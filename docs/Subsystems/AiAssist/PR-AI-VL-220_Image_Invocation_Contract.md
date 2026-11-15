@@ -16,7 +16,7 @@ What this does **not** do, and what is still missing before any run is possible:
    (section 7 proves it); the digest the first supervised run executed is `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`,
    after PR-AI-VL-222 (a diagnostic plan section, no change to this contract) the plan the second run executed is
    `ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7`, and after PR-AI-VL-223 (a template A/B plan section; the
-   `--jinja` variant below is evaluation-only and pending the owner's approval by digest) the current digest is
+   `--jinja` variant below is evaluation-only; it was run once with the owner's approval by digest, see PR-AI-VL-223 run 3) the current digest is
    `15d7ab2ee6d5b5f21db3798dee3390ed6a8c4086dc973ce5593ee91a043db536`. The owner's
    authorization (decision C) named the old digest, so the driver's `evaluate` command asks the owner to name the current one
    (`--i-have-the-plan-digest`); no run is possible until the prerequisites in items 2 to 4 exist and the owner confirms.
@@ -108,8 +108,7 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
 
 1. That `llama-mtmd-cli.exe` of `b11960-cpu` loads the Q4_K_M model with the F16 projector at all, and its CPU memory and speed.
 2. Whether the legacy template engine renders the LFM3 chat template or `--jinja` is needed (and whether `--jinja` is
-   accepted together with the grammar). Run 2's log showed the legacy ChatML turn in use; the `--jinja` A/B of PR-AI-VL-223 is
-   prepared and not run.
+   accepted together with the grammar). Run 2's log showed the legacy ChatML turn in use; the `--jinja` A/B of PR-AI-VL-223 was run once on the 512 px set (PR-AI-VL-223 run 3) and did not change the answers where the model was already right.
 3. That a trailing end-of-text marker and blank lines behave as with `llama-completion` (the strip is tolerant).
 4. That `--json-schema-file` constrains `mtmd-cli` decoding as the source suggests (`common_sampler_init` is used).
 5. The right `--image-max-tokens`.
@@ -172,7 +171,7 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
   free-text control request (no `--json-schema-file`, same executable, admission and limits) and **no flag**; `--jinja` stays refused.
   See `docs/work_packages/AI-VL-222_visual_diagnostic.md`.
 
-* **Template A/B (PR-AI-VL-223, decision D24; evaluation-only, pending the owner's approval by plan digest, not run).** The visual
+* **Template A/B (PR-AI-VL-223, decision D24; evaluation-only; run once with the owner's approval by plan digest, result in the work package).** The visual
   argument builder's existing `use_jinja` switch (used by the Gemma candidate) may also be set for the LFM candidate. Without it the
   command line is exactly the one above. With it the single switch `--jinja` is appended at the end, so the turn is rendered from
   the pinned GGUF's own template (BOS first, generation prompt ending in an open `<think>`); `--jinja` stays in the refused list for

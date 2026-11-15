@@ -1,7 +1,7 @@
 # AI-VL-223: turn-format A/B for the LFM3-VL-2B visual harness (decision D24)
 
-Status: **prepared, not run.** Evaluation-only. `qualified` stays false everywhere; nothing here is a quality claim for
-StableNew's real use. The run needs the owner's explicit approval by the plan digest below, in the session that prepared it.
+Status: **run once on 2026-11-14 (run 3, owner-approved by the digest below); result in section 8.** Evaluation-only. `qualified` stays false everywhere; nothing here is a quality claim for
+StableNew's real use. The owner approved the run by the plan digest below, in the session that prepared it.
 
 Plan digest (`python -m tools.qualification.vl220 describe`, field `plan_sha256`; a test fails if this line goes stale):
 `15d7ab2ee6d5b5f21db3798dee3390ed6a8c4086dc973ce5593ee91a043db536`
@@ -135,5 +135,60 @@ Limits the report keeps:
 
 Deterministic tests only: the closed argv list (one new switch, only in the named turn format, never by default; the template and
 thinking arguments refused by name), the gate on the driver and the CLI, the varied set (pins, constant-answer ceiling, oracle
-score), the plan (the new section, and run 2's digest reproduced by removing it), the documents. Qualification: not applicable. No
-model was run for this package.
+score), the plan (the new section, and run 2's digest reproduced by removing it), the documents. Qualification: not applicable. The
+model run is reported in section 8.
+
+## 8. Run 3 result (2026-11-14; plan digest `15d7ab2ee6d5b5f21db3798dee3390ed6a8c4086dc973ce5593ee91a043db536`)
+
+Two variants of `vl220-synthetic-512-2` (14 cases plus 2 free-text controls each), CPU only, one contained child at a time. All 32
+invocations exited 0; all 28 scored answers were structurally valid in both variants (valid rate 1.0, no limit violations). Median
+wall time 4.6 s (legacy) and 4.2 s (jinja), at most 6.1 s per case, controls up to 9.0 s with `--jinja`; peak working set 2.46 GB.
+An earlier attempt was refused before any invocation (`commit_headroom_below_requirement`, the machine's free commit was low
+while Forge and the app were running); its `not_run` stub files are kept as `run3-512v-legacy.refused-attempt1*.json`. Evidence:
+`D:\StableNew-Assets\offline-ail220-evidence
+un3-512v-{legacy,jinja}.json` and `.diagnostics.json`.
+
+| Score | legacy | jinja |
+|---|---|---|
+| prompt adherence (4 cases, varied references) | 1.0 | 1.0 |
+| describe object recall / unsupported mentions | 1.0 / 0.0 | 1.0 / 0.0 |
+| multi-subject consistency (2 cases) | 0.75 | 0.75 |
+| defect triage recall / precision | 0.67 / 0.22 | 0.33 / 0.20 |
+| defect triage false-alarm rate on the clean case | 1.0 | 1.0 |
+| before/after usefulness (2 cases) | 0.5 | 0.0 |
+
+Per kind, answer against reference:
+
+* **adherence (4 of 4, both variants identical):** every answer equals the reference, including the (T,F), (F,T), (T,T), (F,F)
+  patterns. Run 2's perfect adherence was uninformative (every reference and every answer was `e1 = true, e2 = false`); with
+  references that vary, a constant answer cannot score this, so H7 is closed for this set and the model demonstrably reads
+  these two-object scenes.
+* **describe (2 of 2, identical):** `red square, yellow circle` and `green circle`, exactly the references.
+* **consistency:** both variants answer true/true for case 1 (correct) and true/true for case 2 (reference true/false): the same
+  miss in both.
+* **defect triage (reference: clean; one arms extra limb; one legs missing limb; one arms extra limb):**
+  * defect-1 (clean): legacy reported 4 findings, jinja reported 4 findings, so both false-alarm.
+  * defect-2: legacy found the arms extra limb and added a false legs finding; jinja reported nothing (a miss).
+  * defect-3 (legs missing limb): both reported an arms extra limb: a miss and a false finding in both.
+  * defect-4: both found the arms extra limb and then added several false findings (jinja more of them).
+* **before/after:** reference a, b. Legacy answered a (right) and tie (wrong); jinja answered tie (wrong) and a (wrong).
+
+**Did the template change defect triage and before/after? Not usefully.** The two turns agree on every case where the model is
+already good (adherence, describe, consistency). Where it is poor (defect triage, before/after) neither turn fixes it, and
+jinja scored the same or lower on both (recall 0.67 to 0.33; before/after 0.5 to 0.0). With 3 positive defect cases and 2
+before/after cases, those differences are one or two answers each and are not evidence that jinja is worse; they are certainly not
+evidence that it is better. The rendered turn is not what limits defect triage here. Because the grammar forces `{` as the first
+token, the open `<think>` never gets to produce reasoning in the scored answers; it only shows in the free-text controls, where the
+jinja turn writes visible reasoning ("The user wants a concise description ... Let me look carefully") and the legacy turn answers
+directly. The log's own rendered-template line did not survive the bounded stderr capture, so the jinja turn is confirmed by the
+different argument-shape digest (one switch) and by that behaviour, not by a logged template.
+
+**Run 2 against run 3 (legacy turn, 512 px):** the structured scores are unchanged on a different, varied set: defect triage
+precision 0.22 and recall 0.67 with the clean case flagged, before/after 0.5, consistency 0.75 with the same `s2` miss, describe
+exact. Only adherence moved from uninformative to informative (1.0 on varied references). So defect triage and before/after were
+poor before this run, are poor in both turns, and are the open question; the stick-figure scenes may simply be too unlike what
+the model was trained to triage.
+
+Caveats, unchanged: drawn shapes and stick figures say little about real generated images; one greedy sample per case and per
+variant, so stability is untested; `qualified` stays false; no change to the product, the registry or the managed runtime follows
+from this run.
