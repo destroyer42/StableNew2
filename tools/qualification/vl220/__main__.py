@@ -47,7 +47,7 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
     from src.ai_assist.host import GenerationActivity
     from src.ai_assist.paths import resolve_ai_root
     from tools.qualification.vl220 import contract, driver
-    from tools.qualification.vl220.visual_argv import VisualLimits
+    from tools.qualification.vl220.visual_argv import TURN_LEGACY, VisualLimits
 
     if contract.INVOCATION_APPROVED is not True:
         sys.stderr.write(f"refused: {driver.REFUSED_NOT_APPROVED}\n")
@@ -69,6 +69,9 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         return 2
     if args.diagnostics_out is not None and args.diagnostics_out.exists():
         sys.stderr.write(f"refused: {diagnostics.REFUSED_EXISTS}\n")
+        return 2
+    if args.turn_format != TURN_LEGACY and (args.diagnostics_out is None or args.cases is not None):
+        sys.stderr.write(f"refused: {driver.REFUSED_TURN_FORMAT}\n")
         return 2
     try:
         if args.cases is None:
@@ -109,6 +112,7 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         activity=(lambda: GenerationActivity()) if args.generation_idle else None,
         limits=limits,
         capture=capture,
+        turn_format=args.turn_format,
     )
     run = visual.run_cases(case_set, labels)
     controls = None
@@ -120,6 +124,7 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         case_set_sha256=contract.digest(case_doc),
         candidate=candidate,
         controls=controls,
+        turn_format=args.turn_format,
     )
     with args.evidence_out.open("x", encoding="utf-8") as handle:
         json.dump(document, handle, indent=2, sort_keys=True, allow_nan=False)
@@ -130,7 +135,11 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         try:
             diagnostics.write_diagnostics(
                 args.diagnostics_out,
-                capture.document(plan_sha256=current, evidence_file=args.evidence_out.name),
+                capture.document(
+                    plan_sha256=current,
+                    evidence_file=args.evidence_out.name,
+                    turn_format=args.turn_format,
+                ),
             )
         except diagnostics.DiagnosticsRefused as exc:
             sys.stderr.write(f"refused: {exc}\n")
@@ -202,6 +211,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also run the unscored free-text controls (needs --diagnostics-out)",
     )
+    evaluate.add_argument(
+        "--turn-format", default="legacy", choices=("legacy", "jinja"),
+        help="legacy (default): the earlier command line. jinja: adds the single --jinja switch so the turn is rendered from "
+        "the pinned GGUF's own chat template (evaluation-only; needs --diagnostics-out and a built-in synthetic set)",
+    )  # fmt: skip
     evaluate.add_argument("--cases", type=Path, default=None)
     evaluate.add_argument("--labels", type=Path, default=None)
     evaluate.add_argument("--min-image-tokens", type=int, default=64)

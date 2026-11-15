@@ -1,10 +1,10 @@
 # PR-AI-VL-222: why the first LFM3-VL-2B synthetic run scored near zero, and a small diagnostic run
 
-Status: **implemented on a feature branch; PR open; the diagnostic run has NOT been run** (it waits for the owner's approval of
-the plan digest below). This is a diagnosis, not a qualification: nothing here says the model is good, bad, qualified or failed
+Status: **implemented; the diagnostic run was approved by the owner by the plan digest below and performed on 2026-11-14; its
+result is in "Run 2 result". The turn-format follow-up is `AI-VL-223_template_ab.md`.** This is a diagnosis, not a qualification: nothing here says the model is good, bad, qualified or failed
 for StableNew's real use. `qualified` stays `false` everywhere.
 
-Plan digest to approve (`python -m tools.qualification.vl220 describe`, field `plan_sha256`; a test fails if this line goes stale):
+Plan digest of the run (the plan the second run executed; `python -m tools.qualification.vl220 describe`, field `plan_sha256`; a test fails if this line goes stale):
 `ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7`
 
 Digest chain: `23df6fa4...880e` (owner-approved) -> `fa63304d...339a` (the plan the first run executed; differs only by the
@@ -272,15 +272,38 @@ tokens, template, grammar) and one plain conclusion: **harness defect**, **invoc
 these images**. It does not call the model qualified or failed for StableNew's real use; real assets with human labels are a
 separate step.
 
-## Decision D24 (for the orchestrating session or the owner; nothing was changed)
+## Run 2 result (2026-11-14; 30 invocations, all exit 0, all structurally valid, no limit violations)
+
+Plan `ea7f2bb8...`; evidence and diagnostics under `D:\StableNew-Assets\offline-ai\vl220-evidence\run2-synthetic-{128,512}*`
+(outside Git). Peak working set 2.43 and 2.45 GB; median per case 3.1 s (128 px) and 3.9 s (512 px).
+
+| Kind | 128 px | 512 px |
+|---|---|---|
+| Valid structured answers | 13 of 13 (run 1: adherence 3 of 3 invalid) | 13 of 13 |
+| Adherence | 1.0, but uninformative: every reference is `e1 = true, e2 = false` and so was every answer (defect H7, fixed by the varied set of AI-VL-223) | same |
+| Consistency | 1.0 | 0.75 (`consistency-2`: answered `s2` true, reference false) |
+| Describe | `red rectangle` for the red square (object recall 0.67) | exact (recall 1.0, no unsupported name) |
+| Defect triage | precision 0.22, recall 0.67, clean figure flagged (false alarm 1.0); near-constant answer: arms and legs `extra_limb` major | same answers |
+| Before/after | 0.5: said `a` and `tie`, never `b`; both images were encoded (5 chunks) | same |
+| Free-text controls | `des-1`: a red rectangle and a yellow circle overlapping; `des-2`: one green circle on the left | same, correct |
+
+stderr: the runtime printed the legacy ChatML example (no BOS, no thinking prefix); image encoding took about 140 ms at 128 px and
+about 540 ms at 512 px, consistent with 64 versus 256 image tokens.
+
+Conclusion (not a qualification). The first run's near-zero was largely **harness defects** (H1 to H3): with the fixes the
+structured answers are valid and describe works at 512 px. The remaining misses (defect triage, before/after, one consistency
+case) are **not schema or scoring faults**: the answers are valid, the scoring matches the references, and the model demonstrably
+sees the images. Whether they come from the legacy turn (I1) or from the model not handling these tasks cannot be told from this
+run. Scenes are drawn shapes and stick figures, which say little about real generated images.
+
+## Decision D24 (decided by the orchestrating session under the owner's delegation: prepare an A/B, run only on the owner's digest)
 
 The one remaining *invocation* suspect (I1) cannot be fixed inside the closed vocabulary: the model's own template (BOS, then
-`<think>` or `<think></think>` after `assistant`) is only used with `--jinja`, and `--chat-template-kwargs '{"enable_thinking":false}'`
-would be the way to select the no-thinking form. The AI-VL-220 contract left `--jinja` open (section 5, item 2) and this package
-leaves it refused. If the free-text controls and the corrected structured answers still look wrong while the controls show the
-model does describe the scenes (or the opposite), the next step is a diagnostic-only builder variant that adds `--jinja` (and
-`--chat-template-kwargs`, with the same source proof) behind its own plan digest. That is a new flag and a new owner approval; it
-is not part of this PR.
+`<think>` or `<think></think>` after `assistant`) is only used with `--jinja`. This package left `--jinja` refused. The follow-up,
+`docs/work_packages/AI-VL-223_template_ab.md`, adds it as a named, evaluation-only turn format behind its own plan digest and owner
+approval. Its source proof found that `--chat-template-kwargs` (and the `--reasoning` family) is **not accepted by
+`llama-mtmd-cli` b11960**, so the no-thinking form cannot be requested; the A/B compares the legacy turn with the template's
+default turn (BOS plus an open thinking block).
 
 ## Acceptance and evidence boundary
 

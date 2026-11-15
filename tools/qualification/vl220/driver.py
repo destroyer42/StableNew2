@@ -84,6 +84,8 @@ from tools.qualification.vl220.contract import (
 from tools.qualification.vl220.prompts import render_control_prompt, render_visual_prompt
 from tools.qualification.vl220.visual_argv import (
     MAX_IMAGE_BYTES,
+    TURN_FORMATS,
+    TURN_LEGACY,
     VISION_BUILD_ID,
     VISION_TOOL,
     VisualArgvRefused,
@@ -130,6 +132,7 @@ REFUSED_ARGV = "argv_refused"
 REFUSED_SCRATCH = "scratch_unavailable"
 REFUSED_CANCELLED = "cancelled"
 REFUSED_DIAGNOSTICS = "diagnostics_not_enabled"
+REFUSED_TURN_FORMAT = "turn_format_needs_diagnostic_capture"
 
 # --- per-case status ----------------------------------------------------------------------------------------------------
 STATUS_VALID = "valid"
@@ -389,7 +392,10 @@ class VisualDriver:
         cancel: CancelCheck | None = None,
         watch_interval: float = WATCH_INTERVAL_SECONDS,
         capture: diagnostics.DiagnosticCapture | None = None,
+        turn_format: str = TURN_LEGACY,
     ) -> None:
+        if turn_format not in TURN_FORMATS:
+            raise ValueError(f"unknown turn format: {turn_format!r}")
         self._candidate = candidate
         self._root = Path(evaluation_root)
         self._ai_root = Path(ai_root)
@@ -410,6 +416,13 @@ class VisualDriver:
         #: Only a capture built for a built-in synthetic set can exist (``DiagnosticCapture`` refuses anything else), so
         #: with ``None`` no answer text and no runtime output is kept beyond scoring, exactly as before.
         self._capture = capture
+        #: ``legacy`` (the default) is the command line of the earlier packages. Any other turn format is evaluation-only
+        #: (PR-AI-VL-223, D24) and is refused unless a capture exists, i.e. unless the case set is a built-in synthetic set.
+        self._turn_format = turn_format
+
+    @property
+    def turn_format(self) -> str:
+        return self._turn_format
 
     # -- locations ------------------------------------------------------------------------------------------------------
 
@@ -552,6 +565,8 @@ class VisualDriver:
         name = job.request_id
         if contract.INVOCATION_APPROVED is not True:
             return _refused(name, Refusal(REFUSED_NOT_APPROVED))
+        if self._turn_format != TURN_LEGACY and self._capture is None:
+            return _refused(name, Refusal(REFUSED_TURN_FORMAT))
         if self._cancel():
             return _refused(name, Refusal(REFUSED_CANCELLED))
         refused_root = staging.root_refusal(self._root)
@@ -626,6 +641,7 @@ class VisualDriver:
                 limits=limits,
                 sampling=self._sampling,
                 free_text=job.schema is None,
+                turn_format=self._turn_format,
             )
         except VisualArgvRefused as exc:
             return _refused(name, Refusal(REFUSED_ARGV, (exc.code,)))
@@ -782,6 +798,7 @@ def evidence_document(
     case_set_sha256: str,
     candidate: VisualCandidate,
     controls: EvaluationRun | None = None,
+    turn_format: str = TURN_LEGACY,
 ) -> dict[str, Any]:
     """The only thing a run writes: timing, memory, the path-free argv hash, exit codes and reason codes, plus the aggregate
     score numbers. It contains no image, prompt or answer text."""
@@ -794,6 +811,7 @@ def evidence_document(
         "candidate_id": candidate.candidate_id,
         "build_id": VISION_BUILD_ID,
         "executable": VISION_TOOL,
+        "turn_format": turn_format,
         "complete": run.complete,
         "refusal": None
         if run.refusal is None
@@ -810,6 +828,7 @@ __all__ = [
     "MODEL_REGISTRY_PATH",
     "REFUSED_NOT_APPROVED",
     "REFUSED_PLAN_DIGEST",
+    "REFUSED_TURN_FORMAT",
     "CaseEvidence",
     "CaseRun",
     "EvaluationRun",

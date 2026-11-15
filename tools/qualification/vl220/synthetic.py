@@ -24,9 +24,12 @@ from tools.qualification.vl220 import contract
 SET_ID = "vl220-synthetic-1"
 #: The same deterministic scenes drawn four times larger (512 x 512 per cell): a second set with its own pins (PR-AI-VL-222).
 SET_ID_512 = "vl220-synthetic-512-1"
+#: The 512-pixel scenes with a varied adherence table (PR-AI-VL-223, defect H7): in the first two sets every adherence case
+#: asks "first element true, second false", so a constant answer scored 1.0. Here the four cases cover all four patterns.
+SET_ID_512_VARIED = "vl220-synthetic-512-2"
 CELL = 128
 #: Set id to the integer factor every coordinate and size of the 128-pixel scene table is multiplied by.
-BUILTIN_SCALES: Mapping[str, int] = {SET_ID: 1, SET_ID_512: 4}
+BUILTIN_SCALES: Mapping[str, int] = {SET_ID: 1, SET_ID_512: 4, SET_ID_512_VARIED: 4}
 _BACKGROUND = (245, 245, 245)
 COLORS: Mapping[str, tuple[int, int, int]] = {
     "red": (220, 40, 40),
@@ -163,6 +166,28 @@ def object_names() -> list[str]:
     return sorted(_name(shape, color) for shape in ("square", "circle") for color in COLORS)
 
 
+#: ``(drawn, asked)`` per adherence case. The first table is the one of the first two sets (every case: first true, second false).
+_ADHERENCE: list[tuple[list[tuple[str, str]], list[tuple[str, str]]]] = [
+    ([("square", "red"), ("circle", "blue")], [("square", "red"), ("circle", "green")]),
+    (
+        [("circle", "yellow"), ("square", "green"), ("circle", "red")],
+        [("circle", "yellow"), ("square", "blue")],
+    ),
+    ([("square", "blue")], [("square", "blue"), ("square", "red")]),
+]
+#: The varied table: (true, false), (false, true), (true, true), (false, false). Every answer pattern appears once, so no
+#: constant answer can score above one half per element.
+_ADHERENCE_VARIED: list[tuple[list[tuple[str, str]], list[tuple[str, str]]]] = [
+    ([("square", "red"), ("circle", "blue")], [("square", "red"), ("circle", "green")]),
+    ([("circle", "blue"), ("square", "red")], [("circle", "green"), ("square", "red")]),
+    (
+        [("circle", "yellow"), ("square", "green"), ("circle", "red")],
+        [("circle", "yellow"), ("square", "green")],
+    ),
+    ([("square", "blue")], [("square", "red"), ("circle", "green")]),
+]
+
+
 @functools.cache
 def _build(set_id: str) -> tuple[dict[str, bytes], dict[str, Any], dict[str, Any]]:
     scale = BUILTIN_SCALES[set_id]
@@ -174,14 +199,7 @@ def _build(set_id: str) -> tuple[dict[str, bytes], dict[str, Any], dict[str, Any
         cases.append(case)
         labels.append({"case_id": case["case_id"], "reference": reference})
 
-    adherence = [
-        ([("square", "red"), ("circle", "blue")], [("square", "red"), ("circle", "green")]),
-        (
-            [("circle", "yellow"), ("square", "green"), ("circle", "red")],
-            [("circle", "yellow"), ("square", "blue")],
-        ),
-        ([("square", "blue")], [("square", "blue"), ("square", "red")]),
-    ]
+    adherence = _ADHERENCE_VARIED if set_id == SET_ID_512_VARIED else _ADHERENCE
     for index, (drawn, asked) in enumerate(adherence, start=1):
         asset = f"adh-{index}"
         images[asset] = scene(drawn, scale=scale)
@@ -301,6 +319,7 @@ __all__ = [
     "BUILTIN_SCALES",
     "SET_ID",
     "SET_ID_512",
+    "SET_ID_512_VARIED",
     "Canvas",
     "build_synthetic_set",
     "figure",

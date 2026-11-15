@@ -13,10 +13,12 @@ from typing import Any
 
 from tools.qualification.vl220 import contract, diagnostics, prompts, scoring, synthetic
 from tools.qualification.vl220.candidates import VisualCandidate, load_candidates
+from tools.qualification.vl220.visual_argv import JINJA_FLAG, TURN_JINJA, TURN_LEGACY
 
 INVOCATION_DOCUMENT = "docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md"
 EVALUATION_DOCUMENT = "docs/Subsystems/AiAssist/PR-AI-VL-220_Visual_Evaluation_Contract.md"
 DIAGNOSTIC_DOCUMENT = "docs/work_packages/AI-VL-222_visual_diagnostic.md"
+TEMPLATE_AB_DOCUMENT = "docs/work_packages/AI-VL-223_template_ab.md"
 
 
 def dry_run() -> dict[str, Any]:
@@ -39,6 +41,43 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+#: The two sets the PR-AI-VL-222 diagnostic covers. The later built-in set is covered by ``template_ab`` only, so the
+#: ``diagnostic`` section (and with it the plan the second run executed) stays exactly what it was.
+DIAGNOSTIC_SET_IDS = (synthetic.SET_ID, synthetic.SET_ID_512)
+
+
+def _set_section(set_id: str) -> tuple[dict[str, Any], int]:
+    """``(the pins of one built-in set, its request count)``: case and label digests, and per request the SHA-256 of the
+    prompt file and of its own response schema, plus the two free-text controls."""
+
+    images, case_doc, label_doc = synthetic.build_synthetic_set(set_id)
+    case_set = contract.validate_case_set(case_doc)
+    requests = {
+        case.case_id: {
+            "prompt_sha256": _sha(prompts.render_visual_prompt(case)),
+            "schema_sha256": contract.digest(contract.build_response_schema(case.kind, case)),
+        }
+        for case in case_set.cases
+    }
+    controls = [
+        {
+            "request_id": item.request_id,
+            "asset_id": item.asset_id,
+            "prompt_sha256": _sha(prompts.render_control_prompt()),
+        }
+        for item in diagnostics.control_requests(set_id)
+    ]
+    section = {
+        "image_edge_pixels": synthetic.CELL * synthetic.BUILTIN_SCALES[set_id],
+        "images": len(images),
+        "case_set_sha256": contract.digest(case_doc),
+        "label_set_sha256": contract.digest(label_doc),
+        "requests": requests,
+        "controls": controls,
+    }
+    return section, len(requests) + len(controls)
+
+
 def diagnostic_section() -> dict[str, Any]:
     """What the PR-AI-VL-222 diagnostic would send and keep, so the digest the owner approves covers the exact question text.
 
@@ -47,33 +86,9 @@ def diagnostic_section() -> dict[str, Any]:
 
     sets: dict[str, Any] = {}
     invocations = 0
-    for set_id, scale in synthetic.BUILTIN_SCALES.items():
-        images, case_doc, label_doc = synthetic.build_synthetic_set(set_id)
-        case_set = contract.validate_case_set(case_doc)
-        requests = {
-            case.case_id: {
-                "prompt_sha256": _sha(prompts.render_visual_prompt(case)),
-                "schema_sha256": contract.digest(contract.build_response_schema(case.kind, case)),
-            }
-            for case in case_set.cases
-        }
-        controls = [
-            {
-                "request_id": item.request_id,
-                "asset_id": item.asset_id,
-                "prompt_sha256": _sha(prompts.render_control_prompt()),
-            }
-            for item in diagnostics.control_requests(set_id)
-        ]
-        invocations += len(requests) + len(controls)
-        sets[set_id] = {
-            "image_edge_pixels": synthetic.CELL * scale,
-            "images": len(images),
-            "case_set_sha256": contract.digest(case_doc),
-            "label_set_sha256": contract.digest(label_doc),
-            "requests": requests,
-            "controls": controls,
-        }
+    for set_id in DIAGNOSTIC_SET_IDS:
+        sets[set_id], count = _set_section(set_id)
+        invocations += count
     return {
         "decision": "D23",
         "document": DIAGNOSTIC_DOCUMENT,
@@ -93,6 +108,43 @@ def diagnostic_section() -> dict[str, Any]:
         },
         "invocations": invocations,
         "sets": sets,
+    }
+
+
+def template_ab_section() -> dict[str, Any]:
+    """The PR-AI-VL-223 template A/B (decision D24): the same scored cases and controls of one built-in set, run once with the
+    legacy turn and once with the ``jinja`` turn, so every difference between the two answers is attributable to the turn.
+
+    ``jinja`` adds exactly one switch. ``--chat-template-kwargs`` and the ``--reasoning`` family stay refused because
+    ``llama-mtmd-cli`` b11960 does not accept them (see the document), so the jinja turn is the template's default one."""
+
+    section, per_variant = _set_section(synthetic.SET_ID_512_VARIED)
+    return {
+        "decision": "D24",
+        "document": TEMPLATE_AB_DOCUMENT,
+        "set_id": synthetic.SET_ID_512_VARIED,
+        "set": section,
+        "default_turn_format": TURN_LEGACY,
+        "variants": {
+            TURN_LEGACY: {
+                "flags_added": [],
+                "turn": "mtmd-cli built-in ChatML: no BOS, no thinking prefix",
+            },
+            TURN_JINJA: {
+                "flags_added": [JINJA_FLAG],
+                "turn": "the pinned GGUF template: BOS first, generation prompt ends with an open <think>",
+            },
+        },
+        "refused_by_name": [
+            "--chat-template-kwargs",
+            "--reasoning",
+            "--chat-template",
+            "--chat-template-file",
+        ],
+        "only_for": "built-in synthetic sets with a diagnostic capture; refused for any other case set",
+        "invocations_per_variant": per_variant,
+        "invocations": per_variant * 2,
+        "qualified": False,
     }
 
 
@@ -135,6 +187,7 @@ def build_plan(candidate: VisualCandidate | None = None) -> dict[str, Any]:
         },
         "comparators": contract.comparator_table(),
         "diagnostic": diagnostic_section(),
+        "template_ab": template_ab_section(),
     }
     plan["plan_sha256"] = contract.digest(plan)
     return plan
@@ -144,7 +197,9 @@ __all__ = [
     "DIAGNOSTIC_DOCUMENT",
     "EVALUATION_DOCUMENT",
     "INVOCATION_DOCUMENT",
+    "TEMPLATE_AB_DOCUMENT",
     "build_plan",
     "diagnostic_section",
     "dry_run",
+    "template_ab_section",
 ]

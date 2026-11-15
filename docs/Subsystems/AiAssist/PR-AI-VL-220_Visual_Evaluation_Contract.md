@@ -7,11 +7,14 @@ acknowledgement, the firewall rule and attestation, the evaluation-root import a
 images and labeler do not exist yet, so no run is possible today. Nothing here is qualification.
 
 Plan digest (`python -m tools.qualification.vl220 describe`, field `plan_sha256`; a test fails if this line goes stale):
-`ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7`
+`15d7ab2ee6d5b5f21db3798dee3390ed6a8c4086dc973ce5593ee91a043db536`
 
 The first supervised run (2026-11-14) executed plan `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`; PR-AI-VL-222 (`docs/work_packages/AI-VL-222_visual_diagnostic.md`) added the
 `diagnostic` plan section (per-case prompts and schemas, the free-text controls, a second 512-pixel synthetic set) and so changed the
-digest to the one above; a test removes that section and reproduces the first run's digest. Response schemas are now built per
+digest to `ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7`, the plan the second run (2026-11-14) executed; PR-AI-VL-223
+(`docs/work_packages/AI-VL-223_template_ab.md`) added the `template_ab` plan section (the turn-format A/B on a third, varied-adherence
+512-pixel set; evaluation-only, pending the owner's approval by digest, not run) and so changed it to the one above. A test
+removes `template_ab` and reproduces the second run's digest, and removes `diagnostic` as well and reproduces the first run's. Response schemas are now built per
 case (`build_response_schema(kind, case)`: element ids pinned in order, a closed object vocabulary where a case has one); the
 generic per-kind schema is unchanged.
 

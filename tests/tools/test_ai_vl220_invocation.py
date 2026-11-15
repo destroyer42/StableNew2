@@ -71,8 +71,11 @@ PACKAGE = REPO / "tools" / "qualification" / "vl220"
 OLD_PLAN_DIGEST = "23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e"
 #: The plan the first supervised run (2026-11-14) was approved and executed against.
 RUN1_PLAN_DIGEST = "fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a"
-#: The plan after PR-AI-VL-222: RUN1 plus the ``diagnostic`` section (per-case schemas and prompts, controls, the second set).
-NEW_PLAN_DIGEST = "ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7"
+#: The plan the second supervised run (2026-11-14, PR-AI-VL-222) was approved and executed against: RUN1 plus the
+#: ``diagnostic`` section (per-case schemas and prompts, controls, the second set).
+RUN2_PLAN_DIGEST = "ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7"
+#: The plan after PR-AI-VL-223: RUN2 plus the ``template_ab`` section (the turn-format A/B on the varied 512-pixel set).
+NEW_PLAN_DIGEST = "15d7ab2ee6d5b5f21db3798dee3390ed6a8c4086dc973ce5593ee91a043db536"
 MARKER = "zebra-marker-xyz"
 
 
@@ -1244,6 +1247,7 @@ def test_the_cli_refuses_a_missing_or_wrong_plan_digest_before_touching_anything
     for wrong in (
         OLD_PLAN_DIGEST,
         RUN1_PLAN_DIGEST,
+        RUN2_PLAN_DIGEST,
         "0" * 64,
         "",
         NEW_PLAN_DIGEST[:-1],
@@ -1331,13 +1335,19 @@ def test_the_flag_flips_only_because_every_contract_gate_is_implemented() -> Non
 
 def test_the_plan_digest_chain_differs_step_by_step_only_by_what_each_package_changed() -> None:
     current = plan.build_plan()
-    assert current["plan_sha256"] == NEW_PLAN_DIGEST != RUN1_PLAN_DIGEST != OLD_PLAN_DIGEST
+    assert len({current["plan_sha256"], RUN2_PLAN_DIGEST, RUN1_PLAN_DIGEST, OLD_PLAN_DIGEST}) == 4
+    assert current["plan_sha256"] == NEW_PLAN_DIGEST
     body = copy.deepcopy({key: value for key, value in current.items() if key != "plan_sha256"})
+    # PR-AI-VL-223 added exactly one section to the plan the second run executed; removing it gives that plan back.
+    run2 = copy.deepcopy(body)
+    del run2["template_ab"]
+    assert contract.digest(run2) == RUN2_PLAN_DIGEST
+    assert {key for key in body if key not in run2} == {"template_ab"}
     # PR-AI-VL-222 added exactly one section to the plan the first run executed; removing it gives that plan back.
-    run1 = copy.deepcopy(body)
+    run1 = copy.deepcopy(run2)
     del run1["diagnostic"]
     assert contract.digest(run1) == RUN1_PLAN_DIGEST
-    assert {key for key in body if key not in run1} == {"diagnostic"}
+    assert {key for key in run2 if key not in run1} == {"diagnostic"}
     # And the first run's plan differs from the owner-approved one only by the flag and the reason text.
     reverted = copy.deepcopy(run1)
     reverted["image_invocation"]["approved"] = False
@@ -1363,5 +1373,6 @@ def test_the_documents_name_the_new_plan_digest_and_the_prior_one() -> None:
     for relative in (plan.EVALUATION_DOCUMENT, plan.INVOCATION_DOCUMENT):
         text = (REPO / relative).read_text(encoding="utf-8")
         assert NEW_PLAN_DIGEST in text, relative
+        assert RUN2_PLAN_DIGEST in text, relative
         assert RUN1_PLAN_DIGEST in text, relative
         assert OLD_PLAN_DIGEST in text, relative

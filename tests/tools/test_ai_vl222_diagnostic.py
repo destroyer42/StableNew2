@@ -22,7 +22,12 @@ from typing import Any
 
 import pytest
 
-from tests.tools.test_ai_vl220_invocation import World, cli_args, world  # noqa: F401  (fixture)
+from tests.tools.test_ai_vl220_invocation import (  # noqa: F401  (world is a fixture)
+    RUN2_PLAN_DIGEST,
+    World,
+    cli_args,
+    world,
+)
 from tools.qualification.vl220 import __main__ as cli
 from tools.qualification.vl220 import (
     contract,
@@ -451,7 +456,9 @@ def test_the_work_package_prints_the_rendered_prompts_it_describes() -> None:
     big, _, _, _ = load(synthetic.SET_ID_512)
     assert prompts.render_visual_prompt(named(big, "describe-1")).strip() in document
     assert prompts.CONTROL_PROMPT in document
-    assert plan.build_plan()["plan_sha256"] in document
+    assert (
+        RUN2_PLAN_DIGEST in document
+    )  # the plan the second run executed (the A/B plan is in the AI-VL-223 package)
 
 
 # ======================================================================================== A5: the two synthetic sets

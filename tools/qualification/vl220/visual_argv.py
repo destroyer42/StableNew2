@@ -37,13 +37,32 @@ VISUAL_VALUE_FLAGS: frozenset[str] = frozenset(
 )  # fmt: skip
 VISUAL_ALLOWED_FLAGS: frozenset[str] = VISUAL_SWITCHES | VISUAL_VALUE_FLAGS
 
+#: The turn format (PR-AI-VL-223, decision D24). ``legacy`` is the default and the only one the vocabulary above supports on its
+#: own: ``mtmd-cli`` then formats the turn with its built-in ChatML (no BOS, no thinking prefix). ``jinja`` is an evaluation-only
+#: variant that adds exactly one switch, ``--jinja``, so the turn is rendered from the chat template inside the hash-pinned GGUF
+#: (BOS first, then ``<think>`` open at the end of the generation prompt: the template defaults ``enable_thinking`` to true and
+#: ``mtmd-cli`` passes no template argument). It never adds a template, template file, template string or template argument.
+TURN_LEGACY = "legacy"
+TURN_JINJA = "jinja"
+TURN_FORMATS: tuple[str, ...] = (TURN_LEGACY, TURN_JINJA)
+JINJA_FLAG = "--jinja"
+
 #: Refused by name even though a typo could not widen the allow-list anyway: the production forbidden set (minus the one flag
-#: this builder owns) plus the contract's explicit "no" rows (``-p``, ``--log-disable``) and the open ``--jinja`` question.
+#: this builder owns) plus the contract's explicit "no" rows (``-p``, ``--log-disable``) and ``--jinja``, which only the named
+#: ``jinja`` turn format may emit. ``--chat-template-kwargs`` and the ``--reasoning`` family are refused by name because
+#: ``llama-mtmd-cli`` b11960 does not accept them at all (``common/arg.cpp``: registered for the server and CLI examples only,
+#: so ``arg_to_options`` for the mtmd example lacks them and parsing stops with "invalid argument"; ``mtmd-cli.cpp`` also passes
+#: no template argument to the formatter), so a "no thinking" turn cannot be requested through this tool.
 VISUAL_REFUSED_FLAGS: frozenset[str] = (FORBIDDEN_FLAGS - {"--mmproj"}) | {
     "-p",
     "--prompt",
     "--log-disable",
     "--jinja",
+    "--chat-template-kwargs",
+    "--reasoning",
+    "-rea",
+    "--reasoning-budget",
+    "--reasoning-format",
 }
 
 _ROLE_OF_FLAG = {
@@ -215,7 +234,9 @@ def _flag_shaped(token: str) -> bool:
     return token.startswith("-") and not _is_number(token)
 
 
-def check_visual_argv(argv: list[str], *, free_text: bool = False) -> None:
+def check_visual_argv(
+    argv: list[str], *, free_text: bool = False, turn_format: str = TURN_LEGACY
+) -> None:
     """Raise :class:`VisualArgvRefused` unless ``argv`` is exactly the closed visual vocabulary in a safe shape.
 
     Beyond the allow-list: every value-taking flag has a value that is not itself flag-shaped, no flag repeats (except one
@@ -223,8 +244,13 @@ def check_visual_argv(argv: list[str], *, free_text: bool = False) -> None:
     CPU-only settings (``-ngl 0``, ``-mmdev none``, ``--no-mmproj-offload``, ``--offline``) are all there.
 
     ``free_text`` is the diagnostic control (PR-AI-VL-222): the one difference is that no ``--json-schema-file`` is given (and
-    one is refused), so the answer is unconstrained text. It adds no flag to the vocabulary."""
+    one is refused), so the answer is unconstrained text. It adds no flag to the vocabulary.
 
+    ``turn_format`` is ``legacy`` (no ``--jinja``, the default) or ``jinja`` (exactly one ``--jinja``, nothing else new)."""
+
+    if turn_format not in TURN_FORMATS:
+        raise _refuse("unknown_turn_format", str(turn_format)[:40])
+    jinja = turn_format == TURN_JINJA
     counts: Counter[str] = Counter()
     values: dict[str, list[str]] = {}
     index = 0
@@ -232,21 +258,24 @@ def check_visual_argv(argv: list[str], *, free_text: bool = False) -> None:
         token = argv[index]
         if not isinstance(token, str) or not _flag_shaped(token):
             raise _refuse("stray_value", str(token)[:40])
-        if token in VISUAL_REFUSED_FLAGS:
+        variant_switch = jinja and token == JINJA_FLAG
+        if token in VISUAL_REFUSED_FLAGS and not variant_switch:
             raise _refuse("forbidden_flag", token)
-        if token not in VISUAL_ALLOWED_FLAGS:
+        if token not in VISUAL_ALLOWED_FLAGS and not variant_switch:
             raise _refuse("flag_not_allow_listed", token)
         counts[token] += 1
-        if token in VISUAL_SWITCHES:
+        if token in VISUAL_SWITCHES or variant_switch:
             index += 1
             continue
         if index + 1 >= len(argv) or _flag_shaped(argv[index + 1]) or argv[index + 1] == "":
             raise _refuse("missing_value", token)
         values.setdefault(token, []).append(argv[index + 1])
         index += 2
-    for flag in _AT_MOST_ONCE:
+    for flag in _AT_MOST_ONCE | {JINJA_FLAG}:
         if counts[flag] > 1:
             raise _refuse("flag_repeated", flag)
+    if jinja and counts[JINJA_FLAG] != 1:
+        raise _refuse("jinja_turn_format_needs_the_jinja_switch")
     if counts["--mmproj"] != 1:
         raise _refuse("exactly_one_mmproj_required")
     expected_schema = 0 if free_text else 1
@@ -331,8 +360,12 @@ def build_visual_argv(
     limits: VisualLimits | None = None,
     sampling: VisualSampling | None = None,
     free_text: bool = False,
+    turn_format: str = TURN_LEGACY,
 ) -> list[str]:
     """Arguments (without the executable) for one single-turn, CPU-only, offline image question.
+
+    ``turn_format`` ``jinja`` (evaluation-only, PR-AI-VL-223) adds the single ``--jinja`` switch right after ``--offline``;
+    the default ``legacy`` builds exactly the command line of the earlier packages.
 
     ``free_text`` (the diagnostic control only) takes ``schema_file=None`` and emits no ``--json-schema-file``; a schema file
     given with it, or none given without it, is refused.
@@ -361,8 +394,11 @@ def build_visual_argv(
     images = [_inside(path, work_dir, "image_outside_work_dir") for path in image_paths]
     for image in images:
         inspect_image(image)
+    if turn_format not in TURN_FORMATS:
+        raise _refuse("unknown_turn_format", str(turn_format)[:40])
     argv = [
         "--offline",
+        *([JINJA_FLAG] if turn_format == TURN_JINJA else []),
         "-ngl",
         "0",
         "--no-mmproj-offload",
@@ -409,13 +445,17 @@ def build_visual_argv(
         "--seed",
         str(int(sampling.seed)),
     ]
-    check_visual_argv(argv, free_text=free_text)
+    check_visual_argv(argv, free_text=free_text, turn_format=turn_format)
     return argv
 
 
 __all__ = [
+    "JINJA_FLAG",
     "MAX_IMAGE_BYTES",
     "MAX_IMAGE_SIDE",
+    "TURN_FORMATS",
+    "TURN_JINJA",
+    "TURN_LEGACY",
     "VISION_BUILD_ID",
     "VISION_TOOL",
     "VISUAL_ALLOWED_FLAGS",
