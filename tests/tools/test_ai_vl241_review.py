@@ -4,6 +4,8 @@ Hermetic like the VL-220 and VL-230 driver tests: a Python script stands in for 
 canned outcome; no model, no GPU, no network. Each test below pins one finding of ``docs/work_packages/AI-VL-241_gemma_readiness.md``.
 """
 
+# ruff: noqa: F811 - pytest fixtures are re-declared as parameters
+
 from __future__ import annotations
 
 import shutil
