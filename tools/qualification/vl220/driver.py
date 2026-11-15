@@ -109,6 +109,18 @@ GUARD_AVAILABLE_GIB = 0.25
 GUARD_COMMIT_HEADROOM_GIB = 1.0
 GUARD_CONSECUTIVE = 2
 WATCH_INTERVAL_SECONDS = 1.0
+#: Host headroom the planned child needs beyond its own weights (AI-VL-241 envelope, ``docs/work_packages/AI-VL-241_gemma_readiness.md``).
+#: ``PLANNED_PRIVATE_GIB`` is the planned private (committed) peak of one child. Where a candidate has no entry the earlier rule
+#: stands: the pinned download plus ``MEMORY_MARGIN_GIB``. Gemma: 6.50 GiB weights + 0.16 GiB projector + at most 1.4 GiB of KV
+#: cache at 4096 tokens (40 sliding-window layers, 8 global layers, full cache) + about 0.5 GiB of compute buffers + about 0.3 GiB of
+#: process baseline, rounded up. LFM3-VL-2B measured 1.70 GiB private for 1.38 GiB of weights, so the structure holds.
+PLANNED_PRIVATE_GIB: Mapping[str, float] = {GEMMA_CANDIDATE_ID: 9.0}
+HEADROOM_MARGIN_GIB = 2.0
+#: Per-case wall-clock limit a candidate runs under unless the operator names one (``--timeout-seconds``, which is part of the
+#: execution identity the owner approves). LFM keeps the contract's 180 s. Gemma 12B on eight CPU threads is estimated at 25-90 s
+#: a case with a long tail (docs/work_packages/AI-VL-241_gemma_readiness.md), so a 180 s kill would discard the very measurement the
+#: run is for; 300 s is the same bounded kill with room. Measured time above the plan's 180 s still reports as a resource violation.
+DEFAULT_TIMEOUT_SECONDS: Mapping[str, float] = {GEMMA_CANDIDATE_ID: 300.0}
 
 LOCK_NAME = "vl220.lock"
 WORK_NAME = "_work"
@@ -134,6 +146,7 @@ REFUSED_SCRATCH = "scratch_unavailable"
 REFUSED_CANCELLED = "cancelled"
 REFUSED_DIAGNOSTICS = "diagnostics_not_enabled"
 REFUSED_TURN_FORMAT = "turn_format_needs_diagnostic_capture"
+REFUSED_LAUNCH = "launch_failed"
 
 # --- per-case status ----------------------------------------------------------------------------------------------------
 STATUS_VALID = "valid"
@@ -242,6 +255,60 @@ def vision_build_reasons(
     if any(VISION_BUILD_ID in entry.compatible_builds for entry in registry.entries):
         reasons.append("vision_build_listed_by_a_model")
     return reasons
+
+
+def memory_requirements(candidate: VisualCandidate) -> tuple[float, float]:
+    """``(available RAM GiB, commit headroom GiB)`` admission needs before one child of ``candidate``.
+
+    The earlier rule (pinned download plus a 4 GiB margin, for both readings) stays for a candidate with no planned private
+    peak. With one, the host must hold that peak and still leave a margin: available RAM at least the peak plus
+    ``HEADROOM_MARGIN_GIB``, and commit headroom at least the peak plus the watch's own kill threshold
+    (``GUARD_COMMIT_HEADROOM_GIB``) plus the margin, so a child that reaches its planned peak is never the thing that trips the
+    guard. Gemma: 11.0 GiB available, 12.0 GiB commit (the job's own commit cap)."""
+
+    baseline = candidate.download_bytes / _GIB + MEMORY_MARGIN_GIB
+    planned = PLANNED_PRIVATE_GIB.get(candidate.candidate_id)
+    if planned is None:
+        return baseline, baseline
+    return (
+        max(baseline, planned + HEADROOM_MARGIN_GIB),
+        max(baseline, planned + GUARD_COMMIT_HEADROOM_GIB + HEADROOM_MARGIN_GIB),
+    )
+
+
+def default_limits(
+    candidate: VisualCandidate,
+    *,
+    image_min_tokens: int | None = None,
+    image_max_tokens: int | None = None,
+    timeout_seconds: float | None = None,
+) -> VisualLimits:
+    """The invocation limits a run uses for ``candidate`` unless the operator overrides them."""
+
+    base = (
+        VisualLimits()
+    )  # a slots dataclass keeps no class-level defaults, so read them from an instance
+    return VisualLimits(
+        image_min_tokens=base.image_min_tokens if image_min_tokens is None else image_min_tokens,
+        image_max_tokens=base.image_max_tokens if image_max_tokens is None else image_max_tokens,
+        timeout_seconds=timeout_seconds
+        if timeout_seconds is not None
+        else DEFAULT_TIMEOUT_SECONDS.get(candidate.candidate_id, base.timeout_seconds),
+    )
+
+
+def working_set_tripwire_bytes(
+    candidate: VisualCandidate, resource: contract.ResourceLimits
+) -> int:
+    """The working-set size at which a contained child is killed (the strict, Gemma-only watch).
+
+    The hard memory bound is the job object's commit limit and the private-bytes cap, both at the resource ceiling. A working set
+    is not a commit: it also counts pages of the pinned model and projector files that are mapped into the process while the
+    weights are read (llama.cpp copies Q4_0 weights into its own repacked buffers and only unmaps the file afterwards), so a
+    healthy load can read as nearly twice the weights. The tripwire is therefore the ceiling plus the two pinned files, the
+    most the files can add; anything above that is not explained by the pins and stops the child."""
+
+    return int(resource.max_peak_working_set_bytes + candidate.download_bytes)
 
 
 def _reject_constant(name: str) -> Any:
@@ -421,7 +488,7 @@ class VisualDriver:
         self._environ = os.environ if environ is None else environ
         self._command_factory = command_factory
         self._runner = runner
-        self._limits = limits if limits is not None else VisualLimits()
+        self._limits = limits if limits is not None else default_limits(candidate)
         self._sampling = sampling if sampling is not None else VisualSampling()
         #: Gemma always renders its turn from its own template and runs under the stricter containment checks of PR-AI-VL-230.
         #: ``use_jinja=True`` for another candidate is the evaluation-only turn variant of PR-AI-VL-223 (decision D24): it adds
@@ -435,6 +502,14 @@ class VisualDriver:
         #: Only a capture built for a built-in synthetic set can exist (``DiagnosticCapture`` refuses anything else), so
         #: with ``None`` no answer text and no runtime output is kept beyond scoring, exactly as before.
         self._capture = capture
+        self._cleanup_complete = True
+
+    @property
+    def cleanup_complete(self) -> bool:
+        """``False`` once a per-case work directory (prompt and image copies) could not be removed; the next case is then
+        refused and the operator removes it."""
+
+        return self._cleanup_complete
 
     @property
     def turn_format(self) -> str:
@@ -544,16 +619,16 @@ class VisualDriver:
         }
 
     def _memory_refusal(self) -> Refusal | None:
-        needed = self._candidate.download_bytes / _GIB + MEMORY_MARGIN_GIB
+        needed_available, needed_commit = memory_requirements(self._candidate)
         try:
             memory = checked_memory(self._memory())
         except Exception:  # noqa: BLE001
             memory = None
         if memory is None:
             return Refusal(REFUSED_MEMORY_UNREADABLE)
-        if not memory.available_gib >= needed:
+        if not memory.available_gib >= needed_available:
             return Refusal(REFUSED_MEMORY)
-        if not memory.commit_headroom_gib >= needed:
+        if not memory.commit_headroom_gib >= needed_commit:
             return Refusal(REFUSED_COMMIT)
         return None
 
@@ -644,6 +719,17 @@ class VisualDriver:
             return _refused(name, Refusal(REFUSED_BUSY))
         scratch = self._root / WORK_NAME / uuid.uuid4().hex
         try:
+            # Anything left in the work directory is a prompt or image copy that a failed cleanup (or a crash) kept: it is
+            # private data that must not pile up, and it is never removed on the operator's behalf. Checked under the lock, so
+            # it cannot be another evaluation's live directory.
+            try:
+                leftovers = (self._root / WORK_NAME).is_dir() and any(
+                    (self._root / WORK_NAME).iterdir()
+                )
+            except OSError:
+                leftovers = True
+            if leftovers:
+                return _refused(name, Refusal(REFUSED_SCRATCH, ("work_directory_not_empty",)))
             try:
                 scratch.mkdir(parents=True, exist_ok=False)
             except OSError:
@@ -651,9 +737,22 @@ class VisualDriver:
             try:
                 return self._admitted_run(case_set, job, scratch)
             finally:
-                shutil.rmtree(scratch, ignore_errors=True)
+                self._remove_work(scratch)
         finally:
             lock.unlink(missing_ok=True)
+
+    def _remove_work(self, scratch: Path) -> None:
+        """Remove one case's work directory, retrying once (a just-killed child can hold a handle for a moment), and remember
+        a failure instead of hiding it."""
+
+        for attempt in range(2):
+            shutil.rmtree(scratch, ignore_errors=True)
+            if not scratch.exists():
+                return
+            if attempt == 0:
+                time.sleep(0.5)
+        self._cleanup_complete = False
+        logger.warning("A visual work directory could not be removed; the operator must delete it")
 
     def _admitted_run(self, case_set: CaseSet, job: _Job, scratch: Path) -> CaseRun:
         name = job.request_id
@@ -717,6 +816,7 @@ class VisualDriver:
     def _launch(
         self, job: _Job, build: RuntimeBuild, argv: list[str], scratch: Path, limits: VisualLimits
     ) -> CaseRun:
+        assert self._activity is not None  # admission refused without a reading
         shape = argv_shape_digest(argv)
         resource = self._resource_limits
         observer = ChildObserver(
@@ -729,9 +829,10 @@ class VisualDriver:
             memory=self._memory,
             clock=self._clock,
             interval=self._interval,
-            working_set_limit_bytes=resource.max_peak_working_set_bytes if self._strict else None,
+            working_set_limit_bytes=working_set_tripwire_bytes(self._candidate, resource)
+            if self._strict
+            else None,
         )
-        assert self._activity is not None  # admission refused without a reading
         runtime_root = runtime_dir(self._ai_root, build.build_id)
         executable = runtime_root / build.executable
         started = self._clock()
@@ -855,6 +956,12 @@ class VisualDriver:
                 return EvaluationRun(
                     tuple(rows), refusal=Refusal(REFUSED_CANCELLED, (run.evidence.reason,))
                 )
+            if run.evidence.status == STATUS_LAUNCH_FAILED:
+                # Nothing ran (no OS container, the memory limit could not be proved, the child was not observable): the same
+                # cause would fail every case, so stop rather than score a set of non-answers.
+                return EvaluationRun(
+                    tuple(rows), refusal=Refusal(REFUSED_LAUNCH, (run.evidence.reason,))
+                )
             responses[case.case_id] = run.text
             if run.evidence.launched:
                 measurements[case.case_id] = Measurement(
@@ -887,6 +994,10 @@ class VisualDriver:
             if run.evidence.status == STATUS_CANCELLED:
                 return EvaluationRun(
                     tuple(rows), refusal=Refusal(REFUSED_CANCELLED, (run.evidence.reason,))
+                )
+            if run.evidence.status == STATUS_LAUNCH_FAILED:
+                return EvaluationRun(
+                    tuple(rows), refusal=Refusal(REFUSED_LAUNCH, (run.evidence.reason,))
                 )
         return EvaluationRun(tuple(rows), complete=True)
 
@@ -944,6 +1055,7 @@ def evidence_document(
     candidate: VisualCandidate,
     controls: EvaluationRun | None = None,
     turn_format: str = TURN_LEGACY,
+    cleanup_complete: bool = True,
 ) -> dict[str, Any]:
     """The only thing a run writes: timing, memory, the path-free argv hash, exit codes and reason codes, plus the aggregate
     score numbers. It contains no image, prompt or answer text."""
@@ -958,6 +1070,7 @@ def evidence_document(
         "executable": VISION_TOOL,
         "turn_format": turn_format,
         "complete": run.complete,
+        "cleanup_complete": cleanup_complete,
         "refusal": None
         if run.refusal is None
         else {"code": run.refusal.code, "reasons": list(run.refusal.reasons)},
@@ -971,6 +1084,7 @@ __all__ = [
     "EVIDENCE_SCHEMA",
     "LOCK_NAME",
     "MODEL_REGISTRY_PATH",
+    "REFUSED_LAUNCH",
     "REFUSED_NOT_APPROVED",
     "REFUSED_PLAN_DIGEST",
     "REFUSED_TURN_FORMAT",
@@ -980,6 +1094,9 @@ __all__ = [
     "Refusal",
     "VisualDriver",
     "check_output",
+    "default_limits",
+    "memory_requirements",
+    "working_set_tripwire_bytes",
     "evidence_document",
     "strict_json",
     "vision_build_reasons",

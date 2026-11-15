@@ -153,9 +153,10 @@ Reasoning:
   The McNemar condition prevents a gain driven by a handful of images in both directions from passing.
 * **F5, D6.** Resource safety is a hard gate, reported apart from quality: any case over the plan's memory limit fails, as does a
   median over the tier's time budget. Proposed limits: per-case wall 180 s for both tiers, peak working set 6 GiB fast and 12 GiB
-  deep (the values the VL-220 plan already uses), median budgets 20 s fast and 120 s deep. **These are placeholders until AI-VL-241
-  reports Gemma's measured time and memory**; the plan records `limits_source` and the owner approves the actual values with the
-  digest. A timed-out case also counts as invalid under F1/D1.
+  deep (the values the VL-220 plan already uses), median budgets 20 s fast and 120 s deep. **These are placeholders.** AI-VL-241 measured
+  Gemma on the synthetic wiring set at about 20 s per case and 7.7 GiB private on CPU (`docs/work_packages/AI-VL-241_gemma_readiness.md`);
+  real images are larger, so the owner sets the deep limits from that measurement and a pilot. The plan records `limits_source`
+  and the owner approves the actual values with the digest. A timed-out case also counts as invalid under F1/D1.
 * **T1.** The pre-registered candidates are the two conditional rules; "never", "always" and "deep alone" are reported for
   context only. A rule passes when its recall is within 0.05 of the deep tier alone, its clean false alarm meets D2, and its
   expected seconds per image are at most half the deep tier's. Time depends on the share of defective images the operator sends,

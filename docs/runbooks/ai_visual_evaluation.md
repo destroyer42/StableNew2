@@ -110,6 +110,8 @@ caps committed memory in the Windows job object. LFM retains the original 6 GiB 
 The evidence records a path-free argv hash, wall time, observed working set, exit code, validation code and scores.
 Gemma evidence includes deterministic floors. The `dry-run` command also prints the synthetic floors.
 
+Gemma's envelope on the reference machine (`docs/work_packages/AI-VL-241_gemma_readiness.md`): about 7.9 GiB private memory per child (planned upper bound 9.0 GiB), a working set of 8-14 GiB, and an estimated 25-75 s per case. Admission requires 11.0 GiB available RAM and 12.0 GiB commit headroom, so close Forge and the application first; a short reading is a `not_run` refusal, not a failure. The default per-case kill is 300 s (`--timeout-seconds` changes it and the execution digest). Image tokens are `--min-image-tokens 64 --max-image-tokens 256` (one token is a 48 x 48 pixel cell for the `gemma4uv` projector; the model's own range is 70-1120). `evidence.cleanup_complete: false` means a work directory under the evaluation root could not be removed: delete `_work` yourself before another run.
+
 Runtime compatibility is based on pinned source and artifact inspection. Tests use fake children. Model loading, prompt
 rendering, constrained decoding, speed, memory use and output quality require supervised evidence. Both candidates remain
 unqualified and operator-only.
