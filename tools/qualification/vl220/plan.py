@@ -8,10 +8,16 @@ the document that is checked.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from tools.qualification.vl220 import contract, scoring, synthetic
-from tools.qualification.vl220.candidates import VisualCandidate, load_candidates
+from tools.qualification.vl220.candidates import (
+    GEMMA_CANDIDATE_ID,
+    LFM_CANDIDATE_ID,
+    VisualCandidate,
+    find_candidate,
+)
 
 INVOCATION_DOCUMENT = "docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md"
 EVALUATION_DOCUMENT = "docs/Subsystems/AiAssist/PR-AI-VL-220_Visual_Evaluation_Contract.md"
@@ -33,14 +39,22 @@ def dry_run() -> dict[str, Any]:
     }
 
 
+def evaluation_limits(candidate: VisualCandidate) -> contract.ResourceLimits:
+    limits = contract.ResourceLimits()
+    if candidate.candidate_id == GEMMA_CANDIDATE_ID:
+        return replace(limits, max_peak_working_set_bytes=12 * 1024**3)
+    return limits
+
+
 def build_plan(candidate: VisualCandidate | None = None) -> dict[str, Any]:
-    chosen = candidate if candidate is not None else load_candidates()[0]
+    chosen = candidate if candidate is not None else find_candidate(LFM_CANDIDATE_ID)
+    limits = evaluation_limits(chosen)
     images, case_doc, label_doc = synthetic.build_synthetic_set()
     plan: dict[str, Any] = {
         "contract_id": contract.CONTRACT_ID,
         "executes_models": False,
         "image_invocation": {
-            "approved": contract.INVOCATION_APPROVED,
+            "approved": contract.INVOCATION_APPROVED and chosen.image_invocation_approved,
             "document": INVOCATION_DOCUMENT,
         },
         "evaluation_document": EVALUATION_DOCUMENT,
@@ -50,10 +64,10 @@ def build_plan(candidate: VisualCandidate | None = None) -> dict[str, Any]:
             kind: contract.digest(contract.build_response_schema(kind)) for kind in contract.KINDS
         },
         "limits": {
-            "max_wall_seconds": contract.ResourceLimits().max_wall_seconds,
-            "max_peak_working_set_bytes": contract.ResourceLimits().max_peak_working_set_bytes,
-            "max_context_tokens": contract.ResourceLimits().max_context_tokens,
-            "require_cpu_only": contract.ResourceLimits().require_cpu_only,
+            "max_wall_seconds": limits.max_wall_seconds,
+            "max_peak_working_set_bytes": limits.max_peak_working_set_bytes,
+            "max_context_tokens": limits.max_context_tokens,
+            "require_cpu_only": limits.require_cpu_only,
         },
         "synthetic_set": {
             "set_id": synthetic.SET_ID,

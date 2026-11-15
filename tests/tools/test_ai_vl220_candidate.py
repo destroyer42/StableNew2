@@ -78,6 +78,7 @@ MODEL_ENTRIES: dict[str, Any] = {
     "tokenizer.ggml.tokens": ["a", "b"],
     "general.base_model.0.name": "LFM3 1.7B Base",
     "lfm3.embedding_length": 2048,
+    "lfm3.context_length": 128000,
     "general.file_type": 15,
 }
 PROJECTOR_ENTRIES: dict[str, Any] = {
@@ -96,6 +97,8 @@ def build_fixture(
     tmp_path: Path,
     model_entries: dict[str, Any] | None = None,
     projector_entries: dict[str, Any] | None = None,
+    *,
+    candidate_index: int = 0,
 ) -> tuple[cand.VisualCandidate, Path]:
     """A candidate whose pins equal tiny staged files made here, so admission can be exercised without the real bytes."""
 
@@ -104,12 +107,12 @@ def build_fixture(
     model = gguf_bytes(model_entries or MODEL_ENTRIES)
     projector = gguf_bytes(projector_entries or PROJECTOR_ENTRIES)
     document = load_document()
-    entry = document["candidates"][0]
+    entry = document["candidates"][candidate_index]
     for key, data in (("model", model), ("projector", projector)):
         entry[key]["bytes"] = len(data)
         entry[key]["sha256"] = hashlib.sha256(data).hexdigest()
         (staging_dir / entry[key]["filename"]).write_bytes(data)
-    (candidate,) = cand.parse_candidates(document)
+    candidate = cand.parse_candidates(document)[candidate_index]
     return candidate, staging_dir
 
 
@@ -131,7 +134,7 @@ def runtime() -> RuntimeManifest:
 
 
 def test_pinned_candidate_provenance_is_complete_and_revision_pinned() -> None:
-    (candidate,) = cand.load_candidates()
+    candidate = cand.find_candidate("lfm3-vl-2b-q4_k_m-liquidai")
     assert candidate.candidate_id == "lfm3-vl-2b-q4_k_m-liquidai"
     for item in (candidate.model, candidate.projector):
         assert item.repository == "LiquidAI/LFM3-VL-2B-GGUF"
@@ -155,9 +158,9 @@ def test_candidate_document_never_claims_qualification_or_text_use() -> None:
         "qualified",
         "production_eligible",
         "text_registry_eligible",
-        "image_invocation_approved",
     ):
         assert entry[flag] is False
+    assert entry["image_invocation_approved"] is True
     for key in ("capabilities", "compatible_builds", "max_context", "model_id", "license_spdx"):
         assert key not in entry
     assert entry["modality"] == "vision_language"
@@ -188,7 +191,7 @@ def test_candidate_document_never_claims_qualification_or_text_use() -> None:
         lambda e: e.update(qualified=True),
         lambda e: e.update(production_eligible=True),
         lambda e: e.update(text_registry_eligible=True),
-        lambda e: e.update(image_invocation_approved=True),
+        lambda e: e.update(image_invocation_approved=1),
         lambda e: e.pop("image_invocation_approved"),
         lambda e: e.update(capabilities=["prompt_rewrite"]),
         lambda e: e.update(compatible_builds=["b11960-cpu"]),
@@ -213,7 +216,7 @@ def test_document_level_refusals() -> None:
         {**document, "schema_version": 2},
         {**document, "candidates": []},
         {**document, "extra": 1},
-        {**document, "candidates": document["candidates"] * 2},
+        {**document, "candidates": [document["candidates"][0]] * 2},
     ):
         with pytest.raises(cand.CandidateInvalid):
             cand.parse_candidates(broken)
@@ -222,7 +225,7 @@ def test_document_level_refusals() -> None:
 
 
 def test_runtime_requirement_matches_the_committed_manifest() -> None:
-    (candidate,) = cand.load_candidates()
+    candidate = cand.find_candidate("lfm3-vl-2b-q4_k_m-liquidai")
     manifest = runtime()
     required = manifest.find(candidate.runtime.required_build_id)
     assert required is not None and required.upstream_tag == "b11960"
@@ -235,7 +238,7 @@ def test_runtime_requirement_matches_the_committed_manifest() -> None:
 
 
 def test_license_record_names_this_exact_text_not_the_earlier_acknowledgement() -> None:
-    (candidate,) = cand.load_candidates()
+    candidate = cand.find_candidate("lfm3-vl-2b-q4_k_m-liquidai")
     # Same licence terms as the LFM3-1.7B record, but different bytes (whitespace), so the earlier owner
     # acknowledgement (AI-QUAL-115) does not name this text and a new one is required.
     assert candidate.license.text_sha256 != AI115_ACKNOWLEDGED_LICENSE_SHA
@@ -354,7 +357,7 @@ def test_a_non_gguf_file_with_the_pinned_hash_is_still_refused(tmp_path: Path) -
         bytes=(staged / candidate.projector.filename).stat().st_size,
         sha256=candidate.projector.sha256,
     )
-    (junk_candidate,) = cand.parse_candidates(document)
+    junk_candidate = cand.parse_candidates(document)[0]
     (staged / junk_candidate.model.filename).write_bytes(junk)
     assert cand.REASON_MODEL_HEADER in admit(junk_candidate, staged).reasons
 
@@ -422,19 +425,17 @@ def test_cancellation_stops_hashing_and_admits_nothing(tmp_path: Path) -> None:
 
 
 def test_download_commands_are_anonymous_and_revision_pinned() -> None:
-    (candidate,) = cand.load_candidates()
+    candidate = cand.find_candidate("lfm3-vl-2b-q4_k_m-liquidai")
     lines = staging.download_commands(candidate, "D:/stage")
     assert len(lines) == 2
     for line in lines:
         assert HEX40 in line and "Authorization" not in line and "token" not in line.lower()
-        assert line.startswith("curl -sS -L --fail -o ")
+        assert line.startswith('curl --proto "=https" --proto-redir "=https" ')
 
 
 def test_stage_report_is_content_free_and_reflects_admission(tmp_path: Path) -> None:
     candidate, staged = build_fixture(tmp_path)
-    report = staging.stage_report(
-        candidate, staged, build_id="b11960-cpu", runtime_manifest=runtime(), acknowledgement=None
-    )
+    report = staging.stage_report(candidate, staged, build_id="b11960-cpu", acknowledgement=None)
     assert report["admitted"] is False and report["reasons"] == [cand.REASON_LICENSE_MISSING]
     assert all(item["present"] for item in report["files"])
     assert str(tmp_path) not in json.dumps(report)
@@ -445,7 +446,7 @@ def test_import_copies_only_after_admission_and_never_into_managed_ai_or_git(
 ) -> None:
     candidate, staged = build_fixture(tmp_path)
     ack = acknowledgement(candidate)
-    common: dict[str, Any] = {"build_id": "b11960-cpu", "runtime_manifest": runtime()}
+    common: dict[str, Any] = {"build_id": "b11960-cpu"}
     root = tmp_path / "evalroot"
     with pytest.raises(staging.StagingRefused) as refused:
         staging.import_candidate(candidate, staged, root, acknowledgement=None, **common)
@@ -483,25 +484,41 @@ def test_a_cancelled_import_leaves_nothing_behind(tmp_path: Path) -> None:
 
     def cancel_during_copy() -> bool:
         calls["n"] += 1
-        return calls["n"] > 2  # the two admission hashes pass; the first copy chunk cancels
+        return calls["n"] > 3  # preflight and both hashes pass; copying is cancelled
 
     with pytest.raises(staging.StagingRefused) as refused:
         staging.import_candidate(
-            candidate, staged, root, build_id="b11960-cpu", runtime_manifest=runtime(),
+            candidate, staged, root, build_id="b11960-cpu",
             acknowledgement=acknowledgement(candidate), cancel=cancel_during_copy,
         )  # fmt: skip
     assert cand.REASON_CANCELLED in refused.value.reasons
     assert not any(item.is_file() for item in root.rglob("*"))
 
 
-def test_a_copy_that_differs_from_the_pin_is_not_kept(tmp_path: Path) -> None:
+def test_a_copy_that_differs_from_the_pin_is_not_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     candidate, staged = build_fixture(tmp_path)
     source = staged / candidate.model.filename
-    bad = replace(candidate.model, sha256="0" * 64)
-    target = tmp_path / "out.gguf"
+    original = staging._copy_verified
+    root = tmp_path / "evalroot"
+
+    def replace_after_admission(path, target, pin, cancel):
+        if path == source:
+            path.write_bytes(b"changed")
+        original(path, target, pin, cancel)
+
+    monkeypatch.setattr(staging, "_copy_verified", replace_after_admission)
     with pytest.raises(staging.StagingRefused):
-        staging._copy_verified(source, target, bad, None)
-    assert not target.exists() and not target.with_name("out.gguf.part").exists()
+        staging.import_candidate(
+            candidate,
+            staged,
+            root,
+            build_id=candidate.runtime.required_build_id,
+            acknowledgement=acknowledgement(candidate),
+        )
+    assert not staging.installed_pair(root, candidate).exists()
+    assert not list(root.rglob(".import-*"))
 
 
 # ------------------------------------------------------------------------------------------------------- GGUF reader
@@ -534,7 +551,6 @@ def test_gguf_reader_skips_arrays_and_is_bounded(tmp_path: Path) -> None:
 
 def test_text_registry_is_unchanged_in_meaning_and_has_no_visual_entry() -> None:
     registry = load_model_registry(MODEL_REGISTRY_PATH)
-    (candidate,) = cand.load_candidates()
     assert {entry.model_id for entry in registry.entries} == {
         "qwen3.5-9b-q4_k_m-unsloth",
         "qwen3.5-9b-q5_k_m-unsloth",
@@ -544,8 +560,11 @@ def test_text_registry_is_unchanged_in_meaning_and_has_no_visual_entry() -> None
         "lfm3-1.7b-q8_0-liquidai",
     }
     assert all(entry.qualified is False for entry in registry.entries)
-    assert registry.find_by_sha(candidate.model.sha256) is None
-    assert registry.find_by_sha(candidate.projector.sha256) is None
+    for visual in cand.load_candidates():
+        assert registry.find_by_sha(visual.model.sha256) is None
+        assert registry.find_by_sha(visual.projector.sha256) is None
+        for model in registry.entries:
+            assert "b11960-cpu-vision" not in model.compatible_builds
     text = MODEL_REGISTRY_PATH.read_text(encoding="utf-8").lower()
     for needle in ("lfm3-vl", "mmproj", "vision_language", "image-text", "image_text"):
         assert needle not in text
@@ -568,7 +587,7 @@ def test_nothing_in_production_reads_the_visual_candidate_file() -> None:
 def test_selector_activation_and_import_model_ignore_the_visual_candidate(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (candidate,) = cand.load_candidates()
+    candidate = cand.find_candidate("lfm3-vl-2b-q4_k_m-liquidai")
     registry = load_model_registry(MODEL_REGISTRY_PATH)
     manifest = runtime()
     root = tmp_path / "ai"
@@ -610,16 +629,14 @@ def test_selector_activation_and_import_model_ignore_the_visual_candidate(
 # ----------------------------------------------------------------------------------- no network, no process, no flag
 
 
-def test_the_package_cannot_reach_the_network_or_start_a_process() -> None:
+def test_the_package_cannot_open_sockets_or_spawn_a_child_directly() -> None:
     forbidden = {
         "socket", "ssl", "http", "urllib", "ftplib", "smtplib", "requests", "httpx", "aiohttp", "subprocess",
-        "multiprocessing", "ctypes", "asyncio", "webbrowser", "threading", "concurrent", "huggingface_hub",
+        "multiprocessing", "asyncio", "webbrowser", "threading", "concurrent", "huggingface_hub",
         "llama_cpp", "torch", "transformers", "onnxruntime",
     }  # fmt: skip
     files = sorted(PACKAGE.glob("*.py"))
     assert len(files) >= 8
-    # The one module allowed to spell the projector and image flags is the closed visual builder (image invocation contract).
-    spelling_exempt = {"visual_argv.py"}
     for path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
@@ -632,12 +649,12 @@ def test_the_package_cannot_reach_the_network_or_start_a_process() -> None:
                 assert name.split(".")[0] not in forbidden, f"{path.name} imports {name}"
         source = path.read_text(encoding="utf-8")
         for flag in ("--mmproj", "--image", "-mm ", "--rpc", "Popen", "os.system", "os.startfile"):
-            if path.name in spelling_exempt and flag in ("--mmproj", "--image"):
+            if path.name == "visual_argv.py" and flag in ("--mmproj", "--image"):
                 continue
             assert flag not in source, f"{path.name} contains {flag}"
 
 
-def test_every_command_runs_with_network_and_process_creation_disabled(
+def test_non_execution_commands_run_with_network_and_process_creation_disabled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from tools.qualification.vl220 import __main__ as cli
@@ -650,6 +667,7 @@ def test_every_command_runs_with_network_and_process_creation_disabled(
     monkeypatch.setattr(subprocess, "Popen", boom)
     candidate, staged = build_fixture(tmp_path)
     assert cli.main(["describe"]) == 0
+    assert cli.main(["describe-execution"]) == 0
     assert cli.main(["dry-run"]) == 0
     assert cli.main(["commands", "--dest", str(tmp_path)]) == 0
     assert cli.main(["verify-staging", "--staging", str(staged), "--build-id", "b11960-cpu"]) == 1

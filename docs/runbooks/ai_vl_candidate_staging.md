@@ -55,3 +55,5 @@ rule; `ai_assist_admin import-runtime --build-id b11960-cpu-vision` and `record-
 command, the record is replaced); your confirmation in chat; and `--i-have-the-plan-digest` naming the current plan digest
 (`python -m tools.qualification.vl220 describe`). The driver refuses, with a stable code, anything missing
 (`PR-AI-VL-220_Image_Invocation_Contract.md` section 7).
+
+For the Gemma candidate and checks shared by both models, see [offline visual candidate evaluation](ai_visual_evaluation.md).
