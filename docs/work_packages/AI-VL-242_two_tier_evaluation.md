@@ -75,6 +75,10 @@ Approve or change: the gate values (contract section 6), the case set (export, c
 
 ## Follow-ups
 
+- **Blocking the planned set:** Review must record a clean confirmation and a subject count per image (AI-VL-240 found it
+  cannot today; `src/` work, owner-approved separately). Without it the real set has no confirmed-clean image, and the
+  clean false-alarm, floor and multi-subject gates cannot be evaluated.
+
 - Driver integration (owner of `driver.py`): run `image_review` / `pair_review` cases with `eval2.build_response_schema` and
   `eval2.prompt_for`, write `evidence/2` through `eval2.evidence_record`, and bind the `eval/2` plan digest at admission.
 - Florence-2 comparator producer: derive the subject-count token from the existing Smart Review object labels, outside Git.

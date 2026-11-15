@@ -705,3 +705,34 @@ def test_an_undefined_value_on_the_full_sample_fails_closed(base: dict[str, Any]
     assert _verdict(result, "D3") == "FAIL"
     result["stage"] = "pilot"
     assert _verdict(result, "D3") == "NOT_DECIDED"
+
+
+def test_an_export_like_todays_review_has_no_clean_reference_and_cannot_pass() -> None:
+    """AI-VL-240: Review cannot yet record clean confirmations or subject counts, so a real export has neither."""
+
+    document = sup.export(
+        [sup.image(f"d{i}", clean=False, findings=[sup.finding()]) for i in range(30)]
+        + [sup.image(f"u{i}", clean=False) for i in range(20)]
+    )
+    cases, labels_doc, case_set, labels = sup.documents(document)
+    built = sup.planned(cases, labels_doc, stage="full")
+    keys = {
+        "plan_sha256": built["plan_sha256"],
+        "case_set_sha256": built["case_set"]["case_set_sha256"],
+    }
+    fast = eval2.validate_evidence(
+        sup.scripted(case_set, labels, sup.truthful(4.0), tier="fast", **keys), case_set
+    )
+    deep = eval2.validate_evidence(
+        sup.scripted(case_set, labels, sup.truthful(30.0), tier="deep", **keys), case_set
+    )
+    result = analysis.analyze(case_set, labels, fast, deep, built)
+    assert result["counts"]["clean"] == 0
+    assert result["tiers"]["fast"]["multi_subject"]["evaluated"] is False
+    verdicts = {v.gate_id: v.verdict for v in gates.evaluate(result)}
+    for gate_id in ("F2", "F4", "D2", "D5"):
+        assert verdicts[gate_id] == "INSUFFICIENT_SAMPLE", gate_id
+    # Identical tiers: the whole F1-gain interval is below 0.15, a clear failure at any sample size.
+    assert (verdicts["D4"], verdicts["T1"]) == ("FAIL", "NOT_APPLICABLE")
+    assert "PASS" in verdicts.values()  # F3 and others still read the defective images
+    assert "## Gate verdicts" in report.render(result, gates.evaluate(result))

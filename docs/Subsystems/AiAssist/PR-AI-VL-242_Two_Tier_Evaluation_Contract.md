@@ -36,7 +36,16 @@ images; is the deep tier measurably better; and does a two-tier rule buy the dee
 * **Prompt adherence findings are dropped** (counted): a real case carries no prompt, so a model cannot judge them, and an image
   whose only findings are prompt adherence is excluded (counted).
 * **Regions.** Review's half-open pixel box becomes the 3 x 3 grid zones it occupies: a zone counts when it holds at least 10 %
-  of the box's area, and the zone holding the box's centre always counts. A finding without a box keeps "no region".
+  of the box's area, and the zone holding the box's centre always counts. A finding without a box (Review's whole-image
+  finding) keeps "no region" and matches any answer region.
+* **Ignored export content.** Every other key (for example `file`, `roles`, `record_ids`, `severity`, `intervention` and the
+  `mixed_pairs` list of pairs whose region judgments disagree) is ignored and never copied.
+* **What today's Review can supply.** AI-VL-240 reports that Review cannot yet record a clean confirmation or a subject count:
+  `clean_confirmed` is always false and `subject_count` always null, and findings exist only for images the operator queued a
+  guided correction for. **A real export today therefore has no confirmed-clean image and no subject reference**: clean false
+  alarm, balanced accuracy, the floor gates and multi-subject consistency cannot be computed, and every gate that needs clean
+  images reports `INSUFFICIENT_SAMPLE`. The planned set (20 clean, 10 multi-subject) needs Review to record both, a separate
+  `src/` package, before the paired run.
 * **Pairs.** Both images must be in the export and differ. Presentation alternates by sorted case id (before first, after first,
   ...), so a model that always prefers one position scores at chance; the case lists the two images in display order and only
   the label says which one is the corrected image.
@@ -227,6 +236,8 @@ invocation gates (licence acknowledgement, firewall attestation, evaluation-root
 
 ## 11. Roadmap evidence rules this contract does not yet cover
 
+* **Confirmed-clean images and subject counts** cannot be recorded in Review today (section 2), so the clean-image and
+  multi-subject dimensions have no real reference until that is added.
 * **Prompt adherence** is not evaluated: the export carries no prompt or element reference (the owner's prompts stay private).
   Covering it needs an export field the owner approves and a new contract version.
 * **Object-level hallucination** (naming things that are not there) has no human reference; the clean-image false alarm and

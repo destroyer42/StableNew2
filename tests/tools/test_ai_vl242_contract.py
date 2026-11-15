@@ -117,7 +117,15 @@ def test_the_converter_copies_no_export_text() -> None:
     document["images"][25]["findings"][0]["observation"] = "PRIVATE-OBSERVATION-TEXT"
     document["images"][25]["prompt"] = "PRIVATE-PROMPT-TEXT"
     document["provenance"]["note"] = "PRIVATE-NOTE"
-    document["pairs"][0]["intervention"] = "PRIVATE-INTERVENTION"
+    document["pairs"][0]["intervention"] = {"kind": "PRIVATE-INTERVENTION"}
+    # Keys the AI-VL-240 exporter adds beside the ones the converter reads: ignored, never copied.
+    document["images"][25].update(
+        file="PRIVATE-PATH/x.png", model_family=None, roles=["PRIVATE-ROLE"], record_ids=[1]
+    )
+    document["images"][25]["findings"][0].update(severity=None, record_id="PRIVATE-RECORD")
+    document["mixed_pairs"] = [
+        dict(document["pairs"][1], judgment="mixed", pair_id="PRIVATE-MIXED")
+    ]
     conversion = review_export.convert(document)
     text = canonical_json([conversion.cases, conversion.labels, conversion.summary])
     for secret in ("PRIVATE", "clean-", "defect-", "after-", "pair-", "synthetic-fixture"):
