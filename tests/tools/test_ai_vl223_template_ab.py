@@ -425,7 +425,7 @@ def test_the_work_package_records_the_digest_the_commands_the_proof_and_the_limi
     text = (REPO / plan.TEMPLATE_AB_DOCUMENT).read_text(encoding="utf-8")
     digest = plan.build_plan()["plan_sha256"]
     assert text.count(digest) >= 4 and RUN2_PLAN_DIGEST in text
-    assert "not run" in text.lower() and "qualified" in text
+    assert "run 3 result" in text.lower() and "qualified" in text
     for line in (
         "write-synthetic --set vl220-synthetic-512-2",
         "--turn-format legacy",
@@ -447,12 +447,12 @@ def test_the_work_package_records_the_digest_the_commands_the_proof_and_the_limi
     assert section["invocations"] == 32
 
 
-def test_the_contract_documents_record_the_variant_as_evaluation_only_and_pending() -> None:
+def test_the_contract_documents_record_the_variant_as_evaluation_only_and_run_once() -> None:
     for relative in (plan.INVOCATION_DOCUMENT, plan.EVALUATION_DOCUMENT):
         text = (REPO / relative).read_text(encoding="utf-8")
         assert plan.build_plan()["plan_sha256"] in text and "AI-VL-223" in text, relative
     invocation = (REPO / plan.INVOCATION_DOCUMENT).read_text(encoding="utf-8")
-    assert "evaluation-only" in invocation and "pending the owner" in invocation
+    assert "evaluation-only" in invocation and "run once" in invocation
     assert "`qualified` stays false" in invocation
 
 
