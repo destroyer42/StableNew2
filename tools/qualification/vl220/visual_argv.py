@@ -38,12 +38,21 @@ VISUAL_VALUE_FLAGS: frozenset[str] = frozenset(
 VISUAL_ALLOWED_FLAGS: frozenset[str] = VISUAL_SWITCHES | VISUAL_VALUE_FLAGS
 
 #: Refused by name even though a typo could not widen the allow-list anyway: the production forbidden set (minus the one flag
-#: this builder owns) plus the contract's explicit "no" rows (``-p``, ``--log-disable``) and the open ``--jinja`` question.
+#: this builder owns) plus the contract's explicit "no" rows (``-p``, ``--log-disable``) and ``--jinja``, which only
+#: ``use_jinja=True`` may emit. ``--chat-template-kwargs`` and the ``--reasoning`` family are refused by name because
+#: ``llama-mtmd-cli`` b11960 does not accept them at all (``common/arg.cpp``: registered for the server and CLI examples only, so
+#: the mtmd example's option table lacks them and parsing stops with "invalid argument"; ``mtmd-cli.cpp`` also passes no
+#: template argument to the turn formatter), so a "no thinking" turn cannot be requested through this tool.
 VISUAL_REFUSED_FLAGS: frozenset[str] = (FORBIDDEN_FLAGS - {"--mmproj"}) | {
     "-p",
     "--prompt",
     "--log-disable",
     "--jinja",
+    "--chat-template-kwargs",
+    "--reasoning",
+    "-rea",
+    "--reasoning-budget",
+    "--reasoning-format",
 }
 
 _ROLE_OF_FLAG = {
@@ -53,7 +62,18 @@ _ROLE_OF_FLAG = {
     "-f": "<prompt>",
     "--json-schema-file": "<schema>",
 }
-_GEMMA_TEMPLATE_FLAG = "--jinja"
+#: The one switch that makes ``mtmd-cli`` render the turn from the chat template inside the pinned GGUF instead of its built-in
+#: ChatML. The Gemma candidate always uses it (PR-AI-VL-230). For the LFM candidate it is an evaluation-only variant
+#: (PR-AI-VL-223, decision D24): the driver refuses it unless a diagnostic capture exists, i.e. unless the case set is a built-in
+#: synthetic set. With it the LFM turn is ``<bos>`` first and a generation prompt that ends in an open ``<think>`` (the template
+#: defaults ``enable_thinking`` to true and ``mtmd-cli`` passes no template argument). No template, template file, template
+#: string or template argument is ever accepted.
+JINJA_FLAG = "--jinja"
+_GEMMA_TEMPLATE_FLAG = JINJA_FLAG
+#: Names of the two turn formats (evidence, plan and CLI wording); the builder itself takes ``use_jinja: bool``.
+TURN_LEGACY = "legacy"
+TURN_JINJA = "jinja"
+TURN_FORMATS: tuple[str, ...] = (TURN_LEGACY, TURN_JINJA)
 _AT_MOST_ONCE = (VISUAL_ALLOWED_FLAGS | {_GEMMA_TEMPLATE_FLAG}) - {"--image"}
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -428,7 +448,11 @@ def build_visual_argv(
 
 
 __all__ = [
+    "JINJA_FLAG",
     "MAX_IMAGE_BYTES",
+    "TURN_FORMATS",
+    "TURN_JINJA",
+    "TURN_LEGACY",
     "MAX_IMAGE_SIDE",
     "VISION_BUILD_ID",
     "VISION_TOOL",

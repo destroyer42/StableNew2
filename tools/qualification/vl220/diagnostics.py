@@ -190,10 +190,13 @@ class DiagnosticCapture:
             }
         )
 
-    def document(self, *, plan_sha256: str, evidence_file: str) -> dict[str, Any]:
+    def document(
+        self, *, plan_sha256: str, evidence_file: str, turn_format: str = "legacy"
+    ) -> dict[str, Any]:
         return {
             "schema": DIAGNOSTICS_SCHEMA,
             "plan_sha256": plan_sha256,
+            "turn_format": turn_format,
             "set_id": self._set_id,
             "case_set_sha256": self._case_digest,
             "labeler": contract.LABELER_SYNTHETIC,

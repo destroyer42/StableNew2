@@ -63,6 +63,7 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
     from src.ai_assist.host import GenerationActivity
     from src.ai_assist.paths import resolve_ai_root
     from tools.qualification.vl220 import contract
+    from tools.qualification.vl220.visual_argv import TURN_JINJA, TURN_LEGACY
 
     if contract.INVOCATION_APPROVED is not True:
         sys.stderr.write(f"refused: {driver.REFUSED_NOT_APPROVED}\n")
@@ -84,6 +85,20 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
         return 2
     if args.diagnostics_out is not None and args.diagnostics_out.exists():
         sys.stderr.write(f"refused: {diagnostics.REFUSED_EXISTS}\n")
+        return 2
+    # Turn format (PR-AI-VL-223, D24). Gemma always renders its own template; for any other candidate ``jinja`` is the
+    # evaluation-only variant and is refused before a launch unless this is a diagnostic run of a built-in synthetic set.
+    gemma = candidate.candidate_id == GEMMA_CANDIDATE_ID
+    turn_format = args.turn_format or (TURN_JINJA if gemma else TURN_LEGACY)
+    if gemma and turn_format != TURN_JINJA:
+        sys.stderr.write("refused: gemma_renders_its_own_template\n")
+        return 2
+    if (
+        not gemma
+        and turn_format == TURN_JINJA
+        and (args.diagnostics_out is None or args.cases is not None)
+    ):
+        sys.stderr.write(f"refused: {driver.REFUSED_TURN_FORMAT}\n")
         return 2
     try:
         if args.cases is None:
@@ -139,6 +154,7 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
         activity=(lambda: GenerationActivity()) if args.generation_idle else None,
         limits=limits,
         capture=capture,
+        use_jinja=turn_format == TURN_JINJA,
     )
     run = visual.run_cases(case_set, labels)
     controls = None
@@ -150,6 +166,7 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
         case_set_sha256=case_sha,
         candidate=candidate,
         controls=controls,
+        turn_format=visual.turn_format,
     )
     if execution is not None:
         document.update(execution_sha256=execution["execution_sha256"], label_set_sha256=label_sha)
@@ -162,7 +179,11 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
         try:
             diagnostics.write_diagnostics(
                 args.diagnostics_out,
-                capture.document(plan_sha256=current, evidence_file=args.evidence_out.name),
+                capture.document(
+                    plan_sha256=current,
+                    evidence_file=args.evidence_out.name,
+                    turn_format=visual.turn_format,
+                ),
             )
         except diagnostics.DiagnosticsRefused as exc:
             sys.stderr.write(f"refused: {exc}\n")
@@ -244,6 +265,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also run the unscored free-text controls (needs --diagnostics-out)",
     )
+    evaluate.add_argument(
+        "--turn-format", default=None, choices=("legacy", "jinja"),
+        help="legacy (default for LFM): the earlier command line. jinja (always, for Gemma): adds the single --jinja switch so "
+        "the turn is rendered from the pinned GGUF's own chat template; for LFM it is evaluation-only and needs "
+        "--diagnostics-out and a built-in synthetic set",
+    )  # fmt: skip
     evaluate.add_argument("--cases", type=Path, default=None)
     evaluate.add_argument("--labels", type=Path, default=None)
     evaluate.add_argument("--min-image-tokens", type=int, default=64)

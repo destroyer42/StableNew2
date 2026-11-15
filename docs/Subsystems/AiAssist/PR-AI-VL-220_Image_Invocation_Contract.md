@@ -13,8 +13,11 @@ What this does **not** do, and what is still missing before any run is possible:
    driver are in the follow-up package, and `contract.INVOCATION_APPROVED` is now `True` (as is the plan field; the comparator
    reason `image_invocation_not_approved`, which read "approved and implemented", is gone). The plan digest the owner named,
    `23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`, therefore changed by exactly that flag and that reason text
-   (section 7 proves it); the digest the first supervised run executed is `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`, and after PR-AI-VL-222 (a diagnostic plan section, no change to this
-   contract) the current digest is `ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7`. The owner's
+   (section 7 proves it); the digest the first supervised run executed is `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`,
+   after PR-AI-VL-222 (a diagnostic plan section, no change to this contract) the plan the second run executed is
+   `ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7`, and after PR-AI-VL-223 (a template A/B plan section; the
+   `--jinja` variant below is evaluation-only and pending the owner's approval by digest) the current digest is
+   `15d7ab2ee6d5b5f21db3798dee3390ed6a8c4086dc973ce5593ee91a043db536`. The owner's
    authorization (decision C) named the old digest, so the driver's `evaluate` command asks the owner to name the current one
    (`--i-have-the-plan-digest`); no run is possible until the prerequisites in items 2 to 4 exist and the owner confirms.
 2. **The license acknowledgement is still the owner's act and has not been made** (record `license_acknowledgement.json`, text
@@ -58,7 +61,7 @@ cannot reach.
 | `--image` | yes (`MTMD, CLI`) | yes: one file per case (two for before/after), copied to a private work directory |
 | `--no-mmproj-offload`, `-mmdev none` | yes (`mmproj_examples`) | yes: keep the projector on the CPU |
 | `--image-min-tokens`, `--image-max-tokens` | yes (`mmproj_examples`) | yes: bound image memory (values set from the first supervised measurement) |
-| `--jinja` | yes | **open**: MTMD defaults to the legacy template engine; whether it renders this model's template is unproven (section 5) |
+| `--jinja` | yes | **refused by default**; a named, evaluation-only turn-format variant adds exactly this switch (section 7, PR-AI-VL-223). The legacy engine's use was confirmed by run 2's log; whether `--jinja` changes answers is the A/B, pending the owner's digest approval |
 | `--log-disable` | accepted | **no**: it pauses the log that prints the generation, so stdout would be empty |
 | `--no-conversation`, `--no-display-prompt`, `--reasoning` | **not accepted** | no (not needed; single-turn is implied) |
 | `-p` | yes | **no**: the prompt goes in a file (`-f`), never on a command line other processes can read |
@@ -105,7 +108,8 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
 
 1. That `llama-mtmd-cli.exe` of `b11960-cpu` loads the Q4_K_M model with the F16 projector at all, and its CPU memory and speed.
 2. Whether the legacy template engine renders the LFM3 chat template or `--jinja` is needed (and whether `--jinja` is
-   accepted together with the grammar).
+   accepted together with the grammar). Run 2's log showed the legacy ChatML turn in use; the `--jinja` A/B of PR-AI-VL-223 is
+   prepared and not run.
 3. That a trailing end-of-text marker and blank lines behave as with `llama-completion` (the strip is tolerant).
 4. That `--json-schema-file` constrains `mtmd-cli` decoding as the source suggests (`common_sampler_init` is used).
 5. The right `--image-max-tokens`.
@@ -167,6 +171,15 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
   set the capture cannot be constructed and the rule above stands (a test proves the refusal). The same package adds an unscored
   free-text control request (no `--json-schema-file`, same executable, admission and limits) and **no flag**; `--jinja` stays refused.
   See `docs/work_packages/AI-VL-222_visual_diagnostic.md`.
+
+* **Template A/B (PR-AI-VL-223, decision D24; evaluation-only, pending the owner's approval by plan digest, not run).** The visual
+  argument builder's existing `use_jinja` switch (used by the Gemma candidate) may also be set for the LFM candidate. Without it the
+  command line is exactly the one above. With it the single switch `--jinja` is appended at the end, so the turn is rendered from
+  the pinned GGUF's own template (BOS first, generation prompt ending in an open `<think>`); `--jinja` stays in the refused list for
+  every other use and is accepted only when the check is asked for `use_jinja=True` and it appears exactly once. For LFM the driver
+  refuses it unless a diagnostic capture exists (so only for a built-in synthetic set); the strict containment checks stay Gemma-only. `--chat-template-kwargs`, the `--reasoning` family and every template or template-file flag stay
+  refused: b11960's `llama-mtmd-cli` does not register the first two (`common/arg.cpp`), so a no-thinking turn cannot be requested.
+  Nothing is promoted and `qualified` stays false. See `docs/work_packages/AI-VL-223_template_ab.md`.
 
 Still missing before any run (none is created by the implementing package): the license acknowledgement
 (`license_acknowledgement.json`, text `30adf9d6...`), the owner's outbound Block rule for `llama-mtmd-cli.exe` and the attestation

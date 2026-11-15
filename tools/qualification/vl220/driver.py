@@ -85,6 +85,8 @@ from tools.qualification.vl220.contract import (
 from tools.qualification.vl220.prompts import render_control_prompt, render_visual_prompt
 from tools.qualification.vl220.visual_argv import (
     MAX_IMAGE_BYTES,
+    TURN_JINJA,
+    TURN_LEGACY,
     VISION_BUILD_ID,
     VISION_TOOL,
     VisualArgvRefused,
@@ -131,6 +133,7 @@ REFUSED_ARGV = "argv_refused"
 REFUSED_SCRATCH = "scratch_unavailable"
 REFUSED_CANCELLED = "cancelled"
 REFUSED_DIAGNOSTICS = "diagnostics_not_enabled"
+REFUSED_TURN_FORMAT = "turn_format_needs_diagnostic_capture"
 
 # --- per-case status ----------------------------------------------------------------------------------------------------
 STATUS_VALID = "valid"
@@ -403,6 +406,7 @@ class VisualDriver:
         cancel: CancelCheck | None = None,
         watch_interval: float = WATCH_INTERVAL_SECONDS,
         capture: diagnostics.DiagnosticCapture | None = None,
+        use_jinja: bool | None = None,
     ) -> None:
         self._candidate = candidate
         self._root = Path(evaluation_root)
@@ -419,13 +423,24 @@ class VisualDriver:
         self._runner = runner
         self._limits = limits if limits is not None else VisualLimits()
         self._sampling = sampling if sampling is not None else VisualSampling()
-        self._use_jinja = candidate.candidate_id == GEMMA_CANDIDATE_ID
+        #: Gemma always renders its turn from its own template and runs under the stricter containment checks of PR-AI-VL-230.
+        #: ``use_jinja=True`` for another candidate is the evaluation-only turn variant of PR-AI-VL-223 (decision D24): it adds
+        #: the one ``--jinja`` switch and nothing else (the strict checks stay Gemma-only, so the two LFM variants run under
+        #: identical conditions) and is refused unless a diagnostic capture exists.
+        self._strict = candidate.candidate_id == GEMMA_CANDIDATE_ID
+        self._use_jinja = self._strict or bool(use_jinja)
         self._resource_limits = plan.evaluation_limits(candidate)
         self._cancel: CancelCheck = cancel if cancel is not None else (lambda: False)
         self._interval = watch_interval
         #: Only a capture built for a built-in synthetic set can exist (``DiagnosticCapture`` refuses anything else), so
         #: with ``None`` no answer text and no runtime output is kept beyond scoring, exactly as before.
         self._capture = capture
+
+    @property
+    def turn_format(self) -> str:
+        """``jinja`` when the turn is rendered from the pinned GGUF's template (``--jinja``), otherwise ``legacy``."""
+
+        return TURN_JINJA if self._use_jinja else TURN_LEGACY
 
     # -- locations ------------------------------------------------------------------------------------------------------
 
@@ -613,6 +628,8 @@ class VisualDriver:
         name = job.request_id
         if contract.INVOCATION_APPROVED is not True:
             return _refused(name, Refusal(REFUSED_NOT_APPROVED))
+        if self._use_jinja and not self._strict and self._capture is None:
+            return _refused(name, Refusal(REFUSED_TURN_FORMAT))
         if self._cancel():
             return _refused(name, Refusal(REFUSED_CANCELLED))
         refused_root = staging.root_refusal(self._root)
@@ -712,9 +729,7 @@ class VisualDriver:
             memory=self._memory,
             clock=self._clock,
             interval=self._interval,
-            working_set_limit_bytes=resource.max_peak_working_set_bytes
-            if self._use_jinja
-            else None,
+            working_set_limit_bytes=resource.max_peak_working_set_bytes if self._strict else None,
         )
         assert self._activity is not None  # admission refused without a reading
         runtime_root = runtime_dir(self._ai_root, build.build_id)
@@ -725,7 +740,7 @@ class VisualDriver:
                 "require_containment": True,
                 "memory_limit_mb": resource.max_peak_working_set_bytes / 1024**2,
             }
-            if self._use_jinja
+            if self._strict
             else {}
         )
         outcome = self._runner(
@@ -780,7 +795,7 @@ class VisualDriver:
                 else "launch_failed"
             )
             return CaseRun(CaseEvidence(status=STATUS_LAUNCH_FAILED, reason=reason, **evidence))
-        if self._use_jinja and (not outcome.contained or outcome.memory_limit_enforced is not True):
+        if self._strict and (not outcome.contained or outcome.memory_limit_enforced is not True):
             return CaseRun(
                 CaseEvidence(
                     status=STATUS_LAUNCH_FAILED,
@@ -806,7 +821,7 @@ class VisualDriver:
             return CaseRun(
                 CaseEvidence(status=STATUS_CHILD_FAILED, reason="child_exit_nonzero", **evidence)
             )
-        if self._use_jinja and not observer.evidence.child_observed:
+        if self._strict and not observer.evidence.child_observed:
             return CaseRun(
                 CaseEvidence(
                     status=STATUS_LAUNCH_FAILED,
@@ -849,7 +864,7 @@ class VisualDriver:
                     cpu_only=run.evidence.cpu_only,
                 )
         report = scoring.score_run(case_set, labels, responses, measurements, self._resource_limits)
-        if self._use_jinja:
+        if self._strict:
             report["baselines"] = {
                 mode: scoring.score_run(
                     case_set, labels, scoring.baseline_responses(case_set, mode)
@@ -928,6 +943,7 @@ def evidence_document(
     case_set_sha256: str,
     candidate: VisualCandidate,
     controls: EvaluationRun | None = None,
+    turn_format: str = TURN_LEGACY,
 ) -> dict[str, Any]:
     """The only thing a run writes: timing, memory, the path-free argv hash, exit codes and reason codes, plus the aggregate
     score numbers. It contains no image, prompt or answer text."""
@@ -940,6 +956,7 @@ def evidence_document(
         "candidate_id": candidate.candidate_id,
         "build_id": VISION_BUILD_ID,
         "executable": VISION_TOOL,
+        "turn_format": turn_format,
         "complete": run.complete,
         "refusal": None
         if run.refusal is None
@@ -956,6 +973,7 @@ __all__ = [
     "MODEL_REGISTRY_PATH",
     "REFUSED_NOT_APPROVED",
     "REFUSED_PLAN_DIGEST",
+    "REFUSED_TURN_FORMAT",
     "CaseEvidence",
     "CaseRun",
     "EvaluationRun",

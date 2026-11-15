@@ -88,7 +88,8 @@ the synthetic case and label documents in memory. For existing assets, pass `--c
 `--assets` at the PNG or JPEG files named by asset ID. Existing assets require human labels.
 
 The LFM3-VL-2B invocation, sampling defaults and owner plan from VL-220 still apply. Its current plan digest is
-`fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`. Follow the
+`15d7ab2ee6d5b5f21db3798dee3390ed6a8c4086dc973ce5593ee91a043db536` (run `describe` for the live value; earlier packages' digests
+are listed in the image invocation contract). Follow the
 [LFM staging runbook](ai_vl_candidate_staging.md) for the original LFM command. Pass `--ai-root $root` to use the isolated
 runtime installed above.
 
