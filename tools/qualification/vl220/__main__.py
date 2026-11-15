@@ -27,7 +27,7 @@ from tools.qualification.vl220.candidates import (
     find_candidate,
     has_link,
 )
-from tools.qualification.vl220.visual_argv import VISION_BUILD_ID, VisualLimits
+from tools.qualification.vl220.visual_argv import VISION_BUILD_ID
 
 DEFAULT_CANDIDATE = "lfm3-vl-2b-q4_k_m-liquidai"
 
@@ -77,6 +77,20 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
     if args.evidence_out.exists():
         sys.stderr.write("refused: evidence file already exists\n")
         return 2
+    # The evidence is written only after the whole run, so a location that cannot take it must be found out before the first
+    # launch, not after minutes of CPU: the folder exists, is outside Git and outside the AI Assist root, and is not the
+    # diagnostics file.
+    evidence_parent = staging.root_refusal(args.evidence_out.parent)
+    if evidence_parent or not args.evidence_out.parent.is_dir():
+        reason = evidence_parent or "directory_missing"
+        sys.stderr.write(f"refused: evidence_path_refused: {reason}\n")
+        return 2
+    if (
+        args.diagnostics_out is not None
+        and args.diagnostics_out.absolute() == args.evidence_out.absolute()
+    ):
+        sys.stderr.write("refused: evidence and diagnostics need different files\n")
+        return 2
     if (args.cases is None) != (args.labels is None):
         sys.stderr.write("refused: --cases and --labels go together\n")
         return 2
@@ -107,8 +121,11 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
             case_doc, label_doc = _load_json(args.cases), _load_json(args.labels)
         case_set = contract.validate_case_set(case_doc)
         labels = contract.validate_label_set(label_doc, case_set)
-        limits = VisualLimits(
-            image_min_tokens=args.min_image_tokens, image_max_tokens=args.max_image_tokens
+        limits = driver.default_limits(
+            candidate,
+            image_min_tokens=args.min_image_tokens,
+            image_max_tokens=args.max_image_tokens,
+            timeout_seconds=args.timeout_seconds,
         )
     except (OSError, ValueError, RecursionError) as exc:
         sys.stderr.write(f"refused: {exc.__class__.__name__}\n")
@@ -167,14 +184,19 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
         candidate=candidate,
         controls=controls,
         turn_format=visual.turn_format,
+        cleanup_complete=visual.cleanup_complete,
     )
     if execution is not None:
         document.update(execution_sha256=execution["execution_sha256"], label_set_sha256=label_sha)
-    with args.evidence_out.open("x", encoding="utf-8") as handle:
-        json.dump(document, handle, indent=2, sort_keys=True, allow_nan=False)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    try:
+        with args.evidence_out.open("x", encoding="utf-8") as handle:
+            json.dump(document, handle, indent=2, sort_keys=True, allow_nan=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError:
+        sys.stderr.write("refused: evidence_write_failed\n")
+        return 1
     if capture is not None:
         try:
             diagnostics.write_diagnostics(
@@ -188,6 +210,11 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
         except diagnostics.DiagnosticsRefused as exc:
             sys.stderr.write(f"refused: {exc}\n")
             return 1
+    if not visual.cleanup_complete:
+        sys.stderr.write(
+            "refused: work_directory_not_removed (delete <evaluation root>/_work yourself first)\n"
+        )
+        return 1
     if controls is not None and controls.refusal is not None:
         sys.stderr.write(f"refused: {controls.refusal}\n")
         return 1
@@ -212,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     execution = sub.add_parser("describe-execution")
     execution.add_argument("--min-image-tokens", type=int, default=64)
     execution.add_argument("--max-image-tokens", type=int, default=256)
+    execution.add_argument("--timeout-seconds", type=float, default=None)
     status = sub.add_parser("status")
     status.add_argument("--evaluation-root", type=Path, required=True)
     status.add_argument("--ai-root", type=Path)
@@ -275,6 +303,10 @@ def main(argv: list[str] | None = None) -> int:
     evaluate.add_argument("--labels", type=Path, default=None)
     evaluate.add_argument("--min-image-tokens", type=int, default=64)
     evaluate.add_argument("--max-image-tokens", type=int, default=256)
+    evaluate.add_argument(
+        "--timeout-seconds", type=float, default=None,
+        help="per-case wall-clock kill; default 180 (LFM) or 300 (Gemma). Part of the execution identity.",
+    )  # fmt: skip
     evaluate.add_argument("--execution-sha256")
     evaluate.add_argument("--case-sha256")
     evaluate.add_argument("--label-sha256")
@@ -291,9 +323,11 @@ def main(argv: list[str] | None = None) -> int:
             _print(
                 driver.execution_identity(
                     candidate,
-                    VisualLimits(
+                    driver.default_limits(
+                        candidate,
                         image_min_tokens=args.min_image_tokens,
                         image_max_tokens=args.max_image_tokens,
+                        timeout_seconds=args.timeout_seconds,
                     ),
                 )
             )
