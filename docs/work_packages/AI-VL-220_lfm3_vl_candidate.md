@@ -186,6 +186,9 @@ Explicit exclusions kept: no llama.cpp binary or model was executed; no GPU; not
 change to the text registry, the selector, Preview, activation, `import-model`, `FORBIDDEN_FLAGS`, `ALLOWED_FLAGS`,
 `build_argv`, `build_production_argv` or any frozen AI-111/AI-115 identity (their digest tests pass unmodified).
 
+Follow-up (2026-11-14): the first supervised run scored near zero; the diagnosis, the harness fixes, the 512-pixel set and the
+diagnostic mode are in `docs/work_packages/AI-VL-222_visual_diagnostic.md` (the plan digest moved with it).
+
 Held, still the owner's before the first supervised CPU-only run: `license_acknowledgement.json` for text
 `30adf9d6478191fb87f2424f63ba0728598335aaf99cd2848ef17e8e545fe94b`; the outbound Block rule for `llama-mtmd-cli.exe` and the
 attestation for `b11960-cpu-vision`; the evaluation-root import; for existing assets, the chosen images and a human labeler; and

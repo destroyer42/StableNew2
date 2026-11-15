@@ -215,12 +215,15 @@ def _flag_shaped(token: str) -> bool:
     return token.startswith("-") and not _is_number(token)
 
 
-def check_visual_argv(argv: list[str]) -> None:
+def check_visual_argv(argv: list[str], *, free_text: bool = False) -> None:
     """Raise :class:`VisualArgvRefused` unless ``argv`` is exactly the closed visual vocabulary in a safe shape.
 
     Beyond the allow-list: every value-taking flag has a value that is not itself flag-shaped, no flag repeats (except one
     ``--image`` per image, one or two), exactly one ``--mmproj`` and one ``-m``, an image and a prompt file are present, and the
-    CPU-only settings (``-ngl 0``, ``-mmdev none``, ``--no-mmproj-offload``, ``--offline``) are all there."""
+    CPU-only settings (``-ngl 0``, ``-mmdev none``, ``--no-mmproj-offload``, ``--offline``) are all there.
+
+    ``free_text`` is the diagnostic control (PR-AI-VL-222): the one difference is that no ``--json-schema-file`` is given (and
+    one is refused), so the answer is unconstrained text. It adds no flag to the vocabulary."""
 
     counts: Counter[str] = Counter()
     values: dict[str, list[str]] = {}
@@ -246,7 +249,8 @@ def check_visual_argv(argv: list[str]) -> None:
             raise _refuse("flag_repeated", flag)
     if counts["--mmproj"] != 1:
         raise _refuse("exactly_one_mmproj_required")
-    if counts["-m"] != 1 or counts["-f"] != 1 or counts["--json-schema-file"] != 1:
+    expected_schema = 0 if free_text else 1
+    if counts["-m"] != 1 or counts["-f"] != 1 or counts["--json-schema-file"] != expected_schema:
         raise _refuse("model_prompt_and_schema_required")
     if counts["--image"] not in (1, 2):
         raise _refuse("one_or_two_images_required")
@@ -320,14 +324,18 @@ def build_visual_argv(
     model_path: Path,
     projector_path: Path,
     prompt_file: Path,
-    schema_file: Path,
+    schema_file: Path | None,
     image_paths: list[Path],
     evaluation_root: Path,
     work_dir: Path,
     limits: VisualLimits | None = None,
     sampling: VisualSampling | None = None,
+    free_text: bool = False,
 ) -> list[str]:
     """Arguments (without the executable) for one single-turn, CPU-only, offline image question.
+
+    ``free_text`` (the diagnostic control only) takes ``schema_file=None`` and emits no ``--json-schema-file``; a schema file
+    given with it, or none given without it, is refused.
 
     The model and the one projector must be files inside ``evaluation_root``; the prompt, schema and images must be files inside
     the private ``work_dir``. An empty prompt file or a missing image is refused because ``mtmd-cli`` is single-turn only when
@@ -343,7 +351,13 @@ def build_visual_argv(
     if model == projector:
         raise _refuse("projector_is_the_model")
     prompt = _prompt_file(prompt_file, work_dir)
-    schema = _inside(schema_file, work_dir, "schema_file_outside_work_dir")
+    if free_text != (schema_file is None):
+        raise _refuse("schema_file_does_not_match_the_request_mode")
+    schema = (
+        None
+        if schema_file is None
+        else _inside(schema_file, work_dir, "schema_file_outside_work_dir")
+    )
     images = [_inside(path, work_dir, "image_outside_work_dir") for path in image_paths]
     for image in images:
         inspect_image(image)
@@ -366,8 +380,10 @@ def build_visual_argv(
     argv += [
         "-f",
         str(prompt),
-        "--json-schema-file",
-        str(schema),
+    ]
+    if schema is not None:
+        argv += ["--json-schema-file", str(schema)]
+    argv += [
         "-c",
         str(limits.context_tokens),
         "-n",
@@ -393,7 +409,7 @@ def build_visual_argv(
         "--seed",
         str(int(sampling.seed)),
     ]
-    check_visual_argv(argv)
+    check_visual_argv(argv, free_text=free_text)
     return argv
 
 
