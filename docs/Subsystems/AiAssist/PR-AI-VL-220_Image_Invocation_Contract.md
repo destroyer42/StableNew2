@@ -180,6 +180,8 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
   refused: b11960's `llama-mtmd-cli` does not register the first two (`common/arg.cpp`), so a no-thinking turn cannot be requested.
   Nothing is promoted and `qualified` stays false. See `docs/work_packages/AI-VL-223_template_ab.md`.
 
+* **Review fixes (AI-VL-241, `docs/work_packages/AI-VL-241_gemma_readiness.md`; no change to sections 2-4).** Memory headroom stays "download plus a 4 GiB margin" except for a candidate with a planned private peak: Gemma needs 11.0 GiB available and 12.0 GiB commit headroom. The strict (Gemma) watch kills on a working set above the commit ceiling plus the two pinned files, not on the ceiling alone (mapped file pages are not commit). A `launch_failed` case stops the set instead of being scored. A work directory that cannot be removed is reported (`cleanup_complete: false`) and refuses the next case; nothing is deleted for the operator. The evidence location is checked before the first launch. Gemma's default per-case kill is 300 s (`--timeout-seconds` is part of the execution identity); the plan's proposed 180 s limit is unchanged and only reports.
+
 Still missing before any run (none is created by the implementing package): the license acknowledgement
 (`license_acknowledgement.json`, text `30adf9d6...`), the owner's outbound Block rule for `llama-mtmd-cli.exe` and the attestation
 for `b11960-cpu-vision`, the import of the pair into an evaluation root, and for existing assets the owner's chosen images and a
