@@ -166,7 +166,10 @@ def test_the_generation_post_set_is_derived_from_the_production_call_paths() -> 
     generating = {"/sdapi/v1/txt2img", "/sdapi/v1/img2img", "/sdapi/v1/extra-single-image"}
     assert generating <= posted
     # one canonical identity shared by the definite-HTTP rule and the ambiguous-transport classifier
-    assert client_module._GENERATION_POST_ENDPOINTS == generating
+    # ...plus the StableNew companion's localized ADetailer operation, which samples too and is never replayed.
+    companion = "/stablenew/v1/adetailer/localized"
+    assert f'"post",\n            "{companion}"' in source.replace("\r\n", "\n")
+    assert client_module._GENERATION_POST_ENDPOINTS == generating | {companion}
     assert not hasattr(client_module, "_DISPATCHING_GENERATION_ENDPOINTS")
 
 

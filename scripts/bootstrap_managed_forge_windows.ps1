@@ -13,7 +13,11 @@ param(
     [string]$PackageIndexUrl = "https://pypi.org/simple",
     [switch]$SkipModelHashes,
     [switch]$CheckOnly,
-    [switch]$Recreate
+    [switch]$Recreate,
+    # Refresh only the StableNew-owned extensions of an existing managed install (copied from this repository,
+    # hash-validated), then verify. Installs no package and fetches nothing. Forge must be stopped by its owner
+    # first; a running Forge keeps the extension it loaded until it is restarted.
+    [switch]$SyncOwnedExtensions
 )
 
 Set-StrictMode -Version Latest
@@ -167,6 +171,30 @@ function Install-Detectors {
     }
 }
 
+function Install-OwnedExtensions {
+    # StableNew's own Forge extensions: copied from this repository (never fetched), each file validated against
+    # the contract's sha256 (CRLF folded to LF) before anything is written. Declared files are overwritten in
+    # place and nothing is deleted here: a stray file left in the target is reported by the verifier as drift.
+    foreach ($extension in $Manifest.extensions.stablenew_owned.PSObject.Properties) {
+        $source = Join-Path $RepoRoot (([string]$extension.Value.source).Replace("/", "\"))
+        $target = Join-Path $DataDir ("extensions\{0}" -f $extension.Name)
+        foreach ($file in $extension.Value.files.PSObject.Properties) {
+            $path = Join-Path $source (([string]$file.Name).Replace("/", "\"))
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Owned extension file '$($file.Name)' of '$($extension.Name)' is missing from the repository." }
+            $text = [IO.File]::ReadAllText($path).Replace("`r`n", "`n")
+            $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes($text)
+            $hash = -join ([Security.Cryptography.SHA256]::Create().ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") })
+            if ($hash -ne [string]$file.Value) { throw "Owned extension file '$($file.Name)' of '$($extension.Name)' has sha256 $hash, not the accepted $($file.Value)." }
+        }
+        foreach ($file in $extension.Value.files.PSObject.Properties) {
+            $relative = ([string]$file.Name).Replace("/", "\")
+            $destination = Join-Path $target $relative
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+            Copy-Item -LiteralPath (Join-Path $source $relative) -Destination $destination -Force
+        }
+    }
+}
+
 function Write-ForgeConfig {
     # The declared Forge settings, as BOM-less UTF-8 JSON (Forge reads it with plain utf-8).
     $settings = [ordered]@{}
@@ -181,7 +209,7 @@ function Invoke-Verifier {
     Invoke-Checked -Executable $VenvPython -Arguments $arguments -FailureMessage "The managed Forge runtime at '$InstallDir' does not match its contract." | ForEach-Object { Write-Host $_ }
 }
 
-if ($CheckOnly -and $Recreate) { throw "-CheckOnly and -Recreate cannot be used together." }
+if ($CheckOnly -and ($Recreate -or $SyncOwnedExtensions)) { throw "-CheckOnly cannot be combined with -Recreate or -SyncOwnedExtensions." }
 if ([string]::IsNullOrWhiteSpace($ModelReferenceHome)) { throw "-ModelReferenceHome is required (the existing A1111 home whose models Forge references)." }
 Assert-OwnedInstallDir
 
@@ -190,6 +218,17 @@ if ($CheckOnly) {
     Assert-SupportedPython -Executable $VenvPython
     Invoke-Verifier
     Write-Host "Managed Forge check-only verification passed: $InstallDir"
+    return
+}
+
+if ($SyncOwnedExtensions) {
+    if ($Recreate) { throw "-SyncOwnedExtensions and -Recreate cannot be used together." }
+    if (-not (Test-Path -LiteralPath (Join-Path $InstallDir $MarkerName) -PathType Leaf)) { throw "'$InstallDir' is not a StableNew-managed install (no $MarkerName); nothing was changed." }
+    if (-not (Test-Path -LiteralPath $VenvPython -PathType Leaf)) { throw "No managed Forge venv at '$VenvPython'. Run this script without -SyncOwnedExtensions first." }
+    Install-OwnedExtensions
+    Invoke-Verifier
+    Write-InstallMarker -Status "verified"
+    Write-Host "Managed Forge owned extensions refreshed and verified: $InstallDir"
     return
 }
 
@@ -226,6 +265,7 @@ Invoke-Checked -Executable $VenvPython -Arguments @("-m", "pip", "install", "--n
 Invoke-Checked -Executable $VenvPython -Arguments @("-m", "pip", "install", "--no-deps", "-r", $ConstraintsPath) -FailureMessage "Could not install the accepted package set from '$ConstraintsPath'." | Out-Null
 
 Install-Detectors
+Install-OwnedExtensions
 Write-ForgeConfig
 
 Invoke-Verifier

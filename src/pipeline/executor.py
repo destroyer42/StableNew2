@@ -36,6 +36,18 @@ from src.conditioning.openpose import ConditioningError
 from src.config import app_config
 from src.pipeline.adetailer_contract import schema_issues
 from src.pipeline.adetailer_effectiveness import build_effectiveness, response_infotexts
+from src.pipeline.adetailer_localized import (
+    EXECUTION_MODE_KEY,
+    LOCALIZED_ONLY,
+    LocalizedOutcome,
+    LocalizedRefinementError,
+    build_request,
+    encode_png,
+    execution_mode,
+    localized_refusals,
+    verify_and_composite,
+    verify_published,
+)
 from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.pipeline.backend_setting_evidence import setting_values
 from src.pipeline.global_prompt_policy import (
@@ -3059,6 +3071,15 @@ class Pipeline:
             return f"ETA: {hours:d}h {minutes:02d}m {secs:02d}s"
         return f"ETA: {minutes:02d}:{secs:02d}"
 
+    @staticmethod
+    def _adetailer_refusal(message: str) -> PipelineStageError:
+        """A visible, fail-closed ADetailer stage failure (never a silent fallback to whole-image processing)."""
+
+        logger.error("[adetailer/localized] %s", message)
+        return PipelineStageError(
+            GenerateError(code=GenerateErrorCode.ADETAILER_CONFIG, message=message, stage="adetailer")
+        )
+
     def run_adetailer(
         self,
         input_image_path: Path,
@@ -3435,6 +3456,16 @@ class Pipeline:
                 ),
             }
 
+        # An absent mode is a job compiled before localized-only existed: it keeps the whole-image request below.
+        try:
+            adetailer_mode = execution_mode(config)
+        except LocalizedRefinementError as exc:
+            raise self._adetailer_refusal(str(exc)) from exc
+        if adetailer_mode == LOCALIZED_ONLY:
+            refusals = localized_refusals(requested_passes)
+            if refusals:
+                raise self._adetailer_refusal("; ".join(refusals))
+
         payload = {
             "init_images": [init_image],
             "prompt": final_prompt,
@@ -3534,6 +3565,31 @@ class Pipeline:
                     payload_height,
                 )
 
+        localized_original: Image.Image | None = None
+        if adetailer_mode == LOCALIZED_ONLY:
+            # No whole-image img2img: the companion runs only the requested passes' masked inpaints and returns the
+            # masks it used. The request keeps this stage's prompt, sampler and request-local pinning fields.
+            with Image.open(input_image_path) as source_image:
+                localized_original = source_image.convert("RGB")
+            payload = build_request(
+                original=localized_original,
+                passes=requested_passes,
+                generation={
+                    key: payload[key]
+                    for key in (
+                        "prompt",
+                        "negative_prompt",
+                        "sampler_name",
+                        "steps",
+                        "cfg_scale",
+                        "seed",
+                        "scheduler",
+                        "override_settings",
+                    )
+                    if key in payload
+                },
+            )
+
         # Create progress callback that reports to controller
         def on_adetailer_progress(
             percent: float,
@@ -3588,6 +3644,56 @@ class Pipeline:
 
         # Check for cancellation after API call
         self._ensure_not_cancelled(cancel_token, "adetailer post-call")
+
+        localized_outcome: LocalizedOutcome | None = None
+        if localized_original is not None:
+            info = response.get("info") if isinstance(response, dict) else None
+            evidence = info.get("stablenew_localized") if isinstance(info, dict) else None
+            if isinstance(evidence, dict):
+                # The client carries the refined image as ``images[0]`` and the rest of the evidence under ``info``.
+                returned = response.get("images") or []
+                evidence = {**evidence, "image": returned[0] if returned else None}
+            try:
+                localized_outcome = verify_and_composite(
+                    original=localized_original,
+                    response=evidence,
+                    passes=requested_passes,
+                )
+            except LocalizedRefinementError as exc:
+                raise self._adetailer_refusal(
+                    f"localized refinement could not be verified, so nothing was published: {exc}"
+                ) from exc
+            if localized_outcome.image is None:
+                # No eligible mask (or nothing sampled): the input is the result, byte for byte.
+                reason = (
+                    "no eligible face or hand mask"
+                    if localized_outcome.record["zero_mask_passthrough"]
+                    else "no mask was refined"
+                )
+                logger.info("[adetailer/localized] %s; input passes through unchanged", reason)
+                return {
+                    "name": Path(input_image_path).stem,
+                    "stage": "adetailer",
+                    "skipped": True,
+                    "skip_reason": reason,
+                    "input_image": str(input_image_path),
+                    "path": str(input_image_path),
+                    EXECUTION_MODE_KEY: adetailer_mode,
+                    "adetailer_localized": localized_outcome.record,
+                    "adetailer_effectiveness": build_effectiveness(
+                        face_args=face_args,
+                        hand_args=hand_args,
+                        request_completed=True,
+                        input_image=input_image_path,
+                        output_image=input_image_path,
+                        adaptive_refinement=adaptive_refinement or None,
+                        skipped_reason=reason,
+                    ),
+                }
+            # Only the verified composite is ever written: backend pixels inside the authorized region, source
+            # pixels everywhere else.
+            assert isinstance(response, dict)
+            response["images"] = [encode_png(localized_outcome.image)]
 
         if not response or "images" not in response:
             logger.error("adetailer failed")
@@ -3660,7 +3766,10 @@ class Pipeline:
             "requested_seed": payload.get("seed", -1),
             "actual_seed": gen_info.get("seed"),
             "actual_subseed": gen_info.get("subseed"),
+            EXECUTION_MODE_KEY: adetailer_mode,
         }
+        if localized_outcome is not None:
+            metadata["adetailer_localized"] = localized_outcome.record
         self._attach_runtime_warning(
             metadata,
             {
@@ -3710,6 +3819,18 @@ class Pipeline:
         if isinstance(response, dict):
             response["images"] = []
         actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
+        if actual_path and localized_outcome is not None and localized_original is not None:
+            # Finalization proof on the file itself; a file that fails it is removed, never published.
+            try:
+                with Image.open(actual_path) as written:
+                    verify_published(
+                        original=localized_original, published=written, outcome=localized_outcome
+                    )
+            except (LocalizedRefinementError, OSError) as exc:
+                Path(actual_path).unlink(missing_ok=True)
+                raise self._adetailer_refusal(
+                    f"the written image failed preservation verification and was removed: {exc}"
+                ) from exc
         if actual_path:
             try:
                 # Detection, execution, observable change and (unreviewed) improvement are recorded separately; the

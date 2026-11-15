@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-731 of 886 modules have a docstring.
+732 of 887 modules have a docstring.
 
 ## src/
 
@@ -685,6 +685,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Pipeline module
 - `adetailer_contract.py`: ADetailer-Neo control truth (PR-REFINE-160): the arguments the pinned extension accepts, and the facts derive…
 - `adetailer_effectiveness.py`: Versioned ADetailer effectiveness evidence (PR-REFINE-160): what was detected, what ran, what changed, what w…
+- `adetailer_localized.py`: Localized-only ADetailer refinement (PR-IMG-ADETAILER-LOCAL-240B): execution mode, mask evidence and preserva…
 - `adetailer_profiles.py`: Authoring profiles and compile-time ADetailer settings
 - `animatediff_retirement.py`: AnimateDiff execution retirement policy: one predicate, one error, one stable message
 - `artifact_contract.py`: (no docstring)

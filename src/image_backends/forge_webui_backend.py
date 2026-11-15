@@ -213,6 +213,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         stage_types=("txt2img", "img2img", "adetailer", "upscale"),
         supports_hypernetworks=False,  # the pinned Forge Neo removed Hypernetworks
         supports_openpose_conditioning=True,  # built-in ControlNet extension; one pre-rendered unit, base txt2img only
+        supports_localized_adetailer=True,  # the managed runtime's stablenew-adetailer-local companion extension
     )
     transition_target = RUNTIME_FORGE_WEBUI
 

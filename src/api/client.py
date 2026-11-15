@@ -244,8 +244,16 @@ def _log_stage_failure(stage: str, error: str | Exception) -> None:
 # img2img; upscale uses the extras endpoint). Both the ambiguous-transport classifier (never replay a
 # possibly-executed request) and the definite-HTTP-response rule (never replay a refused job) use it.
 _GENERATION_POST_ENDPOINTS = frozenset(
-    {"/sdapi/v1/txt2img", "/sdapi/v1/img2img", "/sdapi/v1/extra-single-image"}
+    {
+        "/sdapi/v1/txt2img",
+        "/sdapi/v1/img2img",
+        "/sdapi/v1/extra-single-image",
+        # The StableNew companion's localized ADetailer operation samples, so it is never replayed either.
+        "/stablenew/v1/adetailer/localized",
+    }
 )
+#: Payload marker of the localized-only ADetailer operation (``src/pipeline/adetailer_localized.SCHEMA``).
+LOCALIZED_ADETAILER_SCHEMA = "stablenew.adetailer-localized.v1"
 DEFINITE_HTTP_RESPONSE_FAIL_FAST = "definite_http_response"
 
 
@@ -1503,6 +1511,36 @@ class SDWebUIClient:
         logger.info("img2img completed successfully")
         return data
 
+    def adetailer_localized(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Localized face/hand refinement through the StableNew companion extension (never a whole-image img2img).
+
+        One POST with the fail-fast ADetailer policy; errors always propagate, so a runtime without the companion
+        fails the stage instead of falling back. The companion's evidence (masks, source identity, versions) is
+        returned under ``info["stablenew_localized"]`` and the refined image, when one exists, as ``images[0]``.
+        """
+
+        with self._request_context(
+            "post",
+            "/stablenew/v1/adetailer/localized",
+            json=payload,
+            stage="adetailer",
+            policy=ADETAILER_RETRY_POLICY,
+        ) as response:
+            if response is None:
+                return None
+            data = response.json()
+        if not isinstance(data, dict):
+            return None
+        image = data.pop("image", None)
+        return {
+            "images": [image] if image else [],
+            "info": {
+                "seed": data.get("seed"),
+                "subseed": data.get("subseed"),
+                "stablenew_localized": data,
+            },
+        }
+
     def interrogate(self, image_base64: str, *, model: str = "clip") -> str | None:
         """
         Generate a caption for an image using the WebUI interrogate endpoint.
@@ -1740,6 +1778,13 @@ class SDWebUIClient:
                 response = self.txt2img(payload, raise_on_error=True)
             elif stage_normalized == "img2img":
                 response = self.img2img(payload, raise_on_error=True)
+            elif (
+                stage_normalized == "adetailer"
+                and payload.get("schema") == LOCALIZED_ADETAILER_SCHEMA
+            ):
+                # localized_only: the companion operation. It is still the "adetailer" stage for retry, triage and
+                # health purposes; only the endpoint differs, and there is no fallback to the img2img route below.
+                response = self.adetailer_localized(payload)
             elif stage_normalized == "adetailer":
                 # ADetailer uses the img2img endpoint but with a fail-fast retry policy:
                 # GPU OOM loops never recover without a restart, so retrying is wasteful.

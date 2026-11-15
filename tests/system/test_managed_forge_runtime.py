@@ -262,8 +262,12 @@ def test_unexpected_missing_and_ignorable_extensions(tmp_path: Path) -> None:
     ext = tmp_path / "extensions"
     ext.mkdir()
     assert any("required extension missing: adetailer-neo" in p for p in verifier.check_extensions(tmp_path, manifest))
+    assert any(
+        "required extension missing: stablenew-adetailer-local" in p for p in verifier.check_extensions(tmp_path, manifest)
+    )
 
     (ext / "adetailer-neo").mkdir()
+    (ext / "stablenew-adetailer-local").mkdir()
     (ext / "Put Extensions here.txt").write_text("", encoding="utf-8")
     (ext / "__pycache__").mkdir()
     assert verifier.check_extensions(tmp_path, manifest) == []
@@ -271,6 +275,61 @@ def test_unexpected_missing_and_ignorable_extensions(tmp_path: Path) -> None:
     [problem] = verifier.check_extensions(tmp_path, manifest)
     assert "unexpected extension: adetailer" in problem and "MANAGED_FORGE_DRIFT" in problem
     assert "missing" in verifier.check_extensions(tmp_path / "elsewhere", manifest)[0]
+
+
+def _install_companion(data_dir: Path) -> Path:
+    entry = _manifest()["extensions"]["stablenew_owned"]["stablenew-adetailer-local"]
+    target = data_dir / "extensions" / "stablenew-adetailer-local"
+    for relative in entry["files"]:
+        (target / relative).parent.mkdir(parents=True, exist_ok=True)
+        (target / relative).write_bytes((ROOT / entry["source"] / relative).read_bytes())
+    return target
+
+
+def test_the_owned_companion_extension_is_pinned_by_content_and_its_repository_copy_matches() -> None:
+    manifest = _manifest()
+
+    assert manifest["extensions"]["allowed"] == ["adetailer-neo", "stablenew-adetailer-local"]
+    assert verifier.check_owned_extension_sources(manifest) == []  # the manifest hash is the committed source
+    assert verifier.validate_manifest(manifest) == []
+    for mutate in (
+        lambda m: m["extensions"].pop("stablenew_owned"),
+        lambda m: m["extensions"]["stablenew_owned"].update(other={"source": "x", "files": {"a.py": "0" * 64}}),
+        lambda m: m["extensions"]["stablenew_owned"]["stablenew-adetailer-local"].update(source="scripts/elsewhere"),
+        lambda m: m["extensions"]["stablenew_owned"]["stablenew-adetailer-local"].update(files={"../x.py": "0" * 64}),
+        lambda m: m["extensions"]["stablenew_owned"]["stablenew-adetailer-local"].update(files={}),
+    ):
+        broken = copy.deepcopy(manifest)
+        mutate(broken)
+        assert any("stablenew_owned" in problem for problem in verifier.validate_manifest(broken))
+    stale = copy.deepcopy(manifest)
+    files = stale["extensions"]["stablenew_owned"]["stablenew-adetailer-local"]["files"]
+    files[next(iter(files))] = "0" * 64  # an edited source without a new pin
+    assert any("does not match its declared sha256" in problem for problem in verifier.validate_manifest(stale))
+
+
+def test_an_installed_companion_must_be_exactly_its_pinned_files(tmp_path: Path) -> None:
+    manifest = _manifest()
+    target = _install_companion(tmp_path)
+    script = target / "scripts" / "stablenew_adetailer_local.py"
+
+    assert verifier.check_owned_extensions(tmp_path, manifest) == []
+    (target / "scripts" / "__pycache__").mkdir()
+    (target / "scripts" / "__pycache__" / "stablenew_adetailer_local.cpython-313.pyc").write_bytes(b"x")
+    assert verifier.check_owned_extensions(tmp_path, manifest) == []  # Forge's own bytecode cache is not drift
+    script.write_bytes(script.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    assert verifier.check_owned_extensions(tmp_path, manifest) == []  # line endings are not identity
+
+    (target / "scripts" / "extra.py").write_text("x = 1\n", encoding="utf-8")
+    [problem] = verifier.check_owned_extensions(tmp_path, manifest)
+    assert "unexpected file scripts/extra.py" in problem and "MANAGED_FORGE_DRIFT" in problem
+    (target / "scripts" / "extra.py").unlink()
+    script.write_text(script.read_text(encoding="utf-8") + "# patched\n", encoding="utf-8")
+    [problem] = verifier.check_owned_extensions(tmp_path, manifest)
+    assert "does not match its accepted sha256" in problem
+    script.unlink()
+    [problem] = verifier.check_owned_extensions(tmp_path, manifest)
+    assert "file missing" in problem
 
 
 def _detector_manifest(tmp_path: Path) -> dict:

@@ -25,6 +25,12 @@ from src.image_backends.exact_model_profile import validate_profile_njr
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import apply_model_compile_policy
 from src.image_backends.operation_compatibility import require_njr_operation
+from src.pipeline.adetailer_localized import (
+    LOCALIZED_ONLY,
+    execution_mode,
+    stage_refusals,
+    stamp_fresh_execution_mode,
+)
 from src.pipeline.adetailer_profiles import compile_adetailer
 from src.pipeline.config_contract_v26 import canonicalize_intent_config
 from src.pipeline.exact_profile_effective_config import prepare_effective_config
@@ -253,11 +259,31 @@ def _run_checks(record: NormalizedJobRecord, checks: tuple[CompileCheck, ...]) -
         _CHECKS[check](record)
 
 
+def _with_fresh_adetailer_mode(stages: tuple[StageConfig, ...]) -> tuple[StageConfig, ...]:
+    """Newly compiled work states its ADetailer execution mode (``localized_only`` unless the stage already names one).
+
+    A ``FROZEN`` draft and ``derive_njr`` never pass through here, so a stored record keeps the mode it was recorded
+    with; a record without the key is one compiled before the mode existed and runs as ``legacy_whole_image``.
+    """
+
+    stamped: list[StageConfig] = []
+    for stage in stages:
+        if stage.stage_type == "adetailer" and stage.enabled:
+            extra = stamp_fresh_execution_mode(thaw_json(stage.extra))
+            if execution_mode(extra) == LOCALIZED_ONLY and (refusals := stage_refusals(extra)):
+                raise ValueError("ADetailer stage refused: " + "; ".join(refusals))
+            stage = replace(stage, extra=extra)
+        stamped.append(stage)
+    return tuple(stamped)
+
+
 def compile_njr(draft: NjrDraft) -> NormalizedJobRecord:
     """Assemble exactly one record from ``draft``, then run its declared checks."""
 
     if draft.policy_state is PolicyState.RAW:
         draft = _prepare_raw(draft)
+    if draft.policy_state is not PolicyState.FROZEN:
+        draft = replace(draft, stages=_with_fresh_adetailer_mode(tuple(draft.stages)))
     record = NormalizedJobRecord(
         schema_version=CURRENT_NJR_SCHEMA_VERSION,
         job_id=draft.job_id,

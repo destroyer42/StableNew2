@@ -31,6 +31,11 @@ from src.image_backends.image_backend_types import (
     ImageExecutionResult,
 )
 from src.image_backends.masked_inpaint import validate_frozen_mask_target
+from src.pipeline.adetailer_localized import (
+    LOCALIZED_ONLY,
+    LocalizedRefinementError,
+    execution_mode,
+)
 from src.services.runtime_transition_service import (
     RuntimeTransitionCoordinator,
     RuntimeTransitionError,
@@ -186,6 +191,12 @@ class WebUIFamilyImageBackend:
         """Reject work this backend cannot run, before the runner dispatches any stage."""
 
         self._reject_foreign_model_profile(getattr(njr, "backend_options", None))
+        if "adetailer" in stage_names:
+            for stage in getattr(njr, "stage_chain", None) or ():
+                if getattr(stage, "stage_type", None) == "adetailer" and getattr(
+                    stage, "enabled", False
+                ):
+                    self._require_adetailer_mode_supported(getattr(stage, "extra", None))
         from src.image_backends.forge_controlnet_units import validate_intent
 
         validate_intent(getattr(njr, "config", None), stage_names, backend_id=self.backend_id)
@@ -202,10 +213,30 @@ class WebUIFamilyImageBackend:
             backend_supported=self.capabilities.supports_openpose_conditioning,
         )
 
+    def _require_adetailer_mode_supported(self, stage_config: Any) -> None:
+        """Refuse a ``localized_only`` ADetailer stage on a backend that cannot run it (never a whole-image fallback)."""
+
+        config = dict(stage_config or {}) if isinstance(stage_config, Mapping) else {}
+        extra = config.get("extra")
+        if isinstance(extra, Mapping):
+            config.update(extra)
+        try:
+            mode = execution_mode(config)
+        except LocalizedRefinementError as exc:
+            raise ValueError(f"ADetailer stage refused: {exc}") from exc
+        if mode == LOCALIZED_ONLY and not self.capabilities.supports_localized_adetailer:
+            raise ValueError(
+                f"The '{self.backend_id}' image backend cannot run localized-only ADetailer refinement "
+                "(it needs the StableNew companion extension of the managed Forge runtime). The job is refused; "
+                "StableNew never falls back to re-generating the whole image."
+            )
+
     def _validate_request(self, request: ImageExecutionRequest) -> None:
         """Pure intent check, run before any runtime side effect (raise to refuse)."""
 
         self._reject_foreign_model_profile(request.backend_options)
+        if request.stage_name == "adetailer":
+            self._require_adetailer_mode_supported(request.stage_config)
         validate_frozen_mask_target(
             request.selected_model or "",
             {"image": {"backend_id": self.backend_id}},
