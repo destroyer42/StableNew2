@@ -193,6 +193,19 @@ def populated(world: World) -> World:
         correction=correction("Face", "Edit mask", None),
         request_paths=(before2,),
     )
+    before3, b3 = world.image("c_before", 40)
+    after3, a3 = world.image("c_after", 50)
+    world.job(
+        "job-3",
+        parent_artifact_id=f"sha256:{b3}",
+        correction=correction("Anatomy", "Reprocess with img2img", None),
+        result_paths=(after3,),
+        request_paths=(before3,),
+        stages=("img2img",),
+    )
+    world.judgment(
+        "rec-3", "job-3", b3, a3, [row("Anatomy", "worsened", None)], preference="prefer original"
+    )
     return world
 
 
@@ -218,8 +231,15 @@ def test_export_document_and_manifest(populated: World, tmp_path: Path) -> None:
     document = json.loads((folder / contract.DOCUMENT_NAME).read_text(encoding="utf-8"))
     manifest = json.loads((folder / contract.MANIFEST_NAME).read_text(encoding="utf-8"))
     assert document["schema"] == "stablenew.vl240.review_export/1"
-    assert set(document) == {"schema", "images", "pairs", "provenance"}
-    assert len(document["images"]) == 3 and len(document["pairs"]) == 1
+    assert set(document) == {"schema", "images", "pairs", "mixed_pairs", "provenance"}
+    assert len(document["images"]) == 5 and len(document["pairs"]) == 1
+    assert len(document["mixed_pairs"]) == 1 and document["pairs"][0]["judgment"] == "worse"
+    assert {p["judgment"] for p in document["pairs"]} <= {
+        "helped",
+        "no_benefit",
+        "worse",
+        "inconclusive",
+    }
     for image in document["images"]:
         assert set(image) == {
             "image_id",
@@ -269,7 +289,7 @@ def test_export_document_and_manifest(populated: World, tmp_path: Path) -> None:
         document["provenance"]["labeler"] == "human"
         and document["provenance"]["contains_prompt_text"] is False
     )
-    assert export.verify_export(folder) == {"ok": True, "problems": {}, "images": 3}
+    assert export.verify_export(folder) == {"ok": True, "problems": {}, "images": 5}
     # tampering is caught
     victim = next((folder / "images").iterdir())
     victim.write_bytes(victim.read_bytes() + b"x")
@@ -280,7 +300,7 @@ def test_ids_are_opaque_and_deterministic(populated: World) -> None:
     first = export.build_document(collect(populated))
     second = export.build_document(collect(populated))
     assert first["images"] == second["images"] and first["pairs"] == second["pairs"]
-    assert [i["image_id"] for i in first["images"]] == ["img-0001", "img-0002", "img-0003"]
+    assert [i["image_id"] for i in first["images"]] == [f"img-000{n}" for n in range(1, 6)]
 
 
 # ----------------------------------------------------------------------------------------------- confirmed-only export
@@ -295,19 +315,25 @@ def test_findings_come_only_from_a_queued_guided_correction(populated: World) ->
         if i["findings"]
     ]
     assert sorted(found, key=lambda item: item[0]) == [
+        ("Anatomy", None),
         ("Face", None),
-        ("Hands", {"left": 0, "top": 0, "right": 8, "bottom": 8}),
+        ("Hands", [0, 0, 8, 8]),
     ]
     for item in by_sha.values():
         assert item["clean_confirmed"] is False
         assert all(f["severity"] is None for f in item["findings"])
     # the "after" image carries no finding: nobody confirmed a defect in it
-    assert [i["findings"] for i in document["images"] if i["roles"] == ["after"]] == [[]]
+    assert [i["findings"] for i in document["images"] if i["roles"] == ["after"]] == [[], []]
 
 
 def test_pair_judgment_vocabulary_and_mixed(populated: World) -> None:
-    pair = export.build_document(collect(populated))["pairs"][0]
-    assert pair["judgment"] == "mixed"  # improved hands, worsened face
+    document = export.build_document(collect(populated))
+    assert [p["judgment"] for p in document["pairs"]] == ["worse"]
+    assert document["pairs"][0]["overall_preference"] == "prefer_original"
+    pair = document["mixed_pairs"][0]
+    assert (
+        pair["judgment"] == "mixed"
+    )  # improved hands, worsened face; never forced into one of the four
     assert {item["judgment"] for item in pair["region_judgments"]} == {"helped", "worse"}
     assert pair["overall_preference"] == "prefer_result"
     assert pair["intervention"] == {
@@ -315,7 +341,7 @@ def test_pair_judgment_vocabulary_and_mixed(populated: World) -> None:
         "stages": ["img2img"],
         "action": "ADetailer hand pass",
         "category": "Hands",
-        "region": {"left": 0, "top": 0, "right": 8, "bottom": 8},
+        "region": [0, 0, 8, 8],
     }
     assert set(contract.OUTCOME_TO_JUDGMENT.values()) == {
         "helped",
@@ -552,17 +578,20 @@ def test_no_content_reaches_output_stdout_or_errors(
 
 def test_describe_counts_progress_and_no_ids(populated: World) -> None:
     report = export.describe(collect(populated), targets="full")
-    assert report["counts"]["images"] == 3 and report["counts"]["pairs"] == 1
+    assert report["counts"]["images"] == 5
+    assert report["counts"]["pairs"] == 1 and report["counts"]["mixed_pairs"] == 1
     assert (
         report["counts"]["defect_images_by_category"]["Hands"] == 1
         and report["counts"]["defect_images_by_category"]["Face"] == 1
     )
+    assert report["counts"]["defect_images_by_category"]["Anatomy"] == 1
     assert report["counts"]["pairs_by_judgment"]["mixed"] == 1
+    assert report["counts"]["pairs_by_judgment"]["worse"] == 1
     progress = report["progress"]
     assert progress["defect_images"] == {
-        "have": 2,
+        "have": 3,
         "target": 30,
-        "remaining": 28,
+        "remaining": 27,
         "met": False,
         "recordable_in_review": True,
     }

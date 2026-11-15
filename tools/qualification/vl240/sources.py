@@ -48,9 +48,6 @@ class Region:
     def box(self) -> tuple[int, int, int, int]:
         return self.left, self.top, self.right, self.bottom
 
-    def as_dict(self) -> dict[str, int]:
-        return {"left": self.left, "top": self.top, "right": self.right, "bottom": self.bottom}
-
 
 @dataclass(frozen=True, slots=True)
 class RegionJudgment:

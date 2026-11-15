@@ -104,13 +104,7 @@ def _intervention(job: JobFacts) -> dict[str, Any]:
             kind="guided_correction",
             action=job.correction.get("action"),
             category=job.correction.get("category"),
-            region=(
-                None
-                if job.correction.get("region") is None
-                else dict(
-                    zip(("left", "top", "right", "bottom"), job.correction["region"], strict=True)
-                )
-            ),
+            region=job.correction.get("region"),
         )
     return base
 
@@ -222,8 +216,10 @@ def _pairs_from_judgments(
 # --------------------------------------------------------------------------------------------------------- document
 
 
-def _region(region: Region | None) -> dict[str, int] | None:
-    return None if region is None else region.as_dict()
+def _region(region: Region | None) -> list[int] | None:
+    """``[left, top, right, bottom]``, half-open stored pixels (``Region.box``), or ``None`` for the whole image."""
+
+    return None if region is None else list(region.box)
 
 
 def build_document(collected: Collected, *, exported_at: datetime | None = None) -> dict[str, Any]:
@@ -260,10 +256,12 @@ def build_document(collected: Collected, *, exported_at: datetime | None = None)
                 "record_ids": sorted(entry.records),
             }
         )
-    pairs = []
+    pairs: list[dict[str, Any]] = []
+    mixed_pairs: list[dict[str, Any]] = []
     ordered = sorted(collected.pairs, key=lambda p: (p.before, p.after, p.job_id))
     for index, pair in enumerate(ordered, start=1):
-        pairs.append(
+        # ``pairs`` holds only a single human judgment; a pair whose regions disagree is kept apart, never forced into one.
+        (mixed_pairs if pair.judgment == "mixed" else pairs).append(
             {
                 "pair_id": f"pair-{index:04d}",
                 "before_image_id": ids[pair.before],
@@ -287,6 +285,7 @@ def build_document(collected: Collected, *, exported_at: datetime | None = None)
         "schema": contract.SCHEMA,
         "images": images,
         "pairs": pairs,
+        "mixed_pairs": mixed_pairs,
         "provenance": {
             "labeler": "human",
             "basis": "operator-confirmed Review records only",
@@ -336,16 +335,19 @@ def describe(collected: Collected, *, targets: str = "full") -> dict[str, Any]:
         "counts": {
             "images": len(images),
             "pairs": len(document["pairs"]),
+            "mixed_pairs": len(document["mixed_pairs"]),
             "defect_images_by_category": {c: by_category.get(c, 0) for c in contract.CATEGORIES},
             "pairs_by_judgment": {
-                j: sum(1 for p in document["pairs"] if p["judgment"] == j)
+                j: sum(
+                    1 for p in (*document["pairs"], *document["mixed_pairs"]) if p["judgment"] == j
+                )
                 for j in contract.JUDGMENTS
             },
             "pairs_by_intervention": dict(
                 sorted(
                     Counter(
                         str(p["intervention"].get("action") or p["intervention"]["kind"])
-                        for p in document["pairs"]
+                        for p in (*document["pairs"], *document["mixed_pairs"])
                     ).items()
                 )
             ),

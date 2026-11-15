@@ -61,7 +61,9 @@ When the job finishes:
 1. In **Review**, select the **result** image and open **Inspect & Improve…**.
 2. Click **Compare completed result**. If it says the source is not verified, you cannot save a judgment for that pair; skip it.
 3. For each region you care about, pick the outcome in the list (improved, unchanged, worsened or uncertain) and click
-   **Record judgment**. Set **Overall preference** if you have one.
+   **Record judgment**. Set **Overall preference** if you have one. If you judge different regions differently (hands
+   improved, face worsened) the pair is counted as `mixed` and does not count toward the pair target, so for the target
+   judge one region per pair unless the difference matters.
 4. Click **Save with Review ratings**. Check the **Review Feedback** status says the record was saved. Use **Undo** there if you
    saved by mistake.
 

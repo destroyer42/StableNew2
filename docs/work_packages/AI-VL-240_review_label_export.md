@@ -98,19 +98,22 @@ images[]                    sorted by sha256
   width, height             stored pixels, from the file header
   model_family              null (not recorded)
   clean_confirmed           false (no explicit human mark exists in Review)
-  findings[]                {category (Review taxonomy), region {left,top,right,bottom}|null (whole image),
+  findings[]                {category (Review taxonomy), region [left,top,right,bottom]|null (whole image),
                              severity null (not recorded), record_id (job id of the queued correction)}
   subject_count             null (not recorded)
   roles[]                   "before" | "after" for images used in a pair
   record_ids[]              job ids and Learning run ids the facts came from
-pairs[]                     sorted by before, after, job
+pairs[]                     sorted by before, after, job; only pairs with one human judgment
   pair_id                   opaque "pair-0001"
   before_image_id, after_image_id
   intervention              {kind, stages[]} and, for a guided correction, {action, category, region}
-  judgment                  helped | no_benefit | worse | inconclusive, or mixed when region outcomes disagree
-  region_judgments[]        {category, region, judgment}
+  judgment                  helped | no_benefit | worse | inconclusive
+  region_judgments[]        {category, region [l,t,r,b]|null, judgment}
   overall_preference        prefer_original | prefer_result | no_preference | inconclusive | null
   record_ids                {learning_record, job}
+mixed_pairs[]               same shape, judgment "mixed": the operator judged regions differently (for example hands
+                            improved, face worsened). Kept apart so no consumer reads it as one of the four; counted by
+                            `describe` but not toward the pair target
 provenance                  {labeler "human", basis, sources, exported_at, exporter_version, content_visibility_mode,
                              contains_prompt_text false, availability{...}}
 ```
