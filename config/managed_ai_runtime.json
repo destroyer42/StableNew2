@@ -135,6 +135,7 @@
       "asset_name": "llama-b11960-bin-win-cpu-x64.zip",
       "asset_sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287",
       "build_id": "b11960-cpu-vision",
+      "upstream_commit": "8642541b255bfb5dc39cd351a178be09013a55d6",
       "executable": "llama-mtmd-cli.exe",
       "files": {
         "ggml-base.dll": "200cd9b6f0a7934c2e1c85e55289d5498332713321b03e83eb2ae3da5eeb6137",

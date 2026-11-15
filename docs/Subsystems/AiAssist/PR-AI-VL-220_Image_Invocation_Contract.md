@@ -173,11 +173,11 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
   See `docs/work_packages/AI-VL-222_visual_diagnostic.md`.
 
 * **Template A/B (PR-AI-VL-223, decision D24; evaluation-only, pending the owner's approval by plan digest, not run).** The visual
-  argument builder gains a named turn format. `legacy` is the default and is exactly the command line above. `jinja` adds the single
-  switch `--jinja`, so the turn is rendered from the pinned GGUF's own template (BOS first, generation prompt ending in an open
-  `<think>`); `--jinja` stays in the refused list for every other use and is accepted only when the check is asked for the `jinja`
-  turn format and it appears exactly once. The driver refuses a non-default turn format unless a diagnostic capture exists (so only
-  for a built-in synthetic set). `--chat-template-kwargs`, the `--reasoning` family and every template or template-file flag stay
+  argument builder's existing `use_jinja` switch (used by the Gemma candidate) may also be set for the LFM candidate. Without it the
+  command line is exactly the one above. With it the single switch `--jinja` is appended at the end, so the turn is rendered from
+  the pinned GGUF's own template (BOS first, generation prompt ending in an open `<think>`); `--jinja` stays in the refused list for
+  every other use and is accepted only when the check is asked for `use_jinja=True` and it appears exactly once. For LFM the driver
+  refuses it unless a diagnostic capture exists (so only for a built-in synthetic set); the strict containment checks stay Gemma-only. `--chat-template-kwargs`, the `--reasoning` family and every template or template-file flag stay
   refused: b11960's `llama-mtmd-cli` does not register the first two (`common/arg.cpp`), so a no-thinking turn cannot be requested.
   Nothing is promoted and `qualified` stays false. See `docs/work_packages/AI-VL-223_template_ab.md`.
 

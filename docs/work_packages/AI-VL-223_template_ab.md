@@ -65,15 +65,17 @@ What follows from it:
 
 ## 3. What is added (and what is not)
 
-* `tools/qualification/vl220/visual_argv.py`: a named **turn format**, `legacy` (default, byte-for-byte the earlier command line)
-  or `jinja`, which adds exactly one switch, `--jinja`, right after `--offline`. `VISUAL_ALLOWED_FLAGS` keeps its 22 flags;
-  `--jinja` stays in `VISUAL_REFUSED_FLAGS` and is accepted only when the check is asked for the `jinja` turn format and the switch
-  appears exactly once. `--chat-template-kwargs`, `--reasoning`, `-rea`, `--reasoning-budget`, `--reasoning-format`,
-  `--chat-template`, `--chat-template-file` are refused by name in every mode. No template file or template string is accepted;
-  the template comes only from the hash-pinned GGUF.
-* `driver.py`: `VisualDriver(turn_format=...)`, default `legacy`. A non-default turn format is **refused unless a diagnostic capture
-  exists**, i.e. unless the case set is exactly a built-in synthetic set (`turn_format_needs_diagnostic_capture`). The evidence
-  document and the diagnostics document record which turn format ran.
+* `tools/qualification/vl220/visual_argv.py`: the argument builder reuses the existing `use_jinja: bool` switch of the Gemma package
+  (PR-AI-VL-230). `use_jinja=False` (default for the LFM candidate) is byte-for-byte the earlier command line; `use_jinja=True`
+  adds exactly one switch, `--jinja`, **at the end of the argument list**. `VISUAL_ALLOWED_FLAGS` keeps its 22 flags; `--jinja`
+  stays in `VISUAL_REFUSED_FLAGS` and is accepted only when the check is asked for `use_jinja=True` and the switch appears exactly
+  once. `--chat-template-kwargs`, `--reasoning`, `-rea`, `--reasoning-budget`, `--reasoning-format`, `--chat-template`,
+  `--chat-template-file` are refused by name in every mode. No template file or template string is accepted; the template comes
+  only from the hash-pinned GGUF. The names `legacy` and `jinja` (`TURN_LEGACY`, `TURN_JINJA`) are only labels in evidence, plan and CLI.
+* `driver.py`: `VisualDriver(use_jinja=...)`. Gemma always renders its own template and keeps the strict containment checks of
+  PR-AI-VL-230; those checks stay Gemma-only, so the two LFM variants run under identical conditions. For the LFM candidate,
+  `use_jinja=True` is **refused unless a diagnostic capture exists**, i.e. unless the case set is exactly a built-in synthetic set
+  (`turn_format_needs_diagnostic_capture`). The evidence document and the diagnostics document record which turn format ran.
 * `__main__.py`: `evaluate --turn-format {legacy,jinja}`. `jinja` needs `--diagnostics-out` and refuses `--cases`.
 * `synthetic.py` / H7: a third built-in set, `vl220-synthetic-512-2`.
 * `plan.py`: the `template_ab` section (variants, refused flags, the set's pins and per-request prompt and schema digests, request counts).

@@ -166,25 +166,25 @@ def _kwargs(tmp_path: Path) -> dict[str, Any]:
 def test_the_jinja_turn_format_adds_exactly_one_switch_and_nothing_else(tmp_path: Path) -> None:
     kwargs = _kwargs(tmp_path)
     legacy = visual_argv.build_visual_argv(**kwargs)
-    jinja = visual_argv.build_visual_argv(**kwargs, turn_format=visual_argv.TURN_JINJA)
-    assert visual_argv.build_visual_argv(**kwargs, turn_format=visual_argv.TURN_LEGACY) == legacy
+    jinja = visual_argv.build_visual_argv(**kwargs, use_jinja=True)
+    assert visual_argv.build_visual_argv(**kwargs, use_jinja=False) == legacy
     assert "--jinja" not in legacy and jinja.count("--jinja") == 1
     assert [token for token in jinja if token != "--jinja"] == legacy
     assert visual_argv.argv_shape_digest(jinja) != visual_argv.argv_shape_digest(legacy)
-    visual_argv.check_visual_argv(jinja, turn_format=visual_argv.TURN_JINJA)
+    visual_argv.check_visual_argv(jinja, use_jinja=True)
     visual_argv.check_visual_argv(legacy)
     # The free-text control composes with the variant and changes nothing else.
     free = visual_argv.build_visual_argv(
-        **{**kwargs, "schema_file": None}, free_text=True, turn_format=visual_argv.TURN_JINJA
+        **{**kwargs, "schema_file": None}, free_text=True, use_jinja=True
     )
     assert "--jinja" in free and "--json-schema-file" not in free
-    visual_argv.check_visual_argv(free, free_text=True, turn_format=visual_argv.TURN_JINJA)
+    visual_argv.check_visual_argv(free, free_text=True, use_jinja=True)
 
 
 def test_the_default_turn_format_still_refuses_the_jinja_switch(tmp_path: Path) -> None:
     kwargs = _kwargs(tmp_path)
-    jinja = visual_argv.build_visual_argv(**kwargs, turn_format=visual_argv.TURN_JINJA)
-    for fmt in ({}, {"turn_format": visual_argv.TURN_LEGACY}):
+    jinja = visual_argv.build_visual_argv(**kwargs, use_jinja=True)
+    for fmt in ({}, {"use_jinja": False}):
         with pytest.raises(visual_argv.VisualArgvRefused) as refused:
             visual_argv.check_visual_argv(jinja, **fmt)
         assert refused.value.code == "forbidden_flag"
@@ -199,19 +199,11 @@ def test_the_jinja_turn_format_needs_the_switch_once_and_only_once(tmp_path: Pat
     kwargs = _kwargs(tmp_path)
     legacy = visual_argv.build_visual_argv(**kwargs)
     with pytest.raises(visual_argv.VisualArgvRefused) as missing:
-        visual_argv.check_visual_argv(legacy, turn_format=visual_argv.TURN_JINJA)
-    assert missing.value.code == "jinja_turn_format_needs_the_jinja_switch"
+        visual_argv.check_visual_argv(legacy, use_jinja=True)
+    assert missing.value.code == "gemma_template_flag_required"
     with pytest.raises(visual_argv.VisualArgvRefused) as twice:
-        visual_argv.check_visual_argv(
-            [*legacy, "--jinja", "--jinja"], turn_format=visual_argv.TURN_JINJA
-        )
+        visual_argv.check_visual_argv([*legacy, "--jinja", "--jinja"], use_jinja=True)
     assert twice.value.code == "flag_repeated"
-    for bad in ("", "JINJA", "chatml", "legacy "):
-        with pytest.raises(visual_argv.VisualArgvRefused) as unknown:
-            visual_argv.check_visual_argv(legacy, turn_format=bad)
-        assert unknown.value.code == "unknown_turn_format"
-        with pytest.raises(visual_argv.VisualArgvRefused):
-            visual_argv.build_visual_argv(**kwargs, turn_format=bad)
 
 
 @pytest.mark.parametrize(
@@ -224,10 +216,10 @@ def test_the_jinja_turn_format_needs_the_switch_once_and_only_once(tmp_path: Pat
 def test_no_template_or_thinking_argument_is_accepted_even_in_the_jinja_turn_format(
     flag: str, tmp_path: Path
 ) -> None:
-    argv = visual_argv.build_visual_argv(**_kwargs(tmp_path), turn_format=visual_argv.TURN_JINJA)
+    argv = visual_argv.build_visual_argv(**_kwargs(tmp_path), use_jinja=True)
     for tail in ([flag], [flag, '{"enable_thinking":false}'], [flag, "off"]):
         with pytest.raises(visual_argv.VisualArgvRefused):
-            visual_argv.check_visual_argv([*argv, *tail], turn_format=visual_argv.TURN_JINJA)
+            visual_argv.check_visual_argv([*argv, *tail], use_jinja=True)
     assert good_argv is not None
 
 
@@ -279,15 +271,13 @@ def _capture(set_id: str) -> diagnostics.DiagnosticCapture:
 def test_a_non_default_turn_format_is_refused_without_a_capture_and_launches_nothing(
     diag_world: World,
 ) -> None:
-    visual = diag_world.driver(turn_format="jinja")
+    visual = diag_world.driver(use_jinja=True)
     run = visual.run_case(diag_world.case_set, diag_world.case(contract.KIND_DESCRIBE))
     assert run.refusal is not None and run.refusal.code == driver.REFUSED_TURN_FORMAT
     assert run.evidence.status == driver.STATUS_NOT_RUN and diag_world.launches == []
     whole = visual.run_cases(diag_world.case_set, diag_world.labels)
     assert not whole.complete and whole.refusal is not None
     assert diag_world.launches == []
-    with pytest.raises(ValueError):
-        diag_world.driver(turn_format="chatml")
 
 
 def test_the_driver_default_turn_format_is_legacy_and_launches_without_the_switch(
@@ -305,7 +295,7 @@ def test_the_driver_default_turn_format_is_legacy_and_launches_without_the_switc
 def test_with_a_capture_the_jinja_turn_launches_the_switch_and_nothing_new(
     diag_world: World,
 ) -> None:
-    visual = diag_world.driver(capture=_capture(synthetic.SET_ID), turn_format="jinja")
+    visual = diag_world.driver(capture=_capture(synthetic.SET_ID), use_jinja=True)
     scored = visual.run_cases(diag_world.case_set, diag_world.labels)
     controls = visual.run_controls(
         diag_world.case_set, diagnostics.control_requests(synthetic.SET_ID)
@@ -347,7 +337,7 @@ def test_with_a_capture_the_jinja_turn_launches_the_switch_and_nothing_new(
 
 def test_the_capture_document_records_the_turn_format(diag_world: World) -> None:
     capture = _capture(synthetic.SET_ID)
-    diag_world.driver(capture=capture, turn_format="jinja").run_case(
+    diag_world.driver(capture=capture, use_jinja=True).run_case(
         diag_world.case_set, diag_world.case(contract.KIND_DESCRIBE)
     )
     jinja = capture.document(plan_sha256="0" * 64, evidence_file="e.json", turn_format="jinja")
@@ -365,7 +355,7 @@ def _patch_driver(diag_world: World, monkeypatch: pytest.MonkeyPatch) -> None:
     def build(candidate: Any, **k: Any) -> Any:
         return real(
             candidate,
-            **{**diag_world.kwargs, "capture": k["capture"], "turn_format": k["turn_format"]},
+            **{**diag_world.kwargs, "capture": k["capture"], "use_jinja": k["use_jinja"]},
         )
 
     monkeypatch.setattr(driver, "VisualDriver", build)
@@ -464,3 +454,66 @@ def test_the_contract_documents_record_the_variant_as_evaluation_only_and_pendin
     invocation = (REPO / plan.INVOCATION_DOCUMENT).read_text(encoding="utf-8")
     assert "evaluation-only" in invocation and "pending the owner" in invocation
     assert "`qualified` stays false" in invocation
+
+
+# ================================================================================================= main's use_jinja (PR-AI-VL-230)
+
+
+def test_the_lfm_jinja_variant_runs_under_the_same_conditions_as_the_legacy_turn(
+    diag_world: World,
+) -> None:
+    from src.utils.managed_process import run_bounded
+
+    seen: list[dict[str, Any]] = []
+
+    def spy(command: list[str], **kwargs: Any) -> Any:
+        seen.append(kwargs)
+        return run_bounded(command, **kwargs)
+
+    describe = diag_world.case(contract.KIND_DESCRIBE)
+    diag_world.driver(runner=spy).run_case(diag_world.case_set, describe)
+    capture = _capture(synthetic.SET_ID)
+    diag_world.driver(runner=spy, capture=capture, use_jinja=True).run_case(
+        diag_world.case_set, describe
+    )
+    legacy, jinja = seen
+    assert "--jinja" not in launched(diag_world)[0]["argv"]
+    assert launched(diag_world)[1]["argv"].count("--jinja") == 1
+    # Gemma's stricter containment and memory-cap options are Gemma-only: neither LFM variant gets them.
+    assert "require_containment" not in legacy and "require_containment" not in jinja
+    assert set(legacy) == set(jinja)
+
+
+def test_gemma_keeps_its_own_template_and_its_strict_checks() -> None:
+    from tools.qualification.vl220 import candidates
+
+    gemma = candidates.find_candidate(candidates.GEMMA_CANDIDATE_ID)
+    lfm = candidates.find_candidate(candidates.LFM_CANDIDATE_ID)
+    common: dict[str, Any] = {
+        "evaluation_root": REPO,
+        "ai_root": REPO,
+        "assets_dir": REPO,
+        "acknowledgement": None,
+        "activity": None,
+    }
+    assert driver.VisualDriver(gemma, **common).turn_format == "jinja"
+    assert driver.VisualDriver(lfm, **common).turn_format == "legacy"
+    assert driver.VisualDriver(lfm, use_jinja=True, **common).turn_format == "jinja"
+    assert driver.VisualDriver(gemma, use_jinja=False, **common).turn_format == "jinja"
+
+
+def test_the_cli_refuses_a_legacy_turn_for_gemma_before_anything_runs(
+    diag_world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from tools.qualification.vl220 import candidates
+
+    gemma = candidates.find_candidate(candidates.GEMMA_CANDIDATE_ID)
+    digest = plan.build_plan(gemma)["plan_sha256"]
+    (diag_world.tmp / "ack.json").write_text("{}", encoding="utf-8")
+    args = [
+        "--candidate", candidates.GEMMA_CANDIDATE_ID,
+        *cli_args(diag_world, digest, "--generation-idle", "--turn-format", "legacy"),
+    ]  # fmt: skip
+    assert cli.main(args) == 2
+    assert "gemma_renders_its_own_template" in capsys.readouterr().err
+    assert diag_world.launches == [] and not (diag_world.tmp / "evidence.json").exists()

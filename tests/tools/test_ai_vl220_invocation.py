@@ -100,7 +100,7 @@ def test_the_vision_build_is_a_pinned_unqualified_twin_of_the_required_build() -
     assert vision.executable == VISION_TOOL == "llama-mtmd-cli.exe" and VISION_TOOL in vision.files
     assert twin.executable == "llama-completion.exe"
     assert vision.qualified is False and twin.qualified is False
-    (candidate,) = cand.load_candidates()
+    candidate = cand.find_candidate(cand.LFM_CANDIDATE_ID)
     assert (
         candidate.runtime.required_build_id == "b11960-cpu"
         and candidate.runtime.tool == VISION_TOOL

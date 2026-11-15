@@ -17,8 +17,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from tools.qualification.vl220 import diagnostics, plan, staging, synthetic
-from tools.qualification.vl220.candidates import CandidateInvalid, find_candidate
+from src.ai_assist.manifests import ImportRefused, import_runtime, load_runtime_manifest
+from tools.qualification.vl220 import diagnostics, driver, plan, staging, synthetic
+from tools.qualification.vl220.candidates import (
+    GEMMA_CANDIDATE_ID,
+    RUNTIME_MANIFEST_PATH,
+    CandidateInvalid,
+    VisualCandidate,
+    find_candidate,
+    has_link,
+)
+from tools.qualification.vl220.visual_argv import VISION_BUILD_ID, VisualLimits
 
 DEFAULT_CANDIDATE = "lfm3-vl-2b-q4_k_m-liquidai"
 
@@ -31,23 +40,30 @@ def _acknowledgement(path: Path | None) -> dict[str, Any] | None:
     if path is None:
         return None
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        loaded = _load_json(path)
+    except (OSError, ValueError, RecursionError):
         return None
     return loaded if isinstance(loaded, dict) else None
 
 
 def _load_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+    if has_link(path.absolute()) or not path.is_file():
+        raise ValueError("invalid_document_path")
+    max_bytes = 4 * 1024**2
+    with path.open("rb") as handle:
+        raw = handle.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise ValueError("document_too_large")
+    return driver.load_strict_json(raw.decode("utf-8"))
 
 
-def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
+def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
     """The one command that can launch the visual runtime. Every refusal here runs nothing."""
 
     from src.ai_assist.host import GenerationActivity
     from src.ai_assist.paths import resolve_ai_root
-    from tools.qualification.vl220 import contract, driver
-    from tools.qualification.vl220.visual_argv import TURN_LEGACY, VisualLimits
+    from tools.qualification.vl220 import contract
+    from tools.qualification.vl220.visual_argv import TURN_JINJA, TURN_LEGACY
 
     if contract.INVOCATION_APPROVED is not True:
         sys.stderr.write(f"refused: {driver.REFUSED_NOT_APPROVED}\n")
@@ -70,7 +86,18 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
     if args.diagnostics_out is not None and args.diagnostics_out.exists():
         sys.stderr.write(f"refused: {diagnostics.REFUSED_EXISTS}\n")
         return 2
-    if args.turn_format != TURN_LEGACY and (args.diagnostics_out is None or args.cases is not None):
+    # Turn format (PR-AI-VL-223, D24). Gemma always renders its own template; for any other candidate ``jinja`` is the
+    # evaluation-only variant and is refused before a launch unless this is a diagnostic run of a built-in synthetic set.
+    gemma = candidate.candidate_id == GEMMA_CANDIDATE_ID
+    turn_format = args.turn_format or (TURN_JINJA if gemma else TURN_LEGACY)
+    if gemma and turn_format != TURN_JINJA:
+        sys.stderr.write("refused: gemma_renders_its_own_template\n")
+        return 2
+    if (
+        not gemma
+        and turn_format == TURN_JINJA
+        and (args.diagnostics_out is None or args.cases is not None)
+    ):
         sys.stderr.write(f"refused: {driver.REFUSED_TURN_FORMAT}\n")
         return 2
     try:
@@ -83,8 +110,8 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         limits = VisualLimits(
             image_min_tokens=args.min_image_tokens, image_max_tokens=args.max_image_tokens
         )
-    except (OSError, ValueError) as exc:
-        sys.stderr.write(f"refused: {exc.__class__.__name__}: {exc}\n")
+    except (OSError, ValueError, RecursionError) as exc:
+        sys.stderr.write(f"refused: {exc.__class__.__name__}\n")
         return 2
     # Diagnostic mode (D23): raw answers and runtime output are kept only for a built-in synthetic set; anything else is
     # refused before a single launch and the earlier rule stands (no answer text, no runtime output persisted).
@@ -100,6 +127,21 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         except diagnostics.DiagnosticsRefused as exc:
             sys.stderr.write(f"refused: {exc}\n")
             return 2
+
+    execution = None
+    case_sha = contract.digest(case_doc)
+    label_sha = contract.digest(label_doc)
+    frozen = (args.execution_sha256, args.case_sha256, args.label_sha256)
+    if candidate.candidate_id == GEMMA_CANDIDATE_ID or any(frozen):
+        try:
+            execution = driver.execution_identity(candidate, limits)
+        except (OSError, ValueError):
+            sys.stderr.write("refused: vision_build_refused\n")
+            return 2
+        if frozen != (execution["execution_sha256"], case_sha, label_sha):
+            sys.stderr.write("refused: evaluation_identity_mismatch\n")
+            return 2
+
     acknowledgement = _acknowledgement(args.acknowledgement)
     visual = driver.VisualDriver(
         candidate,
@@ -112,7 +154,7 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         activity=(lambda: GenerationActivity()) if args.generation_idle else None,
         limits=limits,
         capture=capture,
-        turn_format=args.turn_format,
+        use_jinja=turn_format == TURN_JINJA,
     )
     run = visual.run_cases(case_set, labels)
     controls = None
@@ -121,11 +163,13 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
     document = driver.evidence_document(
         run,
         plan_sha256=current,
-        case_set_sha256=contract.digest(case_doc),
+        case_set_sha256=case_sha,
         candidate=candidate,
         controls=controls,
-        turn_format=args.turn_format,
+        turn_format=visual.turn_format,
     )
+    if execution is not None:
+        document.update(execution_sha256=execution["execution_sha256"], label_set_sha256=label_sha)
     with args.evidence_out.open("x", encoding="utf-8") as handle:
         json.dump(document, handle, indent=2, sort_keys=True, allow_nan=False)
         handle.write("\n")
@@ -138,7 +182,7 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
                 capture.document(
                     plan_sha256=current,
                     evidence_file=args.evidence_out.name,
-                    turn_format=args.turn_format,
+                    turn_format=visual.turn_format,
                 ),
             )
         except diagnostics.DiagnosticsRefused as exc:
@@ -165,12 +209,22 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("describe")
     sub.add_parser("dry-run")
+    execution = sub.add_parser("describe-execution")
+    execution.add_argument("--min-image-tokens", type=int, default=64)
+    execution.add_argument("--max-image-tokens", type=int, default=256)
+    status = sub.add_parser("status")
+    status.add_argument("--evaluation-root", type=Path, required=True)
+    status.add_argument("--ai-root", type=Path)
+    status.add_argument("--acknowledgement", type=Path)
+    archive = sub.add_parser("import-runtime")
+    archive.add_argument("--evaluation-root", type=Path, required=True)
+    archive.add_argument("--archive", type=Path, required=True)
     commands = sub.add_parser("commands")
     commands.add_argument("--dest", required=True)
     for name in ("verify-staging", "import"):
         item = sub.add_parser(name)
         item.add_argument("--staging", type=Path, required=True)
-        item.add_argument("--build-id", default="b11960-cpu")
+        item.add_argument("--build-id")
         item.add_argument("--acknowledgement", type=Path, default=None)
         if name == "import":
             item.add_argument("--evaluation-root", type=Path, required=True)
@@ -212,14 +266,18 @@ def main(argv: list[str] | None = None) -> int:
         help="also run the unscored free-text controls (needs --diagnostics-out)",
     )
     evaluate.add_argument(
-        "--turn-format", default="legacy", choices=("legacy", "jinja"),
-        help="legacy (default): the earlier command line. jinja: adds the single --jinja switch so the turn is rendered from "
-        "the pinned GGUF's own chat template (evaluation-only; needs --diagnostics-out and a built-in synthetic set)",
+        "--turn-format", default=None, choices=("legacy", "jinja"),
+        help="legacy (default for LFM): the earlier command line. jinja (always, for Gemma): adds the single --jinja switch so "
+        "the turn is rendered from the pinned GGUF's own chat template; for LFM it is evaluation-only and needs "
+        "--diagnostics-out and a built-in synthetic set",
     )  # fmt: skip
     evaluate.add_argument("--cases", type=Path, default=None)
     evaluate.add_argument("--labels", type=Path, default=None)
     evaluate.add_argument("--min-image-tokens", type=int, default=64)
     evaluate.add_argument("--max-image-tokens", type=int, default=256)
+    evaluate.add_argument("--execution-sha256")
+    evaluate.add_argument("--case-sha256")
+    evaluate.add_argument("--label-sha256")
     args = parser.parse_args(argv)
     try:
         candidate = find_candidate(args.candidate)
@@ -228,6 +286,45 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.command == "describe":
         _print(plan.build_plan(candidate))
+    elif args.command == "describe-execution":
+        try:
+            _print(
+                driver.execution_identity(
+                    candidate,
+                    VisualLimits(
+                        image_min_tokens=args.min_image_tokens,
+                        image_max_tokens=args.max_image_tokens,
+                    ),
+                )
+            )
+        except (OSError, ValueError):
+            sys.stderr.write("refused: execution_profile_invalid\n")
+            return 2
+    elif args.command == "status":
+        status_report = driver.readiness(
+            candidate,
+            evaluation_root=args.evaluation_root,
+            ai_root=args.ai_root if args.ai_root is not None else args.evaluation_root,
+            acknowledgement=_acknowledgement(args.acknowledgement),
+        )
+        _print(status_report)
+        return 0 if status_report["launch_prerequisites_met"] else 1
+    elif args.command == "import-runtime":
+        try:
+            root = staging.resolve_evaluation_root(args.evaluation_root)
+            manifest = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
+            build = manifest.find(VISION_BUILD_ID)
+            if build is None or manifest.problems or build.qualified:
+                raise ImportRefused("visual_runtime_not_pinned")
+            if has_link(args.archive.absolute()) or has_link(root / "runtimes" / build.build_id):
+                raise ImportRefused("unsafe_link_or_nonregular_file")
+            _print({"installed_runtime": str(import_runtime(args.archive, build, root))})
+        except (ImportRefused, staging.StagingRefused) as exc:
+            sys.stderr.write(f"refused: {exc}\n")
+            return 1
+        except OSError:
+            sys.stderr.write("refused: import_io_error\n")
+            return 1
     elif args.command == "dry-run":
         _print(plan.dry_run())
     elif args.command == "commands":
@@ -238,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
         report = staging.stage_report(
             candidate,
             args.staging,
-            build_id=args.build_id,
+            build_id=args.build_id or candidate.runtime.required_build_id,
             acknowledgement=_acknowledgement(args.acknowledgement),
         )
         _print(report)
@@ -246,11 +343,14 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "import":
         try:
             target = staging.import_candidate(
-                candidate, args.staging, args.evaluation_root, build_id=args.build_id,
+                candidate, args.staging, args.evaluation_root, build_id=args.build_id or candidate.runtime.required_build_id,
                 acknowledgement=_acknowledgement(args.acknowledgement),
             )  # fmt: skip
         except staging.StagingRefused as exc:
             sys.stderr.write(f"refused: {exc}\n")
+            return 1
+        except OSError:
+            sys.stderr.write("refused: import_io_error\n")
             return 1
         sys.stdout.write(f"imported: {target}\n")
     else:
