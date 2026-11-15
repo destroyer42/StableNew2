@@ -3651,7 +3651,7 @@ class Pipeline:
             evidence = info.get("stablenew_localized") if isinstance(info, dict) else None
             if isinstance(evidence, dict):
                 # The client carries the refined image as ``images[0]`` and the rest of the evidence under ``info``.
-                returned = response.get("images") or []
+                returned = (response or {}).get("images") or []
                 evidence = {**evidence, "image": returned[0] if returned else None}
             try:
                 localized_outcome = verify_and_composite(
