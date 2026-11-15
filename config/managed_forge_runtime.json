@@ -86,8 +86,18 @@
     }
   },
   "extensions": {
-    "allowed": ["adetailer-neo"],
-    "ignored_entries": ["Put Extensions here.txt", "__pycache__"]
+    "allowed": ["adetailer-neo", "stablenew-adetailer-local"],
+    "ignored_entries": ["Put Extensions here.txt", "__pycache__"],
+    "stablenew_owned": {
+      "stablenew-adetailer-local": {
+        "source": "tools/forge_extensions/stablenew-adetailer-local",
+        "version": "1.0.0",
+        "purpose": "Runs the pinned ADetailer-Neo's own masked passes without an outer img2img and returns the masks used (stablenew.adetailer-localized.v1). Copied from this repository, never fetched; identified by content hash, not a git revision.",
+        "files": {
+          "scripts/stablenew_adetailer_local.py": "1958e3b13f81d73cf31c9c421193fcfd499166111da9f0cfd2c538960567d46f"
+        }
+      }
+    }
   },
   "detectors": {
     "files": {

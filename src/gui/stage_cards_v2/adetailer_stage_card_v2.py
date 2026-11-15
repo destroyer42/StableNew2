@@ -71,7 +71,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
         "SGM Uniform",
     ]
     MASK_FILTER_OPTIONS = list(MASK_FILTER_METHODS)
-    MASK_MERGE_OPTIONS = list(MASK_MERGE_MODES)
+    #: "Merge and Invert" targets the background, which localized-only refinement refuses; it is not offered.
+    MASK_MERGE_OPTIONS = [mode for mode in MASK_MERGE_MODES if mode != "Merge and Invert"]
     STAGE_MODEL_INHERIT = "Inherit Base Generation"
 
     def __init__(self, master: tk.Misc, *, theme: Any | None = None, **kwargs: Any) -> None:
@@ -195,7 +196,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
         super().__init__(
             master,
             title="ADetailer Stage",
-            description="Face and hand refinement with explicit pass-level controls.",
+            description="Localized face and hand refinement with explicit pass-level controls.",
             theme=theme,
             **kwargs,
         )
@@ -216,7 +217,12 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
         helper = ttk.Label(
             parent,
-            text="Edits are restored as your working draft. Use Apply to PromptPack to save pack settings. Queued jobs keep their compiled settings.",
+            text=(
+                "New jobs change only the detected face and hand regions; the rest of the image is preserved exactly. "
+                "For whole-image refinement add an img2img stage. "
+                "Edits are restored as your working draft. Use Apply to PromptPack to save pack settings. "
+                "Queued jobs keep their compiled settings."
+            ),
             style=BODY_LABEL_STYLE,
             wraplength=460,
             justify="left",

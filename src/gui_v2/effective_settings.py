@@ -173,7 +173,12 @@ def _adetailer_summary(job: Any) -> str:
     ):
         value = ("all eligible" if limit == 0 else f"up to {limit}") if enabled else "off"
         passes.append(f"{role} {value}")
-    return f"{label} ({', '.join(passes)})"
+    scope = (
+        "localized only: detected regions change, the rest of the image is preserved"
+        if settings.get("adetailer_execution_mode") == "localized_only"
+        else "legacy whole-image refinement, as recorded"
+    )
+    return f"{label} ({', '.join(passes)}); {scope}"
 
 
 def _job_rows(job: Any, context: EffectiveContext) -> dict[str, str]:

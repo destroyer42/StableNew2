@@ -125,6 +125,10 @@ class ImageBackendCapabilities:
     #: True only for a runtime that can execute a pre-rendered OpenPose ControlNet unit on the base txt2img stage
     #: (PR-IMG-CNET-210). Anything else refuses such work before dispatch rather than silently dropping it.
     supports_openpose_conditioning: bool = False
+    #: True only for a runtime that can run ADetailer's masked passes without a whole-image img2img and return the
+    #: masks it used (the StableNew companion extension in the managed Forge runtime). A ``localized_only`` ADetailer
+    #: stage is refused everywhere else; it never degrades to the whole-image request.
+    supports_localized_adetailer: bool = False
 
 
 @dataclass(slots=True)

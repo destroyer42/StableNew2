@@ -174,6 +174,9 @@ def freeze_njr(settings: dict[str, Any], backend: str, *, job_id: str, output_di
     }
     if chain:
         config["adetailer"], config["upscale"] = dict(settings["adetailer"]), dict(settings["upscale"])
+        # The frozen matrix is the qualified whole-image ADetailer comparison on both backends; it states that
+        # recorded mode instead of taking the localized-only default of newly authored jobs (PR-IMG-ADETAILER-LOCAL-240B).
+        config["adetailer"]["adetailer_execution_mode"] = "legacy_whole_image"
     lora = f" <lora:{settings['lora_name']}:{settings['lora_strength']}>" if case == "B" else ""
     njr = build_cli_njr(prompt=settings["prompt"] + lora, config=config, batch_size=1, run_name=job_id)
     return replace(njr, output_plan=replace(njr.output_plan, base_output_dir=str(output_dir)))

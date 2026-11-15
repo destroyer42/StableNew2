@@ -46,6 +46,10 @@ _VERSION_UID = re.compile(r"""^VERSION_UID\s*(?::[^=\n]+)?=\s*["']([^"']+)["']""
 _PIN = re.compile(r"^([A-Za-z0-9_.\-]+)==(\S+)\s*(?:#.*)?$")
 _URL_PIN = re.compile(r"^([A-Za-z0-9_.\-]+)\s*@\s*(\S+)\s+#\s*version=(\S+)\s*$")
 DRIFT = "MANAGED_FORGE_DRIFT"
+#: The pinned third-party extension and the one StableNew-owned companion that calls into it. Nothing else may load.
+OWNED_EXTENSION = "stablenew-adetailer-local"
+OWNED_EXTENSION_ROOT = "tools/forge_extensions"
+ALLOWED_EXTENSIONS = ["adetailer-neo", OWNED_EXTENSION]
 
 
 def normalize_name(name: str) -> str:
@@ -102,8 +106,24 @@ def validate_manifest(
         problems.append("launch_policy must require --api, --skip-install and --ad-no-huggingface")
     if policy.get("model_reference_flag") != "--forge-ref-a1111-home":
         problems.append("launch_policy.model_reference_flag must be --forge-ref-a1111-home")
-    if (manifest.get("extensions") or {}).get("allowed") != ["adetailer-neo"]:
-        problems.append("extensions.allowed must be exactly ['adetailer-neo']")
+    extensions = manifest.get("extensions") or {}
+    if extensions.get("allowed") != ALLOWED_EXTENSIONS:
+        problems.append(f"extensions.allowed must be exactly {ALLOWED_EXTENSIONS}")
+    owned = extensions.get("stablenew_owned") or {}
+    if set(owned) != {OWNED_EXTENSION}:
+        problems.append(f"extensions.stablenew_owned must declare exactly '{OWNED_EXTENSION}'")
+    for name, entry in owned.items():
+        owned_files = (entry or {}).get("files") or {}
+        if str((entry or {}).get("source", "")) != f"{OWNED_EXTENSION_ROOT}/{name}":
+            problems.append(f"extensions.stablenew_owned.{name}.source must be {OWNED_EXTENSION_ROOT}/{name}")
+        if not owned_files or not all(
+            _SHA256.match(str(v)) and not Path(k).is_absolute() and ".." not in Path(k).parts for k, v in owned_files.items()
+        ):
+            problems.append(f"extensions.stablenew_owned.{name}.files must map relative paths to sha256 hashes")
+    if not problems and require_constraints_file:
+        # Only with the repository at hand (the same condition as the constraints file): the copy a bootstrap
+        # installs from must be exactly what the contract pins.
+        problems += [f"extensions.stablenew_owned {p}" for p in check_owned_extension_sources(manifest, root=root)]
     files = (manifest.get("detectors") or {}).get("files") or {}
     if set(files) != {"face_yolov8n.pt", "hand_yolov8n.pt"} or not all(_SHA256.match(str(v)) for v in files.values()):
         problems.append("detectors.files must be exactly the two YOLO files with sha256 hashes")
@@ -258,6 +278,59 @@ def check_extensions(data_dir: Path, manifest: dict[str, Any]) -> list[str]:
     present = {entry.name for entry in folder.iterdir() if entry.name not in ignored}
     problems = [f"[{DRIFT}] unexpected extension: {name}" for name in sorted(present - allowed)]
     problems += [f"[{DRIFT}] required extension missing: {name}" for name in sorted(allowed - present)]
+    return problems
+
+
+def normalized_sha256(path: Path) -> str:
+    """sha256 of a text file with CRLF folded to LF, so a Windows and a Linux checkout hash the same source."""
+
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def _owned_files(folder: Path) -> set[str]:
+    return {
+        entry.relative_to(folder).as_posix()
+        for entry in folder.rglob("*")
+        if entry.is_file() and "__pycache__" not in entry.parts
+    }
+
+
+def check_owned_extensions(data_dir: Path, manifest: dict[str, Any]) -> list[str]:
+    """A StableNew-owned extension is exactly its declared files, by content hash: nothing added, changed or missing."""
+
+    problems: list[str] = []
+    for name, entry in (manifest["extensions"].get("stablenew_owned") or {}).items():
+        folder = data_dir / "extensions" / name
+        if not folder.is_dir():
+            continue  # reported by check_extensions as a missing required extension
+        expected = entry["files"]
+        present = _owned_files(folder)
+        problems += [f"[{DRIFT}] {name}: unexpected file {path}" for path in sorted(present - set(expected))]
+        for path, digest in sorted(expected.items()):
+            if path not in present:
+                problems.append(f"[{DRIFT}] {name}: file missing: {path}")
+            elif normalized_sha256(folder / path) != digest:
+                problems.append(f"[{DRIFT}] {name}: {path} does not match its accepted sha256")
+    return problems
+
+
+def check_owned_extension_sources(manifest: dict[str, Any], *, root: Path = ROOT) -> list[str]:
+    """The repository copy a bootstrap installs from must itself match the contract (no unpinned edit)."""
+
+    problems: list[str] = []
+    for name, entry in (manifest["extensions"].get("stablenew_owned") or {}).items():
+        folder = root / entry["source"]
+        if not folder.is_dir():
+            problems.append(f"{name}: source directory missing: {entry['source']}")
+            continue
+        if _owned_files(folder) != set(entry["files"]):
+            problems.append(f"{name}: source files differ from the declared set")
+            continue
+        problems += [
+            f"{name}: source {path} does not match its declared sha256"
+            for path, digest in sorted(entry["files"].items())
+            if normalized_sha256(folder / path) != digest
+        ]
     return problems
 
 
@@ -445,6 +518,7 @@ def main(argv: list[str] | None = None) -> int:
     torch_problems, facts = check_torch(manifest)
     problems += [f"[torch] {p}" for p in torch_problems]
     problems += [f"[extensions] {p}" for p in check_extensions(data_dir, manifest)]
+    problems += [f"[extensions] {p}" for p in check_owned_extensions(data_dir, manifest)]
     problems += [f"[detectors] {p}" for p in check_detectors(data_dir, manifest)]
     problems += [f"[path-budget] {p}" for p in check_path_budget(args.install_dir, manifest)]
     problems += [f"[runtime-dir] {p}" for p in check_runtime_dirs(args.install_dir, manifest)]

@@ -24,6 +24,11 @@ stopped by this tooling. `WebUIProcessManager` remains the only lifecycle author
 - Forge: `Haoming02/sd-webui-forge-classic` at commit `d70373ebcf1a96d210b78cd6f77196459e783e2a`. The branch
   name `neo` is provenance only; the commit is the identity and no mutable ref is ever followed.
 - ADetailer-Neo: `Haoming02/ADetailer-Neo` at commit `af228eba7a3f3691a25bcd1fc94aa95e600dd3e6`.
+- `stablenew-adetailer-local`: StableNew's own companion extension, copied from
+  `tools/forge_extensions/stablenew-adetailer-local` in this repository and pinned by the sha256 of each
+  file (`extensions.stablenew_owned` in the contract; CRLF is folded to LF before hashing). It adds the
+  localized ADetailer route that newly compiled ADetailer jobs require and changes nothing in ADetailer-Neo. It
+  is never fetched from a network.
 - Official standard-GIL CPython 3.13.x (accepted 3.13.16), JIT off. Torch `2.13.0+cu130`, torchvision
   `0.28.0+cu130`, CUDA 13.0.
 - Loopback only (`127.0.0.1`). Default port `7871`.
@@ -58,7 +63,7 @@ The install is `%LOCALAPPDATA%\StableNew\Forge\neo-d70373eb\{source,venv,data,ru
 |---|---|
 | `source` | the exact Forge commit (clean checkout) |
 | `venv` | the isolated interpreter and the exact accepted package set |
-| `data` | Forge's `--data-dir`: the declared `config.json`, `extensions/adetailer-neo` (exact commit) and `models/adetailer` (the two YOLO files) |
+| `data` | Forge's `--data-dir`: the declared `config.json`, `extensions/adetailer-neo` (exact commit), `extensions/stablenew-adetailer-local` (exact files) and `models/adetailer` (the two YOLO files) |
 | `runtime` | StableNew-owned Hugging Face / Matplotlib / YOLO / uv state, isolated from every other runtime |
 
 The helper:
@@ -79,7 +84,9 @@ The helper:
 6. copies **only** `face_yolov8n.pt` and `hand_yolov8n.pt` from `-DetectorSourceDir`, after validating each
    SHA256. The source files are never modified or deleted. No detector or model is ever downloaded, and no
    MediaPipe model is installed;
-7. runs the verifier and, only if it passes, marks the install `verified`.
+7. copies the StableNew-owned companion extension from this repository, after validating each file's sha256
+   against the contract. Declared files are overwritten in place and nothing is deleted;
+8. runs the verifier and, only if it passes, marks the install `verified`.
 
 It does **not** launch Forge, run the extension's own installer, download models, or touch A1111, an external
 Forge, ComfyUI, the StableNew application environment or any process.
@@ -92,6 +99,22 @@ or interrupted build therefore always leaves a marked directory that `-Recreate`
 already exists **without** the marker is never modified, adopted, recreated or deleted, with or without
 `-Recreate`; move it aside or choose another `-InstallRoot`. `-Recreate` rebuilds only a directory this tooling
 created and marked. `-CheckOnly` is strictly read-only.
+
+## Add or refresh the companion extension on an existing install
+
+An install built before the companion existed fails verification (`required extension missing:
+stablenew-adetailer-local`), and every newly compiled ADetailer job fails visibly against it, because
+localized-only refinement never falls back to a whole-image request. Stop Forge yourself first (StableNew does
+not stop it for this), then:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_managed_forge_windows.ps1 `
+  -SyncOwnedExtensions -ModelReferenceHome "C:\Path\to\stable-diffusion-webui"
+```
+
+This copies only the companion's declared files, installs no package, fetches nothing and then runs the
+verifier. It refuses a directory without the ownership marker. Forge loads the extension the next time it
+starts. Use the same command after a StableNew update that changes the companion.
 
 ## Verify (drift detection)
 
@@ -109,8 +132,10 @@ The verifier is read-only and runs on the managed venv's interpreter. It checks:
 - every package in the lock is installed at its exact version **and no package outside the lock is installed**;
 - `pip check` reports the one declared conflict and nothing else;
 - Torch/torchvision are the pinned `+cu130` builds, CUDA is 13.0 and available, and the qualified GPU is visible;
-- `data/extensions` holds only `adetailer-neo`; `data/models/adetailer` holds exactly the two YOLO files with the
-  accepted SHA256s (no MediaPipe, no extra detector);
+- `data/extensions` holds only `adetailer-neo` and `stablenew-adetailer-local`; the companion is exactly its
+  declared files with the accepted SHA256s (an added, changed or missing file is drift; Forge's `__pycache__`
+  is ignored); `data/models/adetailer` holds exactly the two YOLO files with the accepted SHA256s (no
+  MediaPipe, no extra detector);
 - the StableNew-owned runtime/config directories exist, `config.json` declares the contract's settings, and the
   declared `VERSION_UID` is the one the pinned Forge source (`modules/launch_utils.py`) defines;
 - the model references resolve to the accepted checkpoint, LoRA and upscaler with the accepted SHA256s;
