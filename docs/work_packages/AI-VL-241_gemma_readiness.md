@@ -89,9 +89,7 @@ Machine: i9-13900K (8 P + 16 E cores, `-t 8`), 31.8 GiB RAM, 92 GiB commit limit
 | Commit headroom | **12.0 GiB** | planned private 9.0 + the in-run guard's own kill threshold 1.0 + margin 2.0; equals the job limit, so the host can hold the worst case |
 | In-run guard (unchanged) | available >= 0.25 GiB, commit headroom >= 1.0 GiB, two consecutive 1 s readings | stops a child that makes the host thrash |
 
-Measured on this host while preparing (no Forge, no application running): about 11.8 GiB physical free and about 16 GiB commit
-headroom (the pagefile is 60 GiB). That clears the gate narrowly; **Forge or the application running will not** (an earlier LFM
-run was refused for commit headroom under that load), so they must be closed. A short reading refuses cleanly: `not_run`, the
+Read with the harness's own probe (`read_host_memory`) while preparing (a process listing showed no Forge, ComfyUI, llama or StableNew process): **12.5 GiB available and 10.7 GiB commit headroom**. That clears the RAM gate but **not the commit gate (12.0 GiB)**, so the run would be refused today (`commit_headroom_below_requirement`, row `not_run`); other software on the host holds about 1.4 GiB more commit than the run can spare, and it must be closed or the reading re-taken before the run. Forge or the StableNew application running is worse (an earlier LFM run was refused for commit headroom under that load). A short reading refuses cleanly: `not_run`, the
 refusal code in the evidence, the set stops, nothing is launched or scored.
 
 ### 3.4 Time per case (estimate, uncertainty stated)
