@@ -1,6 +1,6 @@
 # AI-VL-241: independent review of the visual driver, and Gemma 4 12B readiness (CPU, synthetic wiring run)
 
-Status: **review and fixes delivered; the Gemma wiring run is prepared and awaits the owner's approval by digest (section 6).**
+Status: **review and fixes delivered; the Gemma wiring run was approved by the owner by digest on 2026-11-15 and executed once (run 4, section 7).**
 Nothing here qualifies a model. `qualified`, `production_eligible` and `text_registry_eligible` stay false for both
 candidates, and a synthetic run is a wiring check, not quality evidence.
 
@@ -94,7 +94,7 @@ refusal code in the evidence, the set stops, nothing is launched or scored.
 
 ### 3.4 Time per case (estimate, uncertainty stated)
 
-The cost is the language model, not the vision encoder (52 M parameters). For `vl220-synthetic-512-2`: text prompt 700-950
+The cost is the language model, not the vision encoder (52 M parameters; run 4 measured 19 ms for it, and 15.6-21.3 s per case, below this estimate: section 7). For `vl220-synthetic-512-2`: text prompt 700-950
 characters (about 200-260 tokens) plus the turn template; images 512 x 512 become **121 tokens** each (see 3.5), the two-panel
 1024 x 512 images 231 and before/after 242; so about **350-530 prompt tokens**, and an answer of about 60-150 tokens (a free-text control up to 256).
 
@@ -158,7 +158,7 @@ mode would instead contend with Forge for VRAM), which AI-GPU-440 already owns. 
 | Import | Not done. After approval: `import --staging D:\StableNew-Assets\offline-ai\downloads\gemma4-12b --evaluation-root D:\StableNew-Assets\offline-ai\vl220-eval --acknowledgement <record>`; it re-verifies while copying 7.15 GB and refuses to overwrite. |
 | Assets | The built-in set `vl220-synthetic-512-2` already exists at `D:\StableNew-Assets\offline-ai\vl220-synthetic-512-2` (14 cases); each image is re-proved against its pin before it is used. |
 
-## 6. The run awaiting approval
+## 6. The run (approved by the owner on 2026-11-15, executed once)
 
 * **Plan digest (Gemma):** `82cd8ce7ca98376bbe5564b380df2da5f616d9b393b8d37563c171f4946d3d70`
 * **Execution digest:** `e0d125f5af941925d7591ab5f5636c05755af48148f5313a1f22ce70dcb425ed` (jinja, 64/256 image tokens, 300 s kill,
@@ -176,9 +176,65 @@ mode would instead contend with Forge for VRAM), which AI-GPU-440 already owns. 
 
 ## 7. Run result and comparison
 
-Pending the owner's approval. Section to be completed after the run with the per-kind table next to LFM3-VL-2B run 3
-(adherence 1.0, describe recall 1.0 and exact at 512 px, consistency 0.75, defect triage recall 0.67 / precision 0.22 with the clean
-figure flagged, before/after 0.5 legacy and 0.0 jinja, 28 of 28 valid, median 4.2-4.6 s, peak working set 2.46 GB).
+Run 4, 2026-11-15, owner-approved by the digests in section 6 (the owner's reply "Approve run" to the request that named them and
+the Apache-2.0 acknowledgement, recorded by this session in `D:\StableNew-Assets\offline-ai\downloads\gemma4-12b\license_acknowledgement.json`).
+Host before the run: no generation, no Forge/ComfyUI/llama process, 13.6 GiB available RAM, 12.9 GiB commit headroom (re-read just
+before; the gate passed), CPU about 3 percent. Code: the PR head of this package. Evidence:
+`D:\StableNew-Assets\offline-ai\vl220-evidence\run4-gemma-512v.json` and `run4-gemma-512v.diagnostics.json`. Set
+`vl220-synthetic-512-2`, turn format `jinja` (always, for Gemma), image tokens 64/256, 300 s kill.
+
+**Outcome.** 16 invocations, all exit 0, none refused, none timed out, none cancelled; all 14 scored answers valid (0 invalid, 0 model
+refusals); `cleanup_complete: true`, the work directory empty and the lock gone afterwards.
+
+| Dimension (same set, 14 cases) | Gemma 4 12B Q4_0 (run 4) | LFM3-VL-2B, `jinja` turn (run 3) | LFM3-VL-2B, legacy turn (run 3) | Deterministic floors (all-yes / all-no / seeded random) |
+|---|---|---|---|---|
+| Valid structured answers | 14 of 14 | 14 of 14 | 14 of 14 | 14 of 14 |
+| Prompt adherence (4 cases, 8 elements) | **0.875** | 1.0 | 1.0 | 0.5 / 0.5 / 0.75 |
+| Describe: object recall / unsupported mentions | 1.0 / 0.0 (exact names) | 1.0 / exact | 1.0 / exact | 0.33 / 0.0 |
+| Multi-subject consistency (2 cases, 4 answers) | 0.75 (`consistency-2` wrong, as LFM) | 0.75 | 0.75 | 0.75 / 0.25 / 0.75 |
+| Defect triage: recall / precision | 0.33 / 0.33 | 0.33 / 0.20 | 0.67 / 0.22 | 0 / 0 / 0 |
+| Defect triage: false alarm on the clean figure | 1.0 (flagged `other`/`distorted`) | flagged | flagged | 1.0 / 0 / 0 |
+| Before/after (2 cases) | **1.0** (`a`, then `b`, both `more_complete`) | 0.0 | 0.5 | 0.5 / 0 / 0.5 |
+| Free-text controls (2) | answered, but each is a thinking trace cut at 256 tokens (see below) | described both scenes correctly | described both | n/a |
+| Wall time per scored case | **median 19.3 s (15.6-21.3 s)** | median 4.2 s (3.6-6.1 s) | median 4.6 s (3.7-6.0 s) | n/a |
+| Wall time per control | 46.0 s each | 8.5-9.0 s | 3.2-3.8 s | n/a |
+| Peak private bytes | **7.72 GiB** | 1.71 GiB | 1.70 GiB | n/a |
+| Peak working set | **13.2 GiB (14.2 GB)** | 2.29 GiB | 2.29 GiB | n/a |
+| Resource violations (plan limits 180 s, 12 GiB working set) | memory: 14 of 14 (working set 13.2 GiB over 12 GiB); time: none | none | none | n/a |
+| Refusals | none | none | none | n/a |
+
+**What this shows.**
+
+* **Memory envelope: confirmed.** Private 7.72 GiB against the 7.9 expected and 9.0 planned; working set 13.2 GiB against the 13.7
+  predicted for the load transient. The old working-set kill at the 12 GiB ceiling (finding M1) would have cancelled **all 14** cases
+  and both controls; with the tripwire at ceiling plus pinned files (18.7 GiB) the run completed. The plan's own 12 GiB working-set
+  limit is therefore reported as violated for every case. That is a statement about the *limit in `plan.py`*, which measures a
+  working set that includes mapped file pages, not about commit; changing it is a `plan.py` decision outside this package (the
+  commit ceiling and the 12 GiB job limit were never approached). Recommended: measure commit (private bytes) against that limit.
+* **Time: faster than estimated.** 15.6-21.3 s per case against 25-75 s expected; no case approached the 180 s plan limit or the 300 s
+  kill. The vision step took 19 ms (the projector has no ViT blocks), so a case is load, a few hundred prompt tokens and about
+  100-150 generated tokens. Generation without a grammar runs at about 5.5 tokens/s (256 tokens plus prefill in 46 s), the top
+  of the 3.5-6 estimate.
+* **Free-text controls are not informative for Gemma.** Without the JSON grammar the pinned template lets the model open its
+  thinking channel (`<|channel>thought ...`) and the 256-token control cap ends the answer inside the trace. With the grammar (all
+  scored cases) the answer begins at the JSON object. This is a property of the control request, not of image perception; a Gemma
+  control would need a larger `-n` or a no-thinking turn. `llama-mtmd-cli` b11960 has no `--reasoning` or `--chat-template-kwargs`, so
+  the no-thinking turn is unreachable (AI-VL-223). Not changed here.
+* **Quality comparison: what it can and cannot mean.** The synthetic scenes (squares, circles, stick figures drawn from a fixed
+  table) are a wiring check. 14 cases, one greedy sample, two to four cases per kind: one answer moves a score by 0.125 to 0.5. Gemma
+  and LFM3-VL-2B are indistinguishable on describe and consistency; Gemma's 0.875 against LFM's 1.0 on adherence is one element;
+  Gemma's 1.0 against LFM's 0.5/0.0 on before/after is two cases against a 0.5 floor; defect triage is poor for both (the clean
+  figure is flagged, precision at or under 0.33), so neither shows triage ability on this set. None of it is evidence about real
+  generated images, and nothing is qualified. Real-image evaluation with human labels (including a larger Gemma image-token
+  budget, which costs prefill time) is the separate package that can answer whether the deep tier earns its cost.
+
+**CPU practicality, measured.** About **20 seconds per image** for a structured review (19.4 s for a before/after pair), about 46 s
+for a 256-token free-text answer, 7.7 GiB of private memory, and the host must be otherwise idle (12 GiB of commit headroom
+required). That is practical for an explicit, single-image "deep review" action with progress and cancel, on CPU, today. It is not a
+bulk tool, and larger image budgets (560-1120 tokens) and any thinking output will lengthen it (estimate +5-15 s of prefill for
+560 tokens; thinking can multiply generation time). So **speed does not force the AI-GPU-440 question to the owner**; what does
+remain for that package is memory exclusivity with Forge (about 8-9 GiB of commit must be free, so Forge's models cannot be loaded
+at the same time) and whether the deep tier beats the fast tier on real labelled images at all.
 
 ## 8. Acceptance and evidence boundary
 
@@ -186,7 +242,7 @@ figure flagged, before/after 0.5 legacy and 0.0 jinja, 28 of 28 valid, median 4.
 * **Demonstration:** the new tests, the existing VL tests, the `tests/tools` folder and the PR gate; read-only verification of the pair, the
   runtime hash, the attestation and the firewall rule.
 * **Qualification:** none. Both candidates stay `qualified: false`.
-* **Unverified or held:** Gemma has never been run; its memory, time, template rendering, grammar behaviour and answers are
-  estimates until the supervised run; synthetic scenes are a wiring check, not evidence about real generated images; real-image
+* **Unverified or held:** Gemma ran once on synthetic scenes (run 4); one greedy sample of 14 cases; the answers' quality on real
+  images is not known; synthetic scenes are a wiring check, not evidence about real generated images; real-image
   evaluation with human labels (and the Gemma image-token budget for it) is a separate package; L3 is accepted, not closed.
-* **Owner decisions pending:** approval by digest (section 6) and the licence acknowledgement; the AI-GPU-440 question after the measured time.
+* **Owner decisions pending:** whether the plan's 12 GiB working-set limit should measure commit instead (plan.py, not this package); the real-image evaluation scope, image-token budget and labeler; AI-GPU-440 (not forced by the measured speed).
