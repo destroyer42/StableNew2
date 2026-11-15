@@ -30,6 +30,7 @@ attestation, creates no firewall rule and never writes the license acknowledgeme
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import logging
@@ -63,7 +64,7 @@ from src.ai_assist.observe import ChildObserver
 from src.ai_assist.paths import attestation_path, runtime_dir
 from src.ai_assist.runtime import CommandFactory, Runner, default_command, strip_end_of_text
 from src.utils.managed_process import run_bounded
-from tools.qualification.vl220 import contract, plan, scoring, staging
+from tools.qualification.vl220 import contract, diagnostics, plan, scoring, staging
 from tools.qualification.vl220.candidates import (
     GEMMA_CANDIDATE_ID,
     REASON_CANCELLED,
@@ -81,7 +82,7 @@ from tools.qualification.vl220.contract import (
     LabelSet,
     Measurement,
 )
-from tools.qualification.vl220.prompts import render_visual_prompt
+from tools.qualification.vl220.prompts import render_control_prompt, render_visual_prompt
 from tools.qualification.vl220.visual_argv import (
     MAX_IMAGE_BYTES,
     VISION_BUILD_ID,
@@ -129,6 +130,7 @@ REFUSED_CANDIDATE = "candidate_not_admitted"
 REFUSED_ARGV = "argv_refused"
 REFUSED_SCRATCH = "scratch_unavailable"
 REFUSED_CANCELLED = "cancelled"
+REFUSED_DIAGNOSTICS = "diagnostics_not_enabled"
 
 # --- per-case status ----------------------------------------------------------------------------------------------------
 STATUS_VALID = "valid"
@@ -140,6 +142,9 @@ STATUS_CANCELLED = "cancelled"
 STATUS_TOO_LARGE = "output_too_large"
 STATUS_CHILD_FAILED = "child_exit_nonzero"
 STATUS_LAUNCH_FAILED = "launch_failed"
+#: The unscored free-text control of the diagnostic: the child answered (or printed nothing).
+STATUS_CONTROL_ANSWERED = "control_answered"
+STATUS_CONTROL_EMPTY = "control_empty"
 
 ActivityReader = Callable[[], GenerationActivity]
 MemoryReader = Callable[[], HostMemory | None]
@@ -359,6 +364,20 @@ class _Watch:
 
 _MEDIA_SUFFIX = {"image/png": ".png", "image/jpeg": ".jpg"}
 
+#: Free-text controls stop early: a description is a few sentences.
+CONTROL_MAX_NEW_TOKENS = 256
+
+
+@dataclass(frozen=True, slots=True)
+class _Job:
+    """One request to the runtime: a scored case (a schema, a case to validate against) or an unscored control (neither)."""
+
+    request_id: str
+    asset_ids: tuple[str, ...]
+    prompt_text: str
+    schema: dict[str, Any] | None
+    case: Case | None
+
 
 class VisualDriver:
     """Runs pinned visual cases one at a time. Construct it, then call :meth:`run_case` or :meth:`run_cases`."""
@@ -383,6 +402,7 @@ class VisualDriver:
         sampling: VisualSampling | None = None,
         cancel: CancelCheck | None = None,
         watch_interval: float = WATCH_INTERVAL_SECONDS,
+        capture: diagnostics.DiagnosticCapture | None = None,
     ) -> None:
         self._candidate = candidate
         self._root = Path(evaluation_root)
@@ -403,6 +423,9 @@ class VisualDriver:
         self._resource_limits = plan.evaluation_limits(candidate)
         self._cancel: CancelCheck = cancel if cancel is not None else (lambda: False)
         self._interval = watch_interval
+        #: Only a capture built for a built-in synthetic set can exist (``DiagnosticCapture`` refuses anything else), so
+        #: with ``None`` no answer text and no runtime output is kept beyond scoring, exactly as before.
+        self._capture = capture
 
     # -- locations ------------------------------------------------------------------------------------------------------
 
@@ -520,12 +543,12 @@ class VisualDriver:
         return None
 
     def _stage_images(
-        self, case: Case, assets: Mapping[str, Asset], scratch: Path
+        self, asset_ids: tuple[str, ...], assets: Mapping[str, Asset], scratch: Path
     ) -> list[Path] | Refusal:
         """Copy each pinned image into the private work directory after proving its pin, then read its header."""
 
         staged: list[Path] = []
-        for position, asset_id in enumerate(case.asset_ids):
+        for position, asset_id in enumerate(asset_ids):
             asset = assets.get(asset_id)
             if asset is None:
                 return Refusal(REFUSED_IMAGE, ("unknown_asset",))
@@ -561,55 +584,76 @@ class VisualDriver:
     def run_case(self, case_set: CaseSet, case: Case) -> CaseRun:
         """Admit and (only if every gate passes) run one case. Never raises; a refusal runs nothing."""
 
+        job = _Job(
+            case.case_id,
+            case.asset_ids,
+            render_visual_prompt(case),
+            contract.build_response_schema(case.kind, case),
+            case,
+        )
+        return self._run_job(case_set, job)
+
+    def run_control(self, case_set: CaseSet, request: diagnostics.ControlRequest) -> CaseRun:
+        """The diagnostic's unscored free-text control: no schema, answer text kept only in the capture. Needs a capture
+        (so only a built-in synthetic set can reach it) and every admission gate a case needs."""
+
+        if self._capture is None:
+            return _refused(request.request_id, Refusal(REFUSED_DIAGNOSTICS))
+        job = _Job(request.request_id, (request.asset_id,), render_control_prompt(), None, None)
+        return self._run_job(case_set, job)
+
+    def _run_job(self, case_set: CaseSet, job: _Job) -> CaseRun:
         try:
-            return self._run_case(case_set, case)
+            return self._run_case(case_set, job)
         except Exception:  # noqa: BLE001 - fail closed: an unexpected problem is a refusal that launched nothing
             logger.warning("Visual case could not be run", exc_info=True)
-            return _refused(case, Refusal(REFUSED_SCRATCH, ("unexpected_error",)))
+            return _refused(job.request_id, Refusal(REFUSED_SCRATCH, ("unexpected_error",)))
 
-    def _run_case(self, case_set: CaseSet, case: Case) -> CaseRun:
+    def _run_case(self, case_set: CaseSet, job: _Job) -> CaseRun:
+        name = job.request_id
         if contract.INVOCATION_APPROVED is not True:
-            return _refused(case, Refusal(REFUSED_NOT_APPROVED))
+            return _refused(name, Refusal(REFUSED_NOT_APPROVED))
         if self._cancel():
-            return _refused(case, Refusal(REFUSED_CANCELLED))
+            return _refused(name, Refusal(REFUSED_CANCELLED))
         refused_root = staging.root_refusal(self._root)
         if refused_root or not self._root.is_dir():
             return _refused(
-                case, Refusal(REFUSED_ROOT, (refused_root or "evaluation_root_missing",))
+                name, Refusal(REFUSED_ROOT, (refused_root or "evaluation_root_missing",))
             )
         if has_link((self._root / WORK_NAME).absolute()):
-            return _refused(case, Refusal(REFUSED_SCRATCH, ("unsafe_work_path",)))
+            return _refused(name, Refusal(REFUSED_SCRATCH, ("unsafe_work_path",)))
         lock = self._acquire()
         if lock is None:
-            return _refused(case, Refusal(REFUSED_BUSY))
+            return _refused(name, Refusal(REFUSED_BUSY))
         scratch = self._root / WORK_NAME / uuid.uuid4().hex
         try:
             try:
                 scratch.mkdir(parents=True, exist_ok=False)
             except OSError:
-                return _refused(case, Refusal(REFUSED_SCRATCH))
+                return _refused(name, Refusal(REFUSED_SCRATCH))
             try:
-                return self._admitted_run(case_set, case, scratch)
+                return self._admitted_run(case_set, job, scratch)
             finally:
                 shutil.rmtree(scratch, ignore_errors=True)
         finally:
             lock.unlink(missing_ok=True)
 
-    def _admitted_run(self, case_set: CaseSet, case: Case, scratch: Path) -> CaseRun:
+    def _admitted_run(self, case_set: CaseSet, job: _Job, scratch: Path) -> CaseRun:
+        name = job.request_id
         refusal = self._activity_refusal()
         if refusal is not None:
-            return _refused(case, refusal)
+            return _refused(name, refusal)
         refusal, build, manifest = self._runtime_refusal()
         if refusal is not None or build is None or manifest is None:
-            return _refused(case, refusal or Refusal(REFUSED_VISION_BUILD))
+            return _refused(name, refusal or Refusal(REFUSED_VISION_BUILD))
         refusal = self._memory_refusal()
         if refusal is not None:
-            return _refused(case, refusal)
+            return _refused(name, refusal)
         staged = self._stage_images(
-            case, {asset.asset_id: asset for asset in case_set.assets}, scratch
+            job.asset_ids, {asset.asset_id: asset for asset in case_set.assets}, scratch
         )
         if isinstance(staged, Refusal):
-            return _refused(case, staged)
+            return _refused(name, staged)
         admission = check_admission(
             self._candidate,
             self.staged_dir,
@@ -622,33 +666,44 @@ class VisualDriver:
             code = (
                 REFUSED_CANCELLED if admission.reasons == (REASON_CANCELLED,) else REFUSED_CANDIDATE
             )
-            return _refused(case, Refusal(code, admission.reasons))
-        schema = contract.build_response_schema(case.kind)
+            return _refused(name, Refusal(code, admission.reasons))
         prompt_file, schema_file = scratch / "prompt.txt", scratch / "schema.json"
-        prompt_file.write_text(render_visual_prompt(case), encoding="utf-8", newline="\n")
-        schema_file.write_text(json.dumps(schema), encoding="utf-8", newline="\n")
+        prompt_file.write_text(job.prompt_text, encoding="utf-8", newline="\n")
+        if job.schema is not None:
+            schema_file.write_text(json.dumps(job.schema), encoding="utf-8", newline="\n")
+        limits = (
+            self._limits
+            if job.case is not None
+            else dataclasses.replace(
+                self._limits,
+                max_new_tokens=min(self._limits.max_new_tokens, CONTROL_MAX_NEW_TOKENS),
+            )
+        )
         try:
             argv = build_visual_argv(
                 model_path=self.staged_dir / self._candidate.model.filename,
                 projector_path=self.staged_dir / self._candidate.projector.filename,
                 prompt_file=prompt_file,
-                schema_file=schema_file,
+                schema_file=schema_file if job.schema is not None else None,
                 image_paths=staged,
                 evaluation_root=self._root,
                 work_dir=scratch,
-                limits=self._limits,
+                limits=limits,
                 sampling=self._sampling,
+                free_text=job.schema is None,
                 use_jinja=self._use_jinja,
             )
         except VisualArgvRefused as exc:
-            return _refused(case, Refusal(REFUSED_ARGV, (exc.code,)))
-        return self._launch(case, build, argv, scratch)
+            return _refused(name, Refusal(REFUSED_ARGV, (exc.code,)))
+        return self._launch(job, build, argv, scratch, limits)
 
-    def _launch(self, case: Case, build: RuntimeBuild, argv: list[str], scratch: Path) -> CaseRun:
+    def _launch(
+        self, job: _Job, build: RuntimeBuild, argv: list[str], scratch: Path, limits: VisualLimits
+    ) -> CaseRun:
         shape = argv_shape_digest(argv)
-        limits = self._resource_limits
+        resource = self._resource_limits
         observer = ChildObserver(
-            cap_gib=limits.max_peak_working_set_bytes / _GIB, clock=self._clock
+            cap_gib=resource.max_peak_working_set_bytes / _GIB, clock=self._clock
         )
         watch = _Watch(
             token=self._cancel,
@@ -657,7 +712,9 @@ class VisualDriver:
             memory=self._memory,
             clock=self._clock,
             interval=self._interval,
-            working_set_limit_bytes=limits.max_peak_working_set_bytes if self._use_jinja else None,
+            working_set_limit_bytes=resource.max_peak_working_set_bytes
+            if self._use_jinja
+            else None,
         )
         assert self._activity is not None  # admission refused without a reading
         runtime_root = runtime_dir(self._ai_root, build.build_id)
@@ -666,15 +723,15 @@ class VisualDriver:
         container_options = (
             {
                 "require_containment": True,
-                "memory_limit_mb": limits.max_peak_working_set_bytes / 1024**2,
+                "memory_limit_mb": resource.max_peak_working_set_bytes / 1024**2,
             }
             if self._use_jinja
             else {}
         )
         outcome = self._runner(
             self._command_factory(executable, argv),
-            timeout_seconds=self._limits.timeout_seconds,
-            max_stdout_bytes=self._limits.max_stdout_bytes,
+            timeout_seconds=limits.timeout_seconds,
+            max_stdout_bytes=limits.max_stdout_bytes,
             cancel=watch,
             cwd=scratch,
             env=build_environment(runtime_root, self._environ, scratch),
@@ -683,15 +740,39 @@ class VisualDriver:
         )
         wall = max(0.0, self._clock() - started)
         evidence = {
-            "case_id": case.case_id,
+            "case_id": job.request_id,
             "wall_seconds": round(wall, 3),
             "peak_working_set_bytes": int(observer.evidence.peak_tree_working_set_gib * _GIB),
             "peak_private_bytes": int(observer.evidence.peak_tree_private_gib * _GIB),
             "exit_code": outcome.returncode,
             "argv_shape_sha256": shape,
-            "context_tokens": self._limits.context_tokens,
+            "context_tokens": limits.context_tokens,
             "cpu_only": True,
         }
+        run = self._judge(job, outcome, evidence, watch, observer)
+        if self._capture is not None:
+            self._capture.record(
+                request_id=job.request_id,
+                request_kind=diagnostics.REQUEST_CASE
+                if job.case is not None
+                else diagnostics.REQUEST_CONTROL,
+                kind=job.case.kind if job.case is not None else "free_text",
+                status=run.evidence.status,
+                reason=run.evidence.reason,
+                exit_code=outcome.returncode,
+                stdout=outcome.stdout or b"",
+                stderr=outcome.stderr or b"",
+            )
+        return run
+
+    def _judge(
+        self,
+        job: _Job,
+        outcome: Any,
+        evidence: dict[str, Any],
+        watch: _Watch,
+        observer: ChildObserver,
+    ) -> CaseRun:
         if outcome.launch_error:
             reason = (
                 "containment_unavailable"
@@ -733,7 +814,12 @@ class VisualDriver:
                     **evidence,
                 )
             )
-        status, check, text = check_output(case, outcome.stdout)
+        if job.case is None:
+            text = outcome.stdout.decode("utf-8", errors="replace").strip()
+            status = STATUS_CONTROL_ANSWERED if text else STATUS_CONTROL_EMPTY
+            # A control is never scored and its text is not kept here: only an attached capture records it.
+            return CaseRun(CaseEvidence(status=status, **evidence))
+        status, check, text = check_output(job.case, outcome.stdout)
         return CaseRun(CaseEvidence(status=status, reason=check.reason, **evidence), text)
 
     # -- a whole case set -----------------------------------------------------------------------------------------------
@@ -772,10 +858,27 @@ class VisualDriver:
             }
         return EvaluationRun(tuple(rows), report=report, complete=True)
 
+    def run_controls(
+        self, case_set: CaseSet, requests: tuple[diagnostics.ControlRequest, ...]
+    ) -> EvaluationRun:
+        """Run the unscored free-text controls in order (diagnostic mode only). Nothing is scored; the first refusal stops."""
 
-def _refused(case: Case, refusal: Refusal) -> CaseRun:
+        rows: list[CaseEvidence] = []
+        for request in requests:
+            run = self.run_control(case_set, request)
+            rows.append(run.evidence)
+            if run.refusal is not None:
+                return EvaluationRun(tuple(rows), refusal=run.refusal)
+            if run.evidence.status == STATUS_CANCELLED:
+                return EvaluationRun(
+                    tuple(rows), refusal=Refusal(REFUSED_CANCELLED, (run.evidence.reason,))
+                )
+        return EvaluationRun(tuple(rows), complete=True)
+
+
+def _refused(request_id: str, refusal: Refusal) -> CaseRun:
     return CaseRun(
-        CaseEvidence(case_id=case.case_id, status=STATUS_NOT_RUN, reason=refusal.code),
+        CaseEvidence(case_id=request_id, status=STATUS_NOT_RUN, reason=refusal.code),
         refusal=refusal,
     )
 
@@ -819,7 +922,12 @@ def execution_identity(candidate: VisualCandidate, limits: VisualLimits) -> dict
 
 
 def evidence_document(
-    run: EvaluationRun, *, plan_sha256: str, case_set_sha256: str, candidate: VisualCandidate
+    run: EvaluationRun,
+    *,
+    plan_sha256: str,
+    case_set_sha256: str,
+    candidate: VisualCandidate,
+    controls: EvaluationRun | None = None,
 ) -> dict[str, Any]:
     """The only thing a run writes: timing, memory, the path-free argv hash, exit codes and reason codes, plus the aggregate
     score numbers. It contains no image, prompt or answer text."""
@@ -837,6 +945,7 @@ def evidence_document(
         if run.refusal is None
         else {"code": run.refusal.code, "reasons": list(run.refusal.reasons)},
         "cases": [row.record() for row in run.evidence],
+        "controls": [] if controls is None else [row.record() for row in controls.evidence],
         "report": None if run.report is None else dict(run.report),
     }
 

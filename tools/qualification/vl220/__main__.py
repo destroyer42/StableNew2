@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from src.ai_assist.manifests import ImportRefused, import_runtime, load_runtime_manifest
-from tools.qualification.vl220 import driver, plan, staging, synthetic
+from tools.qualification.vl220 import diagnostics, driver, plan, staging, synthetic
 from tools.qualification.vl220.candidates import (
     GEMMA_CANDIDATE_ID,
     RUNTIME_MANIFEST_PATH,
@@ -79,9 +79,15 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
     if (args.cases is None) != (args.labels is None):
         sys.stderr.write("refused: --cases and --labels go together\n")
         return 2
+    if args.controls and args.diagnostics_out is None:
+        sys.stderr.write("refused: --controls needs --diagnostics-out\n")
+        return 2
+    if args.diagnostics_out is not None and args.diagnostics_out.exists():
+        sys.stderr.write(f"refused: {diagnostics.REFUSED_EXISTS}\n")
+        return 2
     try:
         if args.cases is None:
-            _, case_doc, label_doc = synthetic.build_synthetic_set()
+            _, case_doc, label_doc = synthetic.build_synthetic_set(args.builtin_set)
         else:
             case_doc, label_doc = _load_json(args.cases), _load_json(args.labels)
         case_set = contract.validate_case_set(case_doc)
@@ -92,6 +98,20 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
     except (OSError, ValueError, RecursionError) as exc:
         sys.stderr.write(f"refused: {exc.__class__.__name__}\n")
         return 2
+    # Diagnostic mode (D23): raw answers and runtime output are kept only for a built-in synthetic set; anything else is
+    # refused before a single launch and the earlier rule stands (no answer text, no runtime output persisted).
+    capture = None
+    if args.diagnostics_out is not None:
+        try:
+            capture = diagnostics.DiagnosticCapture(case_doc, label_doc)
+            refused_path = staging.root_refusal(args.diagnostics_out.parent)
+            if refused_path or not args.diagnostics_out.parent.is_dir():
+                raise diagnostics.DiagnosticsRefused(
+                    diagnostics.REFUSED_PATH, refused_path or "directory_missing"
+                )
+        except diagnostics.DiagnosticsRefused as exc:
+            sys.stderr.write(f"refused: {exc}\n")
+            return 2
 
     execution = None
     case_sha = contract.digest(case_doc)
@@ -108,7 +128,7 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
             return 2
 
     acknowledgement = _acknowledgement(args.acknowledgement)
-    run = driver.VisualDriver(
+    visual = driver.VisualDriver(
         candidate,
         evaluation_root=args.evaluation_root,
         ai_root=resolve_ai_root(args.ai_root),
@@ -118,9 +138,18 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
         # the flag the driver sees no reading and refuses (an unreadable activity is never "idle").
         activity=(lambda: GenerationActivity()) if args.generation_idle else None,
         limits=limits,
-    ).run_cases(case_set, labels)
+        capture=capture,
+    )
+    run = visual.run_cases(case_set, labels)
+    controls = None
+    if args.controls and run.complete:
+        controls = visual.run_controls(case_set, diagnostics.control_requests(case_set.set_id))
     document = driver.evidence_document(
-        run, plan_sha256=current, case_set_sha256=case_sha, candidate=candidate
+        run,
+        plan_sha256=current,
+        case_set_sha256=case_sha,
+        candidate=candidate,
+        controls=controls,
     )
     if execution is not None:
         document.update(execution_sha256=execution["execution_sha256"], label_set_sha256=label_sha)
@@ -129,6 +158,18 @@ def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
         handle.write("\n")
         handle.flush()
         os.fsync(handle.fileno())
+    if capture is not None:
+        try:
+            diagnostics.write_diagnostics(
+                args.diagnostics_out,
+                capture.document(plan_sha256=current, evidence_file=args.evidence_out.name),
+            )
+        except diagnostics.DiagnosticsRefused as exc:
+            sys.stderr.write(f"refused: {exc}\n")
+            return 1
+    if controls is not None and controls.refusal is not None:
+        sys.stderr.write(f"refused: {controls.refusal}\n")
+        return 1
     if run.refusal is not None:
         sys.stderr.write(f"refused: {run.refusal}\n")
         return 1
@@ -168,6 +209,12 @@ def main(argv: list[str] | None = None) -> int:
             item.add_argument("--evaluation-root", type=Path, required=True)
     synth = sub.add_parser("write-synthetic")
     synth.add_argument("--dest", type=Path, required=True)
+    synth.add_argument(
+        "--set",
+        dest="builtin_set",
+        default=synthetic.SET_ID,
+        choices=sorted(synthetic.BUILTIN_SCALES),
+    )
     evaluate = sub.add_parser("evaluate", description=_evaluate.__doc__)
     evaluate.add_argument("--evaluation-root", type=Path, required=True)
     evaluate.add_argument("--assets", type=Path, required=True)
@@ -184,6 +231,19 @@ def main(argv: list[str] | None = None) -> int:
         help="assert that no generation is running on this host (a separate process cannot read the queue)",
     )
     evaluate.add_argument("--ai-root", type=Path, default=None)
+    evaluate.add_argument(
+        "--builtin-set", default=synthetic.SET_ID, choices=sorted(synthetic.BUILTIN_SCALES),
+        help="which built-in synthetic set to run when --cases is not given",
+    )  # fmt: skip
+    evaluate.add_argument(
+        "--diagnostics-out", type=Path, default=None,
+        help="keep raw answers and bounded runtime output here (built-in synthetic sets only; outside Git; never overwritten)",
+    )  # fmt: skip
+    evaluate.add_argument(
+        "--controls",
+        action="store_true",
+        help="also run the unscored free-text controls (needs --diagnostics-out)",
+    )
     evaluate.add_argument("--cases", type=Path, default=None)
     evaluate.add_argument("--labels", type=Path, default=None)
     evaluate.add_argument("--min-image-tokens", type=int, default=64)
@@ -267,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         sys.stdout.write(f"imported: {target}\n")
     else:
-        images, case_doc, label_doc = synthetic.build_synthetic_set()
+        images, case_doc, label_doc = synthetic.build_synthetic_set(args.builtin_set)
         if args.dest.exists() and any(args.dest.iterdir()):
             sys.stderr.write("refused: destination is not empty\n")
             return 1

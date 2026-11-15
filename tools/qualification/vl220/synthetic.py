@@ -11,6 +11,8 @@ anything else).
 
 from __future__ import annotations
 
+import copy
+import functools
 import hashlib
 import struct
 import zlib
@@ -20,7 +22,11 @@ from typing import Any
 from tools.qualification.vl220 import contract
 
 SET_ID = "vl220-synthetic-1"
+#: The same deterministic scenes drawn four times larger (512 x 512 per cell): a second set with its own pins (PR-AI-VL-222).
+SET_ID_512 = "vl220-synthetic-512-1"
 CELL = 128
+#: Set id to the integer factor every coordinate and size of the 128-pixel scene table is multiplied by.
+BUILTIN_SCALES: Mapping[str, int] = {SET_ID: 1, SET_ID_512: 4}
 _BACKGROUND = (245, 245, 245)
 COLORS: Mapping[str, tuple[int, int, int]] = {
     "red": (220, 40, 40),
@@ -31,9 +37,12 @@ COLORS: Mapping[str, tuple[int, int, int]] = {
 
 
 class Canvas:
-    def __init__(self, width: int, height: int) -> None:
+    """Pixel canvas. Drawing arguments are in 128-pixel scene units; ``scale`` multiplies them (1 reproduces the first set)."""
+
+    def __init__(self, width: int, height: int, scale: int = 1) -> None:
         self.width = width
         self.height = height
+        self.scale = scale
         self._pixels = bytearray(bytes(_BACKGROUND) * (width * height))
 
     def _set(self, x: int, y: int, color: tuple[int, int, int]) -> None:
@@ -42,11 +51,13 @@ class Canvas:
             self._pixels[offset : offset + 3] = bytes(color)
 
     def square(self, cx: int, cy: int, half: int, color: tuple[int, int, int]) -> None:
+        cx, cy, half = cx * self.scale, cy * self.scale, half * self.scale
         for y in range(cy - half, cy + half + 1):
             for x in range(cx - half, cx + half + 1):
                 self._set(x, y, color)
 
     def circle(self, cx: int, cy: int, radius: int, color: tuple[int, int, int]) -> None:
+        cx, cy, radius = cx * self.scale, cy * self.scale, radius * self.scale
         for y in range(cy - radius, cy + radius + 1):
             for x in range(cx - radius, cx + radius + 1):
                 if (x - cx) ** 2 + (y - cy) ** 2 <= radius**2:
@@ -55,6 +66,7 @@ class Canvas:
     def line(
         self, x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int], thick: int = 2
     ) -> None:
+        x0, y0, x1, y1, thick = (value * self.scale for value in (x0, y0, x1, y1, thick))
         steps = max(abs(x1 - x0), abs(y1 - y0), 1)
         for step in range(steps + 1):
             x = x0 + (x1 - x0) * step // steps
@@ -95,19 +107,19 @@ def _draw_shape(canvas: Canvas, shape: str, color: str, cx: int, cy: int) -> Non
         canvas.circle(cx, cy, 22, COLORS[color])
 
 
-def scene(items: list[tuple[str, str]], panels: int = 1) -> bytes:
+def scene(items: list[tuple[str, str]], panels: int = 1, scale: int = 1) -> bytes:
     """Up to three shapes per panel on a fixed grid; ``items`` is a list of ``(shape, color)``."""
 
-    canvas = Canvas(CELL * panels, CELL)
+    canvas = Canvas(CELL * scale * panels, CELL * scale, scale)
     for index, (shape, color) in enumerate(items):
         _draw_shape(canvas, shape, color, 32 + 32 * (index % 3) + (index // 3) * CELL, 64)
     return canvas.png()
 
 
-def figure(arms: int = 2, legs: int = 2) -> bytes:
+def figure(arms: int = 2, legs: int = 2, scale: int = 1) -> bytes:
     """A stick figure; a wrong limb count is the synthetic stand-in for an anatomical defect."""
 
-    canvas = Canvas(CELL, CELL)
+    canvas = Canvas(CELL * scale, CELL * scale, scale)
     ink = (30, 30, 30)
     canvas.circle(64, 24, 14, ink)
     canvas.line(64, 38, 64, 82, ink)
@@ -119,8 +131,8 @@ def figure(arms: int = 2, legs: int = 2) -> bytes:
     return canvas.png()
 
 
-def _panels(left: list[tuple[str, str]], right: list[tuple[str, str]]) -> bytes:
-    canvas = Canvas(CELL * 2, CELL)
+def _panels(left: list[tuple[str, str]], right: list[tuple[str, str]], scale: int = 1) -> bytes:
+    canvas = Canvas(CELL * scale * 2, CELL * scale, scale)
     for panel, items in enumerate((left, right)):
         for index, (shape, color) in enumerate(items):
             _draw_shape(canvas, shape, color, 32 + 32 * index + panel * CELL, 64)
@@ -131,9 +143,29 @@ def _name(shape: str, color: str) -> str:
     return f"{color} {shape}"
 
 
-def build_synthetic_set() -> tuple[dict[str, bytes], dict[str, Any], dict[str, Any]]:
-    """``(assets by id, case document, label document)``. Everything is a pure function of the tables below."""
+def build_synthetic_set(
+    set_id: str = SET_ID,
+) -> tuple[dict[str, bytes], dict[str, Any], dict[str, Any]]:
+    """``(assets by id, case document, label document)`` of a built-in set; a pure function of the tables below.
 
+    ``SET_ID`` (128 pixels) is byte-identical to what the first supervised run used; ``SET_ID_512`` draws the same scenes four
+    times larger and adds a closed object vocabulary to its ``describe`` cases. The result is cached and returned as copies."""
+
+    if set_id not in BUILTIN_SCALES:
+        raise KeyError(set_id)
+    images, cases, labels = _build(set_id)
+    return dict(images), copy.deepcopy(cases), copy.deepcopy(labels)
+
+
+def object_names() -> list[str]:
+    """Every ``"<color> <shape>"`` name a scene could contain (the closed vocabulary of the larger set), sorted."""
+
+    return sorted(_name(shape, color) for shape in ("square", "circle") for color in COLORS)
+
+
+@functools.cache
+def _build(set_id: str) -> tuple[dict[str, bytes], dict[str, Any], dict[str, Any]]:
+    scale = BUILTIN_SCALES[set_id]
     images: dict[str, bytes] = {}
     cases: list[dict[str, Any]] = []
     labels: list[dict[str, Any]] = []
@@ -152,7 +184,7 @@ def build_synthetic_set() -> tuple[dict[str, bytes], dict[str, Any], dict[str, A
     ]
     for index, (drawn, asked) in enumerate(adherence, start=1):
         asset = f"adh-{index}"
-        images[asset] = scene(drawn)
+        images[asset] = scene(drawn, scale=scale)
         elements = [
             {"id": f"e{n}", "text": f"a {_name(shape, color)} is visible"}
             for n, (shape, color) in enumerate(asked, 1)
@@ -170,7 +202,7 @@ def build_synthetic_set() -> tuple[dict[str, bytes], dict[str, Any], dict[str, A
     ]
     for index, (left, right) in enumerate(consistency, start=1):
         asset = f"con-{index}"
-        images[asset] = _panels(left, right)
+        images[asset] = _panels(left, right, scale)
         elements = [
             {"id": f"s{n}", "text": f"subject {n} looks the same in both panels"} for n in (1, 2)
         ]
@@ -183,20 +215,20 @@ def build_synthetic_set() -> tuple[dict[str, bytes], dict[str, Any], dict[str, A
         )  # fmt: skip
 
     defects = [
-        ("fig-ok", figure(2, 2), []),
+        ("fig-ok", figure(2, 2, scale), []),
         (
             "fig-extra-arm",
-            figure(3, 2),
+            figure(3, 2, scale),
             [{"region": "arms", "category": "extra_limb", "severity": "major"}],
         ),
         (
             "fig-missing-leg",
-            figure(2, 1),
+            figure(2, 1, scale),
             [{"region": "legs", "category": "missing_limb", "severity": "major"}],
         ),
         (
             "fig-two-extra-arms",
-            figure(4, 2),
+            figure(4, 2, scale),
             [{"region": "arms", "category": "extra_limb", "severity": "major"}],
         ),
     ]
@@ -214,8 +246,8 @@ def build_synthetic_set() -> tuple[dict[str, bytes], dict[str, Any], dict[str, A
         ("complete-second", wanted[:2], wanted, "b"),
     ]
     for index, (name, first, second, preferred) in enumerate(pairs, start=1):
-        images[f"ba-{index}-a"] = scene(first)
-        images[f"ba-{index}-b"] = scene(second)
+        images[f"ba-{index}-a"] = scene(first, scale=scale)
+        images[f"ba-{index}-b"] = scene(second, scale=scale)
         listed = ", ".join(_name(shape, color) for shape, color in wanted)
         add_case(
             {"case_id": f"before-after-{index}-{name}", "kind": contract.KIND_BEFORE_AFTER,
@@ -227,13 +259,18 @@ def build_synthetic_set() -> tuple[dict[str, bytes], dict[str, Any], dict[str, A
     describe = [([("square", "red"), ("circle", "yellow")], 1), ([("circle", "green")], 2)]
     for drawn, index in describe:
         asset = f"des-{index}"
-        images[asset] = scene(drawn)
+        images[asset] = scene(drawn, scale=scale)
         objects = [_name(shape, color) for shape, color in drawn]
+        case: dict[str, Any] = {
+            "case_id": f"describe-{index}", "kind": contract.KIND_DESCRIBE, "asset_ids": [asset],
+            "prompt": "List the objects you can see, one short name each.",
+        }  # fmt: skip
+        if scale != 1:
+            case["vocabulary"] = object_names()
         add_case(
-            {"case_id": f"describe-{index}", "kind": contract.KIND_DESCRIBE, "asset_ids": [asset],
-             "prompt": "List the objects you can see, one short name each."},
+            case,
             {"objects": objects, "synonyms": {name: [name.replace(" ", "-")] for name in objects}},
-        )  # fmt: skip
+        )
 
     asset_docs = [
         {
@@ -247,17 +284,26 @@ def build_synthetic_set() -> tuple[dict[str, bytes], dict[str, Any], dict[str, A
     ]
     case_doc = {
         "schema": contract.CASES_SCHEMA,
-        "set_id": SET_ID,
+        "set_id": set_id,
         "assets": asset_docs,
         "cases": cases,
     }
     label_doc = {
         "schema": contract.LABELS_SCHEMA,
-        "set_id": SET_ID,
+        "set_id": set_id,
         "labeler": contract.LABELER_SYNTHETIC,
         "labels": labels,
     }
     return images, case_doc, label_doc
 
 
-__all__ = ["SET_ID", "Canvas", "build_synthetic_set", "figure", "scene"]
+__all__ = [
+    "BUILTIN_SCALES",
+    "SET_ID",
+    "SET_ID_512",
+    "Canvas",
+    "build_synthetic_set",
+    "figure",
+    "object_names",
+    "scene",
+]

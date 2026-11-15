@@ -13,7 +13,8 @@ What this does **not** do, and what is still missing before any run is possible:
    driver are in the follow-up package, and `contract.INVOCATION_APPROVED` is now `True` (as is the plan field; the comparator
    reason `image_invocation_not_approved`, which read "approved and implemented", is gone). The plan digest the owner named,
    `23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`, therefore changed by exactly that flag and that reason text
-   (section 7 proves it); the current digest is `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`. The owner's
+   (section 7 proves it); the digest the first supervised run executed is `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`, and after PR-AI-VL-222 (a diagnostic plan section, no change to this
+   contract) the current digest is `ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7`. The owner's
    authorization (decision C) named the old digest, so the driver's `evaluate` command asks the owner to name the current one
    (`--i-have-the-plan-digest`); no run is possible until the prerequisites in items 2 to 4 exist and the owner confirms.
 2. **The license acknowledgement is still the owner's act and has not been made** (record `license_acknowledgement.json`, text
@@ -158,6 +159,14 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
   `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`. A test rebuilds the plan, sets
   `image_invocation.approved` back to `false`, restores the reason `image_invocation_not_approved` to the candidate comparator and
   reproduces `23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e` exactly, so those two edits are the only difference.
+
+* **Diagnostic mode (PR-AI-VL-222, decision D23 of the orchestrating session under the owner's delegation).** One narrow exception to "no
+  answer text and no runtime output persisted": for a case set that is exactly a built-in synthetic set (same case and label document
+  digests, labeler `synthetic_by_construction`, every asset digest the pinned one) the driver may capture the raw answer and a bounded
+  head and tail of the runtime's stderr into a separate diagnostics document next to the evidence file, outside Git. For any other case
+  set the capture cannot be constructed and the rule above stands (a test proves the refusal). The same package adds an unscored
+  free-text control request (no `--json-schema-file`, same executable, admission and limits) and **no flag**; `--jinja` stays refused.
+  See `docs/work_packages/AI-VL-222_visual_diagnostic.md`.
 
 Still missing before any run (none is created by the implementing package): the license acknowledgement
 (`license_acknowledgement.json`, text `30adf9d6...`), the owner's outbound Block rule for `llama-mtmd-cli.exe` and the attestation

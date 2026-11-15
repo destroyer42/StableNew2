@@ -1,8 +1,13 @@
-"""The question text for one visual case (PR-AI-VL-220). Pure and deterministic: the same case always renders the same text.
+"""The question text for one visual case (PR-AI-VL-220, revised by PR-AI-VL-222). Pure and deterministic: the same case always
+renders the same text.
 
-The text states the question, lists the elements to judge and shows the one answer shape the response schema allows. It carries
-no reference data (a case has none). The response grammar bounds the structure; this text only tells the model what each
-field means.
+The text states the question, lists the elements to judge with their ids, names the one answer shape the response schema allows
+(with the case's real ids, in order, and a neutral ``<true or false>`` placeholder rather than a literal ``true`` the model
+could copy) and, for object lists, says how to name an object. It carries no reference data (a case has none). The response
+grammar bounds the structure; this text tells the model what each field means.
+
+``mtmd-cli`` places the image marker and applies the chat template itself (see ``docs/work_packages/AI-VL-222_visual_diagnostic.md``),
+so nothing here mentions a media marker.
 """
 
 from __future__ import annotations
@@ -15,11 +20,31 @@ _HEAD = (
     'object and nothing else. If you cannot judge the image, answer with status "refused" and a short refusal_reason.'
 )
 
+#: One sentence per defect category, so ``extra_limb`` and friends mean the same thing to the model as to the label.
+_DEFECT_GLOSSARY = (
+    "Categories: extra_limb means more arms or legs than a person has, missing_limb means fewer, fused_limb means limbs "
+    "joined together, distorted means a badly shaped body part, wrong_count means a wrong number of fingers or toes, "
+    "other is anything else."
+)
+
+#: How an object is named in a ``describe`` answer; generic on purpose (the example is not in any synthetic scene).
+_NAMING = 'Name each object with its color and its kind, for example "blue car", in lower case.'
+
+#: The unscored free-text control request of the diagnostic (no schema, no JSON). It is not a case.
+CONTROL_PROMPT = "Describe this image in two or three plain sentences. Say what shapes or figures you see, their colors and where they are."
+
+
+def _ids(case: Case) -> str:
+    return ", ".join(key for key, _ in case.elements)
+
 
 def _shape(case: Case) -> str:
     base = f'"schema":"{contract.RESPONSE_SCHEMA}","status":"ok","kind":"{case.kind}"'
     if case.kind in (contract.KIND_ADHERENCE, contract.KIND_CONSISTENCY):
-        return "{" + base + ',"answers":[{"id":"<element id>","value":true}]}'
+        entries = ",".join(
+            '{"id":"' + key + '","value":<true or false>}' for key, _ in case.elements
+        )
+        return "{" + base + ',"answers":[' + entries + "]}"
     if case.kind == contract.KIND_DEFECT:
         return (
             "{" + base + ',"findings":[{"region":"<one of: ' + ", ".join(contract.REGIONS) + '>",'
@@ -31,23 +56,41 @@ def _shape(case: Case) -> str:
             "{" + base + ',"preferred":"<one of: ' + ", ".join(contract.PREFERENCES) + '>",'
             '"reason":"<one of: ' + ", ".join(contract.PREFERENCE_REASONS) + '>"}'
         )
-    return "{" + base + ',"objects":["<short object name>"]}'
+    return "{" + base + ',"objects":["<object name>"]}'
 
 
 def _guidance(case: Case) -> str:
     if case.kind == contract.KIND_ADHERENCE:
-        return "For every listed element give true if it is clearly visible in the image, otherwise false. Answer every element."
+        return (
+            "For every listed element give true if it is clearly visible in the image, otherwise false. "
+            f"Answer every element, once, in this order, using exactly these ids: {_ids(case)}."
+        )
     if case.kind == contract.KIND_CONSISTENCY:
-        return "For every listed subject give true if it looks unchanged between the two panels, otherwise false. Answer every subject."
+        return (
+            "For every listed subject give true if it looks unchanged between the two panels, otherwise false. "
+            f"Answer every subject, once, in this order, using exactly these ids: {_ids(case)}."
+        )
     if case.kind == contract.KIND_DEFECT:
-        return "List every anatomical defect you can see. Use an empty findings list when there is none."
+        return (
+            "List every anatomical defect you can see. Use an empty findings list when there is none. "
+            + _DEFECT_GLOSSARY
+        )
     if case.kind == contract.KIND_BEFORE_AFTER:
-        return "Image a is the first image and image b is the second. Choose the one that is more useful for the request, or tie."
-    return "List only the objects you can actually see. Do not guess at hidden or unclear things."
+        return (
+            "You are given two images: image a is the first and image b is the second. Choose the one that is more useful "
+            "for the request, or tie."
+        )
+    text = (
+        "List only the objects you can actually see. Do not guess at hidden or unclear things. "
+        + _NAMING
+    )
+    if case.vocabulary:
+        text += " Use only names from this list: " + ", ".join(case.vocabulary) + "."
+    return text
 
 
 def render_visual_prompt(case: Case) -> str:
-    """The prompt file text for ``case``. ``mtmd-cli`` applies the model's own chat template around it."""
+    """The prompt file text for ``case``. ``mtmd-cli`` puts the image marker(s) in front and applies the model's chat template."""
 
     lines = [_HEAD, "", f"Request: {case.prompt}", _guidance(case)]
     if case.elements:
@@ -57,4 +100,10 @@ def render_visual_prompt(case: Case) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["render_visual_prompt"]
+def render_control_prompt() -> str:
+    """The free-text control prompt file text (diagnostic only; ``mtmd-cli`` adds the image marker and chat template)."""
+
+    return CONTROL_PROMPT + "\n"
+
+
+__all__ = ["CONTROL_PROMPT", "render_control_prompt", "render_visual_prompt"]

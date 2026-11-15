@@ -79,6 +79,7 @@ PREFERENCE_REASONS: tuple[str, ...] = (
 )
 
 MAX_ELEMENTS = 12
+MAX_VOCABULARY = 32
 MAX_FINDINGS = 8
 MAX_OBJECTS = 16
 MAX_OBJECT_CHARS = 40
@@ -182,6 +183,9 @@ class Case:
     asset_ids: tuple[str, ...]
     prompt: str
     elements: tuple[tuple[str, str], ...]
+    #: A closed list of object names a ``describe`` case may answer with (empty: free names). It is a question constraint, not
+    #: reference data: it lists every name the scene could use, so it says nothing about which names are present.
+    vocabulary: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,7 +244,7 @@ def validate_case_set(document: Any) -> CaseSet:
     cases: list[Case] = []
     for raw in _list(data["cases"], "cases", 1, 512):
         item = _exact(
-            raw, frozenset({"case_id", "kind", "asset_ids", "prompt", "elements"}), "case",
+            raw, frozenset({"case_id", "kind", "asset_ids", "prompt", "elements", "vocabulary"}), "case",
             required=frozenset({"case_id", "kind", "asset_ids", "prompt"}),
         )  # fmt: skip
         kind = item["kind"]
@@ -272,9 +276,22 @@ def validate_case_set(document: Any) -> CaseSet:
                 raise _fail("duplicate_element")
         elif "elements" in item:
             raise _fail("unexpected_elements", str(item["case_id"]))
+        vocabulary: list[str] = []
+        if "vocabulary" in item:
+            if kind != KIND_DESCRIBE:
+                raise _fail("unexpected_vocabulary", str(item["case_id"]))
+            vocabulary = [
+                _object_name(value)
+                for value in _list(item["vocabulary"], "vocabulary", 1, MAX_VOCABULARY)
+            ]
+            if len(set(vocabulary)) != len(vocabulary):
+                raise _fail("duplicate_vocabulary_name", str(item["case_id"]))
         cases.append(
-            Case(_identifier(item["case_id"], "case_id"), kind, asset_ids, prompt, tuple(elements))
-        )
+            Case(
+                _identifier(item["case_id"], "case_id"), kind, asset_ids, prompt, tuple(elements),
+                tuple(vocabulary),
+            )
+        )  # fmt: skip
     if len({case.case_id for case in cases}) != len(cases):
         raise _fail("duplicate_case")
     return CaseSet(_identifier(data["set_id"], "set_id"), tuple(assets), tuple(cases))
@@ -445,6 +462,9 @@ def _payload(case: Case, document: Mapping[str, Any]) -> dict[str, Any]:
             answers[item["id"]] = item["value"]
         if set(answers) != {key for key, _ in case.elements}:
             raise _fail("answers_do_not_match_elements")
+        # The per-case schema is a tuple (one entry per element, in order); the validator is never looser than it.
+        if list(answers) != [key for key, _ in case.elements]:
+            raise _fail("answers_out_of_order")
         return {"answers": answers}
     if case.kind == KIND_DEFECT:
         _exact(document, frozenset({"schema", "status", "kind", "findings"}), "response")
@@ -460,15 +480,20 @@ def _payload(case: Case, document: Mapping[str, Any]) -> dict[str, Any]:
             raise _fail("bad_preference")
         return {"preferred": document["preferred"], "reason": document["reason"]}
     _exact(document, frozenset({"schema", "status", "kind", "objects"}), "response")
-    return {
-        "objects": [
-            _object_name(value) for value in _list(document["objects"], "objects", 0, MAX_OBJECTS)
-        ]
-    }
+    objects = [
+        _object_name(value) for value in _list(document["objects"], "objects", 0, MAX_OBJECTS)
+    ]
+    if case.vocabulary and not set(objects) <= set(case.vocabulary):
+        raise _fail("object_outside_vocabulary")
+    return {"objects": objects}
 
 
-def build_response_schema(kind: str) -> dict[str, Any]:
+def build_response_schema(kind: str, case: Case | None = None) -> dict[str, Any]:
     """The JSON Schema a constrained decoder would be given for ``kind``: two branches, ok and refused, closed objects.
+
+    With ``case`` the schema is that case's own (PR-AI-VL-222): an element case gets a fixed-length tuple (``prefixItems``) with
+    one closed entry per element, its id a ``const`` in element order, so the decoder cannot invent, drop or repeat an id; a
+    ``describe`` case with a vocabulary gets an ``enum`` item. Without ``case`` it is the generic kind schema (unchanged).
 
     It uses only keywords the AI Assist grammar proof already covers (``oneOf``, ``const``, ``enum``, ``required``,
     ``additionalProperties: false``, ``minItems``/``maxItems``, ``maxLength``). :func:`validate_response` is the authority; the
@@ -476,12 +501,27 @@ def build_response_schema(kind: str) -> dict[str, Any]:
 
     if kind not in KINDS:
         raise _fail("bad_kind", kind)
+    if case is not None and case.kind != kind:
+        raise _fail("kind_mismatch", kind)
     head: dict[str, Any] = {
         "schema": {"const": RESPONSE_SCHEMA},
         "status": {"const": "ok"},
         "kind": {"const": kind},
     }
-    if kind in _ELEMENT_KINDS:
+    if kind in _ELEMENT_KINDS and case is not None:
+        payload = {
+            "answers": {
+                "type": "array", "minItems": len(case.elements), "maxItems": len(case.elements),
+                "prefixItems": [
+                    {
+                        "type": "object", "additionalProperties": False, "required": ["id", "value"],
+                        "properties": {"id": {"const": key}, "value": {"type": "boolean"}},
+                    }
+                    for key, _ in case.elements
+                ],
+            }
+        }  # fmt: skip
+    elif kind in _ELEMENT_KINDS:
         payload = {
             "answers": {
                 "type": "array", "minItems": 1, "maxItems": MAX_ELEMENTS,
@@ -511,11 +551,13 @@ def build_response_schema(kind: str) -> dict[str, Any]:
             "reason": {"enum": list(PREFERENCE_REASONS)},
         }
     else:
+        names: dict[str, Any] = (
+            {"enum": list(case.vocabulary)}
+            if case is not None and case.vocabulary
+            else {"type": "string", "maxLength": MAX_OBJECT_CHARS}
+        )
         payload = {
-            "objects": {
-                "type": "array", "minItems": 0, "maxItems": MAX_OBJECTS,
-                "items": {"type": "string", "maxLength": MAX_OBJECT_CHARS},
-            }
+            "objects": {"type": "array", "minItems": 0, "maxItems": MAX_OBJECTS, "items": names}
         }  # fmt: skip
     ok_branch = {
         "type": "object",

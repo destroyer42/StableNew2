@@ -18,8 +18,28 @@ def _ratio(numerator: int, denominator: int) -> float | None:
     return None if denominator == 0 else round(numerator / denominator, 6)
 
 
+_ARTICLES = frozenset({"a", "an", "the"})
+
+
+def _singular(token: str) -> str:
+    if len(token) > 3 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
 def _normal(text: str) -> str:
-    return " ".join(text.lower().replace("-", " ").replace("_", " ").split())
+    """Lower case, separators and punctuation as spaces, leading articles dropped, plural ``s`` dropped.
+
+    ``"A red square."``, ``"red-square"``, ``"RED_SQUARES"`` and ``"red square"`` are the same name. Anything that is a
+    different word (``"rectangle"``) or a different property (``"blue square"``) is not."""
+
+    cleaned = "".join(ch if ch.isalnum() else " " for ch in text.lower())
+    tokens = [_singular(token) for token in cleaned.split()]
+    while tokens and tokens[0] in _ARTICLES:
+        tokens.pop(0)
+    return " ".join(tokens)
 
 
 def score_answers(
@@ -44,20 +64,46 @@ def score_findings(
     return len(expected & given), len(given - expected), len(expected - given)
 
 
-def score_objects(
-    reference: Mapping[str, Any], payload: Mapping[str, Any] | None
-) -> tuple[int, int, int]:
-    """Supported mentions, unsupported mentions (hallucinations), and reference objects found."""
-
+def _accepted(reference: Mapping[str, Any]) -> dict[str, str]:
     accepted: dict[str, str] = {}
     for name in reference["objects"]:
         accepted[_normal(name)] = name
         for alias in reference["synonyms"].get(name, []):
             accepted[_normal(alias)] = name
+    return accepted
+
+
+def _is_generic(mention: str, accepted: Mapping[str, str]) -> bool:
+    """A bare head word of a reference name (``"square"`` for ``"red square"``): true but less specific than asked."""
+
+    words = mention.split()
+    return bool(words) and any(
+        len(words) < len(name.split()) and name.split()[-len(words) :] == words for name in accepted
+    )
+
+
+def score_objects(
+    reference: Mapping[str, Any], payload: Mapping[str, Any] | None
+) -> tuple[int, int, int]:
+    """Supported mentions, unsupported mentions (hallucinations), and reference objects found.
+
+    A generic mention (just the kind, ``"square"``, where the reference says ``"red square"``) is not a hallucination, so it
+    counts as supported; it does not count as finding the object, because the question asked for the color too. How many
+    mentions were generic is reported apart (:func:`generic_mentions`)."""
+
+    accepted = _accepted(reference)
     mentions = [_normal(item) for item in payload["objects"]] if payload else []
-    supported = [item for item in mentions if item in accepted]
-    found = {accepted[item] for item in supported}
-    return len(supported), len(mentions) - len(supported), len(found)
+    exact = [item for item in mentions if item in accepted]
+    generic = [item for item in mentions if item not in accepted and _is_generic(item, accepted)]
+    found = {accepted[item] for item in exact}
+    supported = len(exact) + len(generic)
+    return supported, len(mentions) - supported, len(found)
+
+
+def generic_mentions(reference: Mapping[str, Any], payload: Mapping[str, Any] | None) -> int:
+    accepted = _accepted(reference)
+    mentions = [_normal(item) for item in payload["objects"]] if payload else []
+    return sum(1 for item in mentions if item not in accepted and _is_generic(item, accepted))
 
 
 def score_run(
@@ -71,7 +117,7 @@ def score_run(
 
     tp = fp = fn = clean_total = clean_alarms = 0
     ba_hit = ba_total = 0
-    mention_ok = mention_bad = object_found = object_total = 0
+    mention_ok = mention_bad = object_found = object_total = generic = 0
     valid = refused = invalid = 0
     reasons: dict[str, int] = {}
     per_kind: dict[str, int] = {}
@@ -101,6 +147,7 @@ def score_run(
             mention_ok, mention_bad = mention_ok + ok, mention_bad + bad
             object_found += found
             object_total += len(reference["objects"])
+            generic += generic_mentions(reference, payload)
     adherence_hit, adherence_total = _split(case_set, labels, responses, contract.KIND_ADHERENCE)
     consistency_hit, consistency_total = _split(
         case_set, labels, responses, contract.KIND_CONSISTENCY
@@ -120,6 +167,8 @@ def score_run(
             "unsupported_mention_rate": _ratio(mention_bad, mention_ok + mention_bad),
             "object_recall": _ratio(object_found, object_total),
         },
+        # Detail the hallucination score does not carry (kept apart so that score's shape stays what it was).
+        "describe_detail": {"generic_mentions": generic},
         contract.DIM_STRUCTURED: {
             "valid_rate": _ratio(valid, len(case_set.cases)),
             "refused_rate": _ratio(refused, len(case_set.cases)),
@@ -231,4 +280,11 @@ def baseline_responses(case_set: CaseSet, mode: str, seed: int = 220) -> dict[st
     return out
 
 
-__all__ = ["baseline_responses", "score_answers", "score_findings", "score_objects", "score_run"]
+__all__ = [
+    "baseline_responses",
+    "generic_mentions",
+    "score_answers",
+    "score_findings",
+    "score_objects",
+    "score_run",
+]
