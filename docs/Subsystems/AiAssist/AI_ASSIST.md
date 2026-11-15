@@ -170,3 +170,8 @@ the `b11960-cpu-vision` build entry; `PR-AI-VL-220_Image_Invocation_Contract.md`
 acknowledgement, the owner's firewall rule and attestation, the evaluation-root import and the chosen assets and labeler are still
 the owner's. The runbook is `docs/runbooks/ai_vl_candidate_staging.md`; the work package is
 `docs/work_packages/AI-VL-220_lfm3_vl_candidate.md`.
+
+AI-VL-230 adds Google Gemma 4 12B Instruct QAT Q4_0 and its verified projector to the visual catalog. It shares the VL-220
+evaluation driver and pinned CPU archive. The Gemma profile selects the bundled Jinja template and binds its execution,
+case and label digests. Both candidates are unqualified. See the [operator runbook](../../runbooks/ai_visual_evaluation.md)
+for staged files, imports, readiness and firewall attestation.

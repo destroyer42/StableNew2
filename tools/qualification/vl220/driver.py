@@ -39,7 +39,7 @@ import shutil
 import time
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -61,17 +61,19 @@ from src.ai_assist.manifests import (
     load_runtime_manifest,
 )
 from src.ai_assist.observe import ChildObserver
-from src.ai_assist.paths import runtime_dir
+from src.ai_assist.paths import attestation_path, runtime_dir
 from src.ai_assist.runtime import CommandFactory, Runner, default_command, strip_end_of_text
 from src.utils.managed_process import run_bounded
-from tools.qualification.vl220 import contract, diagnostics, scoring, staging
+from tools.qualification.vl220 import contract, diagnostics, plan, scoring, staging
 from tools.qualification.vl220.candidates import (
+    GEMMA_CANDIDATE_ID,
     REASON_CANCELLED,
     REPO_ROOT,
     RUNTIME_MANIFEST_PATH,
     CancelCheck,
     VisualCandidate,
     check_admission,
+    has_link,
 )
 from tools.qualification.vl220.contract import (
     Asset,
@@ -79,7 +81,6 @@ from tools.qualification.vl220.contract import (
     CaseSet,
     LabelSet,
     Measurement,
-    ResourceLimits,
 )
 from tools.qualification.vl220.prompts import render_control_prompt, render_visual_prompt
 from tools.qualification.vl220.visual_argv import (
@@ -253,11 +254,15 @@ def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def load_strict_json(text: str) -> Any:
+    return json.loads(text, parse_constant=_reject_constant, object_pairs_hook=_no_duplicate_keys)
+
+
 def strict_json(text: str) -> bool:
     """Whether ``text`` is exactly one JSON document with no duplicate keys and no ``NaN``/``Infinity``."""
 
     try:
-        json.loads(text, parse_constant=_reject_constant, object_pairs_hook=_no_duplicate_keys)
+        load_strict_json(text)
     except (ValueError, RecursionError):
         return False
     return True
@@ -294,11 +299,13 @@ class _Watch:
         memory: MemoryReader,
         clock: Callable[[], float],
         interval: float,
+        working_set_limit_bytes: int | None = None,
     ) -> None:
         self._token, self._observer = token, observer
         self._activity, self._memory = activity, memory
         self._clock, self._interval = clock, interval
         self._last = clock()
+        self._working_set_limit_bytes = working_set_limit_bytes
         self._strikes = 0
         self.reason = ""
 
@@ -315,6 +322,13 @@ class _Watch:
         reason = self._observer.poll()
         if reason is not None:
             self.reason = reason
+            return True
+        if (
+            self._working_set_limit_bytes is not None
+            and self._observer.evidence.peak_tree_working_set_gib * _GIB
+            > self._working_set_limit_bytes
+        ):
+            self.reason = "working_set_limit"
             return True
         now = self._clock()
         if now - self._last < self._interval:
@@ -405,6 +419,8 @@ class VisualDriver:
         self._runner = runner
         self._limits = limits if limits is not None else VisualLimits()
         self._sampling = sampling if sampling is not None else VisualSampling()
+        self._use_jinja = candidate.candidate_id == GEMMA_CANDIDATE_ID
+        self._resource_limits = plan.evaluation_limits(candidate)
         self._cancel: CancelCheck = cancel if cancel is not None else (lambda: False)
         self._interval = watch_interval
         #: Only a capture built for a built-in synthetic set can exist (``DiagnosticCapture`` refuses anything else), so
@@ -417,7 +433,7 @@ class VisualDriver:
     def staged_dir(self) -> Path:
         """Where ``import`` put the pair: ``<root>/<candidate id>/<model sha prefix>``."""
 
-        return self._root / self._candidate.candidate_id / self._candidate.model.sha256[:16]
+        return staging.installed_pair(self._root, self._candidate)
 
     # -- admission ------------------------------------------------------------------------------------------------------
 
@@ -463,14 +479,54 @@ class VisualDriver:
                 return Refusal(REFUSED_VISION_BUILD, tuple(reasons)), None, manifest
             build = manifest.find(VISION_BUILD_ID)
             assert build is not None
+            installed = runtime_dir(self._ai_root.absolute(), build.build_id)
+            if has_link(installed):
+                return Refusal(REFUSED_RUNTIME, ("unsafe_runtime_path",)), None, manifest
+            if installed.is_dir() and any(
+                child.name not in {*build.files, "LICENSE-LLVM-OpenMP"}
+                or has_link(child)
+                or not child.is_file()
+                for child in installed.iterdir()
+            ):
+                return Refusal(REFUSED_RUNTIME, ("unexpected_runtime_file",)), None, manifest
             problem = runtime_import_problem(self._ai_root, build, deep=True)
             if problem:
                 return Refusal(REFUSED_RUNTIME, (problem,)), None, manifest
-            if not attestation_covers(self._ai_root, build.build_id, build.executable):
+            if has_link(attestation_path(self._ai_root.absolute())) or not attestation_covers(
+                self._ai_root, build.build_id, build.executable
+            ):
                 return Refusal(REFUSED_ATTESTATION), None, manifest
             return None, build, manifest
         except Exception:  # noqa: BLE001 - admission is fail-closed
             return Refusal(REFUSED_VISION_BUILD, ("admission_error",)), None, None
+
+    def readiness(self) -> dict[str, Any]:
+        """Report static launch prerequisites, without acquiring a slot or launching a child."""
+        reasons: list[str] = []
+        root_reason = staging.root_refusal(self._root)
+        if root_reason:
+            reasons.append(root_reason)
+        else:
+            refusal, _, manifest = self._runtime_refusal()
+            if refusal is not None:
+                reasons.extend((refusal.code, *refusal.reasons))
+            admission = check_admission(
+                self._candidate,
+                self.staged_dir,
+                build_id=self._candidate.runtime.required_build_id,
+                runtime_manifest=manifest,
+                acknowledgement=self._ack,
+            )
+            reasons.extend(admission.reasons)
+        if not contract.INVOCATION_APPROVED:
+            reasons.append(REFUSED_NOT_APPROVED)
+        return {
+            "candidate_id": self._candidate.candidate_id,
+            "build_id": VISION_BUILD_ID,
+            "launch_prerequisites_met": not reasons,
+            "qualified": False,
+            "reasons": reasons,
+        }
 
     def _memory_refusal(self) -> Refusal | None:
         needed = self._candidate.download_bytes / _GIB + MEMORY_MARGIN_GIB
@@ -498,13 +554,18 @@ class VisualDriver:
                 return Refusal(REFUSED_IMAGE, ("unknown_asset",))
             source = self._assets / f"{asset.asset_id}{_MEDIA_SUFFIX[asset.media_type]}"
             try:
+                if has_link(source.absolute()):
+                    return Refusal(REFUSED_IMAGE, ("unsafe_image_path",))
                 if not source.is_file():
                     return Refusal(REFUSED_IMAGE, ("image_missing",))
                 if not 0 < source.stat().st_size <= MAX_IMAGE_BYTES:
                     return Refusal(REFUSED_IMAGE, ("image_size_out_of_range",))
-                data = source.read_bytes()
+                with source.open("rb") as handle:
+                    data = handle.read(MAX_IMAGE_BYTES + 1)
             except OSError:
                 return Refusal(REFUSED_IMAGE, ("image_unreadable",))
+            if len(data) > MAX_IMAGE_BYTES:
+                return Refusal(REFUSED_IMAGE, ("image_size_out_of_range",))
             if len(data) != asset.bytes or hashlib.sha256(data).hexdigest() != asset.sha256:
                 return Refusal(REFUSED_IMAGE, ("image_does_not_match_its_pin",))
             target = scratch / f"image_{position}{_MEDIA_SUFFIX[asset.media_type]}"
@@ -559,14 +620,22 @@ class VisualDriver:
             return _refused(
                 name, Refusal(REFUSED_ROOT, (refused_root or "evaluation_root_missing",))
             )
+        if has_link((self._root / WORK_NAME).absolute()):
+            return _refused(name, Refusal(REFUSED_SCRATCH, ("unsafe_work_path",)))
         lock = self._acquire()
         if lock is None:
             return _refused(name, Refusal(REFUSED_BUSY))
         scratch = self._root / WORK_NAME / uuid.uuid4().hex
         try:
-            return self._admitted_run(case_set, job, scratch)
+            try:
+                scratch.mkdir(parents=True, exist_ok=False)
+            except OSError:
+                return _refused(name, Refusal(REFUSED_SCRATCH))
+            try:
+                return self._admitted_run(case_set, job, scratch)
+            finally:
+                shutil.rmtree(scratch, ignore_errors=True)
         finally:
-            shutil.rmtree(scratch, ignore_errors=True)
             lock.unlink(missing_ok=True)
 
     def _admitted_run(self, case_set: CaseSet, job: _Job, scratch: Path) -> CaseRun:
@@ -580,10 +649,6 @@ class VisualDriver:
         refusal = self._memory_refusal()
         if refusal is not None:
             return _refused(name, refusal)
-        try:
-            scratch.mkdir(parents=True, exist_ok=False)
-        except OSError:
-            return _refused(name, Refusal(REFUSED_SCRATCH))
         staged = self._stage_images(
             job.asset_ids, {asset.asset_id: asset for asset in case_set.assets}, scratch
         )
@@ -626,6 +691,7 @@ class VisualDriver:
                 limits=limits,
                 sampling=self._sampling,
                 free_text=job.schema is None,
+                use_jinja=self._use_jinja,
             )
         except VisualArgvRefused as exc:
             return _refused(name, Refusal(REFUSED_ARGV, (exc.code,)))
@@ -635,7 +701,7 @@ class VisualDriver:
         self, job: _Job, build: RuntimeBuild, argv: list[str], scratch: Path, limits: VisualLimits
     ) -> CaseRun:
         shape = argv_shape_digest(argv)
-        resource = ResourceLimits()
+        resource = self._resource_limits
         observer = ChildObserver(
             cap_gib=resource.max_peak_working_set_bytes / _GIB, clock=self._clock
         )
@@ -646,11 +712,22 @@ class VisualDriver:
             memory=self._memory,
             clock=self._clock,
             interval=self._interval,
+            working_set_limit_bytes=resource.max_peak_working_set_bytes
+            if self._use_jinja
+            else None,
         )
         assert self._activity is not None  # admission refused without a reading
         runtime_root = runtime_dir(self._ai_root, build.build_id)
         executable = runtime_root / build.executable
         started = self._clock()
+        container_options = (
+            {
+                "require_containment": True,
+                "memory_limit_mb": resource.max_peak_working_set_bytes / 1024**2,
+            }
+            if self._use_jinja
+            else {}
+        )
         outcome = self._runner(
             self._command_factory(executable, argv),
             timeout_seconds=limits.timeout_seconds,
@@ -659,6 +736,7 @@ class VisualDriver:
             cwd=scratch,
             env=build_environment(runtime_root, self._environ, scratch),
             observe=observer.bind,
+            **container_options,
         )
         wall = max(0.0, self._clock() - started)
         evidence = {
@@ -671,7 +749,7 @@ class VisualDriver:
             "context_tokens": limits.context_tokens,
             "cpu_only": True,
         }
-        run = self._judge(job, outcome, evidence, watch)
+        run = self._judge(job, outcome, evidence, watch, observer)
         if self._capture is not None:
             self._capture.record(
                 request_id=job.request_id,
@@ -687,7 +765,14 @@ class VisualDriver:
             )
         return run
 
-    def _judge(self, job: _Job, outcome: Any, evidence: dict[str, Any], watch: _Watch) -> CaseRun:
+    def _judge(
+        self,
+        job: _Job,
+        outcome: Any,
+        evidence: dict[str, Any],
+        watch: _Watch,
+        observer: ChildObserver,
+    ) -> CaseRun:
         if outcome.launch_error:
             reason = (
                 "containment_unavailable"
@@ -695,6 +780,14 @@ class VisualDriver:
                 else "launch_failed"
             )
             return CaseRun(CaseEvidence(status=STATUS_LAUNCH_FAILED, reason=reason, **evidence))
+        if self._use_jinja and (not outcome.contained or outcome.memory_limit_enforced is not True):
+            return CaseRun(
+                CaseEvidence(
+                    status=STATUS_LAUNCH_FAILED,
+                    reason="containment_unverified",
+                    **evidence,
+                )
+            )
         if outcome.cancelled:
             return CaseRun(
                 CaseEvidence(
@@ -712,6 +805,14 @@ class VisualDriver:
         if outcome.returncode != 0:
             return CaseRun(
                 CaseEvidence(status=STATUS_CHILD_FAILED, reason="child_exit_nonzero", **evidence)
+            )
+        if self._use_jinja and not observer.evidence.child_observed:
+            return CaseRun(
+                CaseEvidence(
+                    status=STATUS_LAUNCH_FAILED,
+                    reason="child_not_observed",
+                    **evidence,
+                )
             )
         if job.case is None:
             text = outcome.stdout.decode("utf-8", errors="replace").strip()
@@ -747,7 +848,14 @@ class VisualDriver:
                     context_tokens=run.evidence.context_tokens,
                     cpu_only=run.evidence.cpu_only,
                 )
-        report = scoring.score_run(case_set, labels, responses, measurements, ResourceLimits())
+        report = scoring.score_run(case_set, labels, responses, measurements, self._resource_limits)
+        if self._use_jinja:
+            report["baselines"] = {
+                mode: scoring.score_run(
+                    case_set, labels, scoring.baseline_responses(case_set, mode)
+                )
+                for mode in ("all_yes", "all_no", "seeded_random")
+            }
         return EvaluationRun(tuple(rows), report=report, complete=True)
 
     def run_controls(
@@ -773,6 +881,44 @@ def _refused(request_id: str, refusal: Refusal) -> CaseRun:
         CaseEvidence(case_id=request_id, status=STATUS_NOT_RUN, reason=refusal.code),
         refusal=refusal,
     )
+
+
+def readiness(
+    candidate: VisualCandidate,
+    evaluation_root: Path,
+    ai_root: Path,
+    acknowledgement: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    return VisualDriver(
+        candidate,
+        evaluation_root=evaluation_root,
+        ai_root=ai_root,
+        assets_dir=evaluation_root,
+        acknowledgement=acknowledgement,
+        activity=None,
+    ).readiness()
+
+
+def execution_identity(candidate: VisualCandidate, limits: VisualLimits) -> dict[str, Any]:
+    manifest = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
+    registry = load_model_registry(MODEL_REGISTRY_PATH)
+    if vision_build_reasons(manifest, registry, candidate):
+        raise ValueError("vision_build_refused")
+    build = manifest.find(VISION_BUILD_ID)
+    assert build is not None
+    identity = {
+        "plan_sha256": plan.build_plan(candidate)["plan_sha256"],
+        "profile": "vl230.mtmd.b11960/2",
+        "build_id": build.build_id,
+        "executable": build.executable,
+        "executable_sha256": build.files[build.executable],
+        "archive_sha256": build.asset_sha256,
+        "loadable_files_sha256": contract.digest(dict(build.files)),
+        "resources": asdict(plan.evaluation_limits(candidate)),
+        "invocation_limits": asdict(limits),
+        "jinja": candidate.candidate_id == GEMMA_CANDIDATE_ID,
+    }
+    return {**identity, "execution_sha256": contract.digest(identity)}
 
 
 def evidence_document(

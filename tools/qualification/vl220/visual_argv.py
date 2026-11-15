@@ -53,7 +53,8 @@ _ROLE_OF_FLAG = {
     "-f": "<prompt>",
     "--json-schema-file": "<schema>",
 }
-_AT_MOST_ONCE = VISUAL_ALLOWED_FLAGS - {"--image"}
+_GEMMA_TEMPLATE_FLAG = "--jinja"
+_AT_MOST_ONCE = (VISUAL_ALLOWED_FLAGS | {_GEMMA_TEMPLATE_FLAG}) - {"--image"}
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_IMAGE_SIDE = 4096
@@ -215,7 +216,7 @@ def _flag_shaped(token: str) -> bool:
     return token.startswith("-") and not _is_number(token)
 
 
-def check_visual_argv(argv: list[str], *, free_text: bool = False) -> None:
+def check_visual_argv(argv: list[str], *, free_text: bool = False, use_jinja: bool = False) -> None:
     """Raise :class:`VisualArgvRefused` unless ``argv`` is exactly the closed visual vocabulary in a safe shape.
 
     Beyond the allow-list: every value-taking flag has a value that is not itself flag-shaped, no flag repeats (except one
@@ -232,6 +233,10 @@ def check_visual_argv(argv: list[str], *, free_text: bool = False) -> None:
         token = argv[index]
         if not isinstance(token, str) or not _flag_shaped(token):
             raise _refuse("stray_value", str(token)[:40])
+        if use_jinja and token == _GEMMA_TEMPLATE_FLAG:
+            counts[token] += 1
+            index += 1
+            continue
         if token in VISUAL_REFUSED_FLAGS:
             raise _refuse("forbidden_flag", token)
         if token not in VISUAL_ALLOWED_FLAGS:
@@ -247,6 +252,8 @@ def check_visual_argv(argv: list[str], *, free_text: bool = False) -> None:
     for flag in _AT_MOST_ONCE:
         if counts[flag] > 1:
             raise _refuse("flag_repeated", flag)
+    if use_jinja and counts[_GEMMA_TEMPLATE_FLAG] != 1:
+        raise _refuse("gemma_template_flag_required")
     if counts["--mmproj"] != 1:
         raise _refuse("exactly_one_mmproj_required")
     expected_schema = 0 if free_text else 1
@@ -316,6 +323,8 @@ def _prompt_file(path: Path, work_dir: Path) -> Path:
         raise _refuse("prompt_file_unreadable") from exc
     if not text.strip():
         raise _refuse("prompt_file_empty")
+    if "<__media__>" in text:
+        raise _refuse("reserved_media_marker_in_prompt")
     return resolved
 
 
@@ -331,6 +340,7 @@ def build_visual_argv(
     limits: VisualLimits | None = None,
     sampling: VisualSampling | None = None,
     free_text: bool = False,
+    use_jinja: bool = False,
 ) -> list[str]:
     """Arguments (without the executable) for one single-turn, CPU-only, offline image question.
 
@@ -360,6 +370,8 @@ def build_visual_argv(
     )
     images = [_inside(path, work_dir, "image_outside_work_dir") for path in image_paths]
     for image in images:
+        if "," in str(image):
+            raise _refuse("image_path_has_csv_separator")
         inspect_image(image)
     argv = [
         "--offline",
@@ -409,7 +421,9 @@ def build_visual_argv(
         "--seed",
         str(int(sampling.seed)),
     ]
-    check_visual_argv(argv, free_text=free_text)
+    if use_jinja:
+        argv.append(_GEMMA_TEMPLATE_FLAG)
+    check_visual_argv(argv, free_text=free_text, use_jinja=use_jinja)
     return argv
 
 

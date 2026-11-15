@@ -5,7 +5,7 @@ registry: nothing in ``src/`` reads it, so a visual candidate can never be selec
 imported by the production AI Assist path.
 
 :func:`load_candidates` is strict (any unknown key, floating revision, non-https or non-pinned URL, malformed digest or a flag
-that claims qualification, production use, text use or an approved image invocation refuses the whole document).
+that claims qualification, production use, text use refuses the whole document).
 :func:`check_admission` answers one question for the evaluation harness: may these staged bytes and this runtime build be used
 for the offline evaluation, and if not, why. It is fail-closed: any problem, including an unexpected exception, is a refusal
 with a stable reason code. Nothing here executes a binary, loads a model or opens a network connection.
@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import stat
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,8 +31,12 @@ RUNTIME_MANIFEST_PATH = REPO_ROOT / "config" / "managed_ai_runtime.json"
 
 #: The owner-set ceiling for what the operator may download for one candidate (model and projector together).
 MAX_DOWNLOAD_BYTES = 6 * 1024**3
+GEMMA_CANDIDATE_ID = "gemma-4-12b-it-qat-q4_0-google"
+GEMMA_MAX_DOWNLOAD_BYTES = 9 * 1024**3
+LFM_CANDIDATE_ID = "lfm3-vl-2b-q4_k_m-liquidai"
 
 REASON_CANCELLED = "cancelled"
+REASON_UNSAFE_PATH = "unsafe_link_or_nonregular_file"
 REASON_MODEL_MISSING = "model_missing"
 REASON_MODEL_SIZE = "model_size_mismatch"
 REASON_MODEL_HASH = "model_hash_mismatch"
@@ -57,7 +62,6 @@ _FORBIDDEN_TRUE_FLAGS = (
     "qualified",
     "production_eligible",
     "text_registry_eligible",
-    "image_invocation_approved",
 )
 #: Keys that would make the text registry or selector treat a record as a text model; never allowed here.
 _TEXT_REGISTRY_KEYS = (
@@ -128,6 +132,7 @@ class VisualCandidate:
     model: ModelFile
     projector: ProjectorFile
     runtime: RuntimeRequirement
+    image_invocation_approved: bool
 
     @property
     def download_bytes(self) -> int:
@@ -225,7 +230,7 @@ def _parse_projector(raw: Any) -> ProjectorFile:
     )  # fmt: skip
 
 
-def _parse_license(raw: Any) -> LicenseRecord:
+def _parse_license(raw: Any, model: ModelFile) -> LicenseRecord:
     data = _mapping(
         raw,
         "license",
@@ -245,13 +250,16 @@ def _parse_license(raw: Any) -> LicenseRecord:
         "license.acknowledgement_required must be true",
     )
     url = _text(data.get("text_source_url"), "license.text_source_url")
-    _require(
-        re.fullmatch(r"https://huggingface\.co/[^/]+/[^/]+/resolve/[0-9a-f]{40}/LICENSE", url)
-        is not None,
-        "license.text_source_url must be a revision-pinned LICENSE URL",
-    )
+    spdx = _text(data.get("spdx"), "license.spdx")
+    if spdx == "Apache-2.0":
+        _require(
+            url == "https://www.apache.org/licenses/LICENSE-2.0.txt",
+            "use the canonical Apache license",
+        )
+    else:
+        _pinned_url(model.repository, model.revision, "LICENSE", url, "license.text")
     return LicenseRecord(
-        _text(data.get("spdx"), "license.spdx"),
+        spdx,
         _text(data.get("name"), "license.name"),
         _count(data.get("text_bytes"), "license.text_bytes"),
         _text(data.get("text_sha256"), "license.text_sha256", _HEX64),
@@ -275,7 +283,7 @@ def _parse_runtime(raw: Any) -> RuntimeRequirement:
 _CANDIDATE_KEYS = frozenset(
     {
         "candidate_id", "display_name", "modality", "license", "publisher", "converter", "model", "projector",
-        "alternate_projectors", "runtime", "known_limits", *_FORBIDDEN_TRUE_FLAGS,
+        "alternate_projectors", "runtime", "known_limits", "image_invocation_approved", *_FORBIDDEN_TRUE_FLAGS,
     }
 )  # fmt: skip
 
@@ -289,6 +297,15 @@ def _parse_candidate(raw: Any) -> VisualCandidate:
     data = _mapping(raw, "candidate", _CANDIDATE_KEYS)
     for flag in _FORBIDDEN_TRUE_FLAGS:
         _require(data.get(flag) is False, f"{flag} must be present and false for a candidate")
+    approved = data.get("image_invocation_approved")
+    _require(type(approved) is bool, "image_invocation_approved must be boolean")
+    candidate_id = _text(data.get("candidate_id"), "candidate_id", _ID)
+    runtime = _parse_runtime(data.get("runtime"))
+    if approved:
+        _require(
+            runtime.required_build_id == "b11960-cpu" and runtime.tool == "llama-mtmd-cli.exe",
+            "approved image invocation must use the reviewed visual runtime",
+        )
     _require(data.get("modality") == "vision_language", "modality must be vision_language")
     publisher = _mapping(data.get("publisher"), "publisher", frozenset({"repository", "revision"}))
     model = _parse_model(data.get("model"))
@@ -297,8 +314,10 @@ def _parse_candidate(raw: Any) -> VisualCandidate:
         model.repository == projector.repository and model.revision == projector.revision,
         "model and projector must come from the same repository revision",
     )
+    ceiling = GEMMA_MAX_DOWNLOAD_BYTES if candidate_id == GEMMA_CANDIDATE_ID else MAX_DOWNLOAD_BYTES
+    _require(model.bytes + projector.bytes <= ceiling, "the pair exceeds the download ceiling")
     _require(
-        model.bytes + projector.bytes <= MAX_DOWNLOAD_BYTES, "the pair exceeds the download ceiling"
+        model.embedding_length == projector.projection_dim, "the pinned projection width must match"
     )
     alternates = data.get("alternate_projectors", [])
     _require(isinstance(alternates, list), "alternate_projectors must be a list")
@@ -313,15 +332,16 @@ def _parse_candidate(raw: Any) -> VisualCandidate:
             item.get("status") == "listed_not_downloaded_not_approved", "alternates are listed only"
         )
     return VisualCandidate(
-        _text(data.get("candidate_id"), "candidate_id", _ID),
+        candidate_id,
         _text(data.get("display_name"), "display_name"),
         "vision_language",
-        _parse_license(data.get("license")),
+        _parse_license(data.get("license"), model),
         _text(publisher.get("repository"), "publisher.repository", _REPOSITORY),
         _text(publisher.get("revision"), "publisher.revision", _HEX40),
         model,
         projector,
-        _parse_runtime(data.get("runtime")),
+        runtime,
+        approved is True,
     )
 
 
@@ -381,6 +401,9 @@ def _check_file(
 ) -> bool:
     """Append reasons for a staged file; return False when the run was cancelled."""
 
+    if has_link(path) or (path.exists() and not path.is_file()):
+        reasons.append(REASON_UNSAFE_PATH)
+        return True
     if not path.is_file():
         reasons.append(missing)
         return True
@@ -390,9 +413,25 @@ def _check_file(
     measured = hash_file(path, cancel)
     if measured is None:
         return False
-    if measured[0] != pinned.sha256:
+    if measured != (pinned.sha256, pinned.bytes):
         reasons.append(hash_reason)
     return True
+
+
+def has_link(path: Path) -> bool:
+    """Reject symlinks and Windows junctions in a path, including its parents."""
+    if path.drive.startswith("\\\\") or ".." in path.parts:
+        return True
+    for entry in (path, *path.parents):
+        try:
+            info = entry.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or (
+            getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
+            return True
+    return False
 
 
 def _header(path: Path) -> GgufHeader | None:
@@ -403,30 +442,41 @@ def _header(path: Path) -> GgufHeader | None:
 
 
 def _check_headers(candidate: VisualCandidate, staging: Path, reasons: list[str]) -> None:
+    architecture = candidate.model.architecture
+    embedding_key = f"{architecture}.embedding_length"
+    context_key = f"{architecture}.context_length"
     model_header = _header(staging / candidate.model.filename)
     projector_header = _header(staging / candidate.projector.filename)
     if model_header is None or not (
         model_header.architecture == candidate.model.architecture
         and model_header.metadata.get("general.type") == "model"
         and model_header.metadata.get("general.file_type") == candidate.model.gguf_file_type
-        and model_header.metadata.get("lfm3.embedding_length") == candidate.model.embedding_length
+        and model_header.metadata.get(embedding_key) == candidate.model.embedding_length
+        and model_header.metadata.get(context_key) == candidate.model.native_context_tokens
     ):
         reasons.append(REASON_MODEL_HEADER)
     if projector_header is None or not (
         projector_header.architecture == candidate.projector.architecture
         and projector_header.metadata.get("general.type") == "mmproj"
         and projector_header.projector_type == candidate.projector.projector_type
+        and projector_header.metadata.get("clip.has_vision_encoder") is True
+        and projector_header.metadata.get("clip.vision.projection_dim")
+        == candidate.projector.projection_dim
         and projector_header.metadata.get("general.file_type") == candidate.projector.gguf_file_type
     ):
         reasons.append(REASON_PROJECTOR_HEADER)
     if model_header is not None and projector_header is not None:
+        base_name = model_header.metadata.get("general.base_model.0.name")
+        model_name = model_header.metadata.get("general.name")
         paired = (
             projector_header.metadata.get("clip.vision.projection_dim")
-            == model_header.metadata.get("lfm3.embedding_length")
-            and projector_header.metadata.get("general.base_model.0.name")
-            == model_header.metadata.get("general.base_model.0.name")
-            and projector_header.metadata.get("general.name")
-            == model_header.metadata.get("general.name")
+            == model_header.metadata.get(embedding_key)
+            and isinstance(base_name, str)
+            and bool(base_name.strip())
+            and projector_header.metadata.get("general.base_model.0.name") == base_name
+            and isinstance(model_name, str)
+            and bool(model_name.strip())
+            and projector_header.metadata.get("general.name") == model_name
         )
         if not paired:
             reasons.append(REASON_PAIR_MISMATCH)
@@ -485,6 +535,22 @@ def check_admission(
         )
         reasons.extend(runtime_reasons(candidate, build_id, manifest))
         reasons.extend(license_reasons(candidate, acknowledgement))
+        if not candidate.image_invocation_approved:
+            reasons.append("image_invocation_held")
+        reasons.extend(verify_pair(candidate, staging_dir, cancel=cancel).reasons)
+        return Admission(not reasons, tuple(dict.fromkeys(reasons)))
+    except Exception:  # noqa: BLE001 - every unexpected failure blocks launch
+        return Admission(False, (REASON_INTERNAL,))
+
+
+def verify_pair(
+    candidate: VisualCandidate, staging_dir: Path, *, cancel: CancelCheck | None = None
+) -> Admission:
+    """Verify both artifact bytes and GGUF headers independently of launch readiness."""
+    try:
+        if cancel is not None and cancel():
+            return Admission(False, (REASON_CANCELLED,))
+        reasons: list[str] = []
         staging = Path(staging_dir)
         if not _check_file(
             staging / candidate.model.filename, candidate.model, reasons,
@@ -496,9 +562,7 @@ def check_admission(
             REASON_PROJECTOR_MISSING, REASON_PROJECTOR_SIZE, REASON_PROJECTOR_HASH, cancel,
         ):  # fmt: skip
             return Admission(False, (REASON_CANCELLED,))
-        if not any(
-            reason.endswith(("_missing", "_size_mismatch", "_hash_mismatch")) for reason in reasons
-        ):
+        if not reasons:
             _check_headers(candidate, staging, reasons)
         return Admission(not reasons, tuple(dict.fromkeys(reasons)))
     except Exception:  # noqa: BLE001 - admission is fail-closed: an unexpected problem is a refusal, never a pass
@@ -518,4 +582,5 @@ __all__ = [
     "load_candidates",
     "parse_candidates",
     "runtime_reasons",
+    "verify_pair",
 ]
