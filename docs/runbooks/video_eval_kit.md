@@ -167,3 +167,26 @@ This tooling makes no generation and starts no runtime.
   the owner considers a regression. Record the run id, the arms and the decision in the promoting PR.
 * For a one-control question on one image (for example reference strength), use the Video Workflow one-variable
   experiment and its Review Experiment window instead (PR-VID-QUALITY-211).
+
+## 6. Three-engine example suite (VID-CLIP-370)
+
+`docs/runbooks/examples/video_eval_three_engines.suite.json` is a ready-to-edit suite that compares three engines on
+identical cases (same images, prompts, seed and a frame count of 81). Its image names are synthetic placeholders: copy the
+file next to your own images and change `image` (and, ideally, pin `image_sha256`) before queueing.
+
+| Arm | Workflow | Governance | What it tests |
+|---|---|---|---|
+| `ti2v_480p` (baseline) | `wan22_ti2v_5b_i2v_v1` 1.3.0 | approved | The current production engine at 480x832 / 832x480. |
+| `ti2v_720p` | `wan22_ti2v_5b_i2v_v1` 1.4.0 | experimental, `"experimental_opt_in": true` | The same graph at 704x1280 / 1280x704, the model's 720p design point. |
+| `a14b_480p` | `wan22_i2v_a14b_4step_v1` 1.0.0 | experimental, `"experimental_opt_in": true` | Wan2.2 I2V-A14B with the lightx2v 4-step LoRAs at 480x832 / 832x480. |
+
+* Both experimental arms run only because the suite sets the opt-in; the queue confirmation names them. Neither is ever
+  recommended or preselected in the Video Workflow tab, and the picker keeps offering approved TI2V-5B 1.3.0.
+* The execution-time GPU guard still applies to every arm. The A14B arm needs the six pinned files (two experts, two
+  LoRAs, the UMT5 encoder and the Wan 2.1 VAE; names and SHA-256 in `docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md`
+  and the catalog) and a managed Comfy launched with `--disable-pinned-memory`. A missing file refuses the job before
+  anything is dispatched. Nothing is downloaded for you.
+* Frame rates differ by engine (TI2V-5B 24 fps, A14B native 16 fps), so 81 frames is a different clip length per arm.
+  Compare motion and identity, not duration.
+* This only queues and measures. It makes no claim that either candidate is better: that needs a separately authorized
+  physical run and your ratings (sections 4 and 5). As of this writing no physical eval has been run.

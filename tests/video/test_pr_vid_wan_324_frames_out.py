@@ -121,7 +121,8 @@ def test_the_published_versions_keep_a_video_file_output() -> None:
 
 def test_the_frames_out_version_is_registered_approved_and_offered() -> None:
     registry = build_default_workflow_registry()
-    assert registry.list_versions(WAN_ID)[-1] == WAN22_FRAMES_VERSION
+    # 1.4.0 (VID-CLIP-370) is a later experimental candidate; 1.3.0 is the newest approved version.
+    assert registry.list_versions(WAN_ID)[-2:] == [WAN22_FRAMES_VERSION, "1.4.0"]
     spec = registry.get(WAN_ID, WAN22_FRAMES_VERSION)  # runnable with no opt-in
     assert spec.governance_state == "approved" and not spec.is_experimental
     assert spec.governance_notes.startswith("APPROVED")
