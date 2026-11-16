@@ -18,6 +18,7 @@ from src.gui_v2.outpaint_canvas_view import canvas_view, render_canvas_view
 from src.image_backends import masked_inpaint as capability
 from src.pipeline import image_edit_inputs as inputs
 from src.pipeline.outpaint_canvas import Extents
+from tests.gui_v2.edit_work_helpers import single_tool_review
 from tests.pipeline.test_outpaint_frozen_310 import H, W, original_image, png_bytes
 
 PROMPT = "the meadow continues"
@@ -378,18 +379,17 @@ def test_review_extend_canvas_action_opens_only_one_still_image(tk_root, tmp_pat
     )
     path = tmp_path / "source.png"
     path.write_bytes(png_bytes(original_image()))
-    review = SimpleNamespace(_get_selected_review_paths=lambda: [path], app_controller=object())
+    review = single_tool_review([path])
     ReviewTabFrame._open_outpaint_editor(review)
     assert opened[0]["source_path"] == path
     monkeypatch.setattr(
         "src.gui.views.review_tab_frame_v2.messagebox.showwarning", lambda *a, **k: None
     )
-    review._get_selected_review_paths = lambda: [path, path]
+    review = single_tool_review([path, path])
     ReviewTabFrame._open_outpaint_editor(review)
-    review._get_selected_review_paths = lambda: [tmp_path / "clip.mp4"]
+    review = single_tool_review([tmp_path / "clip.mp4"])
     ReviewTabFrame._open_outpaint_editor(review)
-    review._get_selected_review_paths = lambda: [path]
-    review.app_controller = None
+    review = single_tool_review([path], app_controller=None)
     ReviewTabFrame._open_outpaint_editor(review)
     assert len(opened) == 1
 

@@ -51,11 +51,15 @@ def test_the_outcome_tools_are_enabled_only_for_a_verified_adetailer_output(tab,
         image(tmp_path / "in.png"),
         image(tmp_path / "other.png"),
     )
+    # PR-REVIEW-LIFECYCLE-621: the judgment lives inside the ADetailer compare, not in the main controls.
     show(tab, other, None)
-    assert str(tab._adetailer_compare_button.cget("state")) == "disabled"
-    assert all(str(w.cget("state")) == "disabled" for w in tab._adetailer_outcome_widgets)
+    assert tab._adetailer_enabled is False
+    assert not hasattr(tab, "_adetailer_compare_button")
+    tab._open_contextual_compare()  # no verified pair: the ordinary single view, no judgment controls
+    assert tab._adetailer_outcome_widgets == []
     show(tab, output, AdetailerPair(output=output, source=source))
-    assert str(tab._adetailer_compare_button.cget("state")) == "normal"
+    assert tab._adetailer_enabled is True
+    tab._open_contextual_compare()  # a verified pair: the one Compare opens before/after with the judgment
     assert [str(w.cget("state")) for w in tab._adetailer_outcome_widgets] == [
         "readonly",
         "readonly",
@@ -66,6 +70,25 @@ def test_the_outcome_tools_are_enabled_only_for_a_verified_adetailer_output(tab,
         == tab.adetailer_hands_outcome_var.get()
         == "Unreviewed"
     )
+
+
+@pytest.mark.gui
+def test_a_missing_source_disables_the_outcome_controls(tab, tmp_path):
+    output = image(tmp_path / "out.png")
+    show(tab, output, None)
+    tab._compare_mode = "adetailer"
+    tab._render_compare_viewer(output)
+    assert len(tab._adetailer_outcome_widgets) == 3
+    assert all(str(w.cget("state")) == "disabled" for w in tab._adetailer_outcome_widgets)
+
+
+@pytest.mark.gui
+def test_the_judgment_marks_the_rating_as_touched_so_a_decision_saves_it(tab, tmp_path):
+    output, source = image(tmp_path / "out.png"), image(tmp_path / "in.png")
+    show(tab, output, AdetailerPair(output=output, source=source))
+    assert tab._rating_touched is False
+    tab.adetailer_face_outcome_var.set("Improved")
+    assert tab._rating_touched is True
 
 
 @pytest.mark.gui

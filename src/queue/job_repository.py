@@ -60,6 +60,8 @@ _BATCH_ID_MARKER = '"batch_id"'
 #: and is inserted in one transaction, so its rows are adjacent).
 EXPERIMENT_SIBLING_WINDOW = 16
 _IN_CHUNK = 400
+#: Upper bound on the child rows one Review lineage read returns.
+REVIEW_CHILD_LIMIT = 2000
 _TERMINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 _ALLOWED_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.QUEUED: {JobStatus.RUNNING, JobStatus.CANCELLED},
@@ -922,6 +924,41 @@ class JobRepository(JobHistoryStore):
                     )
                 )
         return children
+
+    def read_review_child_rows(
+        self,
+        *,
+        parent_artifact_ids: Sequence[str] = (),
+        parent_job_ids: Sequence[str] = (),
+        limit: int = REVIEW_CHILD_LIMIT,
+    ) -> tuple[BatchCandidateRow, ...]:
+        """Jobs whose recorded lineage names one of these parent artifacts or parent jobs (read-only, bounded).
+
+        Plain read of the existing ``parent_artifact_id`` / ``parent_job_id`` columns: no schema change, no index and
+        no lifecycle effect. At most ``limit`` rows are returned, the NEWEST ones (a cut drops the oldest, because the
+        latest child decides a source's state), listed oldest first; a very large lineage is cut rather than scanned
+        without bound; the caller decides whether a claim is verified (artifact digest) or not (job only).
+        """
+
+        artifacts = list(dict.fromkeys(str(value) for value in parent_artifact_ids if value))
+        jobs = list(dict.fromkeys(str(value) for value in parent_job_ids if value))
+        bound = max(1, int(limit))
+        found: dict[str, BatchCandidateRow] = {}
+        for column, values in (("parent_artifact_id", artifacts), ("parent_job_id", jobs)):
+            for start in range(0, len(values), _IN_CHUNK):
+                chunk = values[start : start + _IN_CHUNK]
+                marks = ",".join("?" for _ in chunk)
+                with self._lock:
+                    rows = self._connection.execute(
+                        f"SELECT rowid AS cursor, * FROM jobs WHERE {column} IN ({marks}) "
+                        "ORDER BY rowid DESC LIMIT ?",
+                        (*chunk, bound),
+                    ).fetchall()
+                for row in rows:
+                    candidate = self._row_to_batch_candidate(row)
+                    found.setdefault(candidate.job_id, candidate)
+        newest = sorted(found.values(), key=lambda row: row.cursor, reverse=True)[:bound]
+        return tuple(sorted(newest, key=lambda row: row.cursor))
 
     def list_experiment_sibling_entries(
         self, job_id: str, experiment_id: str, *, window: int = EXPERIMENT_SIBLING_WINDOW

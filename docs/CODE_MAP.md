@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-741 of 896 modules have a docstring.
+745 of 900 modules have a docstring.
 
 ## src/
 
@@ -381,6 +381,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_editor_contract.py`: Prompt editor contracts independent of UI toolkit
 - `queue_status_contract.py`: Queue status display contract independent of toolkit
 - `review_selection_contract.py`: Toolkit-neutral revision bookkeeping for Review's asynchronous selection (PR-GUI-UX-580)
+- `review_workspace_contract.py`: Toolkit-neutral session for the task-first Review workspace (PR-REVIEW-LIFECYCLE-621)
 - `selection_list_contract.py`: Selection list contract for deterministic list + selection behavior
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
 - `storyboard_contract.py`: Toolkit-neutral capture and dirty-state for the existing sequence editor; no executable state
@@ -439,6 +440,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_tab_frame_v2.py`: Prompt Tab Frame v2.6 - Main prompt editing interface with matrix integration
 - `qualification_rating_card.py`: One image's existing overall/details rating controls in guided qualification review
 - `qualification_review_window.py`: Guided Compare & Rate over verified qualification pairs and existing image ratings
+- `review_set_picker.py`: A small picker for Review's Open menu (Recent job and Batch)
 - `review_tab_frame_v2.py`: (no docstring)
 - `stage_cards_panel.py`: (no docstring)
 - `stage_cards_panel_v2.py`: (no docstring)
@@ -823,10 +825,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `adetailer_outcome.py`: Operator before/after review of an ADetailer output (PR-REFINE-160), carried by the existing Review feedback…
 - `artifact_metadata_inspector.py`: Read-only artifact metadata inspection payload builder
 - `correction_advice.py`: Project guided Review eligibility through the existing model and operation contracts
+- `effective_prompt.py`: Per-stage prompt provenance of a Review image (PR-REVIEW-LIFECYCLE-621)
 - `findings.py`: Bounded, source-bound observations and advisory choices for guided Review
 - `improvement_evidence.py`: Verify Review comparison evidence and prepare bounded judgments for the existing feedback writer
 - `inspection.py`: Bounded inspection and explicit Smart Review imports for the guided finding workspace
 - `review_evidence.py`: Non-mutating, digest-bound Review evidence (PR-REVIEW-EVIDENCE-620)
+- `review_lineage.py`: Read-only lookup of the jobs derived from reviewed images (PR-REVIEW-LIFECYCLE-621)
 - `review_metadata_service.py`: Portable review metadata stamping for reviewed image artifacts
 - `workflow_adapter.py`: Non-render review workflow logic for Review tab
 - `workspace_io.py`: Worker-side file work for the Review workspace (PR-GUI-UX-580)

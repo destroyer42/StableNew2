@@ -17,6 +17,7 @@ from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui_v2.mask_editor_state import MaskDocument, MaskViewport
 from src.image_backends import masked_inpaint as capability
 from src.pipeline import image_edit_inputs as inputs
+from tests.gui_v2.edit_work_helpers import single_tool_review
 from tests.pipeline.test_inpaint300 import png
 
 
@@ -226,12 +227,12 @@ def test_review_edit_mask_action_opens_only_one_still_image(tk_root, tmp_path, m
     )
     path = tmp_path / "source.png"
     path.write_bytes(png())
-    review = SimpleNamespace(_get_selected_review_paths=lambda: [path], app_controller=object())
+    review = single_tool_review([path])
     ReviewTabFrame._open_mask_editor(review)
     assert opened[0]["source_path"] == path
     monkeypatch.setattr(
         "src.gui.views.review_tab_frame_v2.messagebox.showwarning", lambda *a, **k: None
     )
-    review._get_selected_review_paths = lambda: [path, path]
+    review = single_tool_review([path, path])
     ReviewTabFrame._open_mask_editor(review)
     assert len(opened) == 1

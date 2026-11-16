@@ -86,8 +86,8 @@ def test_review_tab_exposes_action_help_and_tooltips(tk_root) -> None:
             "metadata-aware decisions" in tab.action_help_panel.summary_label.cget("text").lower()
         )
         assert "use learning" in tab.action_help_panel.summary_label.cget("text").lower()
-        assert "does not queue a new reprocess job" in tab.import_selected_tooltip.text.lower()
-        assert "queue every loaded image" in tab.reprocess_all_button.tooltip.text.lower()
+        assert "nothing is queued" in tab.send_to_tooltip.text.lower()
+        assert "nothing is queued until you confirm" in tab._rework_tooltip.text.lower()
     finally:
         tab.destroy()
 
