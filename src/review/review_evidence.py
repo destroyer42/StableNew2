@@ -163,7 +163,9 @@ def build_review_rating_record(
             "prompt": base_prompt,
             "negative_prompt": base_negative,
         },
-        variant_configs=[{"prompt": after_prompt, "negative_prompt": after_negative, "model": model}],
+        variant_configs=[
+            {"prompt": after_prompt, "negative_prompt": after_negative, "model": model}
+        ],
         randomizer_mode="review_feedback",
         randomizer_plan_size=1,
         extract_primary=extract_primary,
@@ -270,7 +272,9 @@ def _lookup(
 
 
 def lookup_rating(
-    records_path: str | os.PathLike[str], image_path: str | os.PathLike[str], artifact_sha256: str | None
+    records_path: str | os.PathLike[str],
+    image_path: str | os.PathLike[str],
+    artifact_sha256: str | None,
 ) -> EvidenceLookup:
     return _lookup(Path(records_path), RATING_SOURCE, str(image_path), artifact_sha256)
 
@@ -328,7 +332,9 @@ def summary_from_row(row: Mapping[str, Any], identity: str) -> PortableReviewSum
         negative_prompt_delta=str(metadata.get("negative_prompt_delta") or ""),
         prompt_mode=str(metadata.get("prompt_mode") or ""),
         negative_prompt_mode=str(metadata.get("negative_prompt_mode") or ""),
-        stages=[str(stage) for stage in list(metadata.get("stages") or []) if str(stage or "").strip()],
+        stages=[
+            str(stage) for stage in list(metadata.get("stages") or []) if str(stage or "").strip()
+        ],
         review_context=dict(metadata.get("review_context") or {}),
         review_record_id=str(row.get("run_id") or ""),
         identity_status=identity,

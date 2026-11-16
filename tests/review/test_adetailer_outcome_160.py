@@ -169,7 +169,9 @@ def test_judgments_persist_through_the_existing_feedback_record_without_stamping
     saved = record.metadata["review_context"]["adetailer_outcome_review"]
     assert saved["face"] == expected
     assert saved["source"] == "operator_review"
-    assert ReviewMetadataService().read_review_summary(pair.output) is None  # saving never stamps the file
+    assert (
+        ReviewMetadataService().read_review_summary(pair.output) is None
+    )  # saving never stamps the file
     saved_summary = review_controller.get_prior_review_summary(str(pair.output))
     assert saved_summary is not None
     assert saved_summary["review_context"]["adetailer_outcome_review"]["reviewed_pair"][

@@ -1359,7 +1359,13 @@ class ReviewTabFrame(ttk.Frame):
                     var.set(max(1, min(5, int(value))))
                 except (TypeError, ValueError):
                     continue
-            if str(summary.get("quality_label") or "") in ("reject", "poor", "okay", "good", "excellent"):
+            if str(summary.get("quality_label") or "") in (
+                "reject",
+                "poor",
+                "okay",
+                "good",
+                "excellent",
+            ):
                 self.quality_var.set(str(summary["quality_label"]))
             if not self.feedback_notes.get("1.0", tk.END).strip():
                 self.feedback_notes.insert("1.0", str(summary.get("user_notes") or ""))
@@ -1409,7 +1415,9 @@ class ReviewTabFrame(ttk.Frame):
         )
         bits = [f"Source: {source_label}"]
         if summary.get("identity_status") == "changed":
-            bits.append("This file changed since it was reviewed; the rating below was for its earlier content.")
+            bits.append(
+                "This file changed since it was reviewed; the rating below was for its earlier content."
+            )
         if rating is not None:
             rating_text = f"Rating: {rating}"
             if quality:

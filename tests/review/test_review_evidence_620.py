@@ -75,7 +75,9 @@ def test_rating_never_changes_bytes_size_or_pixels(tmp_path, name, fmt):
     record = _rate(controller, path)
 
     assert (path.read_bytes(), path.stat().st_size, _pixels(path)) == before
-    assert sorted(p.name for p in tmp_path.iterdir() if p.name != "learning_records.jsonl") == [name]
+    assert sorted(p.name for p in tmp_path.iterdir() if p.name != "learning_records.jsonl") == [
+        name
+    ]
     assert record.metadata["artifact_sha256"] == hashlib.sha256(before[0]).hexdigest()
 
 
@@ -111,7 +113,9 @@ def test_view_supplied_digest_is_the_one_recorded(tmp_path):
     controller = _controller(tmp_path)
     path = _image(tmp_path / "a.png", "PNG")
     shown = _digest(path)
-    path.write_bytes(_image(tmp_path / "other.png", "PNG", (200, 0, 0)).read_bytes())  # changed after display
+    path.write_bytes(
+        _image(tmp_path / "other.png", "PNG", (200, 0, 0)).read_bytes()
+    )  # changed after display
 
     record = _rate(controller, path, 3, artifact_sha256=shown)
 
@@ -147,7 +151,11 @@ def test_changed_bytes_are_reported_changed_not_silently_matched(tmp_path):
     # ... and the new bytes can be rated on their own, and restoring the old bytes finds the first rating again.
     _rate(controller, path, 1)
     latest = controller.get_prior_review_summary(str(path))
-    assert latest is not None and latest["identity_status"] == "digest" and latest["user_rating_raw"] == 1
+    assert (
+        latest is not None
+        and latest["identity_status"] == "digest"
+        and latest["user_rating_raw"] == 1
+    )
 
 
 def _legacy_row(path: Path, rating: int) -> dict:
@@ -189,10 +197,13 @@ def test_legacy_path_keyed_row_still_appears_as_the_prior_summary(tmp_path):
     assert summary["user_rating"] == 3 and summary["user_notes"] == "legacy"
 
 
-@pytest.mark.parametrize(("name", "fmt", "source"), [
-    ("s.png", "PNG", "embedded_review_metadata"),
-    ("s.jpg", "JPEG", "sidecar_review_metadata"),
-])
+@pytest.mark.parametrize(
+    ("name", "fmt", "source"),
+    [
+        ("s.png", "PNG", "embedded_review_metadata"),
+        ("s.jpg", "JPEG", "sidecar_review_metadata"),
+    ],
+)
 def test_legacy_embedded_or_sidecar_stamp_still_appears(tmp_path, name, fmt, source):
     controller = _controller(tmp_path)
     path = _image(tmp_path / name, fmt)
@@ -266,14 +277,23 @@ def test_revision_key_uses_the_digest_when_recorded_and_the_path_otherwise(tmp_p
     first = _rate(controller, path, 2)
     second = _rate(controller, copy, 5)
 
-    rows = [json.loads(line) for line in controller._learning_record_writer.records_path.read_text().splitlines()]
+    rows = [
+        json.loads(line)
+        for line in controller._learning_record_writer.records_path.read_text().splitlines()
+    ]
     assert rating_revision_key(rows[0]) == ("review_tab_feedback", "", f"sha256:{_digest(path)}")
-    assert rating_revision_key(rows[0]) == rating_revision_key(rows[1])  # the same bytes are one sample
+    assert rating_revision_key(rows[0]) == rating_revision_key(
+        rows[1]
+    )  # the same bytes are one sample
     assert [r["run_id"] for r in current_rating_revisions(rows)] == [second.run_id]
     assert first.run_id != second.run_id
 
     legacy = _legacy_row(path, 3)
-    assert rating_revision_key(legacy) == ("review_tab_feedback", "", str(path))  # legacy rows unchanged
+    assert rating_revision_key(legacy) == (
+        "review_tab_feedback",
+        "",
+        str(path),
+    )  # legacy rows unchanged
 
 
 def test_undo_by_run_id_still_works_and_failed_append_is_not_saved(tmp_path, monkeypatch):
@@ -283,7 +303,9 @@ def test_undo_by_run_id_still_works_and_failed_append_is_not_saved(tmp_path, mon
     assert controller.undo_review_feedback(run_id=record.run_id, image_path=str(path)) is True
     assert controller.get_prior_review_summary(str(path)) is None
 
-    monkeypatch.setattr(controller._learning_record_writer, "append_record", Mock(return_value=False))
+    monkeypatch.setattr(
+        controller._learning_record_writer, "append_record", Mock(return_value=False)
+    )
     with pytest.raises(OSError, match="not confirmed saved"):
         _rate(controller, path)
 
@@ -314,7 +336,10 @@ def test_disposition_is_digest_bound_latest_wins_and_never_touches_the_file(tmp_
     # Moved copy: same bytes, found by digest. Changed bytes at the old path: reported changed, not applied.
     moved = tmp_path / "moved.png"
     moved.write_bytes(before)
-    assert evidence.lookup_disposition(writer.records_path, moved, _digest(moved)).disposition == "rework"
+    assert (
+        evidence.lookup_disposition(writer.records_path, moved, _digest(moved)).disposition
+        == "rework"
+    )
     _image(path, "PNG", (9, 9, 9))
     drifted = evidence.lookup_disposition(writer.records_path, path, _digest(path))
     assert drifted.identity == "changed"
@@ -339,17 +364,23 @@ def test_dispositions_are_not_ratings_for_listing_undo_or_the_recommendation_eng
     rated = _rate(controller, path, 5)
     disposition = evidence.save_disposition(writer, image_path=path, disposition="discard")
 
-    assert [row["run_id"] for row in controller.list_recent_review_feedback(image_path=str(path))] == [
-        rated.run_id
-    ]
-    assert writer.remove_latest_review_feedback(image_path=str(path)) is True  # removes the rating, not the decision
+    assert [
+        row["run_id"] for row in controller.list_recent_review_feedback(image_path=str(path))
+    ] == [rated.run_id]
+    assert (
+        writer.remove_latest_review_feedback(image_path=str(path)) is True
+    )  # removes the rating, not the decision
     rows = [json.loads(line) for line in writer.records_path.read_text().splitlines()]
     assert [row["run_id"] for row in rows] == [disposition.run_id]
 
     # Even a disposition that carries rating-shaped fields is not evidence for the engine (kind allow-list).
     poisoned = json.loads(json.dumps(rows[0]))
     poisoned["metadata"].update(user_rating=5, user_rating_raw=5, subscores={"anatomy": 5})
-    poisoned["primary_model"], poisoned["primary_steps"], poisoned["primary_cfg_scale"] = "m", 20, 7.0
+    poisoned["primary_model"], poisoned["primary_steps"], poisoned["primary_cfg_scale"] = (
+        "m",
+        20,
+        7.0,
+    )
     rating_row = _legacy_row(path, 5)
     rating_row["metadata"]["record_kind"] = "review_tab_feedback"
     engine = RecommendationEngine(writer.records_path)
