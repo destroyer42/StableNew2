@@ -71,7 +71,10 @@ class LearningExperimentStore:
     ) -> LearningExperimentHandle:
         resolved_id = str(experiment_id or self.create_experiment_id(display_name))
         if not create_only:
-            payload = self._protect_batch_associations(self.load_session(resolved_id), payload)
+            previous = self.load_session(resolved_id)
+            payload = self._carry_closure(
+                previous, self._protect_batch_associations(previous, payload)
+            )
         experiment_dir = self.root / resolved_id
         experiment_dir.mkdir(parents=True, exist_ok=True)
         now = _utc_now_iso()
@@ -110,6 +113,36 @@ class LearningExperimentStore:
             updated_at=now,
             session_path=experiment_dir / self.SESSION_FILE,
         )
+
+    CLOSURE_KEY = "closure"
+
+    @classmethod
+    def _carry_closure(
+        cls, previous: dict[str, Any] | None, incoming: dict[str, Any]
+    ) -> dict[str, Any]:
+        """An ordinary save never adds, changes or drops the operator's closure; only ``set_closure`` does."""
+        carried = {k: v for k, v in incoming.items() if k != cls.CLOSURE_KEY}
+        if previous and cls.CLOSURE_KEY in previous:
+            carried[cls.CLOSURE_KEY] = copy.deepcopy(previous[cls.CLOSURE_KEY])
+        return carried
+
+    def set_closure(self, experiment_id: str, closure: dict[str, Any] | None) -> bool:
+        """Set or (with ``None``) remove the session's closure block; nothing else is written.
+
+        Runs under the store lock and replaces ``session.json`` atomically. The index, metadata, job associations,
+        drafts and the ratings file are untouched. Returns ``False`` when there is no saved session.
+        """
+        with self.lock:
+            path = self.session_path_for(experiment_id)
+            payload = self._read_json(path)
+            if payload is None:
+                return False
+            if closure is None:
+                payload.pop(self.CLOSURE_KEY, None)
+            else:
+                payload[self.CLOSURE_KEY] = copy.deepcopy(closure)
+            self._write_json(path, payload)
+            return True
 
     @staticmethod
     def _protect_batch_associations(

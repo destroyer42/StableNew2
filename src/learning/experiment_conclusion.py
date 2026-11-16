@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any
+from typing import Any, cast
+
+from src.learning import study_catalog
 
 
 def build_experiment_conclusion(
@@ -11,22 +13,10 @@ def build_experiment_conclusion(
     *, study_type: str = "controlled_variable"
 ) -> dict[str, Any]:
     """Summarize persisted sample evidence without creating a second rating."""
-    if study_type == "prompt_slot":
-        from src.learning.prompt_slot_experiment import conclusion
-
-        return conclusion(plan, rating_details, review_drafts)
-    if study_type == "prompt_model_matrix":
-        from src.learning.prompt_model_matrix import conclusion as matrix_conclusion
-
-        return matrix_conclusion(plan, rating_details, review_drafts)
-    if study_type == "embedding_experiment":
-        from src.learning.embedding_experiment import conclusion as embedding_conclusion
-
-        return embedding_conclusion(plan, rating_details, review_drafts)
-    if study_type == "lora_composition":
-        from src.learning.lora_composition import conclusion as lora_conclusion
-
-        return lora_conclusion(plan, rating_details, review_drafts)
+    # Each study that owns a conclusion names it in the catalog; every other study uses the generic builder below.
+    own = study_catalog.conclusion_function(study_type)
+    if own is not None:
+        return cast(dict[str, Any], own(plan, rating_details, review_drafts))
     rows: list[dict[str, Any]] = []
     controlled = True
     saved_total = 0

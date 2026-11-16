@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-732 of 887 modules have a docstring.
+734 of 889 modules have a docstring.
 
 ## src/
 
@@ -585,6 +585,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `experiment_freeze.py`: Immutable controlled-experiment seed policy helpers
 - `experiment_lifecycle.py`: Pure lifecycle rules for Working Draft and Experiment Library placement
 - `experiment_naming.py`: (no docstring)
+- `experiment_outcome.py`: The derived outcome of a Learning experiment, and the operator's closure of it
 - `experiment_reconciliation.py`: Exact admitted Learning identity and repository evidence projections; never dispatches
 - `experiment_store.py`: (no docstring)
 - `feedback_manager.py`: Feedback capture helpers for pipeline runs
@@ -644,6 +645,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `setting_evidence.py`: Frozen Research -> selection -> compiled -> dispatch -> reported comparison
 - `stage_capabilities.py`: (no docstring)
 - `staged_recommendations.py`: Non-mutating recommendation patches for staged-curation derived jobs
+- `study_catalog.py`: One declarative catalog of the Learning study types: data and references, no behaviour
 - `two_axis_grid.py`: Two-axis (CFG Scale / Steps / LoRA Strength) exploratory comparison: plan once, materialize frozen cells
 - `value_identity.py`: Deterministic grouping identity for JSON-like Learning variant values
 - `variable_metadata.py`: Variable metadata registry for learning experiments

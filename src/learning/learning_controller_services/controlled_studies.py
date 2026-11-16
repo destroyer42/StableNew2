@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from src.learning import study_catalog
+
 if TYPE_CHECKING:
     from src.pipeline.njr_core_v26 import NormalizedJobRecord
 
@@ -22,15 +24,10 @@ class ControlledStudyService(Protocol):
     ) -> NormalizedJobRecord: ...
 
 
-_SERVICES = {
-    "prompt_slot": "prompt_slot",
-    "lora_composition": "lora_composition",
-    "embedding_experiment": "embedding_experiment",
-    "prompt_model_matrix": "prompt_model_matrix",
-    "compatibility_probe": "compatibility_probe",
-}
+#: study literal -> coordination module, read from the study catalog (the one place that names every study).
+_SERVICES = {d.slug: d.service for d in study_catalog.STUDIES if d.service}
 #: Studies whose ratings stay experiment-local: no recommendations, Apply or profile publication.
-LOCAL_ONLY_STUDIES = frozenset(_SERVICES)
+LOCAL_ONLY_STUDIES = study_catalog.local_only_studies()
 
 LOCAL_STUDY_RECOMMENDATION_NOTICE = (
     "This study's ratings stay with this experiment. It reports a local conclusion, "
