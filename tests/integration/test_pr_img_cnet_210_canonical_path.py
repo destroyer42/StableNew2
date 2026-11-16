@@ -172,7 +172,7 @@ def test_adetailer_and_upscale_stay_intact_and_are_never_conditioned(webui: Harn
     chain = (
         njr.stages[0],
         make_stage_config(
-            "adetailer", model="sdxl.safetensors", extra={"adetailer_model": "face_yolov8n.pt", "prompt": "detailed face"}
+            "adetailer", model=njr.base_model, extra={"adetailer_model": "face_yolov8n.pt", "prompt": "detailed face"}
         ),
         make_stage_config(
             "upscale", model="sdxl.safetensors", extra={"upscaler": "R-ESRGAN 4x+", "upscale_factor": 2.0}
