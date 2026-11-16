@@ -650,6 +650,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `stage_capabilities.py`: (no docstring)
 - `staged_recommendations.py`: Non-mutating recommendation patches for staged-curation derived jobs
 - `study_catalog.py`: One declarative catalog of the Learning study types: data and references, no behaviour
+- `study_eligibility.py`: What the Learning baseline's model can be tested with, before the operator picks a study form (LEARN-NAV-871)
 - `two_axis_grid.py`: Two-axis (CFG Scale / Steps / LoRA Strength) exploratory comparison: plan once, materialize frozen cells
 - `value_identity.py`: Deterministic grouping identity for JSON-like Learning variant values
 - `variable_metadata.py`: Variable metadata registry for learning experiments

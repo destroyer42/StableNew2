@@ -125,6 +125,8 @@ class RowAssessment:
     next_step: str
     lines: tuple[str, ...] = ()
     catalog_claims: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    #: "What you can test on this model" (LEARN-NAV-871): the study eligibility projection, as plain lines.
+    can_test: tuple[str, ...] = ()
 
 
 def display_name(row: Mapping[str, Any]) -> str:
@@ -255,7 +257,23 @@ def assess_row(
         next_step,
         tuple(lines),
         {key: tuple(value) for key, value in claims.items()},
+        _can_test_lines(target, planning),
     )
+
+
+def _can_test_lines(
+    target: Any, planning: tuple[Mapping[str, Any], Mapping[str, Any]] | None
+) -> tuple[str, ...]:
+    """The same projection the Design step's objective chooser shows, for this checkpoint's own policy."""
+    from src.learning.study_eligibility import describe, eligible_studies
+
+    baseline, resources = planning if planning is not None else ({}, {})
+    try:
+        return describe(
+            eligible_studies(target.policy, baseline, resources, model=target.identity.display_name)
+        )
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        return (f"Not available yet ({type(exc).__name__}).",)
 
 
 def compare_with_history(
@@ -850,6 +868,12 @@ class ModelEvidenceWindow(tk.Toplevel):
             lines.append(f"NEXT STEP: {assessment.next_step}")
             lines.append("")
             lines.extend(assessment.lines)
+            if assessment.can_test:
+                lines.append("")
+                lines.append(
+                    "WHAT YOU CAN TEST ON THIS MODEL (from its policy and your Learning baseline; nothing is run)"
+                )
+                lines.extend("  " + line for line in assessment.can_test)
         lines.append("")
         lines.append("PAST RUNS (observational; never used as a recommendation)")
         history = self._history_for(row)
