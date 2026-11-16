@@ -137,7 +137,7 @@ def assess(sources: IntelligenceSources) -> IntelligenceReport:
             target=target,
             plan=plan,
             experiments=sources.experiments.views,
-            rated=rated_map(attributions),
+            rated=rated_map(attributions, sources.rating_log.study_rows),
             conclusions=conclusions,
             findings=findings,
             publication=publication,

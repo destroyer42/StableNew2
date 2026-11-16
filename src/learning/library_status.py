@@ -16,10 +16,13 @@ import copy
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from src.learning.experiment_lifecycle import classify_experiment_lifecycle
+from src.learning.experiment_outcome import ExperimentOutcome, derive_outcome
 from src.learning.experiment_reconciliation import read_job_evidence
+from src.learning.intelligence_sources import rating_identity, read_rating_log, valid_rating
 
 #: Saved variant statuses whose job may have moved on since the session was saved.
 OPEN_STATUSES = frozenset({"pending", "queued", "running"})
@@ -92,3 +95,29 @@ def library_status(
     if lifecycle != saved:
         note = f"{note} Saved as {saved}; open it to load results.".strip()
     return LibraryStatus(lifecycle, note)
+
+
+def library_outcomes(
+    payloads: Mapping[str, Mapping[str, Any]], records_path: Path | None
+) -> dict[str, ExperimentOutcome]:
+    """The derived outcome of each saved experiment, from one read of the rating log (worker thread; read-only).
+
+    Ratings come from the same latest-per-image rule the evidence intelligence uses; closure comes from each session.
+    One unreadable session reports "needs execution review" and never hides the others.
+    """
+    log = read_rating_log(records_path)
+    ratings: dict[str, dict[str, float]] = {}
+    for row in (*log.rows, *log.study_rows):
+        identity = rating_identity(row)
+        if identity is None:
+            continue
+        meta = row["metadata"]
+        overall = valid_rating(meta.get("user_rating_raw"))
+        if overall is None:
+            overall = valid_rating(meta.get("user_rating"))
+        if overall is not None:
+            ratings.setdefault(identity[0], {})[identity[2]] = overall
+    outcomes: dict[str, ExperimentOutcome] = {}
+    for experiment_id, payload in payloads.items():
+        outcomes[experiment_id] = derive_outcome(payload, ratings.get(experiment_id, {}))
+    return outcomes

@@ -276,6 +276,28 @@ class LearningTabFrame(ttk.Frame):
             style=BODY_LABEL_STYLE,
         )
         self.summary_label.grid(row=2, column=0, columnspan=5, sticky="w", pady=(2, 0))
+        # The experiment's derived outcome and the operator's Close / Reopen (the outcome is re-derived every refresh;
+        # closing records an operator act in the saved session and nothing else).
+        self._closure_cache: tuple[str, int, dict[str, Any] | None] | None = None
+        self._last_outcome: Any = None
+        self._outcome_var = tk.StringVar(value="")
+        outcome_row = ttk.Frame(self.header_frame)
+        outcome_row.grid(row=3, column=0, columnspan=8, sticky="w", pady=(2, 0))
+        self.outcome_label = ttk.Label(outcome_row, textvariable=self._outcome_var, style=BODY_LABEL_STYLE)
+        self.outcome_label.pack(side="left")
+        self.close_experiment_button = ttk.Button(
+            outcome_row, text="Close Experiment", command=self._on_close_current_experiment, state="disabled"
+        )
+        self.close_experiment_button.pack(side="left", padx=(8, 0))
+        self.reopen_experiment_button = ttk.Button(
+            outcome_row, text="Reopen Experiment", command=self._on_reopen_current_experiment, state="disabled"
+        )
+        self.reopen_experiment_button.pack(side="left", padx=(4, 0))
+        attach_tooltip(
+            self.close_experiment_button,
+            "Mark this experiment finished even if some images are unrated. It is recorded as insufficient "
+            "evidence, closed by operator. Nothing is deleted and you can reopen it.",
+        )
         self.learning_controller.add_workflow_state_listener(self._on_workflow_state_changed)
         self.learning_controller.add_resume_state_listener(self._persist_learning_session_state)
         self._on_workflow_state_changed(self.learning_controller.get_workflow_state())
@@ -1148,6 +1170,7 @@ class LearningTabFrame(ttk.Frame):
             self._summary_var.set(f"{self._summary_var.get()} | {recovered}")
         if persistence_error:
             self._summary_var.set(f"{self._summary_var.get()} | Resume save failed: {persistence_error}; do not retry jobs")
+        self._refresh_outcome()
         conclusion = dict(summary.get("conclusion") or {})
         if getattr(self, "review_panel", None) is not None:
             self.review_panel.set_prompt_slot_conclusion(conclusion)
@@ -1157,6 +1180,139 @@ class LearningTabFrame(ttk.Frame):
                 f"Saved/Draft/Unrated: {conclusion.get('saved', 0)}/"
                 f"{conclusion.get('draft', 0)}/{conclusion.get('unrated', 0)}"
             )
+
+    # ------------------------------------------------------------------
+    # LEARN-OUTCOME-870: derived outcome, Close and Reopen
+    # ------------------------------------------------------------------
+
+    def _confirm(self, title: str, message: str) -> bool:
+        """The one confirmation seam for closing an experiment (tests replace it; never a live dialog)."""
+        return bool(messagebox.askyesno(title, message, parent=self))
+
+    def _notify(self, title: str, message: str) -> None:
+        messagebox.showinfo(title, message, parent=self)
+
+    def _stored_closure(self, experiment_id: str) -> dict[str, Any] | None:
+        """The saved session's closure block, re-read only when the session file changed."""
+        from src.learning.experiment_outcome import closure_of
+
+        path = self.experiment_store.session_path_for(experiment_id)
+        try:
+            stamp = path.stat().st_mtime_ns
+        except OSError:
+            return None
+        cached = self._closure_cache
+        if cached is not None and cached[0] == experiment_id and cached[1] == stamp:
+            return cached[2]
+        closure = closure_of(self.experiment_store.load_session(experiment_id))
+        self._closure_cache = (experiment_id, stamp, closure)
+        return closure
+
+    def _open_experiment_evidence(self) -> tuple[str, dict[str, Any], dict[str, Any]] | None:
+        """(experiment id, session payload, saved rating details) of the open experiment, else None."""
+        controller = self.learning_controller
+        state = controller.learning_state
+        experiment_id = str(getattr(state.current_experiment, "experiment_id", "") or "")
+        payload = self._build_store_payload() if experiment_id and state.plan else None
+        if not experiment_id or payload is None:
+            return None
+        ratings: dict[str, Any] = {}
+        for variant in state.plan:
+            for ref in variant.image_refs:
+                detail = controller.get_rating_details_for_image(ref)
+                if detail:
+                    ratings[str(ref)] = detail
+        return experiment_id, payload, ratings
+
+    def _refresh_outcome(self) -> None:
+        from src.learning.experiment_outcome import closure_blocker, derive_outcome
+
+        evidence = self._open_experiment_evidence()
+        if evidence is None:
+            self._last_outcome = None
+            self._outcome_var.set("")
+            self.close_experiment_button.configure(state="disabled")
+            self.reopen_experiment_button.configure(state="disabled")
+            return
+        experiment_id, payload, ratings = evidence
+        closure = self._stored_closure(experiment_id)
+        outcome = derive_outcome(payload, ratings, closure=closure)
+        self._last_outcome = outcome
+        text = f"Outcome: {outcome.text}"
+        if outcome.next_test and outcome.code == "inconclusive":
+            text += f" | Next test: {outcome.next_test}"
+        self._outcome_var.set(text)
+        can_close = closure is None and not closure_blocker(payload)
+        self.close_experiment_button.configure(state="normal" if can_close else "disabled")
+        self.reopen_experiment_button.configure(state="normal" if closure is not None else "disabled")
+
+    @staticmethod
+    def _close_prompt(outcome: Any) -> str:
+        if outcome.unrated and outcome.code in ("awaiting_ratings", "insufficient_evidence"):
+            return (
+                f"{outcome.unrated} generated image(s) are still unrated. Closing records this experiment as "
+                "insufficient evidence, closed by operator. No image, rating or job is changed, and you can "
+                "reopen it later. Close it?"
+            )
+        return (
+            f"Close this experiment? Its outcome stays derived from your ratings ({outcome.label}); closing only "
+            "records that you finished with it, and you can reopen it later."
+        )
+
+    def close_experiment_by_id(
+        self, experiment_id: str, payload: dict[str, Any], ratings: dict[str, Any]
+    ) -> bool:
+        """Confirm, then record the operator's closure of one experiment; True when it was closed."""
+        from src.learning.experiment_outcome import (
+            ClosureRefused,
+            close_experiment,
+            closure_blocker,
+            derive_outcome,
+        )
+
+        reason = closure_blocker(payload)
+        if reason:
+            self._notify("Close Experiment", reason)
+            return False
+        outcome = derive_outcome(payload, ratings, closure=None)
+        if not self._confirm("Close Experiment", self._close_prompt(outcome)):
+            return False
+        try:
+            close_experiment(self.experiment_store, experiment_id, payload, ratings)
+        except ClosureRefused as exc:
+            self._notify("Close Experiment", str(exc))
+            return False
+        self._closure_cache = None
+        return True
+
+    def reopen_experiment_by_id(self, experiment_id: str) -> bool:
+        from src.learning.experiment_outcome import ClosureRefused, reopen_experiment
+
+        try:
+            reopen_experiment(self.experiment_store, experiment_id)
+        except ClosureRefused as exc:
+            self._notify("Reopen Experiment", str(exc))
+            return False
+        self._closure_cache = None
+        return True
+
+    def _on_close_current_experiment(self) -> None:
+        evidence = self._open_experiment_evidence()
+        if evidence is None:
+            return
+        experiment_id, payload, ratings = evidence
+        if not self.experiment_store.session_path_for(experiment_id).exists():
+            # The session is saved once its jobs are admitted; make sure the closure has a session to live in.
+            self._persist_learning_session_state()
+        self.close_experiment_by_id(experiment_id, payload, ratings)
+        self._refresh_outcome()
+
+    def _on_reopen_current_experiment(self) -> None:
+        evidence = self._open_experiment_evidence()
+        if evidence is None:
+            return
+        self.reopen_experiment_by_id(evidence[0])
+        self._refresh_outcome()
 
     def _build_store_payload(self) -> dict[str, Any] | None:
         if self.learning_controller.learning_state.current_experiment is None:
@@ -1291,19 +1447,30 @@ class LearningTabFrame(ttk.Frame):
         window = open_model_evidence(self)
         window.request_next_test(selected_model(baseline or {}, stage))
 
+    LIBRARY_FILTERS = ("Open", "Closed", "All")
+
     def _on_open_experiment_library(self) -> None:
-        all_handles = self.experiment_store.list_handles()
         window = tk.Toplevel(self)
         window.title("Learning Experiment Library")
-        window.geometry("980x480")
-        window.minsize(720, 300)
+        window.geometry("1180x480")
+        window.minsize(820, 300)
         window.columnconfigure(0, weight=1)
-        window.rowconfigure(0, weight=1)
-        columns = ("id", "variable", "stage", "status", "variants", "images", "review", "updated", "history")
+        window.rowconfigure(1, weight=1)
+        self.library_window = window
+        top = ttk.Frame(window, padding=(6, 6, 6, 0))
+        top.grid(row=0, column=0, columnspan=2, sticky="ew")
+        ttk.Label(top, text="Show:").pack(side="left")
+        self.library_filter_var = tk.StringVar(value="Open")
+        self.library_filter_box = ttk.Combobox(
+            top, textvariable=self.library_filter_var, values=self.LIBRARY_FILTERS, state="readonly", width=8
+        )
+        self.library_filter_box.pack(side="left", padx=(4, 0))
+        columns = ("id", "variable", "stage", "status", "outcome", "variants", "images", "review", "updated", "history")
         tree = ttk.Treeview(window, columns=columns, show="tree headings", selectmode="browse")
+        self.library_tree = tree
         tree.heading("#0", text="Experiment")
         headings = {
-            "id": "ID", "variable": "Variable", "stage": "Stage", "status": "Status",
+            "id": "ID", "variable": "Variable", "stage": "Stage", "status": "Status", "outcome": "Outcome",
             "variants": "Variants", "images": "Images", "review": "Review", "updated": "Updated",
             "history": "Job History",
         }
@@ -1311,43 +1478,18 @@ class LearningTabFrame(ttk.Frame):
             tree.heading(column, text=headings[column])
             tree.column(column, width=90, anchor="w")
         tree.column("#0", width=180)
+        tree.column("outcome", width=230)
         tree.column("history", width=260)
-        tree.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+        tree.grid(row=1, column=0, sticky="nsew", padx=6, pady=6)
         scrollbar = ttk.Scrollbar(window, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
-        scrollbar.grid(row=0, column=1, sticky="ns", pady=6)
-        handles = [
-            handle for handle in all_handles
-            if self._payload_has_admission(self.experiment_store.load_session(handle.experiment_id))
-        ]
-        from src.learning.library_status import has_open_jobs
-
-        to_check: list[tuple[str, dict[str, Any], int]] = []
-        for handle in handles:
-            payload = self.experiment_store.load_session(handle.experiment_id) or {}
-            experiment = dict(payload.get("current_experiment") or {})
-            plan = list(payload.get("plan") or [])
-            completed = sum(int(item.get("completed_images", 0) or 0) for item in plan if isinstance(item, dict))
-            total = sum(int(item.get("planned_images", 0) or 0) for item in plan if isinstance(item, dict))
-            ratings = self.learning_record_writer.get_ratings_for_experiment(handle.experiment_id)
-            from src.learning.experiment_lifecycle import classify_experiment_lifecycle
-
-            lifecycle = classify_experiment_lifecycle(
-                payload, saved_rating_count=len(ratings)
-            )
-            tree.insert(
-                "", "end", iid=handle.experiment_id, text=handle.display_name,
-                values=(handle.experiment_id[-8:], experiment.get("variable_under_test", ""),
-                        experiment.get("stage", ""), lifecycle,
-                        len(plan), f"{completed}/{total}", f"{len(ratings)}/{completed}",
-                        handle.updated_at.replace("T", " ")[:19],
-                        "Checking job history..." if has_open_jobs(payload) else ""),
-            )
-            if has_open_jobs(payload):
-                to_check.append((handle.experiment_id, payload, len(ratings)))
-        self._refresh_library_status(tree, to_check)
+        scrollbar.grid(row=1, column=1, sticky="ns", pady=6)
         actions = ttk.Frame(window, padding=6)
-        actions.grid(row=1, column=0, columnspan=2, sticky="ew")
+        actions.grid(row=2, column=0, columnspan=2, sticky="ew")
+
+        def _populate(_event: Any = None) -> None:
+            self._populate_library(tree)
+
         def _open_selected() -> None:
             selection = tree.selection()
             if not selection:
@@ -1355,9 +1497,109 @@ class LearningTabFrame(ttk.Frame):
             experiment_id = str(selection[0])
             if self._restore_from_store_payload(self.experiment_store.load_session(experiment_id), experiment_id=experiment_id):
                 window.destroy()
+
+        def _close_selected() -> None:
+            selection = tree.selection()
+            if selection and self.close_library_experiment(str(selection[0])):
+                _populate()
+
+        def _reopen_selected() -> None:
+            selection = tree.selection()
+            if selection and self.reopen_experiment_by_id(str(selection[0])):
+                _populate()
+
         ttk.Button(actions, text="Open / Review", command=_open_selected).pack(side="left")
+        self.library_close_button = ttk.Button(actions, text="Close Experiment", command=_close_selected)
+        self.library_close_button.pack(side="left", padx=(6, 0))
+        self.library_reopen_button = ttk.Button(actions, text="Reopen Experiment", command=_reopen_selected)
+        self.library_reopen_button.pack(side="left", padx=(4, 0))
         ttk.Button(actions, text="New Experiment", command=lambda: (self._on_new_experiment(), window.destroy())).pack(side="right")
         tree.bind("<Double-1>", lambda _event: _open_selected())
+        self.library_filter_box.bind("<<ComboboxSelected>>", _populate)
+        self._populate_library(tree)
+
+    def _populate_library(self, tree: Any) -> None:
+        """Fill the Library for the chosen Open / Closed / All filter; status and outcome fill in off the GUI thread."""
+        from src.learning.experiment_lifecycle import classify_experiment_lifecycle
+        from src.learning.experiment_outcome import closure_of
+        from src.learning.library_status import has_open_jobs
+
+        wanted = self.library_filter_var.get()
+        for item in tree.get_children():
+            tree.delete(item)
+        to_check: list[tuple[str, dict[str, Any], int]] = []
+        payloads: dict[str, dict[str, Any]] = {}
+        for handle in self.experiment_store.list_handles():
+            payload = self.experiment_store.load_session(handle.experiment_id)
+            if not self._payload_has_admission(payload):
+                continue
+            payload = payload or {}
+            closed = closure_of(payload) is not None
+            if (wanted == "Open" and closed) or (wanted == "Closed" and not closed):
+                continue
+            experiment = dict(payload.get("current_experiment") or {})
+            plan = list(payload.get("plan") or [])
+            completed = sum(int(item.get("completed_images", 0) or 0) for item in plan if isinstance(item, dict))
+            total = sum(int(item.get("planned_images", 0) or 0) for item in plan if isinstance(item, dict))
+            ratings = self.learning_record_writer.get_ratings_for_experiment(handle.experiment_id)
+            lifecycle = classify_experiment_lifecycle(payload, saved_rating_count=len(ratings))
+            tree.insert(
+                "", "end", iid=handle.experiment_id, text=handle.display_name,
+                values=(handle.experiment_id[-8:], experiment.get("variable_under_test", ""),
+                        experiment.get("stage", ""), lifecycle, "Checking...",
+                        len(plan), f"{completed}/{total}", f"{len(ratings)}/{completed}",
+                        handle.updated_at.replace("T", " ")[:19],
+                        "Checking job history..." if has_open_jobs(payload) else ""),
+            )
+            payloads[handle.experiment_id] = payload
+            if has_open_jobs(payload):
+                to_check.append((handle.experiment_id, payload, len(ratings)))
+        self._refresh_library_status(tree, to_check)
+        self._refresh_library_outcomes(tree, payloads)
+
+    def close_library_experiment(self, experiment_id: str) -> bool:
+        """Close one saved experiment from the Library: confirm, then record the closure block only."""
+        payload = self.experiment_store.load_session(experiment_id) or {}
+        ratings = self.learning_record_writer.get_rating_details_for_experiment(experiment_id)
+        return self.close_experiment_by_id(experiment_id, payload, ratings)
+
+    def _refresh_library_outcomes(self, tree: Any, payloads: dict[str, dict[str, Any]]) -> None:
+        """Derive each listed experiment's outcome from one read of the rating log, off the GUI thread."""
+        if not payloads:
+            return
+        import functools
+
+        from src.gui.ui_dispatcher import tk_dispatcher_for
+        from src.learning.library_status import library_outcomes
+        from src.utils.thread_registry import get_thread_registry
+
+        records_path = getattr(self.learning_record_writer, "records_path", None)
+        dispatcher = tk_dispatcher_for(tree)
+
+        def show(outcomes: dict[str, Any]) -> None:
+            try:
+                for experiment_id, outcome in outcomes.items():
+                    if tree.winfo_exists() and tree.exists(experiment_id):
+                        tree.set(experiment_id, "outcome", outcome.text)
+            except tk.TclError:  # the Library closed while the outcomes were derived
+                pass
+
+        def work() -> None:
+            try:
+                outcomes = library_outcomes(payloads, records_path)
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError):
+                _log.exception("Library outcome derivation failed")
+                outcomes = {}
+            dispatcher.invoke(functools.partial(show, outcomes))
+
+        try:
+            get_thread_registry().spawn(
+                target=work, name="learning-library-outcome", purpose="derive Library experiment outcomes"
+            )
+        except RuntimeError:
+            for experiment_id in payloads:
+                if tree.exists(experiment_id):
+                    tree.set(experiment_id, "outcome", "Outcome unavailable")
 
     def _refresh_library_status(self, tree: Any, to_check: list[tuple[str, dict[str, Any], int]]) -> None:
         """Read saved queued/running jobs by exact ID off the GUI thread; never saves, tracks or replays."""

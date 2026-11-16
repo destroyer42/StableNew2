@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.learning import study_catalog
 from src.learning.experiment_execution import thaw_snapshot
 from src.learning.experiment_store import LearningExperimentStore
 from src.learning.intelligence_contracts import digest
@@ -34,6 +35,9 @@ class RatingLog:
     rows: tuple[Mapping[str, Any], ...] = ()
     problems: tuple[str, ...] = ()
     revision: str = ""
+    #: Latest saved rating per image of the other cataloged studies (Model Comparison, grid, matrix). They only say which
+    #: images are rated; publication and preference evidence read ``rows`` alone.
+    study_rows: tuple[Mapping[str, Any], ...] = ()
 
 
 def rating_identity(row: Mapping[str, Any]) -> tuple[str, str, str] | None:
@@ -57,6 +61,8 @@ def read_rating_log(path: Path | None) -> RatingLog:
         return RatingLog(revision=digest(["no-rating-log"]))
     problems: list[str] = []
     latest: dict[tuple[str, str, str], Mapping[str, Any]] = {}
+    study_latest: dict[tuple[str, str, str], Mapping[str, Any]] = {}
+    study_kinds = study_catalog.rating_record_kinds() - {RATING_KIND}
     unidentified = damaged = 0
     try:
         if path.stat().st_size > MAX_LOG_BYTES:
@@ -78,13 +84,15 @@ def read_rating_log(path: Path | None) -> RatingLog:
                 if not isinstance(row, dict) or not isinstance(row.get("metadata"), dict):
                     damaged += 1
                     continue
-                if row["metadata"].get("record_kind") != RATING_KIND:
+                kind = row["metadata"].get("record_kind")
+                if kind != RATING_KIND and kind not in study_kinds:
                     continue
                 identity = rating_identity(row)
                 if identity is None:
                     unidentified += 1
                     continue
-                latest[identity] = row  # append order is the durable rating-replacement rule
+                # append order is the durable rating-replacement rule
+                (latest if kind == RATING_KIND else study_latest)[identity] = row
     except (OSError, UnicodeDecodeError) as exc:
         return RatingLog(
             problems=(f"Learning rating log could not be read ({type(exc).__name__}).",),
@@ -96,17 +104,25 @@ def read_rating_log(path: Path | None) -> RatingLog:
         problems.append(
             f"{unidentified} saved rating(s) lack a durable image identity and were not used."
         )
-    revision = digest(
-        {
-            "ratings": sorted(
-                [*ident, (row.get("metadata") or {}).get("user_rating")]
-                for ident, row in latest.items()
-            ),
-            "damaged": damaged,
-            "unidentified": unidentified,
-        }
+    revision_input: dict[str, Any] = {
+        "ratings": sorted(
+            [*ident, (row.get("metadata") or {}).get("user_rating")]
+            for ident, row in latest.items()
+        ),
+        "damaged": damaged,
+        "unidentified": unidentified,
+    }
+    if study_latest:  # absent when no such rating exists, so earlier revisions are unchanged
+        revision_input["study_ratings"] = sorted(
+            [*ident, (row.get("metadata") or {}).get("user_rating")]
+            for ident, row in study_latest.items()
+        )
+    return RatingLog(
+        tuple(latest.values()),
+        tuple(problems),
+        digest(revision_input),
+        tuple(study_latest.values()),
     )
-    return RatingLog(tuple(latest.values()), tuple(problems), revision)
 
 
 @dataclass(frozen=True)
@@ -134,6 +150,10 @@ class ExperimentView:
     fixed_digest: str
     prompt_context: str  # opaque; "" when the frozen snapshot carries no prompt
     variants: tuple[VariantView, ...]
+    #: (sha256, family) of every frozen model of a multi-model study (Model Comparison, Prompt x Model Matrix).
+    model_pairs: tuple[tuple[str, str], ...] = ()
+    #: The operator's closure block, when the saved session carries one.
+    closure: Mapping[str, Any] | None = None
 
     @property
     def images(self) -> tuple[tuple[str, str], ...]:
@@ -191,6 +211,26 @@ def _state(frozen: bool, variants: Iterable[VariantView]) -> str:
     return STATE_PREPARED
 
 
+def _model_pairs(snapshot: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    """Frozen (sha256, family) of each arm or model of a multi-model study; empty for single-model studies."""
+    items: list[Any] = []
+    for key, field in (("model_comparison", "arms"), ("prompt_model_matrix", "models")):
+        section = snapshot.get(key)
+        if isinstance(section, Mapping) and isinstance(section.get(field), list):
+            items.extend(section[field])
+    pairs = []
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        evidence = item.get("checkpoint_evidence")
+        context = item.get("model_policy_context")
+        sha = evidence.get("sha256") if isinstance(evidence, Mapping) else ""
+        family = context.get("family") if isinstance(context, Mapping) else ""
+        if isinstance(sha, str) and sha and isinstance(family, str):
+            pairs.append((sha, family))
+    return tuple(dict.fromkeys(pairs))
+
+
 def project_experiment(experiment_id: str, payload: Mapping[str, Any]) -> ExperimentView:
     current = payload.get("current_experiment")
     if not isinstance(current, dict):
@@ -203,6 +243,7 @@ def project_experiment(experiment_id: str, payload: Mapping[str, Any]) -> Experi
     identity = snapshot.get("model_identity") or proposal.get("identity") or {}
     variants = tuple(_variant(v) for v in (payload.get("plan") or []) if isinstance(v, dict))
     planning = proposal.get("planning_context") if isinstance(proposal, dict) else {}
+    closure = payload.get("closure")
     return ExperimentView(
         experiment_id=experiment_id,
         state=_state(bool(snapshot_json), variants),
@@ -218,6 +259,8 @@ def project_experiment(experiment_id: str, payload: Mapping[str, Any]) -> Experi
         fixed_digest=str((planning or {}).get("fixed_execution_digest") or ""),
         prompt_context=_prompt_context(snapshot),
         variants=variants,
+        model_pairs=_model_pairs(snapshot),
+        closure=closure if isinstance(closure, dict) and closure.get("closed_at") else None,
     )
 
 
@@ -263,6 +306,8 @@ def load_experiments(store: LearningExperimentStore | None) -> ExperimentLoad:
                     [x.variant_id, x.status, x.controlled, x.reason, list(x.image_refs)]
                     for x in v.variants
                 ],
+                # appended only for a closed experiment, so a library without closures keeps its revision
+                *([v.closure["closed_at"]] if v.closure else []),
             ]
             for v in views
         ]
