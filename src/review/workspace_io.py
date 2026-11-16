@@ -20,9 +20,10 @@ from PIL import Image
 from src.review.adetailer_outcome import AdetailerPair, resolve_adetailer_pair
 from src.review.review_evidence import file_sha256
 from src.utils.image_metadata import (
+    BASELINE_AS_SENT,
     extract_embedded_metadata,
     resolve_model_vae_fields,
-    resolve_prompt_fields,
+    resolve_rework_baseline,
 )
 
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp"})
@@ -89,6 +90,10 @@ class ImageContext:
     prior_summary_available: bool = False
     #: SHA-256 of the bytes Review is showing ("" when unreadable); a saved rating binds to it.
     artifact_sha256: str = ""
+    #: Whether ``prompt`` is the recorded original or, when none was recorded, the prompt as it was sent.
+    prompt_basis: str = BASELINE_AS_SENT
+    #: The embedded payload (``None`` when unreadable), so prompt provenance is projected without a second read.
+    payload: Any = None
 
 
 def load_image_context(
@@ -120,7 +125,8 @@ def load_image_context(
             prior_summary_available=available,
             artifact_sha256=digest,
         )
-    prompt, negative_prompt = resolve_prompt_fields(result.payload)
+    baseline = resolve_rework_baseline(result.payload)
+    prompt, negative_prompt = baseline.prompt, baseline.negative_prompt
     model, vae = resolve_model_vae_fields(result.payload)
     return ImageContext(
         path=path,
@@ -134,6 +140,8 @@ def load_image_context(
         prior_summary=summary,
         prior_summary_available=available,
         artifact_sha256=digest,
+        prompt_basis=baseline.prompt_basis,
+        payload=result.payload,
     )
 
 

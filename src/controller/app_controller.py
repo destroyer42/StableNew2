@@ -2032,7 +2032,7 @@ class AppController:
         from src.utils.image_metadata import (
             extract_embedded_metadata,
             resolve_model_vae_fields,
-            resolve_prompt_fields,
+            resolve_rework_baseline,
         )
 
         try:
@@ -2060,7 +2060,7 @@ class AppController:
             model_value = None
         if isinstance(vae_value, str) and vae_value.strip().lower() in {"unknown", "n/a"}:
             vae_value = None
-        prompt_value, negative_prompt_value = resolve_prompt_fields(payload)
+        prompt_value, negative_prompt_value = resolve_rework_baseline(payload)[:2]
 
         return {
             "stage": str(stage_manifest.get("stage") or payload.get("stage") or "unknown"),

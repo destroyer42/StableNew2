@@ -32,6 +32,8 @@ DISPOSITION_KIND = "review_disposition"
 #: Distinct from ``RATING_SOURCE`` so rating listing and "Undo Last Save" never mistake a disposition for a rating.
 DISPOSITION_SOURCE = "review_tab_disposition"
 DISPOSITIONS = ("retain", "discard", "rework")
+#: Written by Undo: the latest row for the bytes then says "no decision", so the image is to be reviewed again.
+DISPOSITION_CLEARED = "cleared"
 
 #: The record names the bytes that were reviewed and the file currently has those bytes.
 IDENTITY_DIGEST = "digest"
@@ -184,7 +186,7 @@ def build_disposition_record(
     """Build a Retain / Discard / Re-work record bound to the image bytes (nothing is written or moved)."""
 
     value = str(disposition or "").strip().lower()
-    if value not in DISPOSITIONS:
+    if value not in (*DISPOSITIONS, DISPOSITION_CLEARED):
         raise ValueError(f"disposition must be one of {', '.join(DISPOSITIONS)}")
     path_text = str(image_path or "").strip()
     if not path_text:
@@ -244,6 +246,26 @@ class EvidenceLookup:
     identity: str = ""
 
 
+def _path_key(value: Any) -> str:
+    text = str(value or "").strip()
+    return os.path.normcase(str(Path(text))) if text else ""
+
+
+def _pick(
+    by_digest: dict[str, Any] | None, by_path: dict[str, Any] | None, digest: str
+) -> EvidenceLookup:
+    """Digest match first, then path; a path row recorded for different bytes is reported as changed."""
+
+    if by_digest is not None:
+        return EvidenceLookup(by_digest, IDENTITY_DIGEST)
+    if by_path is None:
+        return EvidenceLookup()
+    recorded = normalize_digest(by_path["metadata"].get("artifact_sha256"))
+    if digest and recorded and recorded != digest:
+        return EvidenceLookup(by_path, IDENTITY_CHANGED)
+    return EvidenceLookup(by_path, IDENTITY_PATH)
+
+
 def _lookup(
     records_path: Path, source: str, image_path: str, artifact_sha256: str | None
 ) -> EvidenceLookup:
@@ -261,14 +283,7 @@ def _lookup(
             by_digest = payload
         if _same_path(metadata.get("image_path"), image_path):
             by_path = payload
-    if by_digest is not None:
-        return EvidenceLookup(by_digest, IDENTITY_DIGEST)
-    if by_path is None:
-        return EvidenceLookup()
-    recorded = normalize_digest(by_path["metadata"].get("artifact_sha256"))
-    if digest and recorded and recorded != digest:
-        return EvidenceLookup(by_path, IDENTITY_CHANGED)
-    return EvidenceLookup(by_path, IDENTITY_PATH)
+    return _pick(by_digest, by_path, digest)
 
 
 def lookup_rating(
@@ -299,7 +314,12 @@ def lookup_disposition(
     A decision recorded for different bytes is reported with ``identity="changed"`` and is not applied.
     """
 
-    found = _lookup(Path(records_path), DISPOSITION_SOURCE, str(image_path), artifact_sha256)
+    return _disposition_of(
+        _lookup(Path(records_path), DISPOSITION_SOURCE, str(image_path), artifact_sha256)
+    )
+
+
+def _disposition_of(found: EvidenceLookup) -> DispositionLookup:
     if found.row is None:
         return DispositionLookup()
     metadata = found.row["metadata"]
@@ -310,6 +330,56 @@ def lookup_disposition(
         timestamp=str(found.row.get("timestamp") or ""),
         run_id=str(found.row.get("run_id") or ""),
     )
+
+
+class EvidenceIndex:
+    """One pass over the records file: the latest rating and disposition row by digest and by path.
+
+    Opening a set of images asks the same question for every image, so the file is read once rather than once per
+    image. ``rating`` and ``disposition`` answer exactly as ``lookup_rating`` and ``lookup_disposition`` do.
+    """
+
+    def __init__(self) -> None:
+        self._by_digest: dict[str, dict[str, dict[str, Any]]] = {
+            RATING_SOURCE: {},
+            DISPOSITION_SOURCE: {},
+        }
+        self._by_path: dict[str, dict[str, dict[str, Any]]] = {
+            RATING_SOURCE: {},
+            DISPOSITION_SOURCE: {},
+        }
+
+    @classmethod
+    def read(cls, records_path: str | os.PathLike[str] | None) -> EvidenceIndex:
+        index = cls()
+        if records_path is None:
+            return index
+        for payload in _iter_rows(Path(records_path)):
+            metadata = payload["metadata"]
+            source = metadata.get("source")
+            if source not in index._by_digest:
+                continue
+            recorded = normalize_digest(metadata.get("artifact_sha256"))
+            if recorded:
+                index._by_digest[source][recorded] = payload
+            key = _path_key(metadata.get("image_path"))
+            if key:
+                index._by_path[source][key] = payload
+        return index
+
+    def _find(self, source: str, image_path: Any, artifact_sha256: str | None) -> EvidenceLookup:
+        digest = normalize_digest(artifact_sha256)
+        return _pick(
+            self._by_digest[source].get(digest) if digest else None,
+            self._by_path[source].get(_path_key(image_path)),
+            digest,
+        )
+
+    def rating(self, image_path: Any, artifact_sha256: str | None) -> EvidenceLookup:
+        return self._find(RATING_SOURCE, image_path, artifact_sha256)
+
+    def disposition(self, image_path: Any, artifact_sha256: str | None) -> DispositionLookup:
+        return _disposition_of(self._find(DISPOSITION_SOURCE, image_path, artifact_sha256))
 
 
 def summary_from_row(row: Mapping[str, Any], identity: str) -> PortableReviewSummary:
@@ -394,9 +464,11 @@ def write_rating_into_file(
 
 __all__ = [
     "DISPOSITIONS",
+    "DISPOSITION_CLEARED",
     "DISPOSITION_KIND",
     "DISPOSITION_SOURCE",
     "DispositionLookup",
+    "EvidenceIndex",
     "EvidenceLookup",
     "IDENTITY_CHANGED",
     "IDENTITY_DIGEST",

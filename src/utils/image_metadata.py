@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from PIL import Image, PngImagePlugin
 
@@ -604,6 +604,50 @@ def resolve_prompt_fields(metadata_payload: dict[str, Any] | None) -> tuple[str,
         payload.get("original_negative_prompt"),
     )
     return prompt, negative_prompt
+
+
+#: The re-work baseline is the prompt the operator's own pipeline run was authored with.
+BASELINE_ORIGINAL = "original"
+#: No original was recorded for the image, so the baseline is the prompt that was sent to the stage.
+BASELINE_AS_SENT = "as_sent"
+
+
+class ReworkBaseline(NamedTuple):
+    """The prompts a re-work starts from and where each one came from (``original`` or ``as_sent``).
+
+    A tuple so a caller that needs only the two prompts can unpack ``baseline[:2]``.
+    """
+
+    prompt: str
+    negative_prompt: str
+    prompt_basis: str
+    negative_basis: str
+
+
+def resolve_rework_baseline(metadata_payload: dict[str, Any] | None) -> ReworkBaseline:
+    """The recorded original prompts (``stage_manifest.original_*`` first, then ``generation.original_*``).
+
+    Every stage runs the prompt optimizer again on the prompt it is given, so re-working from the optimized
+    (``final``) prompt optimizes an already optimized prompt. An image with no recorded original falls back to the
+    prompt that was sent (``resolve_prompt_fields``), labelled ``as_sent`` so the operator can see which it is.
+    """
+
+    payload = metadata_payload if isinstance(metadata_payload, dict) else {}
+    stage_manifest = _dict_or_empty(payload.get("stage_manifest"))
+    generation = _dict_or_empty(payload.get("generation"))
+    as_sent, as_sent_negative = resolve_prompt_fields(payload)
+    original = _first_non_empty_string(
+        stage_manifest.get("original_prompt"), generation.get("original_prompt")
+    )
+    original_negative = _first_non_empty_string(
+        stage_manifest.get("original_negative_prompt"), generation.get("original_negative_prompt")
+    )
+    return ReworkBaseline(
+        prompt=original or as_sent,
+        negative_prompt=original_negative or as_sent_negative,
+        prompt_basis=BASELINE_ORIGINAL if original else BASELINE_AS_SENT,
+        negative_basis=BASELINE_ORIGINAL if original_negative else BASELINE_AS_SENT,
+    )
 
 
 def resolve_model_vae_fields(metadata_payload: dict[str, Any] | None) -> tuple[str, str]:
