@@ -47,8 +47,11 @@ class Workspace:
 
         def write(path, digest, job_id, disposition):
             save_disposition(
-                self.writer, image_path=path, disposition=disposition,
-                artifact_sha256=digest or None, source_job_id=job_id,
+                self.writer,
+                image_path=path,
+                disposition=disposition,
+                artifact_sha256=digest or None,
+                source_job_id=job_id,
             )
 
         self.session = ReviewWorkspaceSession(
@@ -82,12 +85,20 @@ def test_twelve_outputs_are_triaged_with_correct_counts_filters_and_untouched_fi
         assert session.decide(workspace.key(index), disposition)
 
     counts = session.counts()
-    assert (counts[ItemState.RETAINED], counts[ItemState.ARCHIVED], counts[ItemState.REWORK_MARKED]) == (5, 3, 4)
+    assert (
+        counts[ItemState.RETAINED],
+        counts[ItemState.ARCHIVED],
+        counts[ItemState.REWORK_MARKED],
+    ) == (5, 3, 4)
     assert counts[ItemState.TO_REVIEW] == 0
     assert session.counts_text() == "To review 0  Retained 5  Re-work 4  Archived 3"
     assert len(session.visible_items()) == 9  # the default view hides what was archived
     session.set_filter(ViewFilter.ARCHIVED)
-    assert [item.name for item in session.visible_items()] == ["img_05.png", "img_06.png", "img_07.png"]
+    assert [item.name for item in session.visible_items()] == [
+        "img_05.png",
+        "img_06.png",
+        "img_07.png",
+    ]
     session.set_filter(ViewFilter.REWORK)
     assert len(session.visible_items()) == 4
     assert _fingerprint(workspace.images) == before  # no size, mtime or SHA-256 changed
@@ -133,10 +144,17 @@ def test_decisions_survive_a_new_session_and_undo_records_the_earlier_decision(t
     second.session.set_items(first.images)  # a new session over the same records
     assert second.session.state_of(first.key(1)) is ItemState.REWORK_MARKED
     assert second.session.state_of(first.key(0)) is ItemState.TO_REVIEW
-    assert lookup_disposition(first.writer.records_path, first.images[1], _sha(first.images[1])).disposition == "rework"
+    assert (
+        lookup_disposition(
+            first.writer.records_path, first.images[1], _sha(first.images[1])
+        ).disposition
+        == "rework"
+    )
 
 
-def test_a_file_replaced_after_it_was_reviewed_is_changed_and_a_failed_write_changes_nothing(workspace):
+def test_a_file_replaced_after_it_was_reviewed_is_changed_and_a_failed_write_changes_nothing(
+    workspace,
+):
     session = workspace.session
     session.set_items(workspace.images[:2])
     session.decide(workspace.key(0), "retain")
@@ -211,11 +229,16 @@ def test_a_decision_on_an_image_with_a_pending_write_is_refused(tmp_path):
     registry.run_all()
 
     assert session.decide(workspace.key(0), "retain")
-    assert session.state_of(workspace.key(0)) is ItemState.RETAINED  # shown at once, saved by the worker
+    assert (
+        session.state_of(workspace.key(0)) is ItemState.RETAINED
+    )  # shown at once, saved by the worker
     assert not session.decide(workspace.key(0), "discard")
     assert "still being saved" in session.message
     registry.run_all()
-    assert lookup_disposition(workspace.writer.records_path, workspace.images[0], None).disposition == "retain"
+    assert (
+        lookup_disposition(workspace.writer.records_path, workspace.images[0], None).disposition
+        == "retain"
+    )
 
 
 def test_without_evidence_the_decision_actions_are_disabled_with_a_reason(tmp_path):
@@ -235,7 +258,9 @@ def _lineage_workspace(tmp_path):
 
 
 def _child(job_id, source, *, digest=None, parent_job=None):
-    record = review_njr(job_id, f"batch-{job_id}", source=source, artifact_sha256=digest, source_count=1)
+    record = review_njr(
+        job_id, f"batch-{job_id}", source=source, artifact_sha256=digest, source_count=1
+    )
     if parent_job:
         record = replace(record, source=replace(record.source, parent_job_id=parent_job))
     return record
@@ -244,9 +269,14 @@ def _child(job_id, source, *, digest=None, parent_job=None):
 def _result(output):
     return {
         "success": True,
-        "artifact": {"stage": "img2img", "artifact_type": "image", "primary_path": str(output),
-                     "output_paths": [str(output)]},
-        "variants": [], "metadata": {},
+        "artifact": {
+            "stage": "img2img",
+            "artifact_type": "image",
+            "primary_path": str(output),
+            "output_paths": [str(output)],
+        },
+        "variants": [],
+        "metadata": {},
     }
 
 
@@ -257,22 +287,32 @@ def test_queued_failed_and_returned_states_come_from_the_repository_and_survive_
     for index in range(3):
         session.decide(workspace.key(index), "rework")
     outputs = [image_file(tmp_path / "out" / f"child_{i}.png", 100 + i) for i in range(3)]
-    admit(stack, [
-        _child(f"c{i}", workspace.images[i], digest=_sha(workspace.images[i])) for i in range(3)
-    ])
+    admit(
+        stack,
+        [_child(f"c{i}", workspace.images[i], digest=_sha(workspace.images[i])) for i in range(3)],
+    )
 
     session.refresh()
     assert {session.state_of(workspace.key(i)) for i in range(3)} == {ItemState.REWORK_QUEUED}
     assert not session.rework_scope()  # already queued: not offered again
     assert "3 already queued" in session.scope_line()
 
-    settle_fifo(stack, {1: "failed"}, error="backend refused", results={0: _result(outputs[0]), 2: _result(outputs[2])})
+    settle_fifo(
+        stack,
+        {1: "failed"},
+        error="backend refused",
+        results={0: _result(outputs[0]), 2: _result(outputs[2])},
+    )
     session.refresh()
-    assert session.state_of(workspace.key(0)) is ItemState.REWORK_MARKED  # finished: its result returned
+    # A finished source awaits a decision (its result is back); only the failed one is offered again.
+    assert session.state_of(workspace.key(0)) is ItemState.RETURNED
     assert session.state_of(workspace.key(1)) is ItemState.REWORK_FAILED
-    assert [item.key for item in session.rework_scope()] == [workspace.key(0), workspace.key(1), workspace.key(2)]
+    assert session.state_of(workspace.key(2)) is ItemState.RETURNED
+    assert [item.key for item in session.rework_scope()] == [workspace.key(1)]
     rows = session.returned_rows()
-    assert [(row.source_name, row.path.name, row.relation, row.state, row.in_set) for row in rows] == [
+    assert [
+        (row.source_name, row.path.name, row.relation, row.state, row.in_set) for row in rows
+    ] == [
         ("img_00.png", "child_0.png", "verified", ItemState.RETURNED, False),
         ("img_02.png", "child_2.png", "verified", ItemState.RETURNED, False),
     ]
@@ -280,14 +320,35 @@ def test_queued_failed_and_returned_states_come_from_the_repository_and_survive_
     # A restart: a new session over the same records and repository re-derives the same states.
     reopened = stack.reopen()
     again = ReviewWorkspaceSession(
-        runner=_inline(), records_path=lambda: workspace.writer.records_path,
+        runner=_inline(),
+        records_path=lambda: workspace.writer.records_path,
         repository=lambda: reopened.repository,
     )
     again.set_items(workspace.images)
     assert [again.state_of(workspace.key(i)) for i in range(3)] == [
-        ItemState.REWORK_MARKED, ItemState.REWORK_FAILED, ItemState.REWORK_MARKED,
+        ItemState.RETURNED,
+        ItemState.REWORK_FAILED,
+        ItemState.RETURNED,
     ]
     assert len(again.returned_rows()) == 2
+
+
+def test_marking_a_returned_source_again_puts_it_back_in_scope_only_for_newer_work(tmp_path):
+    stack, workspace = _lineage_workspace(tmp_path)
+    session = workspace.session
+    session.set_items(workspace.images[:1])
+    key = workspace.key(0)
+    session.decide(key, "rework")
+    output = image_file(tmp_path / "out" / "child.png", 160)
+    admit(stack, [_child("c0", workspace.images[0], digest=_sha(workspace.images[0]))])
+    settle_fifo(stack, result=_result(output))
+    session.refresh()
+    assert session.state_of(key) is ItemState.RETURNED and not session.rework_scope()
+
+    session.decide(key, "rework")  # a newer mark: the finished job belongs to the earlier one
+    session.refresh()
+    assert session.state_of(key) is ItemState.REWORK_MARKED
+    assert [item.key for item in session.rework_scope()] == [key]
 
 
 def test_returned_output_added_to_the_set_is_returned_until_it_is_decided(tmp_path):

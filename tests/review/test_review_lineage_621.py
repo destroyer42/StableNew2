@@ -71,9 +71,7 @@ def test_verified_children_are_found_by_digest_with_outputs_and_batch(stack, tmp
     admit(stack, [_child("child-1", "batch-a", source=source, digest=_digest(source))])
     settle_fifo(stack, result=_result(output))
 
-    found = find_review_children(
-        stack.repository, [LineageSource("k1", _digest(source), "")]
-    )
+    found = find_review_children(stack.repository, [LineageSource("k1", _digest(source), "")])
 
     (child,) = found.children_of("k1")
     assert child.relation == VERIFIED and child.verified
@@ -85,13 +83,18 @@ def test_verified_children_are_found_by_digest_with_outputs_and_batch(stack, tmp
     assert found.of_batch("other") == ()
 
 
-def test_a_job_only_claim_is_labelled_unverified_and_a_foreign_digest_is_not_a_child(stack, tmp_path):
+def test_a_job_only_claim_is_labelled_unverified_and_a_foreign_digest_is_not_a_child(
+    stack, tmp_path
+):
     source = image_file(tmp_path / "source.png", 1)
     other = image_file(tmp_path / "other.png", 9)
-    admit(stack, [
-        _child("job-only", "b1", source=source, parent_job="parent-job"),
-        _child("sibling", "b2", source=source, digest=_digest(other), parent_job="parent-job"),
-    ])
+    admit(
+        stack,
+        [
+            _child("job-only", "b1", source=source, parent_job="parent-job"),
+            _child("sibling", "b2", source=source, digest=_digest(other), parent_job="parent-job"),
+        ],
+    )
 
     found = find_review_children(
         stack.repository, [LineageSource("k1", _digest(source), "parent-job")]
@@ -169,7 +172,10 @@ def test_baseline_without_an_original_is_the_prompt_as_sent_and_says_so():
 
 def test_stage_original_wins_over_the_generation_original_and_negatives_resolve_alike():
     payload = {
-        "generation": {"original_prompt": "generation original", "original_negative_prompt": "gen neg"},
+        "generation": {
+            "original_prompt": "generation original",
+            "original_negative_prompt": "gen neg",
+        },
         "stage_manifest": {
             "original_prompt": "stage original",
             "final_prompt": "optimized",
@@ -192,7 +198,11 @@ def test_provenance_shows_each_stage_marks_missing_values_and_names_the_baseline
         "stage_history": [
             {"stage": "txt2img", "original_prompt": "fox", "final_prompt": "fox, masterpiece"},
         ],
-        "stage_manifest": {"stage": "adetailer", "original_prompt": "face", "final_prompt": "face, detailed"},
+        "stage_manifest": {
+            "stage": "adetailer",
+            "original_prompt": "face",
+            "final_prompt": "face, detailed",
+        },
     }
 
     view = project_effective_prompts(payload)
@@ -202,7 +212,9 @@ def test_provenance_shows_each_stage_marks_missing_values_and_names_the_baseline
     assert view.adetailer is not None and view.adetailer.final == "face, detailed"
     assert view.baseline_basis == BASELINE_ORIGINAL and "original prompt" in text
     assert "final:    fox, masterpiece" in text
-    assert NOT_RECORDED in text  # the txt2img entry recorded no negative prompts... and the missing ones say so
+    assert (
+        NOT_RECORDED in text
+    )  # the txt2img entry recorded no negative prompts... and the missing ones say so
 
 
 def test_provenance_marks_adetailer_and_everything_else_not_recorded_when_absent():

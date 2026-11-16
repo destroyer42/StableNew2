@@ -30,6 +30,7 @@ from src.review.assist.contracts import (
 from src.review.assist.geometry import image_to_canvas
 from src.review.assist.providers import availability_from
 from src.review.assist.session import AssistEnablement, AssistSession
+from tests.gui_v2.edit_work_helpers import single_tool_review
 from tests.pipeline.test_inpaint300 import png
 
 MODEL = ModelIdentity(CAPABILITY_SEGMENT, "sam-2-1-small", "local child process, CPU")
@@ -668,14 +669,19 @@ def test_review_tab_has_a_smart_review_button_and_it_opens_one_still_image_only(
         lambda *a, **k: warnings.append(a),
     )
     text = __import__("tkinter").Text(tk_root)
-    review = SimpleNamespace(
-        _get_selected_review_paths=lambda: [source_path],
-        app_controller=object(),
+    review = single_tool_review(
+        [source_path],
         _smart_enablement=None,
         prompt_text=text,
         _refresh_prompt_diff=lambda: None,
         _content_visibility_mode="sfw",
     )
+    extras = {
+        k: v
+        for k, v in vars(review).items()
+        if k.startswith("_smart")
+        or k in ("prompt_text", "_refresh_prompt_diff", "_content_visibility_mode")
+    }
     ReviewTabFrame._open_smart_review(review)
     ReviewTabFrame._open_smart_review(review)
     assert [item["source_path"] for item in opened] == [source_path, source_path]
@@ -691,13 +697,13 @@ def test_review_tab_has_a_smart_review_button_and_it_opens_one_still_image_only(
     assert isinstance(draft, TextDraft)
     draft.set("hello")
     assert draft.get() == "hello"
-    review._get_selected_review_paths = lambda: [source_path, source_path]
-    ReviewTabFrame._open_smart_review(review)
-    review._get_selected_review_paths = lambda: [source_path.with_suffix(".gif")]
-    ReviewTabFrame._open_smart_review(review)
-    review._get_selected_review_paths = lambda: [source_path]
-    review.app_controller = None
-    ReviewTabFrame._open_smart_review(review)
+    for paths, controller in (
+        ([source_path, source_path], object()),
+        ([source_path.with_suffix(".gif")], object()),
+        ([source_path], None),
+    ):
+        other = single_tool_review(paths, app_controller=controller, **extras)
+        ReviewTabFrame._open_smart_review(other)
     assert len(opened) == 2 and len(warnings) == 3
 
 

@@ -19,9 +19,11 @@ from src.controller.app_controller_services.background_task_coordinator import (
 from src.controller.job_service import JobService
 from src.controller.review_batch_service import prepare_review_batch
 from src.gui.review_batch_dialog import ReviewBatchDialog
+from src.gui.view_contracts.review_workspace_contract import item_key
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.image_backends.forge_zimage_profile import ZIMAGE_PROFILE_V1
 from src.image_backends.operation_compatibility import OperationNotSupportedError
+from src.learning.learning_record import LearningRecordWriter
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.queue.job_model import JobStatus
@@ -78,6 +80,17 @@ def images(tmp_path, count, *, incompatible=False):
     return paths
 
 
+def mark_for_rework(tab, tmp_path, paths):
+    """PR-REVIEW-LIFECYCLE-621: Re-work acts on the marked images; the mark is a Learning evidence decision."""
+    writer = LearningRecordWriter(tmp_path / "evidence.jsonl")
+    tab._resolve_evidence_writer = lambda: writer
+    tab._set_selected_images(paths)
+    tab._bind_writer()
+    for path in paths:
+        assert tab._session.decide(item_key(path), "rework")
+    assert len(tab._session.rework_scope()) == len(paths)
+
+
 def prepare(controller, paths, **options):
     return prepare_review_batch(controller, image_paths=[str(path) for path in paths], stages=["img2img"],
         fallback_config=controller._build_reprocess_config(["img2img"]),
@@ -89,11 +102,11 @@ def test_whole_selection_preview_maps_sources_and_admits_exact_jobs(workflow, tm
     controller, repository, tab = workflow
     paths = images(tmp_path, count)
     original = [path.read_bytes() for path in paths]
-    tab._set_selected_images(paths)
+    mark_for_rework(tab, tmp_path, paths)
     tab.stage_adetailer_var.set(False)
     tab.stage_img2img_var.set(True)
     tab.prompt_text.insert("1.0", "shared instruction")
-    tab._reprocess(batch_all=True)
+    tab._start_rework()
     dialog = next(child for child in tab.winfo_children() if isinstance(child, ReviewBatchDialog))
     preview = dialog.preview
     assert len(dialog.rows.get_children()) == count

@@ -19,12 +19,18 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
-from src.controller.batch_output_resolution import resolve_job_outputs
-from src.queue.batch_membership import BatchKey, BatchKind, MembershipState, resolve_batch_membership
+from src.controller.batch_output_resolution import OutputResolution, resolve_job_outputs
+from src.queue.batch_membership import (
+    BatchKey,
+    BatchKind,
+    MembershipState,
+    resolve_batch_membership,
+)
 from src.queue.batch_projection import (
     BatchJobView,
     BatchSummary,
     StatusCounts,
+    collect_artifact_refs,
     derive_aggregate_state,
     job_view_from_row,
     snapshot_metadata,
@@ -144,20 +150,14 @@ def _failure_text(job: BatchJobView) -> str:
     return job.failure.label or "failed"
 
 
-def _outputs(views: Sequence[BatchJobView]) -> dict[str, tuple[str, ...]]:
-    """Image outputs of finished jobs through the existing resolver (result artifacts only, never checkpoints)."""
+def _summary_of(jobs: Sequence[BatchJobView]) -> BatchSummary:
+    """A plain container for ``resolve_job_outputs``: it only looks jobs up by id."""
 
-    if not views:
-        return {}
-    trimmed = tuple(
-        replace(job, artifacts=tuple(ref for ref in job.artifacts if ref.origin == "result"))
-        for job in views
-    )
-    counts = StatusCounts.of(job.status for job in trimmed)
-    created = min(job.created_at for job in trimmed)
-    summary = BatchSummary(
+    counts = StatusCounts.of(job.status for job in jobs)
+    created = min(job.created_at for job in jobs)
+    return BatchSummary(
         key=_LINEAGE_KEY,
-        jobs=trimmed,
+        jobs=tuple(jobs),
         counts=counts,
         state=derive_aggregate_state(counts),
         declared_source_count=None,
@@ -171,9 +171,51 @@ def _outputs(views: Sequence[BatchJobView]) -> dict[str, tuple[str, ...]]:
         conflicting=False,
         notes=(),
     )
-    return {
-        job.job_id: tuple(resolve_job_outputs(summary, [job.job_id]).images) for job in trimmed
-    }
+
+
+def _outputs(views: Sequence[BatchJobView]) -> dict[str, tuple[str, ...]]:
+    """Image outputs of finished jobs through the existing resolver (result artifacts only, never checkpoints)."""
+
+    if not views:
+        return {}
+    trimmed = tuple(
+        replace(job, artifacts=tuple(ref for ref in job.artifacts if ref.origin == "result"))
+        for job in views
+    )
+    summary = _summary_of(trimmed)
+    return {job.job_id: tuple(resolve_job_outputs(summary, [job.job_id]).images) for job in trimmed}
+
+
+def resolve_result_images(
+    job_id: str, status: JobStatus, created_at: datetime, result: Mapping[str, Any] | None
+) -> OutputResolution:
+    """Existing, readable image outputs of one recorded job (Open > Recent job), by the existing resolver."""
+
+    view = BatchJobView(
+        job_id=job_id,
+        key=_LINEAGE_KEY,
+        status=status,
+        priority=0,
+        queue_order=0,
+        cursor=0,
+        created_at=created_at,
+        started_at=None,
+        completed_at=None,
+        source_index=None,
+        workload_kind="image",
+        source_paths=(),
+        source_label="",
+        model_label="",
+        held_by_webui=False,
+        failure=None,
+        artifacts=tuple(
+            ref for ref in collect_artifact_refs(dict(result or {})) if ref.origin == "result"
+        ),
+        checkpoints=(),
+        parent_job_id=None,
+        replay_origin=None,
+    )
+    return resolve_job_outputs(_summary_of([view]), [job_id])
 
 
 def find_review_children(
@@ -240,4 +282,5 @@ __all__ = [
     "VERIFIED_NOTE",
     "find_review_children",
     "repository_of",
+    "resolve_result_images",
 ]

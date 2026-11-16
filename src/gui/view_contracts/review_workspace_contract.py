@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -125,6 +126,24 @@ class ItemFacts:
     rating: int | None = None
     children: tuple[ReviewChild, ...] = ()
     loaded: bool = False
+    #: When the decision was recorded (UTC, naive), so a re-work finished *before* a newer mark is not counted for it.
+    decided_at: datetime | None = None
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _parse_stamp(*values: str) -> datetime | None:
+    """The first parsable UTC stamp (sub-second ``decided_at`` first, the record's whole-second timestamp after)."""
+
+    for value in values:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except (TypeError, ValueError):
+            continue
+        return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+    return None
 
 
 @dataclass(frozen=True)
@@ -175,9 +194,17 @@ def derive_state(facts: ItemFacts, *, returned: bool = False) -> ItemState:
     if disposition in ("", "rework") and any(child.active for child in facts.children):
         return ItemState.REWORK_QUEUED
     if disposition == "rework":
-        latest = max(facts.children, key=lambda child: child.created_at, default=None)
+        since = [
+            child
+            for child in facts.children
+            if facts.decided_at is None or child.created_at > facts.decided_at
+        ]
+        latest = max(since, key=lambda child: child.created_at, default=None)
         if latest is not None and latest.status is JobStatus.FAILED:
             return ItemState.REWORK_FAILED
+        if latest is not None and latest.status is JobStatus.COMPLETED:
+            # Its re-work is back: the source awaits a decision (and is no longer in the re-work scope).
+            return ItemState.RETURNED
         return ItemState.REWORK_MARKED
     return ItemState.RETURNED if returned else ItemState.TO_REVIEW
 
@@ -189,9 +216,7 @@ def _embedded_job_id(path: Path) -> str:
         return ""
 
 
-def _facts_for(
-    path: Path, index: EvidenceIndex, *, loaded: bool = True
-) -> tuple[ItemFacts, str]:
+def _facts_for(path: Path, index: EvidenceIndex, *, loaded: bool = True) -> tuple[ItemFacts, str]:
     digest = file_sha256(path) or ""
     decision = index.disposition(path, digest or None)
     rating = index.rating(path, digest or None)
@@ -211,6 +236,7 @@ def _facts_for(
             identity=decision.identity,
             rating=value,
             loaded=loaded,
+            decided_at=_parse_stamp(decision.decided_at, decision.timestamp),
         ),
         digest,
     )
@@ -305,7 +331,9 @@ class ReviewWorkspaceSession:
         self._add(paths)
         self.refresh()
 
-    def add_items(self, paths: Sequence[str | os.PathLike[str]], *, after: str | None = None) -> list[str]:
+    def add_items(
+        self, paths: Sequence[str | os.PathLike[str]], *, after: str | None = None
+    ) -> list[str]:
         """Add images (a finished re-work output) to the set; those already present keep their place."""
 
         keys = self._add(paths, after=after)
@@ -355,8 +383,13 @@ class ReviewWorkspaceSession:
         facts = self.facts.get(key, ItemFacts())
         pending = self._pending.get(key)
         if pending is not None:
-            facts = replace(facts, disposition="" if pending == DISPOSITION_CLEARED else pending,
-                            identity="digest", loaded=True)
+            facts = replace(
+                facts,
+                disposition="" if pending == DISPOSITION_CLEARED else pending,
+                identity="digest",
+                loaded=True,
+                decided_at=_utc_now(),
+            )
         return facts
 
     def state_of(self, key: str) -> ItemState:
@@ -367,7 +400,7 @@ class ReviewWorkspaceSession:
 
     def counts(self) -> dict[ItemState, int]:
         returned = self._returned_keys()
-        found: dict[ItemState, int] = {state: 0 for state in ItemState}
+        found: dict[ItemState, int] = dict.fromkeys(ItemState, 0)
         for item in self.items:
             found[derive_state(self.facts_of(item.key), returned=item.key in returned)] += 1
         return found
@@ -445,15 +478,45 @@ class ReviewWorkspaceSession:
                 for output in child.outputs:
                     out_key = item_key(output)
                     # An output already in the set is decided there; otherwise by what was read for it.
-                    own = self.facts_of(out_key) if out_key in in_set else self.output_facts.get(out_key, ItemFacts())
+                    own = (
+                        self.facts_of(out_key)
+                        if out_key in in_set
+                        else self.output_facts.get(out_key, ItemFacts())
+                    )
                     state = derive_state(own, returned=True) if own.loaded else ItemState.RETURNED
                     rows.append(
                         ReturnedRow(
-                            item.key, item.name, Path(output), child.job_id, child.relation,
-                            state, out_key in in_set,
+                            item.key,
+                            item.name,
+                            Path(output),
+                            child.job_id,
+                            child.relation,
+                            state,
+                            out_key in in_set,
                         )
                     )
         return rows
+
+    def compare_partner(self, key: str | None) -> tuple[Path, str] | None:
+        """The image to compare ``key`` with: its latest returned result, else the source it came from.
+
+        Returns ``(path, relation)`` where ``relation`` is ``"returned"`` (the partner is this image's re-work
+        result) or ``"source"`` (the partner is the image this one was re-worked from); ``None`` when neither exists.
+        """
+
+        if key is None:
+            return None
+        children = [
+            c for c in self.facts_of(key).children if c.status is JobStatus.COMPLETED and c.outputs
+        ]
+        if children:
+            latest = max(children, key=lambda child: child.created_at)
+            return Path(latest.outputs[-1]), "returned"
+        for item in self.items:
+            for child in self.facts_of(item.key).children:
+                if any(item_key(output) == key for output in child.outputs):
+                    return item.path, "source"
+        return None
 
     # -- refresh -----------------------------------------------------------------------------------------
 
@@ -490,7 +553,9 @@ class ReviewWorkspaceSession:
             self.output_facts = dict(result.outputs)
             self.lineage_truncated = result.lineage_truncated
             if result.lineage_truncated:
-                self.message = "The lineage read limit was reached; some re-work results may be missing."
+                self.message = (
+                    "The lineage read limit was reached; some re-work results may be missing."
+                )
             self._changed()
 
         def failed(error: Exception) -> None:
@@ -513,13 +578,17 @@ class ReviewWorkspaceSession:
 
     def decide_state(self, key: str | None, disposition: str) -> ActionState:
         if self._write is None:
-            return ActionState(False, "Review decisions are unavailable: Learning evidence is not connected.")
+            return ActionState(
+                False, "Review decisions are unavailable: Learning evidence is not connected."
+            )
         item = self.item(key)
         if item is None:
             return ActionState(False, "Select an image first.")
         if key in self._pending:
             return ActionState(False, "The previous decision for this image is still being saved.")
-        return ActionState(True, f"Record {disposition} for {item.name}. The file is never changed.")
+        return ActionState(
+            True, f"Record {disposition} for {item.name}. The file is never changed."
+        )
 
     def decide(self, key: str | None, disposition: str) -> bool:
         gate = self.decide_state(key, disposition)
@@ -570,10 +639,13 @@ class ReviewWorkspaceSession:
                 disposition="" if disposition == DISPOSITION_CLEARED else disposition,
                 identity="digest",
                 loaded=True,
+                decided_at=_utc_now(),
             )
             if push_undo:
                 self._undo.append(
-                    UndoEntry(item.key, item.path, digest, job_id, before.disposition, before.identity)
+                    UndoEntry(
+                        item.key, item.path, digest, job_id, before.disposition, before.identity
+                    )
                 )
             self._changed()
 
@@ -641,7 +713,9 @@ class ReviewWorkspaceSession:
         scope = self.rework_scope()
         if not scope:
             return ActionState(False, "Mark one or more images for Re-work first.")
-        return ActionState(True, f"Preview, then queue {len(scope)} image(s) through the existing Review path.")
+        return ActionState(
+            True, f"Preview, then queue {len(scope)} image(s) through the existing Review path."
+        )
 
     def single_tool_state(self, current: str | None) -> ActionState:
         """Mask, canvas, Smart Review, Inspect & Improve and Klein work on exactly one image."""

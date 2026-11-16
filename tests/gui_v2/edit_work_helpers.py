@@ -88,3 +88,30 @@ def manual_runner(registry: ManualRegistry, *, alive: bool = True) -> EditWorkRu
         thread_registry=registry,  # type: ignore[arg-type]
     )
     return EditWorkRunner(coordinator, is_alive=lambda: alive)
+
+
+def single_tool_review(paths, *, app_controller=object(), **extra):
+    """A stand-in Review tab whose single-image tool gating is the real ``ReviewTabFrame`` logic over ``paths``.
+
+    ``paths`` is what the tool would act on (the marked image, or the one shown); more than one disables the tool,
+    exactly as ``ReviewWorkspaceSession.single_tool_state`` does when several images are marked for Re-work.
+    """
+
+    from types import SimpleNamespace
+
+    from src.gui.view_contracts.review_workspace_contract import ActionState
+    from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
+
+    class _Item(SimpleNamespace):
+        pass
+
+    session = SimpleNamespace(
+        single_tool_state=lambda _current: ActionState(len(paths) == 1, "stub reason"),
+        single_target=lambda _current: _Item(path=paths[0]) if len(paths) == 1 else None,
+    )
+    review = SimpleNamespace(
+        app_controller=app_controller, _session=session, _current_key=lambda: None, **extra
+    )
+    review._single_target_path = lambda: ReviewTabFrame._single_target_path(review)
+    review._single_tool_path = lambda title: ReviewTabFrame._single_tool_path(review, title)
+    return review

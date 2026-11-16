@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import tkinter as tk
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.controller.batch_operations_service import build_batch_operations_service
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.help_text.workflow_guidance_v2 import (
@@ -32,7 +33,17 @@ from src.gui.view_contracts.review_selection_contract import (
     ReviewSelectionRevisions,
     SelectionToken,
 )
+from src.gui.view_contracts.review_workspace_contract import (
+    FILTER_LABELS,
+    STATE_LABELS,
+    ItemState,
+    ReviewWorkspaceSession,
+    ViewFilter,
+    item_key,
+)
+from src.gui.views.review_set_picker import ReviewSetPicker
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
@@ -46,7 +57,15 @@ from src.review.adetailer_outcome import (
     build_review_context,
     resolve_adetailer_pair,
 )
+from src.review.effective_prompt import (
+    EffectivePromptView,
+    format_provenance,
+    project_effective_prompts,
+    redact_view,
+)
 from src.review.improvement_evidence import ImprovementPair
+from src.review.review_evidence import save_disposition
+from src.review.review_lineage import repository_of, resolve_result_images
 from src.review.workflow_adapter import (
     ReviewWorkflowAdapter,
     ReviewWorkspaceHandoff,
@@ -141,6 +160,12 @@ class ReviewTabFrame(ttk.Frame):
             self.prompt_adherence_rating_var,
         ):
             rating_var.trace_add("write", self._mark_rating_touched)
+        for outcome_var in (
+            self.adetailer_face_outcome_var,
+            self.adetailer_hands_outcome_var,
+            self.adetailer_outcome_note_var,
+        ):
+            outcome_var.trace_add("write", self._mark_rating_touched)
         self._compare_window: tk.Toplevel | None = None
         self._compare_canvas: tk.Canvas | None = None
         self._compare_photo: Any = None
@@ -160,6 +185,32 @@ class ReviewTabFrame(ttk.Frame):
         self._pending_overlay: tuple[ReviewWorkspaceHandoff, Path] | None = None
         self._edited_since_selection = False
         self._confirm_replace_hook: Any = None
+        # PR-REVIEW-LIFECYCLE-621: the logical workspace. Only decisions and ratings are stored (Learning evidence);
+        # job states are derived from the job repository every time they are read.
+        self._session = ReviewWorkspaceSession(
+            runner=self._work,
+            records_path=self._evidence_records_path,
+            repository=self._review_repository,
+            write_disposition=self._write_disposition,
+            on_change=self._on_session_changed,
+        )
+        self._row_texts: list[str] = []
+        self._undo_order: list[str] = []
+        self._returned_rows: list[Any] = []
+        self._set_picker: ReviewSetPicker | None = None
+        self.filter_var = tk.StringVar(value=FILTER_LABELS[ViewFilter.ACTIVE])
+        self._scope_var = tk.StringVar(value="")
+        self._rework_reason_var = tk.StringVar(value="")
+        self._single_note_var = tk.StringVar(value="")
+        self._baseline_note_var = tk.StringVar(value="")
+        self._returned_note_var = tk.StringVar(value="")
+        self._adetailer_enabled = False
+        self._adetailer_outcome_widgets: list[Any] = []
+        self._provenance_view: EffectivePromptView | None = None
+        self._writer: Any = None
+        self._poll_id: str | None = None
+        self._last_session_message = ""
+        self._batch_saves = 0
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
@@ -177,6 +228,7 @@ class ReviewTabFrame(ttk.Frame):
         self._build_header()
         self._build_body()
         self._build_controls()
+        self._build_returned()
 
         self.prompt_mode_var.trace_add("write", lambda *_: self._on_prompt_mode_changed())
         self.negative_mode_var.trace_add("write", lambda *_: self._on_negative_mode_changed())
@@ -193,6 +245,7 @@ class ReviewTabFrame(ttk.Frame):
         self._sync_edit_box_to_mode("negative")
         self.bind("<Map>", self._on_map, add="+")
         self._refresh_prompt_diff()
+        self._refresh_workspace_view()
         if self.app_state is not None and hasattr(self.app_state, "subscribe"):
             try:
                 self.app_state.subscribe(
@@ -204,74 +257,58 @@ class ReviewTabFrame(ttk.Frame):
         self.on_content_visibility_mode_changed(self._content_visibility_mode)
 
     def _build_header(self) -> None:
+        # The set bar: one Open menu, the state filter with its counts, and where hand-offs and messages land.
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
         header.grid(row=1, column=0, sticky="ew", padx=6, pady=(6, 4))
-        header.columnconfigure(6, weight=1)
+        header.columnconfigure(5, weight=1)
 
-        ttk.Button(
-            header,
-            text="Select Images",
-            style="Dark.TButton",
-            command=self._on_select_images,
-        ).grid(row=0, column=0, sticky="w", padx=(0, 6))
-
-        ttk.Button(
-            header,
-            text="Select Folder",
-            style="Dark.TButton",
-            command=self._on_select_folder,
-        ).grid(row=0, column=1, sticky="w", padx=(0, 6))
+        self.open_button = ttk.Menubutton(header, text="Open...")
+        self.open_menu = tk.Menu(self.open_button, tearoff=False)
+        self.open_menu.add_command(label="Folder...", command=self._on_select_folder)
+        self.open_menu.add_command(label="Files...", command=self._on_select_images)
+        self.open_menu.add_command(label="Recent job...", command=self._on_open_recent_job)
+        self.open_menu.add_command(label="Batch...", command=self._on_open_batch)
+        self.open_button.configure(menu=self.open_menu)
+        self.open_button.grid(row=0, column=0, sticky="w", padx=(0, 6))
+        attach_tooltip(
+            self.open_button,
+            "Open the images to review: a folder, files, the outputs of a recent job, or the outputs of a "
+            "Review or Video batch. Nothing is copied or changed.",
+        )
 
         ttk.Button(
             header,
             text="Clear",
             style="Dark.TButton",
             command=self._on_clear,
-        ).grid(row=0, column=2, sticky="w")
+        ).grid(row=0, column=1, sticky="w", padx=(0, 6))
 
-        self.import_selected_button = ttk.Button(
+        ttk.Label(header, text="Show", style="Dark.TLabel").grid(
+            row=0, column=2, sticky="e", padx=(6, 4)
+        )
+        self.filter_box = ttk.Combobox(
             header,
-            text="Import Selected to Learning",
-            style="Dark.TButton",
-            command=self._on_import_selected_to_staged_curation,
+            textvariable=self.filter_var,
+            values=list(FILTER_LABELS.values()),
+            state="readonly",
+            style="Dark.TCombobox",
+            width=10,
         )
-        self.import_selected_button.grid(row=0, column=3, sticky="w", padx=(6, 0))
-
-        self.import_recent_button = ttk.Button(
-            header,
-            text="Import Recent Job",
-            style="Dark.TButton",
-            command=self._on_open_history_import_picker,
-        )
-        self.import_recent_button.grid(row=0, column=4, sticky="w", padx=(6, 0))
-
-        self.send_video_button = ttk.Button(
-            header,
-            text="Make Video",
-            style="Dark.TButton",
-            command=self._on_send_selected_to_video_workflow,
-        )
-        self.send_video_button.grid(row=0, column=5, sticky="w", padx=(6, 0))
-
-        self.manage_photos_button = ttk.Button(
-            header,
-            text="Manage Selected Photos…",
-            style="Dark.TButton",
-            command=self._on_manage_selected_photos,
-        )
-        self.manage_photos_button.grid(row=0, column=6, sticky="w", padx=(6, 0))
-        attach_tooltip(
-            self.manage_photos_button,
-            "Offer the highlighted images to the Managed Photo Set (persistent per-photo settings and results). "
-            "Nothing is copied until you confirm there; Review keeps its selection and edits.",
-        )
+        self.filter_box.grid(row=0, column=3, sticky="w")
+        self.filter_box.bind("<<ComboboxSelected>>", self._on_filter_changed)
+        self.counts_label = ttk.Label(header, text="", style="Dark.TLabel")
+        self.counts_label.grid(row=0, column=4, sticky="w", padx=(10, 0))
 
         self.selection_label = ttk.Label(
             header,
             text="No images selected",
             style="Dark.TLabel",
         )
-        self.selection_label.grid(row=0, column=7, sticky="e")
+        self.selection_label.grid(row=0, column=5, sticky="e")
+        self.help_button = ttk.Button(
+            header, text="Help", style="Dark.TButton", command=self._toggle_help
+        )
+        self.help_button.grid(row=0, column=6, sticky="e", padx=(8, 0))
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
 
         self.workflow_hint_label = ttk.Label(
@@ -279,32 +316,26 @@ class ReviewTabFrame(ttk.Frame):
             text=self._default_workflow_hint,
             style="Dark.TLabel",
         )
-        self.workflow_hint_label.grid(row=1, column=0, columnspan=8, sticky="ew", pady=(6, 0))
+        self.workflow_hint_label.grid(row=1, column=0, columnspan=7, sticky="ew", pady=(6, 0))
         bind_wraplength(self.workflow_hint_label)
+        # One guidance panel, opened on demand (it used to stack under the hint and the overview).
         self.action_help_panel = ActionExplainerPanel(
             header,
             content=build_review_action_guidance(),
             app_state=self.app_state,
             wraplength=980,
         )
-        self.action_help_panel.grid(row=2, column=0, columnspan=8, sticky="ew", pady=(8, 0))
-        self.import_selected_tooltip = attach_tooltip(
-            self.import_selected_button,
-            "Move the selected reviewed images into Learning staged curation. This records them as evidence candidates; it does not queue a new reprocess job by itself.",
-        )
-        self.send_video_tooltip = attach_tooltip(
-            self.send_video_button,
-            "Make a video from the image highlighted in the Images list: it opens the Video Workflow tab with that "
-            "image loaded and the recommended workflow selected. Several highlighted images become batch sources. "
-            "This only transfers the selection; nothing is queued until you press Queue there.",
-        )
-        self.import_recent_tooltip = attach_tooltip(
-            self.import_recent_button,
-            "Open a recent history job and import its outputs into this Review workspace so you can inspect metadata or make deliberate edits.",
-        )
+        self.action_help_panel.grid(row=2, column=0, columnspan=7, sticky="ew", pady=(8, 0))
+        self.action_help_panel.grid_remove()
+
+    def _toggle_help(self) -> None:
+        if self.action_help_panel.winfo_manager():
+            self.action_help_panel.grid_remove()
+        else:
+            self.action_help_panel.grid()
 
     def _build_body(self) -> None:
-        # PR-GUI-100: preview/metadata and the edit/reprocess controls share one scrollable workspace so the
+        # PR-GUI-100: preview/metadata and the decision controls share one scrollable workspace so the
         # ~620 px preview keeps its size and the controls below it stay reachable on short screens.
         self._workspace_scroll = ScrollableFrame(self, style="Panel.TFrame")
         self._workspace_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=4)
@@ -335,55 +366,82 @@ class ReviewTabFrame(ttk.Frame):
         style_listbox_widget(self.images_list)
         self.images_list.grid(row=0, column=0, sticky="nsew")
         self.images_list.bind("<<ListboxSelect>>", self._on_image_select)
+        # Keyboard triage: R retains, D discards, W marks for Re-work, U undoes; the next undecided image is shown.
+        for sequence, disposition in (
+            ("r", "retain"),
+            ("d", "discard"),
+            ("w", "rework"),
+            ("u", "undo"),
+        ):
+            handler = self._decision_key_handler(disposition)
+            for key in (sequence, sequence.upper()):
+                self.images_list.bind(f"<Key-{key}>", handler)
 
         list_scroll = ttk.Scrollbar(left, orient="vertical", command=self.images_list.yview)
         list_scroll.grid(row=0, column=1, sticky="ns")
         self.images_list.configure(yscrollcommand=list_scroll.set)
 
-        right = ttk.LabelFrame(body, text="Preview & Metadata", style="Dark.TLabelframe", padding=8)
+        right = ttk.LabelFrame(body, text="Review", style="Dark.TLabelframe", padding=8)
         right.grid(row=0, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
 
-        preview_actions = ttk.Frame(right, style="Panel.TFrame")
+        preview_actions = FlowRow(right, style="Panel.TFrame", gap=6)
         preview_actions.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        ttk.Button(
+        for text, command in (("Prev", self._show_previous_image), ("Next", self._show_next_image)):
+            preview_actions.add(
+                ttk.Button(preview_actions, text=text, style="Dark.TButton", command=command)
+            )
+        self.compare_button = ttk.Button(
             preview_actions,
-            text="Prev",
+            text="Compare",
             style="Dark.TButton",
-            command=self._show_previous_image,
-        ).pack(side="left")
-        ttk.Button(
-            preview_actions,
-            text="Next",
-            style="Dark.TButton",
-            command=self._show_next_image,
-        ).pack(side="left", padx=(6, 0))
-        ttk.Button(
-            preview_actions,
-            text="Large Compare",
-            style="Dark.TButton",
-            command=self._open_compare_viewer,
-        ).pack(side="left", padx=(12, 0))
-        ttk.Button(
-            preview_actions,
-            text="Compare Latest Derived",
-            style="Dark.TButton",
-            command=self._open_latest_derived_compare,
-        ).pack(side="left", padx=(6, 0))
-        self._adetailer_compare_button = ttk.Button(
-            preview_actions,
-            text="ADetailer Before/After",
-            style="Dark.TButton",
-            command=self._open_adetailer_compare,
-            state="disabled",
+            command=self._open_contextual_compare,
         )
-        self._adetailer_compare_button.pack(side="left", padx=(6, 0))
-        ttk.Button(
+        preview_actions.add(self.compare_button)
+        attach_tooltip(
+            self.compare_button,
+            "Compare the image with its returned re-work (or its source), the ADetailer before/after when the "
+            "source is verified, or a staged-curation derived image; otherwise a large view.",
+        )
+        preview_actions.add(
+            ttk.Button(
+                preview_actions,
+                text="Inspect Metadata",
+                style="Dark.TButton",
+                command=self._open_metadata_inspector,
+            )
+        )
+        self.send_video_button = ttk.Button(
             preview_actions,
-            text="Inspect Metadata",
+            text="Make Video",
             style="Dark.TButton",
-            command=self._open_metadata_inspector,
-        ).pack(side="left", padx=(6, 0))
+            command=self._on_send_selected_to_video_workflow,
+        )
+        preview_actions.add(self.send_video_button)
+        self.send_video_tooltip = attach_tooltip(
+            self.send_video_button,
+            "Make a video from the image highlighted in the Images list: it opens the Video Workflow tab with that "
+            "image loaded and the recommended workflow selected. Several highlighted images become batch sources. "
+            "This only transfers the selection; nothing is queued until you press Queue there.",
+        )
+        self.send_to_button = ttk.Menubutton(preview_actions, text="Send to...")
+        self.send_to_menu = tk.Menu(self.send_to_button, tearoff=False)
+        self.send_to_menu.add_command(
+            label="Learning (staged curation)...",
+            command=self._on_import_selected_to_staged_curation,
+        )
+        self.send_to_menu.add_command(
+            label="Photo Optimize (Managed Photo Set)...", command=self._on_manage_selected_photos
+        )
+        self.send_to_button.configure(menu=self.send_to_menu)
+        preview_actions.add(self.send_to_button)
+        self.send_to_tooltip = attach_tooltip(
+            self.send_to_button,
+            "Learning: record the highlighted images as evidence candidates (nothing is queued). Photo Optimize: "
+            "offer them to the Managed Photo Set (nothing is copied until you confirm there).",
+        )
+
+        self._build_decision_bar(right, row=1)
 
         # PR-GUI-110: 620 px is the maximum, not an assumption; the preview fits the pane's real width.
         self.preview = ThumbnailWidget(
@@ -393,8 +451,10 @@ class ReviewTabFrame(ttk.Frame):
             placeholder_text="Select an image",
             responsive=True,
         )
-        self.preview.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        self.preview._canvas.bind("<Double-Button-1>", lambda _event: self._open_compare_viewer())
+        self.preview.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        self.preview._canvas.bind(
+            "<Double-Button-1>", lambda _event: self._open_contextual_compare()
+        )
         self.preview.bind("<<MediaHidden>>", self._hide_compare_media, add="+")
         self.preview.bind("<<MediaHidden>>", lambda _event: self._close_inspection(), add="+")
 
@@ -404,29 +464,318 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabel",
             justify="left",
         )
-        self.meta_label.grid(row=2, column=0, sticky="ew")
+        self.meta_label.grid(row=3, column=0, sticky="ew")
         bind_wraplength(self.meta_label)
 
-        prior_review_box = ttk.LabelFrame(
+        provenance_box = ttk.LabelFrame(
             right,
-            text="Prior Review Summary",
+            text="Prompts and provenance",
             style="Dark.TLabelframe",
             padding=8,
         )
-        prior_review_box.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-        prior_review_box.columnconfigure(0, weight=1)
+        provenance_box.grid(row=4, column=0, sticky="ew", pady=(8, 0))
+        provenance_box.columnconfigure(0, weight=1)
+        self.provenance_text = tk.Text(
+            provenance_box,
+            height=8,
+            bg=TOKENS.colors.surface_tertiary,
+            fg=TOKENS.colors.text_muted,
+            insertbackground=TOKENS.colors.text_muted,
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+        )
+        style_text_widget(self.provenance_text, elevated=True)
+        self.provenance_text.configure(fg=TOKENS.colors.text_muted)
+        self.provenance_text.grid(row=0, column=0, sticky="ew")
+        self._set_readonly_text(self.provenance_text, "Select an image to see its prompts.")
         prior_review_label = ttk.Label(
-            prior_review_box,
+            provenance_box,
             textvariable=self._prior_review_summary_var,
             style="Dark.TLabel",
             justify="left",
         )
-        prior_review_label.grid(row=0, column=0, sticky="ew")
+        prior_review_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
         bind_wraplength(prior_review_label)
 
+        self._build_rating_details(right, row=5)
+        self._build_feedback_area(right, row=6)
+
+    def _decision_key_handler(self, value: str) -> Callable[[tk.Event], str]:
+        def handle(_event: tk.Event) -> str:
+            return self._on_decision_key(value)
+
+        return handle
+
+    def _build_decision_bar(self, parent: tk.Misc, *, row: int) -> None:
+        """Retain / Discard / Re-work with the rating, right above the preview so triage never scrolls."""
+
+        bar = FlowRow(parent, style="Panel.TFrame", gap=6)
+        bar.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+        self.retain_button = ttk.Button(
+            bar,
+            text="Retain (R)",
+            style="Dark.TButton",
+            command=lambda: self._decide_current("retain"),
+        )
+        self.discard_button = ttk.Button(
+            bar,
+            text="Discard (D)",
+            style="Dark.TButton",
+            command=lambda: self._decide_current("discard"),
+        )
+        self.mark_rework_button = ttk.Button(
+            bar,
+            text="Re-work (W)",
+            style="Dark.TButton",
+            command=lambda: self._decide_current("rework"),
+        )
+        self.restore_button = ttk.Button(
+            bar, text="Restore", style="Dark.TButton", command=self._restore_current
+        )
+        for button in (self.retain_button, self.discard_button, self.mark_rework_button):
+            bar.add(button)
+        bar.add(self.restore_button, shown=False)
+        self._decision_tooltips = {
+            "retain": attach_tooltip(self.retain_button, ""),
+            "discard": attach_tooltip(self.discard_button, ""),
+            "rework": attach_tooltip(self.mark_rework_button, ""),
+        }
+        bar.add(ttk.Label(bar, text="Rating", style="Dark.TLabel"))
+        bar.add(
+            ttk.Spinbox(
+                bar,
+                from_=1,
+                to=5,
+                increment=1,
+                textvariable=self.rating_var,
+                width=4,
+                style="Dark.TSpinbox",
+            )
+        )
+        self.save_rating_button = ttk.Button(
+            bar, text="Save rating", style="Dark.TButton", command=self._save_feedback
+        )
+        bar.add(self.save_rating_button)
+        attach_tooltip(
+            self.save_rating_button,
+            "Saves the rating, quality, subscores and notes as Learning evidence for these exact image bytes. The "
+            "file is never changed. A decision made after you touched the rating saves it too.",
+        )
+        self._decision_bar = bar
+
+    def _build_rating_details(self, parent: tk.Misc, *, row: int) -> None:
+        """Quality label and subscores, one disclosure below the fold."""
+
+        self.details_section = DisclosureSection(
+            parent, title="Details (quality and subscores)", expanded=False
+        )
+        self.details_section.grid(row=row, column=0, sticky="ew", pady=(8, 0))
+        body = self.details_section.body
+        configure_grid_columns(body, get_single_pair_form_column_specs())
+        ttk.Label(body, text="Quality", style="Dark.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
+        )
+        ttk.Combobox(
+            body,
+            textvariable=self.quality_var,
+            values=["reject", "poor", "okay", "good", "excellent"],
+            state="readonly",
+            style="Dark.TCombobox",
+            width=12,
+        ).grid(row=0, column=1, sticky="w", pady=(0, 4))
+        ttk.Label(body, text="Subscores", style="Dark.TLabel").grid(
+            row=1, column=0, sticky="w", padx=(0, 6), pady=(4, 4)
+        )
+        subscores = ttk.Frame(body, style="Panel.TFrame")
+        subscores.grid(row=1, column=1, sticky="w", pady=(4, 4))
+        # PR-GUI-110: two pairs per row (not three) so the row still fits a narrow pane at increased Tk scaling.
+        subscores.columnconfigure(1, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
+        subscores.columnconfigure(3, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
+        for column, (label, variable) in enumerate(
+            (("Anatomy", self.anatomy_rating_var), ("Composition", self.composition_rating_var))
+        ):
+            ttk.Label(subscores, text=label, style="Dark.TLabel").grid(
+                row=0, column=column * 2, sticky="w", padx=(0 if column == 0 else 0, 0)
+            )
+            ttk.Spinbox(
+                subscores,
+                from_=1,
+                to=5,
+                increment=1,
+                textvariable=variable,
+                width=4,
+                style="Dark.TSpinbox",
+            ).grid(row=0, column=column * 2 + 1, sticky="w", padx=(6, 12 if column == 0 else 0))
+        ttk.Label(subscores, text="Prompt Fit", style="Dark.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(4, 0)
+        )
+        ttk.Spinbox(
+            subscores,
+            from_=1,
+            to=5,
+            increment=1,
+            textvariable=self.prompt_adherence_rating_var,
+            width=4,
+            style="Dark.TSpinbox",
+        ).grid(row=1, column=1, sticky="w", padx=(6, 12), pady=(4, 0))
+
+    def _build_feedback_area(self, parent: tk.Misc, *, row: int) -> None:
+        feedback_box = ttk.LabelFrame(
+            parent,
+            text="Notes and actions",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        feedback_box.grid(row=row, column=0, sticky="ew", pady=(8, 0))
+        configure_grid_columns(feedback_box, get_single_pair_form_column_specs())
+        ttk.Label(feedback_box, text="Notes", style="Dark.TLabel").grid(
+            row=0, column=0, sticky="nw", padx=(0, 6)
+        )
+        self.feedback_notes = tk.Text(
+            feedback_box,
+            height=3,
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            insertbackground=TOKENS.colors.text_primary,
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+        )
+        style_text_widget(self.feedback_notes, elevated=True)
+        self.feedback_notes.grid(row=0, column=1, sticky="ew")
+        self.apply_selected_button = ttk.Button(
+            feedback_box,
+            text="Apply rating to selected",
+            style="Dark.TButton",
+            command=self._save_feedback_batch,
+        )
+        self.apply_selected_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        attach_tooltip(
+            self.apply_selected_button,
+            "Saves the rating, quality, subscores and notes shown here for every image highlighted in the list. "
+            "It never marks, retains or discards them.",
+        )
+        # One row (not two) so the Review workspace keeps its scroll height.
+        undo_row = ttk.Frame(feedback_box, style="Panel.TFrame")
+        undo_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        undo_row.columnconfigure((0, 1), weight=1, uniform="feedback_actions")
+        self.undo_button = ttk.Button(
+            undo_row,
+            text="Undo (U)",
+            style="Dark.TButton",
+            command=self._undo_last_action,
+        )
+        self.undo_button.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        attach_tooltip(
+            self.undo_button,
+            "Undo the last decision (a new row restores the earlier one; nothing is deleted) or the last saved rating.",
+        )
+        self.write_rating_button = ttk.Button(
+            undo_row,
+            text="Write rating to file...",
+            style="Dark.TButton",
+            command=self._write_rating_into_file,
+        )
+        self.write_rating_button.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        attach_tooltip(
+            self.write_rating_button,
+            "Optional export of the saved rating. PNG: embedded in the file, which changes the file's identity. "
+            "JPEG and WebP: a sidecar file next to the image; the image is never re-encoded.",
+        )
+        feedback_status = ttk.Label(
+            feedback_box, textvariable=self._feedback_status_var, style="Dark.TLabel"
+        )
+        feedback_status.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        bind_wraplength(feedback_status)
+        feedback_status.grid_remove()
+        self._feedback_status_label = feedback_status
+
+        def show_feedback_outcome(*_args: object) -> None:
+            feedback_status.grid()
+            feedback_status.update_idletasks()
+            self._workspace_scroll.reveal(feedback_status)
+
+        self._feedback_status_var.trace_add("write", show_feedback_outcome)
+
+    def _build_returned(self) -> None:
+        """Finished re-work results beside their source; shown only when there is something to show."""
+
+        frame = ttk.LabelFrame(
+            self._workspace_scroll.inner,
+            text="Returned",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        frame.grid(row=2, column=0, sticky="ew", pady=(4, 6))
+        frame.columnconfigure(0, weight=1)
+        self._returned_frame = frame
+        self.returned_tree = ttk.Treeview(
+            frame,
+            columns=("source", "result", "state", "link"),
+            show="headings",
+            selectmode="browse",
+            height=5,
+        )
+        for name, heading, width in (
+            ("source", "Source", 180),
+            ("result", "Returned result", 220),
+            ("state", "State", 130),
+            ("link", "Source link", 130),
+        ):
+            self.returned_tree.heading(name, text=heading)
+            self.returned_tree.column(name, width=width, anchor="w")
+        self.returned_tree.grid(row=0, column=0, sticky="ew")
+        actions = FlowRow(frame, style="Panel.TFrame", gap=6)
+        actions.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self.returned_compare_button = ttk.Button(
+            actions,
+            text="Compare with source",
+            style="Dark.TButton",
+            command=self._compare_returned,
+        )
+        self.returned_review_button = ttk.Button(
+            actions, text="Review result", style="Dark.TButton", command=self._review_returned
+        )
+        self.returned_rework_button = ttk.Button(
+            actions, text="Re-work again", style="Dark.TButton", command=self._rework_returned_again
+        )
+        self.returned_refresh_button = ttk.Button(
+            actions, text="Refresh", style="Dark.TButton", command=self._session.refresh
+        )
+        self.returned_batches_button = ttk.Button(
+            actions, text="Open Batches (retry)", style="Dark.TButton", command=self._open_batches
+        )
+        for button in (
+            self.returned_compare_button,
+            self.returned_review_button,
+            self.returned_rework_button,
+            self.returned_refresh_button,
+        ):
+            actions.add(button)
+        actions.add(self.returned_batches_button, shown=False)
+        self._returned_actions = actions
+        note = ttk.Label(frame, textvariable=self._returned_note_var, style="Dark.TLabel")
+        note.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        bind_wraplength(note)
+        frame.grid_remove()
+
     def _build_controls(self) -> None:
-        controls = ttk.Frame(self._workspace_scroll.inner, style="Panel.TFrame")
-        controls.grid(row=1, column=0, sticky="ew", pady=(4, 6))
+        # PR-REVIEW-LIFECYCLE-621: the Re-work region is shown only while images are marked for Re-work.
+        rework = ttk.LabelFrame(
+            self._workspace_scroll.inner,
+            text="Re-work",
+            style="Dark.TLabelframe",
+            padding=8,
+        )
+        rework.grid(row=1, column=0, sticky="ew", pady=(4, 6))
+        rework.columnconfigure(0, weight=1)
+        self._rework_frame = rework
+        scope_label = ttk.Label(rework, textvariable=self._scope_var, style="Dark.TLabel")
+        scope_label.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        bind_wraplength(scope_label)
+        controls = ttk.Frame(rework, style="Panel.TFrame")
+        controls.grid(row=1, column=0, sticky="ew")
         configure_grid_columns(
             controls,
             get_two_pane_workspace_column_specs(
@@ -447,9 +796,10 @@ class ReviewTabFrame(ttk.Frame):
         prompt_box.rowconfigure(1, weight=0)
         prompt_box.rowconfigure(3, weight=0)
 
-        ttk.Label(prompt_box, text="Current + prompt", style="Dark.TLabel").grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 4)
+        self._baseline_label = ttk.Label(
+            prompt_box, textvariable=self._baseline_note_var, style="Dark.TLabel"
         )
+        self._baseline_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
         self.current_prompt_text = tk.Text(
             prompt_box,
             height=3,
@@ -566,7 +916,7 @@ class ReviewTabFrame(ttk.Frame):
 
         run_box = ttk.LabelFrame(
             controls,
-            text="Reprocess",
+            text="Stages and queue",
             style="Dark.TLabelframe",
             padding=8,
         )
@@ -672,227 +1022,48 @@ class ReviewTabFrame(ttk.Frame):
             command=self._open_smart_review,
         )
         self.smart_review_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
-        ttk.Button(edit_row, text="Inspect & Improve…", command=self._open_guided_review).grid(
-            row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0)
+        self.inspect_improve_button = ttk.Button(
+            edit_row, text="Inspect & Improve…", command=self._open_guided_review
         )
+        self.inspect_improve_button.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
         attach_tooltip(
             self.smart_review_button,
             "Opt-in local helpers: click an object to suggest a mask, or get a caption suggestion. "
             "Suggestions only; nothing is edited or queued until you accept and review it.",
         )
-        self.reprocess_selected_button = ttk.Button(
-            run_box,
-            text="Reprocess Selected",
-            style="Primary.TButton",
-            command=lambda: self._reprocess(batch_all=False),
-        )
-        self.reprocess_selected_button.grid(row=6, column=0, sticky="ew", pady=(0, 6))
-
-        self.reprocess_all_button = ttk.Button(
-            run_box,
-            text="Reprocess All",
-            style="Dark.TButton",
-            command=lambda: self._reprocess(batch_all=True),
-        )
-        self.reprocess_all_button.grid(row=7, column=0, sticky="ew")
         klein_check = ttk.Checkbutton(
             run_box,
             text="FLUX.2 Klein single-reference edit (Forge)",
             variable=self.klein_edit_var,
             style="Dark.TCheckbutton",
         )
-        klein_check.grid(row=8, column=0, sticky="w", pady=(6, 0))
+        klein_check.grid(row=6, column=0, sticky="w", pady=(6, 0))
         attach_tooltip(
             klein_check,
             "Edit exactly one selected image with FLUX.2 Klein 4B FP8 (img2img only, fixed Euler/Beta/"
             "4 steps/CFG 1.0; the 768x1024 and 1024x1024 sizes are qualified). Requires the Forge "
             "backend. Describe the desired edit in the prompt box; it replaces the prompt.",
         )
-        attach_tooltip(
-            self.reprocess_selected_button,
-            "Queue only the currently selected images for reprocessing with the checked stages and prompt edits shown in Review.",
-        )
-        attach_tooltip(
-            self.reprocess_all_button,
-            "Queue every loaded image with the current Review settings. Use this only after confirming the effective settings summary and batch behavior.",
-        )
-
-        feedback_box = ttk.LabelFrame(
+        self.klein_check = klein_check
+        single_note = ttk.Label(run_box, textvariable=self._single_note_var, style="Dark.TLabel")
+        single_note.grid(row=7, column=0, sticky="ew", pady=(6, 0))
+        bind_wraplength(single_note)
+        self.rework_button = ttk.Button(
             run_box,
-            text="Review Feedback",
-            style="Dark.TLabelframe",
-            padding=8,
+            text="Preview and queue...",
+            style="Primary.TButton",
+            command=self._start_rework,
         )
-        feedback_box.grid(row=9, column=0, sticky="ew", pady=(8, 0))
-        configure_grid_columns(feedback_box, get_single_pair_form_column_specs())
-        ttk.Label(feedback_box, text="Rating", style="Dark.TLabel").grid(
-            row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
+        self.rework_button.grid(row=8, column=0, sticky="ew", pady=(8, 0))
+        self._rework_tooltip = attach_tooltip(
+            self.rework_button,
+            "Preview the marked images with the checked stages and prompt edits, then queue them through the "
+            "existing Review path. Nothing is queued until you confirm the preview.",
         )
-        ttk.Spinbox(
-            feedback_box,
-            from_=1,
-            to=5,
-            increment=1,
-            textvariable=self.rating_var,
-            width=6,
-            style="Dark.TSpinbox",
-        ).grid(row=0, column=1, sticky="w", pady=(0, 4))
-        ttk.Label(feedback_box, text="Quality", style="Dark.TLabel").grid(
-            row=1, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
-        )
-        ttk.Combobox(
-            feedback_box,
-            textvariable=self.quality_var,
-            values=["reject", "poor", "okay", "good", "excellent"],
-            state="readonly",
-            style="Dark.TCombobox",
-            width=12,
-        ).grid(row=1, column=1, sticky="w", pady=(0, 4))
-        ttk.Label(feedback_box, text="Notes", style="Dark.TLabel").grid(
-            row=2, column=0, sticky="nw", padx=(0, 6)
-        )
-        self.feedback_notes = tk.Text(
-            feedback_box,
-            height=3,
-            bg=TOKENS.colors.surface_secondary,
-            fg=TOKENS.colors.text_primary,
-            insertbackground=TOKENS.colors.text_primary,
-            wrap="word",
-            borderwidth=1,
-            relief="solid",
-        )
-        style_text_widget(self.feedback_notes, elevated=True)
-        self.feedback_notes.grid(row=2, column=1, sticky="ew")
-        feedback_btn = ttk.Button(
-            feedback_box,
-            text="Save Feedback",
-            style="Dark.TButton",
-            command=self._save_feedback,
-        )
-        feedback_btn.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        ttk.Button(
-            feedback_box,
-            text="Save Feedback (Selected Batch)",
-            style="Dark.TButton",
-            command=self._save_feedback_batch,
-        ).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        # One row (not two) so the Review workspace keeps its scroll height.
-        undo_row = ttk.Frame(feedback_box, style="Panel.TFrame")
-        undo_row.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        undo_row.columnconfigure((0, 1), weight=1, uniform="feedback_actions")
-        ttk.Button(
-            undo_row,
-            text="Undo Last Save",
-            style="Dark.TButton",
-            command=self._undo_last_feedback_save,
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 3))
-        write_rating_button = ttk.Button(
-            undo_row,
-            text="Write rating to file...",
-            style="Dark.TButton",
-            command=self._write_rating_into_file,
-        )
-        write_rating_button.grid(row=0, column=1, sticky="ew", padx=(3, 0))
-        attach_tooltip(
-            write_rating_button,
-            "Optional export of the saved rating. PNG: embedded in the file, which changes the file's identity. "
-            "JPEG and WebP: a sidecar file next to the image; the image is never re-encoded.",
-        )
-        feedback_status = ttk.Label(
-            feedback_box, textvariable=self._feedback_status_var, style="Dark.TLabel"
-        )
-        feedback_status.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        bind_wraplength(feedback_status)
-        feedback_status.grid_remove()
-        self._feedback_status_label = feedback_status
-
-        def show_feedback_outcome(*_args: object) -> None:
-            feedback_status.grid()
-            feedback_status.update_idletasks()
-            self._workspace_scroll.reveal(feedback_status)
-
-        self._feedback_status_var.trace_add("write", show_feedback_outcome)
-        attach_tooltip(
-            feedback_btn,
-            "Saves rating and prompt-change context into the Learning records store.",
-        )
-        ttk.Label(feedback_box, text="Subscores", style="Dark.TLabel").grid(
-            row=6, column=0, sticky="w", padx=(0, 6), pady=(8, 4)
-        )
-        subscores = ttk.Frame(feedback_box, style="Panel.TFrame")
-        subscores.grid(row=6, column=1, sticky="w", pady=(8, 4))
-        # PR-GUI-110: two pairs per row (not three) so the row still fits a narrow pane at increased Tk scaling.
-        subscores.columnconfigure(1, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
-        subscores.columnconfigure(3, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
-        ttk.Label(subscores, text="Anatomy", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Spinbox(
-            subscores,
-            from_=1,
-            to=5,
-            increment=1,
-            textvariable=self.anatomy_rating_var,
-            width=4,
-            style="Dark.TSpinbox",
-        ).grid(row=0, column=1, sticky="w", padx=(6, 12))
-        ttk.Label(subscores, text="Composition", style="Dark.TLabel").grid(
-            row=0, column=2, sticky="w"
-        )
-        ttk.Spinbox(
-            subscores,
-            from_=1,
-            to=5,
-            increment=1,
-            textvariable=self.composition_rating_var,
-            width=4,
-            style="Dark.TSpinbox",
-        ).grid(row=0, column=3, sticky="w", padx=(6, 0))
-        outcome = ttk.Frame(feedback_box, style="Panel.TFrame")
-        outcome.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        outcome.columnconfigure(1, weight=1)
-        ttk.Label(outcome, text="ADetailer outcome (optional)", style="Dark.TLabel").grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        self._adetailer_outcome_widgets: list[tk.Widget] = []
-        for row, (label, variable) in enumerate(
-            (
-                ("Face", self.adetailer_face_outcome_var),
-                ("Hands", self.adetailer_hands_outcome_var),
-            ),
-            start=1,
-        ):
-            ttk.Label(outcome, text=label, style="Dark.TLabel").grid(
-                row=row, column=0, sticky="w", padx=(0, 6), pady=(2, 0)
-            )
-            combo = ttk.Combobox(
-                outcome,
-                textvariable=variable,
-                values=list(OUTCOME_LABELS.values()),
-                state="disabled",
-                style="Dark.TCombobox",
-                width=14,
-            )
-            combo.grid(row=row, column=1, sticky="w", pady=(2, 0))
-            self._adetailer_outcome_widgets.append(combo)
-        note = ttk.Entry(outcome, textvariable=self.adetailer_outcome_note_var, state="disabled")
-        note.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 0))
-        self._adetailer_outcome_widgets.append(note)
-        attach_tooltip(
-            outcome,
-            "Available for an ADetailer output whose source image is verified. Judge the before/after by region; this is a "
-            "post-ADetailer assessment, not an attribution to one pass, and it does not change the overall rating.",
-        )
-        ttk.Label(subscores, text="Prompt Fit", style="Dark.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(4, 0)
-        )
-        ttk.Spinbox(
-            subscores,
-            from_=1,
-            to=5,
-            increment=1,
-            textvariable=self.prompt_adherence_rating_var,
-            width=4,
-            style="Dark.TSpinbox",
-        ).grid(row=1, column=1, sticky="w", padx=(6, 12), pady=(4, 0))
+        reason = ttk.Label(run_box, textvariable=self._rework_reason_var, style="Dark.TLabel")
+        reason.grid(row=9, column=0, sticky="ew", pady=(4, 0))
+        bind_wraplength(reason)
+        rework.grid_remove()
 
     def _selected_stages(self) -> list[str]:
         stages: list[str] = []
@@ -990,9 +1161,12 @@ class ReviewTabFrame(ttk.Frame):
 
     def _on_clear(self) -> None:
         self._begin_selection_context(None)
+        self._session.clear()
         self._image_ready = False
         self.selected_images = []
         self._image_index_by_row = []
+        self._row_texts = []
+        self._undo_order = []
         self.images_list.delete(0, tk.END)
         self.selection_label.config(text="No images selected")
         self.meta_label.config(text="Metadata: n/a")
@@ -1000,6 +1174,8 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_negative_prompt = ""
         self._selected_image_path = None
         self._selected_image_sha256 = ""
+        self._provenance_view = None
+        self._baseline_note_var.set("")
         self._reset_rating_controls()
         self._adetailer_pair = None
         self._set_adetailer_controls(False)
@@ -1011,6 +1187,7 @@ class ReviewTabFrame(ttk.Frame):
         self._effective_settings_var.set("Effective settings: select an image")
         self._prior_review_summary_var.set("Prior Review Summary: none")
         self.workflow_hint_label.config(text=self._default_workflow_hint)
+        self._refresh_workspace_view()
 
     def _confirm_replace(self, title: str, message: str) -> bool:
         hook = self._confirm_replace_hook
@@ -1160,16 +1337,15 @@ class ReviewTabFrame(ttk.Frame):
             seen.add(key)
             deduped.append(path)
 
-        self.selected_images = deduped
-        self._image_index_by_row = list(self.selected_images)
-        self.images_list.delete(0, tk.END)
-        for p in self.selected_images:
-            self.images_list.insert(tk.END, p.name)
+        self._undo_order = []
+        self._session.set_items(deduped)
+        self.selected_images = self._session.paths()
         self.selection_label.config(text=f"{len(self.selected_images)} image(s) selected")
-        if self.selected_images:
+        first = self._session.visible_items()
+        if first:
             self.images_list.selection_clear(0, tk.END)
             self.images_list.selection_set(0)
-            self._show_image(self.selected_images[0])
+            self._show_image(first[0].path)
 
     def _on_image_select(self, _event: tk.Event) -> None:
         idxs = self.images_list.curselection()
@@ -1182,18 +1358,78 @@ class ReviewTabFrame(ttk.Frame):
         self._show_image(self._image_index_by_row[idx])
 
     def _set_adetailer_controls(self, enabled: bool) -> None:
-        """Enable the before/after tools only for an ADetailer output whose source image is verified."""
+        """Enable the before/after judgment only for an ADetailer output whose source image is verified."""
 
-        self.adetailer_face_outcome_var.set(OUTCOME_LABELS["unreviewed"])
-        self.adetailer_hands_outcome_var.set(OUTCOME_LABELS["unreviewed"])
-        self.adetailer_outcome_note_var.set("")
+        self._adetailer_enabled = bool(enabled)
+        self._applying_saved_rating = True
+        try:
+            self.adetailer_face_outcome_var.set(OUTCOME_LABELS["unreviewed"])
+            self.adetailer_hands_outcome_var.set(OUTCOME_LABELS["unreviewed"])
+            self.adetailer_outcome_note_var.set("")
+        finally:
+            self._applying_saved_rating = False
+        self._sync_adetailer_widgets()
+
+    def _sync_adetailer_widgets(self) -> None:
         for widget in self._adetailer_outcome_widgets:
-            widget.configure(
-                state=("readonly" if isinstance(widget, ttk.Combobox) else "normal")
-                if enabled
-                else "disabled"
+            try:
+                widget.configure(
+                    state=("readonly" if isinstance(widget, ttk.Combobox) else "normal")
+                    if self._adetailer_enabled
+                    else "disabled"
+                )
+            except tk.TclError:
+                continue  # the compare viewer that hosted it was closed
+
+    def _build_adetailer_outcome(self, frame: ttk.Frame) -> None:
+        """The optional before/after judgment, shown inside the ADetailer compare it describes."""
+
+        outcome = ttk.Frame(frame, style="Panel.TFrame")
+        outcome.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        outcome.columnconfigure(3, weight=1)
+        ttk.Label(outcome, text="ADetailer outcome (optional)", style="Dark.TLabel").grid(
+            row=0, column=0, columnspan=4, sticky="w"
+        )
+        for column, (label, variable) in enumerate(
+            (
+                ("Face", self.adetailer_face_outcome_var),
+                ("Hands", self.adetailer_hands_outcome_var),
             )
-        self._adetailer_compare_button.configure(state="normal" if enabled else "disabled")
+        ):
+            ttk.Label(outcome, text=label, style="Dark.TLabel").grid(
+                row=1,
+                column=column * 2,
+                sticky="w",
+                padx=(0 if column == 0 else 12, 6),
+                pady=(2, 0),
+            )
+            combo = ttk.Combobox(
+                outcome,
+                textvariable=variable,
+                values=list(OUTCOME_LABELS.values()),
+                state="disabled",
+                style="Dark.TCombobox",
+                width=14,
+            )
+            combo.grid(row=1, column=column * 2 + 1, sticky="w", pady=(2, 0))
+            self._adetailer_outcome_widgets.append(combo)
+        note = ttk.Entry(outcome, textvariable=self.adetailer_outcome_note_var, state="disabled")
+        note.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(2, 0))
+        self._adetailer_outcome_widgets.append(note)
+        reason = ttk.Label(outcome, text="", style="Dark.TLabel")
+        reason.grid(row=3, column=0, columnspan=4, sticky="w", pady=(2, 0))
+        reason.configure(
+            text=""
+            if self._adetailer_enabled
+            else "The source image of this ADetailer output is not verified, so it cannot be judged."
+        )
+        attach_tooltip(
+            outcome,
+            "Available for an ADetailer output whose source image is verified. Judge the before/after by region; this "
+            "is a post-ADetailer assessment, not an attribution to one pass, and it does not change the overall "
+            "rating. It is saved with the rating (Save rating).",
+        )
+        self._sync_adetailer_widgets()
 
     def _open_adetailer_compare(self) -> None:
         pair = self._adetailer_pair
@@ -1203,13 +1439,66 @@ class ReviewTabFrame(ttk.Frame):
                 "No verified ADetailer source image for the selected image.",
             )
             return
-        self._compare_mode = "single"
+        self._compare_mode = "adetailer"
         self._render_compare_viewer(
             pair.source,
             secondary_path=pair.output,
             title_prefix="ADetailer Before / After",
             labels=("Before (sent to ADetailer)", "After (ADetailer output)"),
         )
+
+    def _open_contextual_compare(self) -> None:
+        """One Compare: the ADetailer before/after, the returned re-work (or its source), a staged-curation
+        derived image, or else the large single view, whichever applies to the image shown."""
+
+        path = self._selected_image_path
+        if path is None:
+            return
+        if not PIL_AVAILABLE:
+            messagebox.showinfo("Viewer unavailable", "Large compare viewer requires Pillow.")
+            return
+        if self._adetailer_pair is not None:
+            self._open_adetailer_compare()
+            return
+        if self._open_partner_compare(path):
+            return
+        if self._open_latest_derived_compare(show_errors=False):
+            return
+        self._open_compare_viewer()
+
+    def _open_partner_compare(self, path: Path) -> bool:
+        partner = self._session.compare_partner(item_key(path))
+        if partner is None:
+            return False
+        other, relation = partner
+        self._compare_mode = "partner"
+        if relation == "returned":
+            self._render_compare_viewer(
+                path,
+                secondary_path=other,
+                title_prefix="Source vs Returned re-work",
+                labels=("Source", "Returned re-work"),
+            )
+        else:
+            self._render_compare_viewer(
+                other,
+                secondary_path=path,
+                title_prefix="Source vs Returned re-work",
+                labels=("Source", "Returned re-work"),
+            )
+        return True
+
+    def _refresh_viewer_after_step(self) -> None:
+        path = self._selected_image_path
+        if path is None:
+            return
+        if self._compare_mode == "latest_derived":
+            self._open_latest_derived_compare(show_errors=False)
+        elif self._compare_mode == "partner" and self._open_partner_compare(path):
+            return
+        else:
+            self._compare_mode = "single"
+            self._render_compare_viewer(path)
 
     def _on_prompt_edited(self) -> None:
         self._edited_since_selection = True
@@ -1245,8 +1534,11 @@ class ReviewTabFrame(ttk.Frame):
         self._prior_review_summary_var.set("Prior Review Summary: loading...")
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
+        self._provenance_view = None
+        self._baseline_note_var.set("")
         self._reset_mode_edits_for_current_image()
         self._apply_content_visibility_mode()
+        self._refresh_decision_controls()
         getter = self._prior_summary_getter()
         self._work.submit(
             "review:image-context",
@@ -1292,6 +1584,14 @@ class ReviewTabFrame(ttk.Frame):
             self._selected_base_negative_prompt = str(
                 overlay[0].base_negative_prompt or self._selected_base_negative_prompt
             )
+        self._provenance_view = (
+            project_effective_prompts(context.payload)
+            if context.metadata_ok and isinstance(context.payload, dict)
+            else None
+        )
+        self._baseline_note_var.set(
+            self._provenance_view.baseline_label if self._provenance_view is not None else ""
+        )
         self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
         if not context.metadata_ok:
@@ -1312,8 +1612,10 @@ class ReviewTabFrame(ttk.Frame):
         if not self._revisions.is_current_image(token):
             return
         self._image_ready = True
+        self._provenance_view = None
         self._prior_review_summary_var.set("Prior Review Summary: unavailable")
         self.meta_label.config(text=f"Metadata: unavailable ({type(error).__name__})")
+        self._render_provenance()
         self._refresh_prompt_diff()
 
     def _mark_rating_touched(self, *_args: object) -> None:
@@ -1681,6 +1983,9 @@ class ReviewTabFrame(ttk.Frame):
         v_scroll.grid(row=2, column=1, sticky="ns")
         h_scroll.grid(row=3, column=0, sticky="ew")
 
+        self._adetailer_outcome_widgets = []
+        if self._compare_mode == "adetailer":
+            self._build_adetailer_outcome(frame)
         self._compare_canvas = canvas
         self._compare_photo = None
         viewer.lift()
@@ -1731,25 +2036,24 @@ class ReviewTabFrame(ttk.Frame):
         status.set(f"Comparison unavailable: {reason}")
 
     def destroy(self) -> None:
+        self._session.close()
+        if self._poll_id is not None:
+            try:
+                self.after_cancel(self._poll_id)
+            except (tk.TclError, ValueError):
+                pass
+            self._poll_id = None
         self._work.close()
         self._revisions.close_compare()
         super().destroy()
 
     def _show_previous_image_and_refresh_viewer(self) -> None:
         self._step_selected_image(-1)
-        if self._selected_image_path is not None:
-            if self._compare_mode == "latest_derived":
-                self._open_latest_derived_compare(show_errors=False)
-            else:
-                self._render_compare_viewer(self._selected_image_path)
+        self._refresh_viewer_after_step()
 
     def _show_next_image_and_refresh_viewer(self) -> None:
         self._step_selected_image(1)
-        if self._selected_image_path is not None:
-            if self._compare_mode == "latest_derived":
-                self._open_latest_derived_compare(show_errors=False)
-            else:
-                self._render_compare_viewer(self._selected_image_path)
+        self._refresh_viewer_after_step()
 
     def _on_import_selected_to_staged_curation(self) -> None:
         learning_controller = self._resolve_learning_controller()
@@ -1780,104 +2084,6 @@ class ReviewTabFrame(ttk.Frame):
             f"Imported {len(selected)} image(s) into Staged Curation.\nGroup: {group_id}",
         )
 
-    def _on_open_history_import_picker(self) -> None:
-        history_items = list(getattr(self.app_state, "history_items", []) or [])
-        if not history_items:
-            messagebox.showinfo("No history", "No recent job history is available to import.")
-            return
-        if self._history_import_window and self._history_import_window.winfo_exists():
-            self._history_import_window.destroy()
-        window = tk.Toplevel(self)
-        self._history_import_window = window
-        window.title("Import Recent Job To Staged Curation")
-        window.transient(self.winfo_toplevel())
-        apply_toplevel_theme(window)
-        window.geometry("900x420")
-        window.minsize(720, 320)
-
-        frame = ttk.Frame(window, padding=8)
-        frame.pack(fill="both", expand=True)
-        frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
-
-        tree = ttk.Treeview(
-            frame,
-            columns=("status", "pack", "job_id"),
-            show="headings",
-            selectmode="browse",
-        )
-        for column_id, heading, width in (
-            ("status", "Status", 120),
-            ("pack", "Pack / Summary", 360),
-            ("job_id", "Job ID", 220),
-        ):
-            tree.heading(column_id, text=heading)
-            tree.column(column_id, width=width, anchor="w")
-        tree.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        tree.configure(yscrollcommand=scrollbar.set)
-
-        for entry in history_items[:50]:
-            item_id = str(getattr(entry, "job_id", "") or "")
-            tree.insert(
-                "",
-                "end",
-                iid=item_id,
-                values=(
-                    str(getattr(getattr(entry, "status", None), "value", "") or ""),
-                    self._history_entry_summary(entry),
-                    item_id,
-                ),
-            )
-
-        action_bar = ttk.Frame(frame, style="Panel.TFrame")
-        action_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        ttk.Button(
-            action_bar,
-            text="Import Selected Job",
-            style="Dark.TButton",
-            command=lambda: self._import_selected_history_job(tree),
-        ).pack(side="left")
-        ttk.Button(
-            action_bar,
-            text="Close",
-            style="Dark.TButton",
-            command=window.destroy,
-        ).pack(side="right")
-
-    def _import_selected_history_job(self, tree: ttk.Treeview) -> None:
-        selection = tree.selection()
-        if not selection:
-            messagebox.showwarning("No selection", "Select a history job to import.")
-            return
-        job_id = selection[0]
-        entry = self._find_history_entry(job_id)
-        if entry is None:
-            messagebox.showerror("Import failed", "Unable to resolve the selected history job.")
-            return
-        learning_controller = self._resolve_learning_controller()
-        if learning_controller is None:
-            messagebox.showerror("Learning unavailable", "Learning controller is not connected.")
-            return
-        importer = getattr(learning_controller, "import_history_entry_to_staged_curation", None)
-        if not callable(importer):
-            messagebox.showerror(
-                "Unsupported", "Connected learning controller does not support history import."
-            )
-            return
-        group_id = importer(entry)
-        if not group_id:
-            messagebox.showerror(
-                "Import failed", "No image outputs were found for the selected history job."
-            )
-            return
-        if self._history_import_window and self._history_import_window.winfo_exists():
-            self._history_import_window.destroy()
-        messagebox.showinfo(
-            "Imported", f"Imported history job into Staged Curation.\nGroup: {group_id}"
-        )
-
     def _find_history_entry(self, job_id: str) -> JobHistoryEntry | None:
         history_items = list(getattr(self.app_state, "history_items", []) or [])
         for entry in history_items:
@@ -1901,10 +2107,13 @@ class ReviewTabFrame(ttk.Frame):
     def _open_guided_review(self) -> None:
         from src.gui.guided_review_dialog import GuidedReviewDialog
 
+        target = self._single_tool_path("Inspect & Improve")
+        if target is None:
+            return
         path = self._selected_image_path
         if (
             path is None
-            or self._get_selected_review_paths() != [path]
+            or target != path
             or not self.preview.model.renderable
             or self.app_controller is None
             or not self._image_ready
@@ -1922,7 +2131,7 @@ class ReviewTabFrame(ttk.Frame):
             return bool(
                 self.winfo_exists()
                 and self._revisions.is_current_image(token)
-                and self._get_selected_review_paths() == [path]
+                and self._selected_image_path == path
                 and self.preview.model.renderable
                 and self._visibility_resolver().is_visible(self._current_visibility_subject())
             )
@@ -1939,11 +2148,8 @@ class ReviewTabFrame(ttk.Frame):
         from src.controller.masked_edit_service import history_lineage_for
         from src.gui.mask_editor_dialog import MaskEditorDialog
 
-        paths = self._get_selected_review_paths()
-        if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-            messagebox.showwarning(
-                "Edit Mask", "Select exactly one PNG, JPEG or WebP still image.", parent=self
-            )
+        path = self._single_tool_path("Edit Mask")
+        if path is None:
             return
         if self.app_controller is None:
             messagebox.showwarning(
@@ -1952,20 +2158,17 @@ class ReviewTabFrame(ttk.Frame):
             return
         MaskEditorDialog(
             self,
-            source_path=paths[0],
+            source_path=path,
             controller=self.app_controller,
-            lineage=history_lineage_for(getattr(self, "_active_handoff", None), paths[0]),
+            lineage=history_lineage_for(getattr(self, "_active_handoff", None), path),
         )
 
     def _open_smart_review(self) -> None:
         from src.gui.smart_review_dialog import SmartReviewDialog, TextDraft
         from src.review.assist.session import AssistEnablement
 
-        paths = self._get_selected_review_paths()
-        if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-            messagebox.showwarning(
-                "Smart Review", "Select exactly one PNG, JPEG or WebP still image.", parent=self
-            )
+        path = self._single_tool_path("Smart Review")
+        if path is None:
             return
         if self.app_controller is None:
             messagebox.showwarning(
@@ -1978,23 +2181,20 @@ class ReviewTabFrame(ttk.Frame):
             )  # session-scoped; every capability starts off
         SmartReviewDialog(
             self,
-            source_path=paths[0],
+            source_path=path,
             controller=self.app_controller,
             enablement=self._smart_enablement,
             prompt_binding=TextDraft(self.prompt_text, self._refresh_prompt_diff),
             visibility_mode=lambda: self._content_visibility_mode,
-            draft_current=lambda: self._get_selected_review_paths() == paths,
+            draft_current=lambda: self._single_target_path() == path,
         )
 
     def _open_outpaint_editor(self) -> None:
         from src.controller.masked_edit_service import history_lineage_for
         from src.gui.outpaint_dialog import OutpaintDialog
 
-        paths = self._get_selected_review_paths()
-        if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-            messagebox.showwarning(
-                "Extend Canvas", "Select exactly one PNG, JPEG or WebP still image.", parent=self
-            )
+        path = self._single_tool_path("Extend Canvas")
+        if path is None:
             return
         if self.app_controller is None:
             messagebox.showwarning(
@@ -2003,9 +2203,9 @@ class ReviewTabFrame(ttk.Frame):
             return
         OutpaintDialog(
             self,
-            source_path=paths[0],
+            source_path=path,
             controller=self.app_controller,
-            lineage=history_lineage_for(getattr(self, "_active_handoff", None), paths[0]),
+            lineage=history_lineage_for(getattr(self, "_active_handoff", None), path),
         )
 
     def _get_selected_review_paths(self) -> list[Path]:
@@ -2055,6 +2255,574 @@ class ReviewTabFrame(ttk.Frame):
             )
         except (RuntimeError, ValueError) as exc:
             messagebox.showerror("Manage Selected Photos", str(exc))
+
+    # -- PR-REVIEW-LIFECYCLE-621: the workspace -------------------------------------------------------------------
+
+    def _resolve_evidence_writer(self) -> Any | None:
+        """The one Learning evidence writer (owned by the Learning tab); ``None`` when Learning is not connected."""
+
+        controller = self._resolve_learning_controller()
+        if controller is None:
+            return None
+        return getattr(controller, "learning_record_writer", None) or getattr(
+            controller, "_learning_record_writer", None
+        )
+
+    def _evidence_records_path(self) -> Path | None:
+        records = getattr(self._resolve_evidence_writer(), "records_path", None)
+        return Path(records) if records else None
+
+    def _review_repository(self) -> Any:
+        return repository_of(self.app_controller)
+
+    def _bind_writer(self) -> Any | None:
+        """Resolve the writer on the Tk thread; the session's worker writes through it."""
+
+        self._writer = self._resolve_evidence_writer()
+        return self._writer
+
+    def _write_disposition(self, path: Path, digest: str, job_id: str, disposition: str) -> Any:
+        writer = self._writer
+        if writer is None:
+            raise OSError("Learning evidence is not connected, so the decision cannot be recorded.")
+        return save_disposition(
+            writer,
+            image_path=path,
+            disposition=disposition,
+            artifact_sha256=digest or None,
+            source_job_id=job_id,
+        )
+
+    def _on_session_changed(self) -> None:
+        self._refresh_workspace_view()
+
+    def _current_key(self) -> str | None:
+        return (
+            item_key(self._selected_image_path) if self._selected_image_path is not None else None
+        )
+
+    def _discard_undo_marker(self, marker: str) -> None:
+        for index in range(len(self._undo_order) - 1, -1, -1):
+            if self._undo_order[index] == marker:
+                del self._undo_order[index]
+                return
+
+    def _refresh_workspace_view(self) -> None:
+        if not self.winfo_exists():
+            return
+        session = self._session
+        self.selected_images = session.paths()
+        self._refresh_list()
+        if not str(self.selection_label.cget("text")).startswith("Scanning"):
+            self._restore_selection_label()
+        counts = session.counts_text() if session.items else ""
+        if session.loading and session.items:
+            counts += "  (reading review state...)"
+        self.counts_label.config(text=counts)
+        label = FILTER_LABELS[session.filter]
+        if self.filter_var.get() != label:
+            self.filter_var.set(label)
+        message = session.message
+        if message != self._last_session_message:
+            self._last_session_message = message
+            if message:
+                self._feedback_status_var.set(message)
+        self._refresh_rework_region()
+        self._refresh_returned()
+        self._refresh_decision_controls()
+        self._schedule_poll()
+
+    def _refresh_list(self) -> None:
+        visible = self._session.visible_items()
+        paths = [item.path for item in visible]
+        texts = [self._session.row_text(item) for item in visible]
+        box = self.images_list
+        if paths == self._image_index_by_row:
+            for index, (old, new) in enumerate(zip(self._row_texts, texts, strict=False)):
+                if old != new:
+                    selected = bool(box.selection_includes(index))
+                    box.delete(index)
+                    box.insert(index, new)
+                    if selected:
+                        box.selection_set(index)
+            self._row_texts = texts
+            return
+        previously = {
+            item_key(self._image_index_by_row[int(index)])
+            for index in box.curselection()
+            if 0 <= int(index) < len(self._image_index_by_row)
+        }
+        shown = self._current_key()
+        box.delete(0, tk.END)
+        for text in texts:
+            box.insert(tk.END, text)
+        self._image_index_by_row = paths
+        self._row_texts = texts
+        for index, item in enumerate(visible):
+            if item.key in previously or (not previously and item.key == shown):
+                box.selection_set(index)
+
+    def _select_key(self, key: str | None) -> bool:
+        """Show the image ``key`` (it must be in the visible list); True when it was."""
+
+        if key is None:
+            return False
+        for index, path in enumerate(self._image_index_by_row):
+            if item_key(path) == key:
+                self.images_list.selection_clear(0, tk.END)
+                self.images_list.selection_set(index)
+                self.images_list.activate(index)
+                self.images_list.see(index)
+                self._show_image(path)
+                return True
+        return False
+
+    def _on_filter_changed(self, _event: object = None) -> None:
+        chosen = self.filter_var.get()
+        for view, label in FILTER_LABELS.items():
+            if label == chosen:
+                self._session.set_filter(view)
+                return
+
+    def _refresh_decision_controls(self) -> None:
+        session = self._session
+        key = self._current_key()
+        connected = self._resolve_evidence_writer() is not None
+        for disposition, button in (
+            ("retain", self.retain_button),
+            ("discard", self.discard_button),
+            ("rework", self.mark_rework_button),
+        ):
+            gate = session.decide_state(key, disposition)
+            enabled, reason = gate.enabled, gate.reason
+            if enabled and not connected:
+                enabled = False
+                reason = "Learning evidence is not connected, so a decision cannot be recorded."
+            button.configure(state="normal" if enabled else "disabled")
+            self._decision_tooltips[disposition].text = reason
+        archived = key is not None and session.state_of(key) is ItemState.ARCHIVED
+        self._decision_bar.set_shown(self.restore_button, archived)
+        restorable = archived and connected and session.decide_state(key, "restore").enabled
+        self.restore_button.configure(state="normal" if restorable else "disabled")
+        self.save_rating_button.configure(
+            state="normal" if self._selected_image_path is not None else "disabled"
+        )
+        highlighted = len(self._highlighted_image_paths())
+        self.apply_selected_button.configure(
+            text=f"Apply rating to {highlighted} selected"
+            if highlighted
+            else "Apply rating to selected"
+        )
+
+    def _refresh_rework_region(self) -> None:
+        session = self._session
+        marked = session.marked_items()
+        if not marked:
+            self._rework_frame.grid_remove()
+            return
+        self._rework_frame.grid()
+        self._scope_var.set(session.scope_line())
+        gate = session.rework_state()
+        enabled, reason = gate.enabled, ""
+        if not gate.enabled:
+            reason = gate.reason
+        elif self.app_controller is None:
+            enabled, reason = False, "The application controller is not connected."
+        self.rework_button.configure(state="normal" if enabled else "disabled")
+        self._rework_reason_var.set(reason)
+        self._rework_tooltip.text = reason or gate.reason
+        single = session.single_tool_state(self._current_key())
+        for widget in (
+            self.edit_mask_button,
+            self.extend_canvas_button,
+            self.smart_review_button,
+            self.inspect_improve_button,
+            self.klein_check,
+        ):
+            widget.configure(state="normal" if single.enabled else "disabled")
+        self._single_note_var.set("" if single.enabled else single.reason)
+
+    def _refresh_returned(self) -> None:
+        session = self._session
+        rows = session.returned_rows()
+        failed = [
+            item for item in session.items if session.state_of(item.key) is ItemState.REWORK_FAILED
+        ]
+        if not rows and not failed:
+            self._returned_rows = []
+            self._returned_frame.grid_remove()
+            return
+        self._returned_frame.grid()
+        values = [
+            (
+                row.source_name,
+                row.path.name,
+                STATE_LABELS[row.state],
+                "Verified" if row.relation == "verified" else "Unverified (job id only)",
+            )
+            for row in rows
+        ]
+        current = [
+            self.returned_tree.item(iid, "values") for iid in self.returned_tree.get_children()
+        ]
+        if [tuple(str(value) for value in row) for row in current] != [
+            tuple(row) for row in values
+        ] or len(self._returned_rows) != len(rows):
+            selected = self.returned_tree.selection()
+            self.returned_tree.delete(*self.returned_tree.get_children())
+            for index, row_values in enumerate(values):
+                self.returned_tree.insert("", "end", iid=str(index), values=row_values)
+            if selected and selected[0].isdigit() and int(selected[0]) < len(values):
+                self.returned_tree.selection_set(selected[0])
+        self._returned_rows = rows
+        notes: list[str] = []
+        if failed:
+            notes.append(
+                f"{len(failed)} re-work job(s) failed. Nothing is retried automatically; retry them from "
+                "Pipeline > Batches."
+            )
+        if any(row.relation != "verified" for row in rows):
+            notes.append(
+                "Unverified: the job recorded this image's job, but not the exact file, so the link may be "
+                "to a different version."
+            )
+        self._returned_note_var.set(" ".join(notes))
+        self._returned_actions.set_shown(self.returned_batches_button, bool(failed))
+
+    def _schedule_poll(self) -> None:
+        """While a re-work job is queued or running, re-read the repository now and then (never a retry)."""
+
+        active = any(
+            self._session.state_of(item.key) is ItemState.REWORK_QUEUED
+            for item in self._session.items
+        )
+        if not active or self._poll_id is not None:
+            return
+        self._poll_id = self.after(5000, self._poll)
+
+    def _poll(self) -> None:
+        self._poll_id = None
+        if self.winfo_exists() and self.winfo_ismapped():
+            self._session.refresh()
+
+    # -- decisions -------------------------------------------------------------------------------------------
+
+    def _decide_current(self, disposition: str) -> bool:
+        key = self._current_key()
+        if key is None:
+            return False
+        self._bind_writer()
+        if self._rating_touched and self._selected_image_path is not None:
+            self._save_feedback()  # a rating set before the decision is saved with it
+        if not self._session.decide(key, disposition):
+            return False
+        self._undo_order.append("decision")
+        self._advance_after_decision(key)
+        return True
+
+    def _restore_current(self) -> bool:
+        key = self._current_key()
+        self._bind_writer()
+        if not self._session.restore(key):
+            return False
+        self._undo_order.append("decision")
+        return True
+
+    def _advance_after_decision(self, key: str) -> None:
+        following = self._session.next_undecided(key)
+        if following is not None:
+            self._select_key(following)
+        elif not any(item_key(path) == key for path in self._image_index_by_row):
+            self._feedback_status_var.set("Every visible image has a decision.")
+
+    def _on_decision_key(self, value: str) -> str:
+        if value == "undo":
+            self._undo_last_action()
+        else:
+            self._decide_current(value)
+        return "break"
+
+    def _undo_last_action(self) -> None:
+        last = self._undo_order[-1] if self._undo_order else ""
+        if last == "rating":
+            self._undo_last_feedback_save()
+            return
+        if last == "decision" or self._session.can_undo:
+            self._bind_writer()
+            if self._session.undo():
+                self._discard_undo_marker("decision")
+            return
+        if self._feedback_undo_stack:
+            self._undo_last_feedback_save()
+            return
+        self._feedback_status_var.set("Nothing to undo.")
+
+    # -- re-work ---------------------------------------------------------------------------------------------
+
+    def _start_rework(self) -> None:
+        gate = self._session.rework_state()
+        if not gate.enabled:
+            messagebox.showwarning("Re-work", gate.reason, parent=self)
+            return
+        self._reprocess(targets=[item.path for item in self._session.rework_scope()])
+
+    def _submit_rework(self, controller: Any, batch: Any, **callbacks: Any) -> Any:
+        """Queue through the controller as before, then re-read the repository so queued jobs show as queued."""
+
+        on_submitted = callbacks.get("on_submitted")
+
+        def submitted(count: int) -> None:
+            if self.winfo_exists():
+                self._session.refresh()
+            if callable(on_submitted):
+                on_submitted(count)
+
+        return controller.submit_review_reprocess_batch_async(
+            batch, **{**callbacks, "on_submitted": submitted}
+        )
+
+    def _single_target_path(self) -> Path | None:
+        target = self._session.single_target(self._current_key())
+        return target.path if target is not None else None
+
+    def _single_tool_path(self, title: str) -> Path | None:
+        """The one image a single-image tool edits, or ``None`` after saying why not."""
+
+        gate = self._session.single_tool_state(self._current_key())
+        if not gate.enabled:
+            messagebox.showwarning(title, gate.reason, parent=self)
+            return None
+        path = self._single_target_path()
+        if path is None or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            messagebox.showwarning(
+                title, "Select exactly one PNG, JPEG or WebP still image.", parent=self
+            )
+            return None
+        return path
+
+    # -- provenance -----------------------------------------------------------------------------------------
+
+    def _render_provenance(self) -> None:
+        view = self._provenance_view
+        if view is None:
+            text = (
+                "No recorded prompts for this image."
+                if self._image_ready
+                else "Loading prompts..."
+                if self._selected_image_path is not None
+                else "Select an image to see its prompts."
+            )
+        else:
+            text = format_provenance(
+                redact_view(view, self._visibility_resolver(), self._current_visibility_subject())
+            )
+        self._set_readonly_text(self.provenance_text, text)
+
+    # -- Open menu ------------------------------------------------------------------------------------------
+
+    def _open_picker(
+        self, title: str, columns: Sequence[tuple[str, str, int]], on_open: Any
+    ) -> ReviewSetPicker:
+        if self._set_picker is not None and self._set_picker.winfo_exists():
+            self._set_picker.destroy()
+        picker = ReviewSetPicker(self, title=title, columns=columns, on_open=on_open)
+        self._set_picker = picker
+        return picker
+
+    def _on_open_recent_job(self) -> None:
+        history_items = list(getattr(self.app_state, "history_items", []) or [])
+        if not history_items:
+            messagebox.showinfo("No history", "No recent job history is available to open.")
+            return
+        picker = self._open_picker(
+            "Open a recent job in Review",
+            (("status", "Status", 120), ("pack", "Pack / Summary", 360), ("job_id", "Job ID", 220)),
+            self._open_history_job,
+        )
+        picker.set_rows(
+            [
+                (
+                    str(getattr(entry, "job_id", "") or ""),
+                    (
+                        str(getattr(getattr(entry, "status", None), "value", "") or ""),
+                        self._history_entry_summary(entry),
+                        str(getattr(entry, "job_id", "") or ""),
+                    ),
+                )
+                for entry in history_items[:50]
+            ]
+        )
+
+    def _open_history_job(self, job_id: str) -> None:
+        entry = self._find_history_entry(job_id)
+        picker = self._set_picker
+        if entry is None:
+            if picker is not None:
+                picker.set_status("That job is no longer in History.")
+            return
+        if picker is not None:
+            picker.set_status("Finding the job's images...")
+        status, created, result = entry.status, entry.created_at, entry.result
+        self._work.submit(
+            "review:open-job",
+            lambda: resolve_result_images(job_id, status, created, result),
+            on_result=lambda resolution: self._load_resolved_outputs(
+                resolution, f"job {job_id[:8]}"
+            ),
+            on_error=lambda exc: self._open_failed(exc),
+            name="review-open-job",
+            purpose="Resolve a recent job's image outputs for Review without blocking Tk",
+        )
+
+    def _on_open_batch(self) -> None:
+        service = build_batch_operations_service(self.app_controller)
+        if service is None:
+            messagebox.showinfo(
+                "No batches", "The job repository is not connected, so no batch can be opened."
+            )
+            return
+        picker = self._open_picker(
+            "Open a batch in Review",
+            (
+                ("batch", "Batch", 220),
+                ("state", "State", 180),
+                ("jobs", "Jobs", 60),
+                ("activity", "Last activity", 180),
+            ),
+            lambda token: self._open_batch_outputs(service, token),
+        )
+        picker.set_status("Reading batches...")
+        self._batch_summaries: dict[str, Any] = {}
+
+        def listed(snapshot: Any) -> None:
+            if not picker.winfo_exists():
+                return
+            rows: list[tuple[str, tuple[str, ...]]] = []
+            for summary in snapshot.catalog.summaries:
+                token = summary.key.to_token()
+                self._batch_summaries[token] = summary
+                rows.append(
+                    (
+                        token,
+                        (
+                            summary.key.label,
+                            summary.state.value,
+                            str(summary.job_count),
+                            summary.last_activity_at.strftime("%Y-%m-%d %H:%M"),
+                        ),
+                    )
+                )
+            picker.set_rows(rows)
+            picker.set_status("" if rows else "No batches were found in the job repository.")
+
+        self._work.submit(
+            "review:list-batches",
+            service.refresh,
+            on_result=listed,
+            on_error=lambda exc: picker.set_status(f"Batches could not be read: {exc}")
+            if picker.winfo_exists()
+            else None,
+            name="review-list-batches",
+            purpose="Read the batch catalog for Review's Open menu without blocking Tk",
+        )
+
+    def _open_batch_outputs(self, service: Any, token: str) -> None:
+        summary = self._batch_summaries.get(token)
+        picker = self._set_picker
+        if summary is None:
+            if picker is not None:
+                picker.set_status("Select a batch first.")
+            return
+        if picker is not None:
+            picker.set_status("Finding the batch's images...")
+        job_ids = tuple(job.job_id for job in summary.jobs)
+        key = summary.key
+        self._work.submit(
+            "review:open-batch",
+            lambda: service.resolve_outputs(key, job_ids),
+            on_result=lambda resolution: self._load_resolved_outputs(resolution, key.label),
+            on_error=lambda exc: self._open_failed(exc),
+            name="review-open-batch",
+            purpose="Resolve a batch's image outputs for Review without blocking Tk",
+        )
+
+    def _open_failed(self, error: Exception) -> None:
+        picker = self._set_picker
+        if picker is not None and picker.winfo_exists():
+            picker.set_status(f"Could not open the outputs: {error}")
+
+    def _load_resolved_outputs(self, resolution: Any, label: str) -> None:
+        picker = self._set_picker
+        images = [Path(path) for path in resolution.images]
+        problems = " ".join(resolution.messages)
+        if not images:
+            if picker is not None and picker.winfo_exists():
+                picker.set_status(f"No usable image outputs for {label}. {problems}".strip())
+            return
+        count = self.load_selected_images(
+            images, status_message=f"Opened {len(images)} image(s) from {label}. {problems}".strip()
+        )
+        if count and picker is not None and picker.winfo_exists():
+            picker.destroy()
+
+    # -- Returned -------------------------------------------------------------------------------------------
+
+    def _selected_returned_row(self) -> Any | None:
+        selection = self.returned_tree.selection()
+        if not selection or not selection[0].isdigit():
+            return None
+        index = int(selection[0])
+        return self._returned_rows[index] if index < len(self._returned_rows) else None
+
+    def _compare_returned(self) -> None:
+        row = self._selected_returned_row()
+        if row is None:
+            self._returned_note_var.set("Select a returned result first.")
+            return
+        source = next((item for item in self._session.items if item.key == row.source_key), None)
+        if source is None:
+            return
+        if not PIL_AVAILABLE:
+            messagebox.showinfo("Viewer unavailable", "Large compare viewer requires Pillow.")
+            return
+        self._compare_mode = "partner"
+        self._render_compare_viewer(
+            source.path,
+            secondary_path=row.path,
+            title_prefix="Source vs Returned re-work",
+            labels=("Source", "Returned re-work"),
+        )
+
+    def _review_returned(self) -> None:
+        row = self._selected_returned_row()
+        if row is None:
+            self._returned_note_var.set("Select a returned result first.")
+            return
+        out_key = item_key(row.path)
+        self._session.add_items([row.path], after=row.source_key)
+        if not self._select_key(out_key):
+            self._session.set_filter(ViewFilter.ALL)
+            self._select_key(out_key)
+
+    def _rework_returned_again(self) -> None:
+        """Mark the returned result itself for Re-work, so the next job names it (not the source) as its parent."""
+
+        row = self._selected_returned_row()
+        if row is None:
+            self._returned_note_var.set("Select a returned result first.")
+            return
+        out_key = item_key(row.path)
+        self._session.add_items([row.path], after=row.source_key)
+        if not self._select_key(out_key):
+            self._session.set_filter(ViewFilter.ALL)
+            self._select_key(out_key)
+        self._decide_current("rework")
+
+    def _open_batches(self) -> None:
+        from src.gui.controllers.video_workspace_handoff import show_queue_view
+
+        if not show_queue_view(getattr(self.app_controller, "main_window", None)):
+            self._returned_note_var.set("Open Pipeline > Batches to retry failed jobs.")
 
     def _on_send_selected_to_video_workflow(self) -> None:
         """Hand the Listbox's highlighted rows (in list order) to the Video Workflow tab.
@@ -2132,6 +2900,7 @@ class ReviewTabFrame(ttk.Frame):
         self._set_readonly_text(self.current_prompt_text, prompt_value)
         self._set_readonly_text(self.current_negative_text, negative_value)
         self.visibility_banner.config(text="")
+        self._render_provenance()
 
     def _hide_compare_media(self, _event: Any = None) -> None:
         window = self._compare_window
@@ -2160,6 +2929,8 @@ class ReviewTabFrame(ttk.Frame):
         self.on_content_visibility_mode_changed()
 
     def _on_map(self, _event=None) -> None:
+        if self._session.items:
+            self._session.refresh()
         if not self._pending_visibility_refresh:
             return
         self.after_idle(
@@ -2349,28 +3120,16 @@ class ReviewTabFrame(ttk.Frame):
         self._sync_edit_box_to_mode("prompt")
         self._sync_edit_box_to_mode("negative")
 
-    def _reprocess(self, *, batch_all: bool) -> None:
+    def _reprocess(self, *, targets: list[Path]) -> None:
+        """Preview and queue ``targets`` through the existing Review path (the one Preview dialog and Queue)."""
+
         klein_edit = bool(self.klein_edit_var.get())
         stages = ["img2img"] if klein_edit else self._selected_stages()
         if not stages:
             messagebox.showwarning("No stages", "Select at least one stage.")
             return
-
-        if batch_all:
-            targets = list(self.selected_images)
-        else:
-            idxs = self.images_list.curselection()
-            if not idxs:
-                messagebox.showwarning("No selection", "Select one or more images in the list.")
-                return
-            targets = [
-                self._image_index_by_row[int(idx)]
-                for idx in idxs
-                if 0 <= int(idx) < len(self._image_index_by_row)
-            ]
-
         if not targets:
-            messagebox.showwarning("No images", "Select at least one image.")
+            messagebox.showwarning("No images", "Mark at least one image for Re-work.")
             return
 
         controller = self.app_controller
@@ -2424,7 +3183,9 @@ class ReviewTabFrame(ttk.Frame):
                     ReviewBatchDialog(
                         self,
                         preview,
-                        submit=controller.submit_review_reprocess_batch_async,
+                        submit=lambda batch, **callbacks: self._submit_rework(
+                            controller, batch, **callbacks
+                        ),
                         repreview=lambda paths: prepare({**request, "image_paths": paths}),
                         visibility=self._visibility_resolver(),
                     )
@@ -2479,6 +3240,7 @@ class ReviewTabFrame(ttk.Frame):
                     batch_size=batch_size,
                 )
             messagebox.showinfo("Submitted", f"Submitted {submitted} reprocess job(s).")
+            self._session.refresh()
         except Exception as exc:
             messagebox.showerror("Reprocess failed", str(exc))
 
@@ -2540,6 +3302,9 @@ class ReviewTabFrame(ttk.Frame):
         self._feedback_undo_stack.append(
             [{"run_id": run_id, "image_path": str(self._selected_image_path)}]
         )
+        self._undo_order.append("rating")
+        self._rating_touched = False
+        self._session.note_rating(item_key(self._selected_image_path), int(self.rating_var.get()))
         status = (
             f"Saved 1 feedback record: {self._selected_image_path}. The image file was not changed. "
             "Review feedback is observational; use controlled Learning evidence for profile publication."
@@ -2564,55 +3329,105 @@ class ReviewTabFrame(ttk.Frame):
                 "Connected learning controller does not support review feedback.",
             )
             return
-        idxs = list(self.images_list.curselection())
-        if not idxs:
+        targets = self._highlighted_image_paths()
+        if not targets:
             messagebox.showwarning("No selection", "Select one or more images in the list.")
             return
-        targets: list[Path] = []
-        for idx in idxs:
-            if 0 <= int(idx) < len(self._image_index_by_row):
-                targets.append(self._image_index_by_row[int(idx)])
-        if not targets:
-            messagebox.showwarning("No images", "No valid selected images.")
-            return
-
-        tokens: list[dict[str, str]] = []
-        failed: list[str] = []
-        refresh_failed: list[str] = []
-        for target in targets:
-            try:
-                payload = self._build_feedback_payload(target)
-                if payload is None:
-                    raise ValueError("Unable to build feedback payload.")
-                record = save(payload)
-                run_id = str(getattr(record, "run_id", "") or "")
-                if not run_id:
-                    raise OSError("Learning did not confirm a saved record identity.")
-                tokens.append(
-                    {
-                        "run_id": run_id,
-                        "image_path": str(target),
-                    }
-                )
-                if record.metadata.get("recommendation_refresh_error"):
-                    refresh_failed.append(str(target))
-            except Exception:
-                failed.append(str(target))
-        if tokens:
-            self._close_inspection()
-            self._feedback_undo_stack.append(tokens)
-        status = f"Saved {len(tokens)} feedback record(s); not confirmed {len(failed)}."
-        if tokens:
-            status += " Saved: " + "; ".join(token["image_path"] for token in tokens) + "."
-        if failed:
-            status += " Not confirmed: " + "; ".join(failed) + ". Check the log before retrying."
+        # Everything the worker needs is read from Tk here; hashing, metadata reads and the saves run off the
+        # Tk thread, and the status is published when they finish.
+        form = self._rating_form()
         selected_image = self._selected_image_path
-        if tokens and selected_image is not None:
-            if refresh_saved_feedback(lambda: self._refresh_prior_review_summary(selected_image)):
-                refresh_failed.append(str(self._selected_image_path))
-        if refresh_failed:
-            status += " Evidence is saved; refresh Learning recommendations and the Review summary."
-        self._feedback_status_var.set(status)
+        getter = self._prior_summary_getter()
+        self._batch_saves += 1
+        self._feedback_status_var.set(f"Saving the rating for {len(targets)} image(s)...")
+        self.apply_selected_button.configure(state="disabled")
+
+        def work() -> dict[str, Any]:
+            tokens: list[dict[str, str]] = []
+            failed: list[str] = []
+            refresh_failed: list[str] = []
+            for target in targets:
+                try:
+                    payload = self._build_feedback_payload(target, form)
+                    if payload is None:
+                        raise ValueError("Unable to build feedback payload.")
+                    record = save(payload)
+                    run_id = str(getattr(record, "run_id", "") or "")
+                    if not run_id:
+                        raise OSError("Learning did not confirm a saved record identity.")
+                    tokens.append({"run_id": run_id, "image_path": str(target)})
+                    if record.metadata.get("recommendation_refresh_error"):
+                        refresh_failed.append(str(target))
+                except Exception:
+                    failed.append(str(target))
+            summary: Any = None
+            summary_ok = False
+            if tokens and selected_image is not None and callable(getter):
+
+                def read() -> None:
+                    nonlocal summary
+                    summary = getter(str(selected_image))
+
+                summary_ok = not refresh_saved_feedback(read)
+            return {
+                "tokens": tokens,
+                "failed": failed,
+                "refresh_failed": refresh_failed,
+                "summary": summary,
+                "summary_ok": summary_ok,
+            }
+
+        def done(result: dict[str, Any]) -> None:
+            if not self.winfo_exists():
+                return
+            self.apply_selected_button.configure(state="normal")
+            tokens = result["tokens"]
+            failed = result["failed"]
+            refresh_failed = list(result["refresh_failed"])
+            if tokens:
+                self._close_inspection()
+                self._feedback_undo_stack.append(tokens)
+                self._undo_order.append("rating")
+                for token in tokens:
+                    self._session.note_rating(item_key(token["image_path"]), form["rating"])
+                if selected_image is not None and any(
+                    item_key(token["image_path"]) == item_key(selected_image) for token in tokens
+                ):
+                    self._rating_touched = False
+            status = f"Saved {len(tokens)} feedback record(s); not confirmed {len(failed)}."
+            if tokens:
+                status += " Saved: " + "; ".join(token["image_path"] for token in tokens) + "."
+            if failed:
+                status += (
+                    " Not confirmed: " + "; ".join(failed) + ". Check the log before retrying."
+                )
+            if tokens and selected_image is not None:
+                if result["summary_ok"]:
+                    self._prior_review_summary_var.set(
+                        self._format_prior_review_summary(result["summary"])
+                    )
+                else:
+                    self._prior_review_summary_var.set("Prior Review Summary: unavailable")
+            if refresh_failed:
+                status += (
+                    " Evidence is saved; refresh Learning recommendations and the Review summary."
+                )
+            self._feedback_status_var.set(status)
+
+        def failed_run(error: Exception) -> None:
+            if not self.winfo_exists():
+                return
+            self.apply_selected_button.configure(state="normal")
+            self._feedback_status_var.set(f"The rating was not saved: {error}")
+
+        self._work.submit(
+            f"review:rate-batch:{self._batch_saves}",
+            work,
+            on_result=done,
+            on_error=failed_run,
+            name="review-rate-batch",
+            purpose="Hash and save one Review rating for each highlighted image without blocking Tk",
+        )
 
     def _write_rating_into_file(self) -> None:
         """Explicit export of the saved rating into the image (or a sidecar); saving a rating never does this."""
@@ -2665,6 +3480,7 @@ class ReviewTabFrame(ttk.Frame):
             messagebox.showinfo("Nothing to undo", "No saved feedback actions to undo.")
             return
         action = self._feedback_undo_stack.pop()
+        self._discard_undo_marker("rating")
         undone = 0
         for token in reversed(action):
             if undo(run_id=token.get("run_id"), image_path=token.get("image_path")):
@@ -2676,38 +3492,65 @@ class ReviewTabFrame(ttk.Frame):
         self._feedback_status_var.set(f"Undo removed {undone} feedback record(s).")
         messagebox.showinfo("Undo complete", f"Removed {undone} feedback record(s).")
 
-    def _build_feedback_payload(self, image_path: Path) -> dict[str, Any] | None:
+    def _rating_form(self) -> dict[str, Any]:
+        """Every Tk-held value a rating save needs, read once on the Tk thread so a worker can build payloads."""
+
+        return {
+            "rating": int(self.rating_var.get()),
+            "quality": self.quality_var.get(),
+            "notes": self.feedback_notes.get("1.0", tk.END).strip(),
+            "prompt_delta": self.prompt_text.get("1.0", tk.END).strip(),
+            "negative_delta": self.negative_text.get("1.0", tk.END).strip(),
+            "prompt_mode": self.prompt_mode_var.get(),
+            "negative_mode": self.negative_mode_var.get(),
+            "stages": self._selected_stages(),
+            "anatomy": int(self.anatomy_rating_var.get()),
+            "composition": int(self.composition_rating_var.get()),
+            "prompt_adherence": int(self.prompt_adherence_rating_var.get()),
+            "selected_path": self._selected_image_path,
+            "selected_sha": self._selected_image_sha256,
+            "adetailer_pair": self._adetailer_pair,
+            "adetailer_face": self.adetailer_face_outcome_var.get(),
+            "adetailer_hands": self.adetailer_hands_outcome_var.get(),
+            "adetailer_note": self.adetailer_outcome_note_var.get(),
+        }
+
+    def _build_feedback_payload(
+        self, image_path: Path, form: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        form = form if form is not None else self._rating_form()
         metadata = extract_embedded_metadata(image_path)
         if metadata.status != "ok" or not isinstance(metadata.payload, dict):
             return None
         payload = self._workflow_adapter.build_feedback_payload(
             image_path=image_path,
             metadata_payload=metadata.payload,
-            rating=int(self.rating_var.get()),
-            quality_label=self.quality_var.get(),
-            notes=self.feedback_notes.get("1.0", tk.END).strip(),
-            prompt_delta=self.prompt_text.get("1.0", tk.END).strip(),
-            negative_prompt_delta=self.negative_text.get("1.0", tk.END).strip(),
-            prompt_mode=self.prompt_mode_var.get(),
-            negative_prompt_mode=self.negative_mode_var.get(),
-            stages=self._selected_stages(),
-            anatomy_rating=int(self.anatomy_rating_var.get()),
-            composition_rating=int(self.composition_rating_var.get()),
-            prompt_adherence_rating=int(self.prompt_adherence_rating_var.get()),
+            rating=form["rating"],
+            quality_label=form["quality"],
+            notes=form["notes"],
+            prompt_delta=form["prompt_delta"],
+            negative_prompt_delta=form["negative_delta"],
+            prompt_mode=form["prompt_mode"],
+            negative_prompt_mode=form["negative_mode"],
+            stages=list(form["stages"]),
+            anatomy_rating=form["anatomy"],
+            composition_rating=form["composition"],
+            prompt_adherence_rating=form["prompt_adherence"],
         )
         # The identity of the bytes Review showed; any other image is hashed by the controller at save time.
-        if image_path == self._selected_image_path and self._selected_image_sha256:
-            payload["artifact_sha256"] = self._selected_image_sha256
+        if image_path == form["selected_path"] and form["selected_sha"]:
+            payload["artifact_sha256"] = form["selected_sha"]
         job_id = str(metadata.payload.get("job_id") or "").strip()
         if job_id:
             payload["source_job_id"] = job_id
         # Only the image currently shown (with its verified source) can carry the optional before/after judgment.
-        if self._adetailer_pair is not None and image_path == self._selected_image_path:
+        pair = form["adetailer_pair"]
+        if pair is not None and image_path == form["selected_path"]:
             context = build_review_context(
-                self._adetailer_pair,
-                face=self.adetailer_face_outcome_var.get(),
-                hands=self.adetailer_hands_outcome_var.get(),
-                note=self.adetailer_outcome_note_var.get(),
+                pair,
+                face=form["adetailer_face"],
+                hands=form["adetailer_hands"],
+                note=form["adetailer_note"],
             )
             if context:
                 payload["context"] = context

@@ -24,7 +24,9 @@ def review(tmp_path, monkeypatch):
     monkeypatch.setattr(frame, "_resolve_learning_controller", lambda: controller)
     monkeypatch.setattr(frame, "_refresh_prior_review_summary", Mock())
     monkeypatch.setattr(
-        frame, "_build_feedback_payload", lambda path: {"image_path": str(path), "rating": 4}
+        frame,
+        "_build_feedback_payload",
+        lambda path, form=None: {"image_path": str(path), "rating": 4},
     )
     paths = [tmp_path / f"image-{i}.png" for i in range(3)]
     frame._image_index_by_row = paths
@@ -119,7 +121,7 @@ def test_post_append_refresh_failure_preserves_saved_outcome_and_undo(review, mo
 def test_batch_payload_failure_preserves_prior_success_tokens(review, monkeypatch):
     frame, _, writer, paths = review
 
-    def build(path):
+    def build(path, form=None):
         if path == paths[1]:
             raise ValueError("metadata unavailable")
         return {"image_path": str(path), "rating": 4}

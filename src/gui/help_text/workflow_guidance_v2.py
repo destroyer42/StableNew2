@@ -17,10 +17,11 @@ def build_review_action_guidance() -> ActionExplainerContent:
             "than immediate reprocessing."
         ),
         bullets=(
-            "Import Selected to Learning copies the chosen review items into staged curation evidence so they can drive later decisions without reprocessing immediately.",
-            "Import Recent Job opens a picker for a recent run when you want to start from history instead of the current folder selection.",
-            "Reprocess Selected queues only the selected images with the stage toggles and prompt edits shown here.",
-            "Reprocess All uses the current Review settings across the full loaded set, so confirm the effective settings box before clicking it.",
+            "Open picks the images: a folder, files, a recent job's outputs, or a batch's outputs. Nothing is copied or changed.",
+            "Retain, Discard and Re-work record your decision as Learning evidence (the keys R, D and W do the same, then show the next undecided image). Discard only archives: the file stays where it is and Restore brings it back.",
+            "Marked images open the Re-work area: choose stages and prompt edits, then Preview and queue. Nothing is queued until you confirm the preview.",
+            "Finished re-work results return beside their source in Returned; compare them, review them, or Re-work again.",
+            "Send to > Learning records the highlighted images as staged-curation evidence without reprocessing; Send to > Photo Optimize offers them to the Managed Photo Set.",
         ),
     )
 

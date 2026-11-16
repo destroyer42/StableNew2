@@ -141,56 +141,64 @@ def test_review_tab_imports_selected_images_to_staged_curation(
 
 
 @pytest.mark.gui
-def test_review_tab_imports_selected_history_job_to_staged_curation(
-    tk_root: tk.Tk, tmp_path: Path
-) -> None:
-    imported: list[str] = []
+def test_review_tab_opens_a_recent_job_s_outputs_in_review(tk_root: tk.Tk, tmp_path: Path) -> None:
+    """PR-REVIEW-LIFECYCLE-621: Open > Recent job replaces the old "Import Recent Job" (a Staged Curation import)."""
 
-    class _LearningController:
-        def import_history_entry_to_staged_curation(self, entry):
-            imported.append(entry.job_id)
-            return "curation-history-1"
+    from PIL import Image
 
+    image = tmp_path / "job-output.png"
+    Image.new("RGB", (8, 8), (1, 2, 3)).save(image)
     entry = JobHistoryEntry(
         job_id="history-1",
         created_at=datetime.utcnow(),
         status=JobStatus.COMPLETED,
         prompt_pack_id="History Pack",
-        result={"output_dir": str(tmp_path)},
+        result={
+            "success": True,
+            "artifact": {
+                "stage": "txt2img",
+                "artifact_type": "image",
+                "primary_path": str(image),
+                "output_paths": [str(image)],
+            },
+            "variants": [],
+            "metadata": {},
+        },
     )
-    app_controller = SimpleNamespace(
-        main_window=SimpleNamespace(
-            learning_tab=SimpleNamespace(learning_controller=_LearningController())
-        )
-    )
-    app_state = SimpleNamespace(history_items=[entry])
-
-    tab = ReviewTabFrame(tk_root, app_controller=app_controller, app_state=app_state)
+    tab = ReviewTabFrame(tk_root, app_state=SimpleNamespace(history_items=[entry]))
     try:
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(
-                "src.gui.views.review_tab_frame_v2.messagebox.showinfo",
-                lambda *args, **kwargs: None,
-            )
-            mp.setattr(
-                "src.gui.views.review_tab_frame_v2.messagebox.showerror",
-                lambda *args, **kwargs: None,
-            )
-            mp.setattr(
-                "src.gui.views.review_tab_frame_v2.messagebox.showwarning",
-                lambda *args, **kwargs: None,
-            )
-            picker = ttk.Treeview(tk_root, columns=("status", "pack", "job_id"), show="headings")
-            picker.insert(
-                "", "end", iid="history-1", values=("completed", "History Pack", "history-1")
-            )
-            picker.selection_set("history-1")
-            tab._import_selected_history_job(picker)  # noqa: SLF001
+        assert not hasattr(tab, "_import_selected_history_job")
+        tab._on_open_recent_job()  # noqa: SLF001
+        picker = tab._set_picker  # noqa: SLF001
+        assert picker is not None and picker.tree.get_children() == ("history-1",)
+        picker.tree.selection_set("history-1")
+        picker._open()  # noqa: SLF001
+        assert tab.selected_images == [image]
+        assert not picker.winfo_exists()
     finally:
-        picker.destroy()
         tab.destroy()
 
-    assert imported == ["history-1"]
+
+@pytest.mark.gui
+def test_review_tab_open_recent_job_says_so_when_the_job_left_no_usable_image(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
+    entry = JobHistoryEntry(
+        job_id="history-2",
+        created_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+        result={"success": True, "variants": [], "metadata": {}},
+    )
+    tab = ReviewTabFrame(tk_root, app_state=SimpleNamespace(history_items=[entry]))
+    try:
+        tab._on_open_recent_job()  # noqa: SLF001
+        picker = tab._set_picker  # noqa: SLF001
+        picker.tree.selection_set("history-2")
+        picker._open()  # noqa: SLF001
+        assert tab.selected_images == []
+        assert "No usable image" in picker.status.get()
+    finally:
+        tab.destroy()
 
 
 @pytest.mark.gui
@@ -491,10 +499,10 @@ def test_review_tab_history_import_picker_uses_themed_popup(tk_root: tk.Tk) -> N
     )
     tab = ReviewTabFrame(tk_root, app_state=SimpleNamespace(history_items=[entry]))
     try:
-        tab._on_open_history_import_picker()  # noqa: SLF001
-        assert tab._history_import_window is not None  # noqa: SLF001
-        assert tab._history_import_window.cget("bg") == BACKGROUND_DARK  # noqa: SLF001
+        tab._on_open_recent_job()  # noqa: SLF001
+        assert tab._set_picker is not None  # noqa: SLF001
+        assert tab._set_picker.cget("bg") == BACKGROUND_DARK  # noqa: SLF001
     finally:
-        if tab._history_import_window is not None and tab._history_import_window.winfo_exists():  # noqa: SLF001
-            tab._history_import_window.destroy()  # noqa: SLF001
+        if tab._set_picker is not None and tab._set_picker.winfo_exists():  # noqa: SLF001
+            tab._set_picker.destroy()  # noqa: SLF001
         tab.destroy()

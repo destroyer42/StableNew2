@@ -147,7 +147,7 @@ def test_saved_geometry_is_normalized_for_the_current_screen(saved, expected) ->
 @pytest.mark.parametrize(
     ("tab_factory", "scroll_attr", "last_control_attr"),
     [
-        (ReviewTabFrame, "_workspace_scroll", "reprocess_all_button"),
+        (ReviewTabFrame, "_workspace_scroll", "write_rating_button"),  # PR-REVIEW-LIFECYCLE-621: Re-work is contextual
         # PR-GUI-110: the primary submit actions left the scroll region; the lowest scrolled control is now the
         # Recent SVD Outputs action / the Video Workflow Recent outputs section (PR-VID-UX-313/314: the negative
         # prompt moved into the collapsed Advanced options).

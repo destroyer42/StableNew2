@@ -10,9 +10,11 @@ import pytest
 from PIL import Image
 
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
+from src.gui.view_contracts.review_workspace_contract import item_key
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui_v2.model_policy_projection import project_model_selection
 from src.image_backends.forge_klein_profile import KLEIN_EDIT_METADATA_KEY
+from src.learning.learning_record import LearningRecordWriter
 from src.review.workflow_adapter import ReviewWorkflowAdapter
 
 KLEIN = "flux-2-klein-4b-fp8.safetensors"
@@ -184,7 +186,13 @@ def _review(tk_root: tk.Tk, tmp_path: Path, count: int = 1) -> tuple[ReviewTabFr
         path = tmp_path / f"r{i}.png"
         Image.new("RGB", (32, 32)).save(path)
         images.append(path)
-    tab.selected_images = list(images)
+    # PR-REVIEW-LIFECYCLE-621: Re-work acts on the images marked for it (a Learning evidence decision).
+    writer = LearningRecordWriter(tmp_path / "evidence.jsonl")
+    tab._resolve_evidence_writer = lambda: writer
+    tab._set_selected_images(list(images))
+    tab._bind_writer()
+    for path in images:
+        assert tab._session.decide(item_key(path), "rework")
     return tab, controller, images
 
 
@@ -199,7 +207,7 @@ def test_review_klein_edit_submits_one_image_as_img2img_replace_with_the_explici
         assert (tab.stage_img2img_var.get(), tab.stage_adetailer_var.get(), tab.stage_upscale_var.get()) == (True, False, False)
         assert tab.prompt_mode_var.get() == "replace"
         tab.prompt_text.insert("1.0", "change only the jacket to deep red leather")
-        tab._reprocess(batch_all=True)
+        tab._start_rework()
         (call,) = controller.calls
         assert call["stages"] == ["img2img"]
         assert call["image_paths"] == [str(images[0])]
@@ -215,15 +223,15 @@ def test_review_klein_edit_requires_exactly_one_image_and_an_edit_prompt(tk_root
 
     warnings: list[str] = []
     monkeypatch.setattr(messagebox, "showwarning", lambda title, message, **k: warnings.append(message))
-    tab, controller, _ = _review(tk_root, tmp_path, count=2)
+    tab, controller, images = _review(tk_root, tmp_path, count=2)
     try:
         tab.klein_edit_var.set(True)
         tab.prompt_text.insert("1.0", "make it red")
-        tab._reprocess(batch_all=True)  # two images -> multi-reference is not supported
+        tab._start_rework()  # two images -> multi-reference is not supported
         assert controller.calls == [] and "exactly one" in warnings[-1]
-        tab.selected_images = tab.selected_images[:1]
+        assert tab._session.decide(item_key(images[1]), "retain")  # one image left marked
         tab.prompt_text.delete("1.0", tk.END)
-        tab._reprocess(batch_all=True)
+        tab._start_rework()
         assert controller.calls == [] and "Describe the desired edit" in warnings[-1]
     finally:
         tab.destroy()
@@ -236,7 +244,7 @@ def test_review_without_the_klein_selection_is_the_unchanged_reprocess_path(tk_r
     tab, controller, images = _review(tk_root, tmp_path)
     try:
         tab.stage_img2img_var.set(True)
-        tab._reprocess(batch_all=True)
+        tab._start_rework()
         (call,) = controller.calls
         assert call["stages"] == ["img2img", "adetailer"]
         assert call["prompt_mode"] == "append"
@@ -352,7 +360,7 @@ def test_review_submit_after_unchecking_uses_the_restored_ordinary_settings(tk_r
         _ordinary_review(tab)
         tab.klein_edit_var.set(True)
         tab.klein_edit_var.set(False)
-        tab._reprocess(batch_all=True)
+        tab._start_rework()
         (call,) = controller.calls
         assert call["stages"] == ["adetailer", "upscale"]
         assert (call["prompt_mode"], call["negative_prompt_mode"], call["batch_size"]) == ("modify", "append", 4)

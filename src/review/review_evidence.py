@@ -15,6 +15,7 @@ import json
 import os
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -201,6 +202,9 @@ def build_disposition_record(
         "artifact_sha256": digest,
         "review_disposition": value,
         "user_notes": str(notes or ""),
+        # Sub-second UTC time of the decision: the record's own timestamp has one-second resolution, which cannot
+        # order a decision against a job queued within the same second.
+        "decided_at": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds"),
     }
     if str(source_job_id or "").strip():
         metadata["source_job_id"] = str(source_job_id).strip()
@@ -302,6 +306,8 @@ class DispositionLookup:
     identity: str = ""
     timestamp: str = ""
     run_id: str = ""
+    #: Sub-second UTC time of the decision when it was recorded (empty for older rows; use ``timestamp`` then).
+    decided_at: str = ""
 
 
 def lookup_disposition(
@@ -329,6 +335,7 @@ def _disposition_of(found: EvidenceLookup) -> DispositionLookup:
         identity=found.identity,
         timestamp=str(found.row.get("timestamp") or ""),
         run_id=str(found.row.get("run_id") or ""),
+        decided_at=str(metadata.get("decided_at") or ""),
     )
 
 
