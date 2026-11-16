@@ -28,6 +28,33 @@ EVIDENCE_CLASSES = (CLASS_CONTROLLED, CLASS_LOCAL, CLASS_ENVELOPE, CLASS_EXPLORA
 RATING_KIND_EXPERIMENT = "learning_experiment_rating"
 EXCLUSIONS_REF = "src.learning.baseline_exclusions:STUDY_EXCLUSIONS"
 
+#: Navigation (LEARN-NAV-871, owner decision OD-2 of 2026-11-16): the operator starts from an objective, not a study.
+#: ``TIER_OBJECTIVE`` studies sit directly under their objective; ``TIER_MORE`` studies sit under "More comparisons".
+OBJECTIVE_WORKS = "works_here"
+OBJECTIVE_SETTING = "better_setting"
+OBJECTIVE_ADAPTER = "adapter_worth_using"
+OBJECTIVE_PREFERENCE = "which_i_prefer"
+OBJECTIVE_MORE = "more_comparisons"
+TIER_OBJECTIVE = "objective"
+TIER_MORE = "more"
+
+
+@dataclass(frozen=True)
+class Objective:
+    key: str
+    label: str
+    tier: str
+
+
+#: The five navigation entries, in display order. Presentation data only.
+OBJECTIVES: tuple[Objective, ...] = (
+    Objective(OBJECTIVE_WORKS, "Does this model work here", TIER_OBJECTIVE),
+    Objective(OBJECTIVE_SETTING, "Find a better setting", TIER_OBJECTIVE),
+    Objective(OBJECTIVE_ADAPTER, "Is this adapter worth using", TIER_OBJECTIVE),
+    Objective(OBJECTIVE_PREFERENCE, "Which do I prefer", TIER_OBJECTIVE),
+    Objective(OBJECTIVE_MORE, "More comparisons", TIER_MORE),
+)
+
 
 @dataclass(frozen=True)
 class StudyDescriptor:
@@ -39,6 +66,12 @@ class StudyDescriptor:
     feeds_recommendations: bool
     #: The existing check that decides whether a design may be previewed (not called by the catalog).
     eligibility_ref: str
+    #: The study's own check of the Learning model (and baseline) as a target, ``""`` when the model's capability
+    #: projection decides it (``controlled_variable``). Not called by the catalog; ``study_eligibility`` calls it.
+    target_check_ref: str = ""
+    #: The objective entry this study is offered under (``OBJECTIVE_*``) and that entry's navigation tier.
+    objective_group: str = ""
+    nav_tier: str = TIER_OBJECTIVE
     #: The study's own conclusion function; ``""`` means the generic ``experiment_conclusion`` builder.
     conclusion_ref: str = ""
     #: Where the study's refused settings are listed (``STUDY_EXCLUSIONS[slug]``); ``""`` when it refuses none.
@@ -60,6 +93,8 @@ STUDIES: tuple[StudyDescriptor, ...] = (
         rating_record_kind=RATING_KIND_EXPERIMENT,
         feeds_recommendations=True,
         eligibility_ref="src.learning.model_policy_service:validate_experiment",
+        target_check_ref="",
+        objective_group=OBJECTIVE_SETTING,
         aliases=("ordinary",),
         next_test="Add images per value, or repeat the test under a different prompt, so the ratings can separate the values.",
     ),
@@ -71,6 +106,8 @@ STUDIES: tuple[StudyDescriptor, ...] = (
         rating_record_kind=RATING_KIND_EXPERIMENT,
         feeds_recommendations=False,
         eligibility_ref="src.learning.prompt_slot_experiment:validate_design",
+        target_check_ref="src.learning.prompt_slot_experiment:require_target",
+        objective_group=OBJECTIVE_PREFERENCE,
         conclusion_ref="src.learning.prompt_slot_experiment:conclusion",
         exclusions_ref=EXCLUSIONS_REF,
         service="prompt_slot",
@@ -84,6 +121,8 @@ STUDIES: tuple[StudyDescriptor, ...] = (
         rating_record_kind=RATING_KIND_EXPERIMENT,
         feeds_recommendations=False,
         eligibility_ref="src.learning.lora_composition:validate_operation",
+        target_check_ref="src.learning.lora_composition:require_target",
+        objective_group=OBJECTIVE_ADAPTER,
         conclusion_ref="src.learning.lora_composition:conclusion",
         exclusions_ref=EXCLUSIONS_REF,
         service="lora_composition",
@@ -97,6 +136,8 @@ STUDIES: tuple[StudyDescriptor, ...] = (
         rating_record_kind=RATING_KIND_EXPERIMENT,
         feeds_recommendations=False,
         eligibility_ref="src.learning.embedding_experiment:validate_operation",
+        target_check_ref="src.learning.embedding_experiment:require_target",
+        objective_group=OBJECTIVE_ADAPTER,
         conclusion_ref="src.learning.embedding_experiment:conclusion",
         exclusions_ref=EXCLUSIONS_REF,
         service="embedding_experiment",
@@ -110,6 +151,8 @@ STUDIES: tuple[StudyDescriptor, ...] = (
         rating_record_kind="learning_model_comparison_rating",
         feeds_recommendations=False,
         eligibility_ref="src.learning.model_comparison:verify_arms_admissible",
+        target_check_ref="src.learning.model_comparison:candidate_ineligibility",
+        objective_group=OBJECTIVE_PREFERENCE,
         next_test="Rate more images per model, or compare the two closest models on a second prompt.",
     ),
     StudyDescriptor(
@@ -120,6 +163,9 @@ STUDIES: tuple[StudyDescriptor, ...] = (
         rating_record_kind="learning_grid_rating",
         feeds_recommendations=False,
         eligibility_ref="src.learning.two_axis_grid:require_plain_txt2img",
+        target_check_ref="src.learning.two_axis_grid:_eligible",
+        objective_group=OBJECTIVE_MORE,
+        nav_tier=TIER_MORE,
         exclusions_ref=EXCLUSIONS_REF,
         next_test="Test the most promising cell's setting alone with a Controlled Variable experiment.",
     ),
@@ -131,6 +177,9 @@ STUDIES: tuple[StudyDescriptor, ...] = (
         rating_record_kind="learning_prompt_model_matrix_rating",
         feeds_recommendations=False,
         eligibility_ref="src.learning.prompt_model_matrix:require_matrix_baseline",
+        target_check_ref="src.learning.model_comparison:candidate_ineligibility",
+        objective_group=OBJECTIVE_MORE,
+        nav_tier=TIER_MORE,
         conclusion_ref="src.learning.prompt_model_matrix:conclusion",
         exclusions_ref=EXCLUSIONS_REF,
         service="prompt_model_matrix",
@@ -144,6 +193,8 @@ STUDIES: tuple[StudyDescriptor, ...] = (
         rating_record_kind=RATING_KIND_EXPERIMENT,
         feeds_recommendations=False,
         eligibility_ref="src.learning.compatibility_probe:verify_spec",
+        target_check_ref="src.learning.learning_controller_services.compatibility_probe:require_probe_target",
+        objective_group=OBJECTIVE_WORKS,
         service="compatibility_probe",
         next_test="Record a verdict with Review Probe Result, or test the best recipe's settings in a Controlled Variable experiment.",
     ),
