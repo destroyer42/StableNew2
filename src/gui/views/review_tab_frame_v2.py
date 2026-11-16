@@ -776,19 +776,23 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=self._save_feedback_batch,
         ).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        # One row (not two) so the Review workspace keeps its scroll height.
+        undo_row = ttk.Frame(feedback_box, style="Panel.TFrame")
+        undo_row.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        undo_row.columnconfigure((0, 1), weight=1, uniform="feedback_actions")
         ttk.Button(
-            feedback_box,
+            undo_row,
             text="Undo Last Save",
             style="Dark.TButton",
             command=self._undo_last_feedback_save,
-        ).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3))
         write_rating_button = ttk.Button(
-            feedback_box,
-            text="Write rating into file...",
+            undo_row,
+            text="Write rating to file...",
             style="Dark.TButton",
             command=self._write_rating_into_file,
         )
-        write_rating_button.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        write_rating_button.grid(row=0, column=1, sticky="ew", padx=(3, 0))
         attach_tooltip(
             write_rating_button,
             "Optional export of the saved rating. PNG: embedded in the file, which changes the file's identity. "
