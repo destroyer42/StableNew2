@@ -18,16 +18,25 @@ from src.image_backends import (
     build_default_image_backend_registry,
     resolve_image_backend_id,
 )
+from src.image_backends.model_policy import resolve_model_policy
 from src.learning.experiment_naming import (
     build_learning_folder_label,
 )
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
+from src.pipeline.adetailer_checkpoint import resolve_adetailer_checkpoint
 from src.pipeline.artifact_contract import build_artifact_record, canonicalize_variant_entries
 from src.pipeline.config_contract_v26 import (
     extract_adaptive_refinement_intent,
     validate_train_lora_execution_config,
+)
+from src.pipeline.image_performance import (
+    METADATA_KEY as IMAGE_PERFORMANCE_KEY,
+)
+from src.pipeline.image_performance import (
+    ImagePerformanceTrace,
+    observe_cleanup,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.njr_core_v26 import thaw_json
@@ -119,17 +128,35 @@ class PipelineRunner:
         *,
         njr: NormalizedJobRecord,
     ) -> str | None:
-        """Select the StableNew-owned model policy for one image stage.
-
-        These stages currently do not have a first-class GUI surface for
-        explicit per-stage SD checkpoint selection, so stale hidden stage
-        config must not silently override the NJR base model.  Backends receive
-        this selected value and own their own field aliases.
-        """
+        """Select a checkpoint from the frozen NJR before constructing the backend request."""
         base_model = str(getattr(njr, "base_model", "") or "").strip()
-        if stage_name in {"img2img", "adetailer", "upscale"} and base_model:
+        if stage_name in {"txt2img", "adetailer"}:
+            base_generation = PipelineRunner._base_generation_checkpoint(njr)
+            if stage_name == "adetailer":
+                return resolve_adetailer_checkpoint(stage_config, base_generation)
+            return base_generation
+        if stage_name in {"img2img", "upscale"} and base_model:
             return base_model
         return str(stage_config.get("model") or base_model or "").strip() or None
+
+    @staticmethod
+    def _base_generation_checkpoint(njr: NormalizedJobRecord) -> str | None:
+        # NJR.base_model is a generic projection of the first populated stage model. An image job's
+        # downstream StageConfig.model may itself be a stale alias, so it is never Base Generation intent.
+        base_stage = next(
+            (stage for stage in njr.stage_chain if stage.enabled
+             and stage.stage_type in {"txt2img", "img2img"}),
+            None,
+        )
+        if base_stage is not None and base_stage.model and base_stage.model.strip():
+            return base_stage.model.strip()
+        for config in (njr.config, njr.config.get("txt2img"), njr.config.get("img2img")):
+            if isinstance(config, Mapping):
+                for key in ("model", "model_name", "base_model"):
+                    value = config.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+        return None
 
     @staticmethod
     def _selected_stage_vae(
@@ -836,20 +863,14 @@ class PipelineRunner:
         # Retired secondary motion is refused the same way, so a job queued before the retirement fails typed.
         require_secondary_motion_not_enabled(njr)
         plan = build_run_plan_from_njr(njr)
-        if hasattr(self._pipeline, "_begin_run_metrics"):
-            self._pipeline._begin_run_metrics()
-        # Best-effort local cleanup before every job. Do not block queued work on
-        # refresh-checkpoints; that endpoint is reserved for explicit aggressive cleanup.
-        try:
-            client = getattr(self._pipeline, "client", None)
-            if client and hasattr(client, "free_vram"):
-                logger.info("Running best-effort pre-job memory cleanup.")
-                client.free_vram(unload_model=False, refresh_checkpoints=False)
-        except Exception:
-            pass
         image_backend_id = self._resolve_image_backend_id(
             njr, [job.stage_name for job in plan.jobs]
         )
+        if hasattr(self._pipeline, "_begin_run_metrics"):
+            self._pipeline._begin_run_metrics()
+        trace = getattr(self._pipeline, "_image_performance", None)
+        trace = trace if isinstance(trace, ImagePerformanceTrace) else None
+        self._cleanup_at_job_start(trace)
         if any(job.stage_name == StageTypeEnum.TRAIN_LORA.value for job in plan.jobs):
             if len(plan.jobs) != 1 or plan.jobs[0].stage_name != StageTypeEnum.TRAIN_LORA.value:
                 raise ValueError("train_lora must be the only enabled stage in an NJR run plan.")
@@ -892,6 +913,7 @@ class PipelineRunner:
             learning_context=dirs.learning_context,
             client=getattr(self._pipeline, "client", None),
             metadata=metadata,
+            image_performance=trace if image_backend_id else None,
         )
         terminal_outcome: str | None = None
         try:
@@ -903,6 +925,12 @@ class PipelineRunner:
             self._finalize_adaptive_refinement(metadata, stage_ctx.paths)
         except CancellationError:
             terminal_outcome = "cancelled"
+            if stage_ctx.image_performance is not None:
+                self._attach_image_performance(stage_ctx, outcome=terminal_outcome)
+                self._write_run_metadata_file(
+                    njr=njr, run_id=dirs.run_id, route_root=dirs.route_root,
+                    metadata=metadata, variants=stage_ctx.variants,
+                )
             raise
         except Exception as exc:
             terminal_outcome = "failed"
@@ -947,6 +975,18 @@ class PipelineRunner:
         self._last_run_result = result
         return result
 
+    def _cleanup_at_job_start(self, trace: ImagePerformanceTrace | None) -> None:
+        # Best-effort local cleanup. Refresh is reserved for explicitly requested maintenance.
+        try:
+            client = getattr(self._pipeline, "client", None)
+            if client and hasattr(client, "free_vram"):
+                logger.info("Running best-effort pre-job memory cleanup.")
+                observe_cleanup(
+                    client, trace, reason="job_start", unload_model=False, refresh_checkpoints=False,
+                )
+        except Exception:
+            pass
+
     def _no_output_reason(self) -> str:
         """Why a run produced nothing: a verified checkpoint mismatch if the executor recorded one, else the generic text."""
 
@@ -977,6 +1017,13 @@ class PipelineRunner:
         )
         # REPROCESSING SUPPORT: input_image_paths are the starting images, start_stage the first stage to run.
         ctx.paths, start_stage = self._reprocess_inputs(njr)
+        ctx.final_image_stage = next(
+            (stage.stage_name for stage in reversed(ctx.plan.jobs)
+             if stage.stage_name in {"txt2img", "img2img", "adetailer", "upscale"}),
+            None,
+        )
+        if ctx.final_image_stage is not None:
+            ctx.requested_image_count = len(ctx.paths) if start_stage else max(1, njr.images_per_prompt or 1)
         reached_start_stage = start_stage is None  # no start_stage: begin immediately
         telemetry = ctx.survivor_telemetry
         for stage in ctx.plan.jobs:
@@ -1029,6 +1076,29 @@ class PipelineRunner:
                 telemetry.leave_stage(stage.stage_name)
             self._pipeline._current_stage_index += 1
 
+    def _attach_image_performance(self, ctx: StageRunContext, *, outcome: str) -> None:
+        trace = ctx.image_performance
+        if trace is not None:
+            ctx.metadata[IMAGE_PERFORMANCE_KEY] = trace.snapshot(outcome)
+        if ctx.final_image_stage is None:
+            return
+        final_count = len(ctx.final_image_paths)
+        base_count = trace.base_images_returned if trace is not None else None
+        metrics: dict[str, Any] = {}
+        if hasattr(self._pipeline, "get_run_efficiency_metrics"):
+            try:
+                metrics = self._pipeline.get_run_efficiency_metrics(final_count)
+            except Exception:
+                metrics = {}
+        if metrics:
+            metrics.update(
+                requested_image_count=ctx.requested_image_count,
+                returned_base_image_count=base_count if base_count is not None else ctx.returned_base_images,
+                final_output_image_count=final_count,
+                stage_execution_count=ctx.image_stage_executions,
+            )
+            ctx.metadata["efficiency_metrics"] = metrics
+
     def _build_run_result(
         self,
         *,
@@ -1041,16 +1111,7 @@ class PipelineRunner:
         stage_events: list[dict[str, Any]],
     ) -> PipelineRunResult:
         metadata = stage_ctx.metadata
-        efficiency_metrics: dict[str, Any] = {}
-        if hasattr(self._pipeline, "get_run_efficiency_metrics"):
-            try:
-                efficiency_metrics = self._pipeline.get_run_efficiency_metrics(
-                    len(stage_ctx.variants)
-                )
-            except Exception:
-                efficiency_metrics = {}
-        if efficiency_metrics:
-            metadata["efficiency_metrics"] = efficiency_metrics
+        self._attach_image_performance(stage_ctx, outcome="completed" if success else "failed")
 
         variants = canonicalize_variant_entries(stage_ctx.variants)
         incomplete = list(getattr(self._pipeline, "_provenance_incomplete", None) or [])
@@ -1472,6 +1533,17 @@ class PipelineRunner:
         backend_options = thaw_json(getattr(njr, "backend_options", {}))
         backend_id = resolve_image_backend_id(backend_options)
         self._image_backends.validate_stage_chain(backend_id, image_stages)
+        start_stage = getattr(njr, "start_stage", None)
+        dispatched_stages = stage_names[stage_names.index(start_stage):] if start_stage in stage_names else stage_names
+        if "adetailer" in dispatched_stages:
+            stage = self._stage_config_for_njr(njr, "adetailer")
+            model = self._selected_stage_model("adetailer", stage, njr=njr)
+            policy = resolve_model_policy(model)
+            if "adetailer" not in policy.stages or backend_id not in policy.allowed_backends:
+                raise ValueError(
+                    f"ADetailer cannot run with {policy.display_name} on {backend_id}. "
+                    "Create a fresh job with a supported checkpoint."
+                )
         # Backend-owned immutable-intent check (e.g. a model profile's envelope) before any dispatch.
         validate_intent = getattr(self._image_backends.get(backend_id), "validate_njr_intent", None)
         if callable(validate_intent):

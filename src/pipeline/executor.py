@@ -34,10 +34,12 @@ from src.api.webui_runtime_identity import WebUIRuntimeIdentityMismatch
 from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_SLOT_FIELD
 from src.conditioning.openpose import ConditioningError
 from src.config import app_config
+from src.pipeline.adetailer_checkpoint import ADetailerCheckpointSelection
 from src.pipeline.adetailer_contract import schema_issues
 from src.pipeline.adetailer_effectiveness import build_effectiveness, response_infotexts
 from src.pipeline.adetailer_localized import (
     EXECUTION_MODE_KEY,
+    LEGACY_WHOLE_IMAGE,
     LOCALIZED_ONLY,
     LocalizedOutcome,
     LocalizedRefinementError,
@@ -55,10 +57,19 @@ from src.pipeline.global_prompt_policy import (
     LEGACY_POLICY_SOURCE,
     has_frozen_global_prompt_policy,
 )
+from src.pipeline.image_performance import (
+    ImagePerformanceTrace,
+    adetailer_passes,
+    observe_cleanup,
+    trace_image_stage,
+)
 from src.pipeline.model_synchronizer import (
     A1111ModelSynchronizer,
     ModelSynchronizationError,
+    ModelSynchronizationResult,
+    checkpoint_names_match,
     normalize_model_name,
+    operator_model_title,
 )
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
@@ -322,6 +333,7 @@ class Pipeline:
         # Per-request signal shared only by the blocking generation call and its
         # progress poller. It is not a queue or process-lifecycle authority.
         self._active_managed_stall_escalation: threading.Event | None = None
+        self._image_performance = ImagePerformanceTrace()
         self._run_started_at_monotonic: float | None = None
         self._run_model_switch_count: int = 0
         self._run_vae_switch_count: int = 0
@@ -331,6 +343,7 @@ class Pipeline:
 
     def _begin_run_metrics(self) -> None:
         """Reset per-run efficiency counters."""
+        self._image_performance = ImagePerformanceTrace()
         self._run_started_at_monotonic = time.monotonic()
         self._run_model_switch_count = 0
         self._run_vae_switch_count = 0
@@ -968,7 +981,7 @@ class Pipeline:
         model_switched = False
         if self._normalize_model_name(model_name):
             try:
-                synchronization = self._model_synchronizer.synchronize(str(model_name))
+                synchronization = self._synchronize_checkpoint(str(model_name))
             except Exception as exc:
                 self._current_model = None
                 if isinstance(exc, ModelSynchronizationError):
@@ -995,11 +1008,16 @@ class Pipeline:
             if modules != self._current_modules or not self._modules_still_applied(modules):
                 self._current_modules = None
                 logger.info("Switching WebUI modules to: %s", ", ".join(modules))
-                if setter(list(modules)) is not True:
-                    raise RuntimeError(
-                        f"The WebUI module selection {list(modules)} was not applied; refusing to "
-                        "generate without the required modules."
-                    )
+                with self._image_performance.operation(
+                    "vae_switch", "stage_preparation", write_requested=True, target="forge_modules"
+                ) as evidence:
+                    if setter(list(modules)) is not True:
+                        evidence["outcome"] = "refused"
+                        raise RuntimeError(
+                            f"The WebUI module selection {list(modules)} was not applied; refusing to "
+                            "generate without the required modules."
+                        )
+                    evidence["outcome"] = "verified"
                 self._current_modules = modules
                 self._current_vae = None
                 self._record_vae_switch()
@@ -1013,19 +1031,63 @@ class Pipeline:
                 current_vae = self._normalize_vae_name(self._current_vae)
                 if desired_vae != current_vae:
                     logger.info(f"Switching to VAE: {vae_name}")
-                    self.client.set_vae(vae_name)
-                    self._current_vae = vae_name
-                    self._record_vae_switch()
+                    self._write_stage_vae(vae_name, reason="stage_preparation")
             elif model_switched:
                 # If a new model is loaded and no explicit VAE is requested, clear any
                 # stale VAE override so WebUI can use the model's preferred default.
                 logger.info("Model switched without explicit VAE; resetting VAE to Automatic")
-                self.client.set_vae("Automatic")
-                self._current_vae = "Automatic"
-                self._record_vae_switch()
+                self._write_stage_vae("Automatic", reason="checkpoint_changed")
         except Exception:
             self._current_vae = None
             raise
+
+    def _synchronize_checkpoint(self, model: str) -> ModelSynchronizationResult:
+        trace = self._image_performance
+        stage = trace.active
+        with trace.operation(
+            "model_sync", "stage_preparation", requested_checkpoint=operator_model_title(model),
+            switch_requested=False, switch_verified=False, observed_checkpoint=None,
+        ) as evidence:
+            try:
+                result = self._model_synchronizer.synchronize(model)
+            except ModelSynchronizationError as exc:
+                evidence.update(
+                    outcome="refused" if exc.is_checkpoint_problem else "failed",
+                    switch_requested=exc.switch_requested,
+                    observed_checkpoint=operator_model_title(exc.actual) if exc.actual else None,
+                )
+                raise
+            else:
+                evidence.update(
+                    outcome="switch_verified" if result.switched else "already_verified",
+                    switch_requested=result.switched,
+                    switch_verified=result.switched,
+                    observed_checkpoint=operator_model_title(result.actual_model),
+                )
+                return result
+            finally:
+                if stage is not None:
+                    stage.checkpoint.setdefault("effective", operator_model_title(model))
+                    stage.checkpoint.setdefault("request_local_pinning", False)
+                    stage.checkpoint.update(
+                        observed=evidence["observed_checkpoint"],
+                        switch_requested=evidence["switch_requested"],
+                        switch_verified=evidence["switch_verified"],
+                    )
+
+    def _write_stage_vae(self, name: str, *, reason: str) -> None:
+        with self._image_performance.operation(
+            "vae_switch", reason, requested_vae=operator_model_title(name), write_requested=True
+        ) as evidence:
+            applied = self.client.set_vae(name)
+            if applied is False:
+                evidence["outcome"] = "refused"
+                self._current_vae = None
+                return
+            self._current_vae = name
+            if applied is True:
+                evidence["outcome"] = "acknowledged"
+                self._record_vae_switch()
 
     def _modules_still_applied(self, modules: Sequence[str]) -> bool:
         """Read-only check that the endpoint still reports exactly ``modules`` (external drift)."""
@@ -1130,7 +1192,10 @@ class Pipeline:
         )
         try:
             if hasattr(self.client, "free_vram"):
-                self.client.free_vram(unload_model=False, force_gc=True)
+                observe_cleanup(
+                    self.client, self._image_performance, reason="pressure_mitigation",
+                    stage=assessment.get("stage"), unload_model=False, force_gc=True,
+                )
         except Exception as exc:
             logger.debug("Pressure mitigation cache clear failed: %s", exc)
 
@@ -1740,7 +1805,10 @@ class Pipeline:
             return None
         if not current_model:
             return None
-        if self._normalize_model_name(current_model) == self._normalize_model_name(requested_model):
+        active = self._image_performance.active
+        if active is not None and isinstance(current_model, str):
+            active.checkpoint[f"ambient_{when}"] = operator_model_title(current_model)
+        if checkpoint_names_match(current_model, requested_model):
             return None
         if request_local_override_expected:
             log_with_ctx(
@@ -1981,13 +2049,17 @@ class Pipeline:
         except Exception:
             logger.debug("Failed to set startup probe grace before recovery", exc_info=True)
         try:
-            recovered = manager.restart_webui(
-                wait_ready=True,
-                max_attempts=max_attempts,
-                base_delay=base_delay,
-                max_delay=max_delay,
-                profile_override=profile_override,
-            )
+            with self._image_performance.operation(
+                "managed_runtime_recovery", reason, runtime_stage=stage, profile=profile_override,
+            ) as evidence:
+                recovered = manager.restart_webui(
+                    wait_ready=True,
+                    max_attempts=max_attempts,
+                    base_delay=base_delay,
+                    max_delay=max_delay,
+                    profile_override=profile_override,
+                )
+                evidence["outcome"] = "completed" if recovered else "failed"
         except Exception as exc:
             logger.error(
                 "Executor WebUI recovery failed for stage=%s reason=%s: %s",
@@ -2303,7 +2375,8 @@ class Pipeline:
             payload.get("cfg_scale", 0.0),
         )
 
-        outcome = self.client.generate_images(stage=stage, payload=payload)
+        with self._image_performance.backend_request():
+            outcome = self.client.generate_images(stage=stage, payload=payload)
         if not outcome.ok or outcome.result is None:
             error = outcome.error or GenerateError(
                 code=GenerateErrorCode.UNKNOWN,
@@ -2500,7 +2573,11 @@ class Pipeline:
                     self._current_job_id,
                     grace_elapsed,
                 )
-                manager.restart_webui(wait_ready=True, max_attempts=1)
+                with self._image_performance.operation(
+                    "managed_runtime_recovery", "managed_generation_stall",
+                ) as evidence:
+                    recovered = manager.restart_webui(wait_ready=True, max_attempts=1)
+                    evidence["outcome"] = "completed" if recovered else "failed"
                 return
 
             status_data = {
@@ -3116,13 +3193,8 @@ class Pipeline:
         total_steps = config.get("steps", 20)
         self._emit_stage_start("adetailer", total_steps=total_steps)
 
-        # Set model and VAE if specified (ensure consistency across pipeline stages)
-        # BUGFIX: Don't treat ADetailer model names as SD model checkpoints
-        requested_model = (
-            config.get("adetailer_checkpoint_model")
-            or config.get("model")
-            or config.get("sd_model_checkpoint")
-        )
+        # The image backend has already projected the runner's frozen checkpoint decision.
+        requested_model = config.get("model") or config.get("sd_model_checkpoint")
         # Handle VAE: get from config but don't default to fallback if empty
         requested_vae = normalize_vae_config_value(
             config.get("vae")
@@ -3131,6 +3203,20 @@ class Pipeline:
         )
         use_request_local_pinning = app_config.adetailer_request_local_pinning_enabled()
         legacy_safe_payload = app_config.adetailer_experiment_legacy_safe_payload_enabled()
+        performance = self._image_performance.active
+        if performance is not None:
+            selection = ADetailerCheckpointSelection.from_config(config)
+            performance.checkpoint = {
+                "selection": selection.mode if selection else "legacy",
+                "effective": operator_model_title(requested_model) if requested_model else None,
+                "observed": None,
+                "switch_requested": False,
+                "switch_verified": False,
+                "request_local_pinning": use_request_local_pinning,
+            }
+            raw_mode = config.get(EXECUTION_MODE_KEY)
+            if raw_mode in (None, LOCALIZED_ONLY, LEGACY_WHOLE_IMAGE):
+                performance.mode = execution_mode(config)
 
         # Filter out ADetailer model names (they end with .pt and start with face_/hand_/person_/mediapipe)
         if requested_model:
@@ -3420,6 +3506,8 @@ class Pipeline:
             for label, pass_args in (("face", face_args), ("hands", hand_args))
             if pass_args.get("ad_tab_enable")
         ]
+        if performance is not None:
+            performance.passes = adetailer_passes(face=face_args, hands=hand_args, verified=None)
         rejected = {
             label: schema_issues(pass_args)
             for label, pass_args in requested_passes
@@ -3437,6 +3525,8 @@ class Pipeline:
             # With no pass requested the extension is a no-op, but WebUI would still run the stage's img2img over the
             # whole image. Send nothing and pass the input through unchanged.
             reason = "face and hand passes are both off"
+            if performance is not None:
+                performance.passthrough = True
             logger.info("[adetailer/no-pass] %s; no request sent, input passes through unchanged", reason)
             return {
                 "name": Path(input_image_path).stem,
@@ -3461,6 +3551,8 @@ class Pipeline:
             adetailer_mode = execution_mode(config)
         except LocalizedRefinementError as exc:
             raise self._adetailer_refusal(str(exc)) from exc
+        if performance is not None:
+            performance.mode = adetailer_mode
         if adetailer_mode == LOCALIZED_ONLY:
             refusals = localized_refusals(requested_passes)
             if refusals:
@@ -3639,11 +3731,10 @@ class Pipeline:
             raise
         stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
 
-        # Extract actual seed from response
-        gen_info = self._extract_generation_info(response) if response else {}
-
-        # Check for cancellation after API call
+        # Check for cancellation before response verification or publication.
         self._ensure_not_cancelled(cancel_token, "adetailer post-call")
+        self._image_performance.begin_finalization()
+        gen_info = self._extract_generation_info(response) if response else {}
 
         localized_outcome: LocalizedOutcome | None = None
         if localized_original is not None:
@@ -3663,6 +3754,11 @@ class Pipeline:
                 raise self._adetailer_refusal(
                     f"localized refinement could not be verified, so nothing was published: {exc}"
                 ) from exc
+            if performance is not None:
+                evidence = localized_outcome.record
+                performance.passes = adetailer_passes(face=face_args, hands=hand_args, verified=evidence)
+                performance.mask_count = evidence["effective_mask_count"]
+                performance.passthrough = localized_outcome.image is None
             if localized_outcome.image is None:
                 # No eligible mask (or nothing sampled): the input is the result, byte for byte.
                 reason = (
@@ -3977,6 +4073,7 @@ class Pipeline:
 
         return None
 
+    @trace_image_stage("txt2img")
     def run_txt2img_stage(
         self,
         prompt: str,
@@ -4391,6 +4488,7 @@ class Pipeline:
                 stage_label="txt2img",
                 cancel_token=cancel_token,
             )
+            self._image_performance.begin_finalization()
             if conditioning_evidence is not None:
                 generated_expected = max(
                     1, int(payload.get("batch_size", 1) or 1) * int(payload.get("n_iter", 1) or 1)
@@ -4398,6 +4496,11 @@ class Pipeline:
                 response, output_evidence = classify_response(response, conditioning_config, expected=generated_expected)
                 conditioning_evidence = {**conditioning_evidence, **output_evidence}
 
+            returned = response.get("images") if isinstance(response, dict) else None
+            if isinstance(returned, list):
+                self._image_performance.base_images_returned = len(returned)
+                if self._image_performance.active is not None:
+                    self._image_performance.active.returned_images = len(returned)
             if not response or "images" not in response or not response["images"]:
                 logger.error("txt2img failed - no images returned")
                 return None
@@ -5294,7 +5397,10 @@ class Pipeline:
                     # Force GC and VRAM clear to free memory
                     gc.collect()
                     if hasattr(self.client, "free_vram"):
-                        self.client.free_vram(unload_model=False, force_gc=True)
+                        observe_cleanup(
+                            self.client, self._image_performance, reason="pressure_mitigation",
+                            stage="upscale", unload_model=False, force_gc=True,
+                        )
 
             except Exception as exc:
                 logger.debug("Pre-upscale memory check failed (non-fatal): %s", exc)
@@ -5723,6 +5829,7 @@ class Pipeline:
             self._record_stage_event("upscale", "exit", 1, 1, False)
             return None
 
+    @trace_image_stage("adetailer")
     def run_adetailer_stage(
         self,
         input_image_path: Path,
