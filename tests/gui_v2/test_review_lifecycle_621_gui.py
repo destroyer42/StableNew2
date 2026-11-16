@@ -649,3 +649,69 @@ def test_the_decision_bar_and_the_set_bar_are_in_view_without_scrolling_on_the_l
     finally:
         tab.destroy()
         tk_root.withdraw()
+
+
+@pytest.mark.gui
+def test_the_lowest_control_stays_reachable_with_the_rework_and_returned_regions_shown(
+    workflow, tmp_path
+):
+    """Reviewer's gap: with both regions open the lowest control is below ``write_rating_button``."""
+
+    from src.gui.view_contracts.window_layout_contract import compute_window_layout
+
+    controller, repository, tab = workflow
+    root = tab.winfo_toplevel()
+    layout = compute_window_layout(1366, 768)
+    root.geometry(f"{layout.width}x{layout.height}+0+0")
+    root.deiconify()
+    try:
+        tab.pack(fill="both", expand=True)
+        paths = images(tmp_path, 2)
+        preview = _queue_one_child(tab, controller, repository, tmp_path, paths)
+        queue = controller.job_service.job_queue
+        first, second = (job.job_id for job in preview.jobs)
+        output = _png(
+            tmp_path / "out" / "child.png",
+            5,
+            payload={"generation": {"model": "sdxl-0.safetensors"}},
+            job_id=first,
+        )
+        _complete(controller, first, output)
+        queue.claim_next_job()
+        queue.mark_failed(second, "synthetic backend refusal")
+        tab._session.refresh()
+        tab._select_key(item_key(paths[0]))
+        root.update()
+
+        # Both regions are open: a returned result and a failed one still in the re-work scope.
+        assert tab._returned_frame.winfo_manager() == "grid"
+        assert tab._rework_frame.winfo_manager() == "grid"
+
+        controls = [
+            tab.write_rating_button,
+            tab.rework_button,
+            tab.returned_tree,
+            *[
+                widget
+                for row in tab._returned_actions.rows()
+                for widget in row
+                if widget.winfo_ismapped()
+            ],
+        ]
+        controls = [widget for widget in controls if widget.winfo_ismapped()]
+        lowest = max(controls, key=lambda widget: widget.winfo_rooty() + widget.winfo_height())
+        assert lowest is not tab.write_rating_button, "the regions must sit below the decision bar"
+
+        canvas = tab._workspace_scroll._canvas
+        canvas.yview_moveto(1.0)
+        root.update()
+        top, bottom = canvas.winfo_rooty(), canvas.winfo_rooty() + canvas.winfo_height()
+        for widget in controls:
+            if widget is lowest:
+                assert top <= widget.winfo_rooty(), widget
+                assert widget.winfo_rooty() + widget.winfo_height() <= bottom + 1, (
+                    "the lowest control must be inside the viewport after scrolling"
+                )
+    finally:
+        tab.pack_forget()
+        root.withdraw()

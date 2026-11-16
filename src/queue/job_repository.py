@@ -935,32 +935,30 @@ class JobRepository(JobHistoryStore):
         """Jobs whose recorded lineage names one of these parent artifacts or parent jobs (read-only, bounded).
 
         Plain read of the existing ``parent_artifact_id`` / ``parent_job_id`` columns: no schema change, no index and
-        no lifecycle effect. At most ``limit`` rows are returned, oldest first, so a very large lineage is cut rather
-        than scanned without bound; the caller decides whether a claim is verified (artifact digest) or not (job only).
+        no lifecycle effect. At most ``limit`` rows are returned, the NEWEST ones (a cut drops the oldest, because the
+        latest child decides a source's state), listed oldest first; a very large lineage is cut rather than scanned
+        without bound; the caller decides whether a claim is verified (artifact digest) or not (job only).
         """
 
         artifacts = list(dict.fromkeys(str(value) for value in parent_artifact_ids if value))
         jobs = list(dict.fromkeys(str(value) for value in parent_job_ids if value))
-        remaining = max(1, int(limit))
+        bound = max(1, int(limit))
         found: dict[str, BatchCandidateRow] = {}
         for column, values in (("parent_artifact_id", artifacts), ("parent_job_id", jobs)):
             for start in range(0, len(values), _IN_CHUNK):
-                if remaining <= 0:
-                    break
                 chunk = values[start : start + _IN_CHUNK]
                 marks = ",".join("?" for _ in chunk)
                 with self._lock:
                     rows = self._connection.execute(
                         f"SELECT rowid AS cursor, * FROM jobs WHERE {column} IN ({marks}) "
-                        "ORDER BY rowid ASC LIMIT ?",
-                        (*chunk, remaining),
+                        "ORDER BY rowid DESC LIMIT ?",
+                        (*chunk, bound),
                     ).fetchall()
                 for row in rows:
                     candidate = self._row_to_batch_candidate(row)
-                    if candidate.job_id not in found:
-                        found[candidate.job_id] = candidate
-                        remaining -= 1
-        return tuple(found.values())
+                    found.setdefault(candidate.job_id, candidate)
+        newest = sorted(found.values(), key=lambda row: row.cursor, reverse=True)[:bound]
+        return tuple(sorted(newest, key=lambda row: row.cursor))
 
     def list_experiment_sibling_entries(
         self, job_id: str, experiment_id: str, *, window: int = EXPERIMENT_SIBLING_WINDOW

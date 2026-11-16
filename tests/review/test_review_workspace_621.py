@@ -6,6 +6,7 @@ Real Learning evidence file and (where lineage matters) a temporary SQLite repos
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import pytest
 from src.controller.app_controller_services.background_task_coordinator import (
     BackgroundTaskCoordinator,
 )
+from src.gui.view_contracts import review_workspace_contract
 from src.gui.view_contracts.edit_work_runner import EditWorkRunner
 from src.gui.view_contracts.review_workspace_contract import (
     ItemState,
@@ -158,7 +160,9 @@ def test_a_file_replaced_after_it_was_reviewed_is_changed_and_a_failed_write_cha
     session = workspace.session
     session.set_items(workspace.images[:2])
     session.decide(workspace.key(0), "retain")
+    stamp = workspace.images[0].stat().st_mtime_ns
     image_file(workspace.images[0], 200)  # different bytes under the same path
+    os.utime(workspace.images[0], ns=(stamp + 5_000_000_000, stamp + 5_000_000_000))
 
     session.refresh()
     assert session.state_of(workspace.key(0)) is ItemState.CHANGED
@@ -368,3 +372,157 @@ def test_returned_output_added_to_the_set_is_returned_until_it_is_decided(tmp_pa
     assert session.state_of(key) is ItemState.RETAINED
     (row,) = session.returned_rows()
     assert row.state is ItemState.RETAINED and row.in_set
+
+
+# --- a refresh never overwrites a newer decision, and does not re-read unchanged files ---------------------------------
+
+
+def _during_next_refresh(monkeypatch, session, action):
+    """Run ``action`` once, while the next refresh is hashing its first image (the race the review found)."""
+
+    session._cache.clear()  # noqa: SLF001 - force the hash so the refresh has a window to race against
+    original = review_workspace_contract.file_sha256
+    state = {"done": False}
+
+    def hashing(path):
+        if not state["done"]:
+            state["done"] = True
+            action()
+        return original(path)
+
+    monkeypatch.setattr(review_workspace_contract, "file_sha256", hashing)
+    return state
+
+
+def test_a_decision_recorded_while_a_refresh_is_hashing_is_not_overwritten_by_it(
+    tmp_path, monkeypatch
+):
+    stack, workspace = _lineage_workspace(tmp_path)
+    session = workspace.session
+    session.set_items(workspace.images)
+    admit(stack, [_child("c2", workspace.images[2], digest=_sha(workspace.images[2]))])
+    key0, key2 = workspace.key(0), workspace.key(2)
+
+    state = _during_next_refresh(monkeypatch, session, lambda: session.decide(key0, "retain"))
+    session.refresh()
+
+    assert state["done"]
+    assert (
+        lookup_disposition(
+            workspace.writer.records_path, workspace.images[0], _sha(workspace.images[0])
+        ).disposition
+        == "retain"
+    )
+    assert session.state_of(key0) is ItemState.RETAINED  # not reverted to "To review"
+    assert session.counts()[ItemState.RETAINED] == 1
+    assert [child.job_id for child in session.facts_of(key2).children] == [
+        "c2"
+    ]  # lineage still applied
+
+
+def test_undo_and_restore_during_a_refresh_are_not_reverted_either(tmp_path, monkeypatch):
+    workspace = Workspace(tmp_path, count=3)
+    session = workspace.session
+    session.set_items(workspace.images)
+    key0, key1 = workspace.key(0), workspace.key(1)
+    session.decide(key0, "retain")
+    session.decide(key1, "discard")
+    assert session.state_of(key1) is ItemState.ARCHIVED
+
+    _during_next_refresh(monkeypatch, session, lambda: session.restore(key1))
+    session.refresh()
+    assert session.state_of(key1) is ItemState.TO_REVIEW  # the Restore row is newer than the read
+    assert session.state_of(key0) is ItemState.RETAINED
+
+    session.decide(key1, "retain")
+    monkeypatch.undo()
+    _during_next_refresh(monkeypatch, session, session.undo)  # undoes the retain just recorded
+    session.refresh()
+    assert session.state_of(key1) is ItemState.TO_REVIEW
+    assert session.state_of(key0) is ItemState.RETAINED
+
+
+def test_a_rating_noted_while_a_refresh_is_hashing_is_kept(tmp_path, monkeypatch):
+    workspace = Workspace(tmp_path, count=2)
+    session = workspace.session
+    session.set_items(workspace.images)
+    key0 = workspace.key(0)
+
+    _during_next_refresh(monkeypatch, session, lambda: session.note_rating(key0, 4))
+    session.refresh()
+
+    assert session.facts_of(key0).rating == 4
+
+
+def test_a_decision_made_before_the_refresh_began_comes_from_the_evidence(tmp_path):
+    workspace = Workspace(tmp_path, count=2)
+    session = workspace.session
+    session.set_items(workspace.images)
+    session.decide(workspace.key(0), "retain")
+    save_disposition(  # another writer's newer row: the next refresh must show it
+        workspace.writer,
+        image_path=workspace.images[0],
+        disposition="discard",
+        artifact_sha256=_sha(workspace.images[0]),
+    )
+
+    session.refresh()
+
+    assert session.state_of(workspace.key(0)) is ItemState.ARCHIVED
+
+
+def _count_reads(monkeypatch):
+    calls = {"hash": [], "meta": []}
+    hash_original = review_workspace_contract.file_sha256
+    meta_original = review_workspace_contract.read_image_metadata
+
+    def hashing(path):
+        calls["hash"].append(Path(path).name)
+        return hash_original(path)
+
+    def metadata(path, *args, **kwargs):
+        calls["meta"].append(Path(path).name)
+        return meta_original(path, *args, **kwargs)
+
+    monkeypatch.setattr(review_workspace_contract, "file_sha256", hashing)
+    monkeypatch.setattr(review_workspace_contract, "read_image_metadata", metadata)
+    return calls
+
+
+def test_unchanged_files_are_hashed_and_read_once_across_refreshes(tmp_path, monkeypatch):
+    stack, workspace = _lineage_workspace(tmp_path)
+    session = workspace.session
+    calls = _count_reads(monkeypatch)
+    session.set_items(workspace.images)
+    output = image_file(tmp_path / "out" / "child.png", 150)
+    admit(stack, [_child("c0", workspace.images[0], digest=_sha(workspace.images[0]))])
+    settle_fifo(stack, result=_result(output))
+
+    session.refresh()  # a child output appears: it is read once
+    session.refresh()
+    session.refresh()
+
+    assert sorted(calls["hash"]) == sorted([p.name for p in workspace.images] + ["child.png"])
+    assert sorted(calls["meta"]) == sorted([p.name for p in workspace.images] + ["child.png"])
+    assert len(session.facts_of(workspace.key(0)).children) == 1  # lineage is still re-derived
+
+
+def test_a_replaced_file_is_read_again_so_changed_since_reviewed_still_works(tmp_path, monkeypatch):
+    workspace = Workspace(tmp_path, count=2)
+    session = workspace.session
+    session.set_items(workspace.images)
+    session.decide(workspace.key(0), "retain")
+    calls = _count_reads(monkeypatch)
+
+    session.refresh()
+    assert calls["hash"] == []  # nothing changed: nothing re-read
+
+    target = workspace.images[0]
+    stamp = target.stat().st_mtime_ns
+    image_file(target, 200)  # different bytes under the same path
+    os.utime(target, ns=(stamp + 5_000_000_000, stamp + 5_000_000_000))
+    session.refresh()
+
+    assert calls["hash"] == ["img_00.png"]  # only the changed file
+    assert session.state_of(workspace.key(0)) is ItemState.CHANGED
+    assert session.state_of(workspace.key(1)) is ItemState.TO_REVIEW

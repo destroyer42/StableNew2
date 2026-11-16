@@ -13,6 +13,7 @@ every completion is dropped when the session was superseded or closed, so a late
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -216,8 +217,48 @@ def _embedded_job_id(path: Path) -> str:
         return ""
 
 
-def _facts_for(path: Path, index: EvidenceIndex, *, loaded: bool = True) -> tuple[ItemFacts, str]:
-    digest = file_sha256(path) or ""
+class FileFactsCache:
+    """Digest and embedded job id per file, valid while the file's size and mtime are unchanged.
+
+    A refresh (and the 5 s poll while a re-work is queued) would otherwise hash and parse every image again. A file
+    whose ``(size, mtime_ns)`` changed is read again, so "Changed since reviewed" still works; a file that cannot be
+    stat'ed is never cached.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, tuple[tuple[int, int], str, str]] = {}
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+    def read(self, path: Path) -> tuple[str, str]:
+        """``(digest, embedded job id)``; both empty when the file is unreadable."""
+
+        try:
+            stat = path.stat()
+            stamp: tuple[int, int] | None = (stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            stamp = None
+        key = item_key(path)
+        if stamp is not None:
+            with self._lock:
+                hit = self._entries.get(key)
+            if hit is not None and hit[0] == stamp:
+                return hit[1], hit[2]
+        digest = file_sha256(path) or ""
+        job_id = _embedded_job_id(path)
+        if stamp is not None and digest:
+            with self._lock:
+                self._entries[key] = (stamp, digest, job_id)
+        return digest, job_id
+
+
+def _facts_for(
+    path: Path, index: EvidenceIndex, cache: FileFactsCache | None = None, *, loaded: bool = True
+) -> tuple[ItemFacts, str]:
+    digest, job_id = (cache or FileFactsCache()).read(path)
     decision = index.disposition(path, digest or None)
     rating = index.rating(path, digest or None)
     value: int | None = None
@@ -227,7 +268,6 @@ def _facts_for(path: Path, index: EvidenceIndex, *, loaded: bool = True) -> tupl
             value = int(raw) if raw is not None else None
         except (TypeError, ValueError):
             value = None
-    job_id = _embedded_job_id(path)
     return (
         ItemFacts(
             digest=digest,
@@ -248,10 +288,12 @@ def collect_facts(
     records_path: Path | None,
     repository: Any,
     is_current: Callable[[], bool] = lambda: True,
+    cache: FileFactsCache | None = None,
 ) -> WorkspaceFacts:
     """Blocking: read each image's digest and decision, then the repository's children of those images.
 
-    Run it on a worker. ``is_current`` is polled between images so a superseded request stops early.
+    Run it on a worker. ``is_current`` is polled between images so a superseded request stops early. ``cache``
+    (the session's) spares re-hashing a file whose size and mtime did not change.
     """
 
     index = EvidenceIndex.read(records_path)
@@ -260,7 +302,7 @@ def collect_facts(
     for path in paths:
         if not is_current():
             return WorkspaceFacts(cancelled=True)
-        item_facts, digest = _facts_for(path, index)
+        item_facts, digest = _facts_for(path, index, cache)
         key = item_key(path)
         facts[key] = item_facts
         sources.append(LineageSource(key, digest, item_facts.job_id))
@@ -272,7 +314,7 @@ def collect_facts(
             for output in child.outputs:
                 if not is_current():
                     return WorkspaceFacts(cancelled=True)
-                outputs[item_key(output)] = _facts_for(Path(output), index)[0]
+                outputs[item_key(output)] = _facts_for(Path(output), index, cache)[0]
     return WorkspaceFacts(facts, outputs, lineage.truncated)
 
 
@@ -302,6 +344,11 @@ class ReviewWorkspaceSession:
         self.message = ""
         self._generation = 0
         self._writes = 0
+        self._cache = FileFactsCache()
+        #: Ordinal of the last local decision / rating per image; a refresh that began earlier never overwrites it.
+        self._ordinal = 0
+        self._decided: dict[str, int] = {}
+        self._rated: dict[str, int] = {}
         self._pending: dict[str, str] = {}
         self._undo: list[UndoEntry] = []
         self._closed = False
@@ -327,6 +374,8 @@ class ReviewWorkspaceSession:
         self._generation += 1
         self.items, self.facts, self.output_facts = [], {}, {}
         self._pending, self._undo, self.message = {}, [], ""
+        self._decided, self._rated = {}, {}
+        self._cache.clear()
         self.lineage_truncated = False
         self._add(paths)
         self.refresh()
@@ -533,6 +582,7 @@ class ReviewWorkspaceSession:
         generation = self._generation
         paths = self.paths()
         records, repository = self._records_path(), self._repository()
+        began = self._ordinal
         self.loading = True
         self._changed()
 
@@ -542,6 +592,7 @@ class ReviewWorkspaceSession:
                 records_path=records,
                 repository=repository,
                 is_current=lambda: generation == self._generation and not self._closed,
+                cache=self._cache,
             )
 
         def done(result: WorkspaceFacts) -> None:
@@ -549,7 +600,7 @@ class ReviewWorkspaceSession:
                 return
             self.loading = False
             known = {item.key for item in self.items}
-            self.facts = {key: value for key, value in result.items.items() if key in known}
+            self.facts = self._merge_local(result.items, known, began)
             self.output_facts = dict(result.outputs)
             self.lineage_truncated = result.lineage_truncated
             if result.lineage_truncated:
@@ -573,6 +624,33 @@ class ReviewWorkspaceSession:
             purpose="Read review decisions and re-work lineage for the Review set",
         )
         return True
+
+    def _merge_local(
+        self, read: dict[str, ItemFacts], known: set[str], began: int
+    ) -> dict[str, ItemFacts]:
+        """A refresh's facts, except a decision or rating recorded here after that refresh began (the newer wins).
+
+        The refresh read the evidence file when it started, so a decision (or Undo/Restore) whose write finished
+        while it was hashing is not in its result; lineage and digests from the refresh are still applied.
+        """
+
+        merged: dict[str, ItemFacts] = {}
+        for key, value in read.items():
+            if key not in known:
+                continue
+            local = self.facts.get(key)
+            if local is not None:
+                if self._decided.get(key, 0) > began:
+                    value = replace(
+                        value,
+                        disposition=local.disposition,
+                        identity=local.identity,
+                        decided_at=local.decided_at,
+                    )
+                if self._rated.get(key, 0) > began:
+                    value = replace(value, rating=local.rating)
+            merged[key] = value
+        return merged
 
     # -- decisions ----------------------------------------------------------------------------------------
 
@@ -641,6 +719,8 @@ class ReviewWorkspaceSession:
                 loaded=True,
                 decided_at=_utc_now(),
             )
+            self._ordinal += 1
+            self._decided[item.key] = self._ordinal
             if push_undo:
                 self._undo.append(
                     UndoEntry(
@@ -683,8 +763,10 @@ class ReviewWorkspaceSession:
         return True
 
     def note_rating(self, key: str, rating: int | None) -> None:
-        if key in self.facts:
-            self.facts[key] = replace(self.facts[key], rating=rating)
+        if self.item(key) is not None:
+            self.facts[key] = replace(self.facts.get(key, ItemFacts()), rating=rating)
+            self._ordinal += 1
+            self._rated[key] = self._ordinal
             self._changed()
 
     # -- re-work scope and tool gating -------------------------------------------------------------------

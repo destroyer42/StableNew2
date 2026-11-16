@@ -143,6 +143,12 @@ def test_the_lineage_read_is_bounded_and_reports_truncation(stack, tmp_path):
     found = find_review_children(stack.repository, [LineageSource("k", digest, "")], limit=3)
 
     assert len(found.children_of("k")) == 3 and found.truncated
+    # A cut drops the OLDEST rows: the latest child decides a source's state, so it must survive.
+    assert [child.job_id for child in found.children_of("k")] == ["c2", "c3", "c4"]
+    rows = stack.repository.read_review_child_rows(
+        parent_artifact_ids=[f"sha256:{digest}"], limit=2
+    )
+    assert [row.job_id for row in rows] == ["c3", "c4"]
 
 
 # --- original-prompt baseline ---------------------------------------------------------------------------------------
