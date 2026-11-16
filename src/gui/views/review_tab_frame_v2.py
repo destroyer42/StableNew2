@@ -129,6 +129,18 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path: Path | None = None
+        # SHA-256 of the bytes shown for the selected image, read off the Tk thread ("" until known or unreadable).
+        self._selected_image_sha256 = ""
+        self._applying_saved_rating = False
+        self._rating_touched = False
+        for rating_var in (
+            self.rating_var,
+            self.quality_var,
+            self.anatomy_rating_var,
+            self.composition_rating_var,
+            self.prompt_adherence_rating_var,
+        ):
+            rating_var.trace_add("write", self._mark_rating_touched)
         self._compare_window: tk.Toplevel | None = None
         self._compare_canvas: tk.Canvas | None = None
         self._compare_photo: Any = None
@@ -770,6 +782,18 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=self._undo_last_feedback_save,
         ).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        write_rating_button = ttk.Button(
+            feedback_box,
+            text="Write rating into file...",
+            style="Dark.TButton",
+            command=self._write_rating_into_file,
+        )
+        write_rating_button.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        attach_tooltip(
+            write_rating_button,
+            "Optional export of the saved rating. PNG: embedded in the file, which changes the file's identity. "
+            "JPEG and WebP: a sidecar file next to the image; the image is never re-encoded.",
+        )
         feedback_status = ttk.Label(
             feedback_box, textvariable=self._feedback_status_var, style="Dark.TLabel"
         )
@@ -971,6 +995,8 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path = None
+        self._selected_image_sha256 = ""
+        self._reset_rating_controls()
         self._adetailer_pair = None
         self._set_adetailer_controls(False)
         self._reset_mode_edits_for_current_image()
@@ -1203,6 +1229,8 @@ class ReviewTabFrame(ttk.Frame):
         if overlay is not None and overlay[1] != path:
             self._pending_overlay = None
         self._selected_image_path = path
+        self._selected_image_sha256 = ""
+        self._reset_rating_controls()
         self._image_ready = False
         self._edited_since_selection = False
         self._adetailer_pair = None
@@ -1234,9 +1262,11 @@ class ReviewTabFrame(ttk.Frame):
         if not self._revisions.is_current_image(token) or self._selected_image_path != context.path:
             return
         self._image_ready = True
+        self._selected_image_sha256 = context.artifact_sha256
         self._adetailer_pair = context.adetailer_pair
         self._set_adetailer_controls(context.adetailer_pair is not None)
         if context.prior_summary_available:
+            self._load_saved_rating(context.prior_summary)
             self._prior_review_summary_var.set(
                 self._format_prior_review_summary(context.prior_summary)
             )
@@ -1282,6 +1312,58 @@ class ReviewTabFrame(ttk.Frame):
         self.meta_label.config(text=f"Metadata: unavailable ({type(error).__name__})")
         self._refresh_prompt_diff()
 
+    def _mark_rating_touched(self, *_args: object) -> None:
+        if not self._applying_saved_rating:
+            self._rating_touched = True
+
+    def _reset_rating_controls(self) -> None:
+        """Show the unrated state, so one image never displays the previous image's rating."""
+
+        self._applying_saved_rating = True
+        try:
+            for var in (
+                self.rating_var,
+                self.anatomy_rating_var,
+                self.composition_rating_var,
+                self.prompt_adherence_rating_var,
+            ):
+                var.set(3)
+            self.quality_var.set("okay")
+            self.feedback_notes.delete("1.0", tk.END)
+        finally:
+            self._applying_saved_rating = False
+        self._rating_touched = False
+
+    def _load_saved_rating(self, summary: Any) -> None:
+        """Fill the rating controls from the saved review of the shown bytes (not when it was for other bytes)."""
+
+        if (
+            not isinstance(summary, dict)
+            or summary.get("identity_status") == "changed"
+            or self._rating_touched
+            or summary.get("user_rating_raw") is None
+        ):
+            return
+        subscores = summary.get("subscores") if isinstance(summary.get("subscores"), dict) else {}
+        self._applying_saved_rating = True
+        try:
+            for var, value in (
+                (self.rating_var, summary.get("user_rating_raw")),
+                (self.anatomy_rating_var, subscores.get("anatomy")),
+                (self.composition_rating_var, subscores.get("composition")),
+                (self.prompt_adherence_rating_var, subscores.get("prompt_adherence")),
+            ):
+                try:
+                    var.set(max(1, min(5, int(value))))
+                except (TypeError, ValueError):
+                    continue
+            if str(summary.get("quality_label") or "") in ("reject", "poor", "okay", "good", "excellent"):
+                self.quality_var.set(str(summary["quality_label"]))
+            if not self.feedback_notes.get("1.0", tk.END).strip():
+                self.feedback_notes.insert("1.0", str(summary.get("user_notes") or ""))
+        finally:
+            self._applying_saved_rating = False
+
     def _refresh_prior_review_summary(self, image_path: Path) -> None:
         learning_controller = self._resolve_learning_controller()
         getter = (
@@ -1324,6 +1406,8 @@ class ReviewTabFrame(ttk.Frame):
             != str(summary.get("negative_prompt_after") or "").strip()
         )
         bits = [f"Source: {source_label}"]
+        if summary.get("identity_status") == "changed":
+            bits.append("This file changed since it was reviewed; the rating below was for its earlier content.")
         if rating is not None:
             rating_text = f"Rating: {rating}"
             if quality:
@@ -2443,12 +2527,9 @@ class ReviewTabFrame(ttk.Frame):
             [{"run_id": run_id, "image_path": str(self._selected_image_path)}]
         )
         status = (
-            f"Saved 1 feedback record: {self._selected_image_path}. "
+            f"Saved 1 feedback record: {self._selected_image_path}. The image file was not changed. "
             "Review feedback is observational; use controlled Learning evidence for profile publication."
         )
-        stamp = record.metadata.get("artifact_review_metadata", {})
-        if stamp.get("success") is False:
-            status += " Artifact annotation failed; the Learning record is saved."
         selected_image = self._selected_image_path
         summary_error = refresh_saved_feedback(
             lambda: self._refresh_prior_review_summary(selected_image)
@@ -2483,7 +2564,6 @@ class ReviewTabFrame(ttk.Frame):
 
         tokens: list[dict[str, str]] = []
         failed: list[str] = []
-        annotation_failed: list[str] = []
         refresh_failed: list[str] = []
         for target in targets:
             try:
@@ -2500,8 +2580,6 @@ class ReviewTabFrame(ttk.Frame):
                         "image_path": str(target),
                     }
                 )
-                if record.metadata.get("artifact_review_metadata", {}).get("success") is False:
-                    annotation_failed.append(str(target))
                 if record.metadata.get("recommendation_refresh_error"):
                     refresh_failed.append(str(target))
             except Exception:
@@ -2514,10 +2592,6 @@ class ReviewTabFrame(ttk.Frame):
             status += " Saved: " + "; ".join(token["image_path"] for token in tokens) + "."
         if failed:
             status += " Not confirmed: " + "; ".join(failed) + ". Check the log before retrying."
-        if annotation_failed:
-            status += (
-                " Learning saved, artifact annotation failed: " + "; ".join(annotation_failed) + "."
-            )
         selected_image = self._selected_image_path
         if tokens and selected_image is not None:
             if refresh_saved_feedback(lambda: self._refresh_prior_review_summary(selected_image)):
@@ -2525,6 +2599,42 @@ class ReviewTabFrame(ttk.Frame):
         if refresh_failed:
             status += " Evidence is saved; refresh Learning recommendations and the Review summary."
         self._feedback_status_var.set(status)
+
+    def _write_rating_into_file(self) -> None:
+        """Explicit export of the saved rating into the image (or a sidecar); saving a rating never does this."""
+
+        path = self._selected_image_path
+        learning_controller = self._resolve_learning_controller()
+        export = getattr(learning_controller, "write_review_rating_into_file", None)
+        if path is None or not callable(export):
+            messagebox.showwarning("Write rating", "Select an image with a saved rating first.")
+            return
+        if path.suffix.lower() == ".png":
+            message = (
+                "This embeds the saved rating in the PNG file. The file's bytes will change, so its identity "
+                "changes: History lineage, Compare with Parent and Review Preview will treat it as a different "
+                "file. Continue?"
+            )
+        else:
+            message = (
+                "This writes the saved rating to a sidecar file next to the image. The image itself is not "
+                "re-encoded or changed. Continue?"
+            )
+        if not self._confirm_replace("Write rating into file?", message):
+            return
+        self._feedback_status_var.set("Writing the rating into the file...")
+        self._work.submit(
+            "review:write-rating",
+            lambda: export(str(path)),
+            on_result=lambda result: self._feedback_status_var.set(
+                f"Rating written to {result.sidecar_path or result.stamped_path}."
+                if result.success
+                else f"Rating was not written: {result.error or 'unknown error'}."
+            ),
+            on_error=lambda exc: self._feedback_status_var.set(f"Rating was not written: {exc}"),
+            name="review-write-rating",
+            purpose="Write the saved Review rating into the selected image or its sidecar",
+        )
 
     def _undo_last_feedback_save(self) -> None:
         learning_controller = self._resolve_learning_controller()
@@ -2571,6 +2681,12 @@ class ReviewTabFrame(ttk.Frame):
             composition_rating=int(self.composition_rating_var.get()),
             prompt_adherence_rating=int(self.prompt_adherence_rating_var.get()),
         )
+        # The identity of the bytes Review showed; any other image is hashed by the controller at save time.
+        if image_path == self._selected_image_path and self._selected_image_sha256:
+            payload["artifact_sha256"] = self._selected_image_sha256
+        job_id = str(metadata.payload.get("job_id") or "").strip()
+        if job_id:
+            payload["source_job_id"] = job_id
         # Only the image currently shown (with its verified source) can carry the optional before/after judgment.
         if self._adetailer_pair is not None and image_path == self._selected_image_path:
             context = build_review_context(

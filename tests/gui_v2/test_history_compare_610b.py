@@ -210,6 +210,29 @@ def test_sha256_parent_claim_is_verified_when_it_matches(family):
     )
 
 
+def test_rating_the_parent_keeps_the_sha256_parent_claim_verified(family):
+    """PR-REVIEW-EVIDENCE-620 J2: rating the parent no longer changes its bytes, so Compare still verifies it."""
+    from unittest.mock import Mock
+
+    from src.gui.controllers.learning_controller import LearningController
+    from src.gui.learning_state import LearningState
+    from src.learning.learning_record import LearningRecordWriter
+
+    controller = LearningController(
+        LearningState(),
+        learning_record_writer=LearningRecordWriter(family.tmp_path / "records.jsonl"),
+    )
+    controller.refresh_recommendations = Mock()
+    controller.save_review_feedback(
+        {"image_path": str(family.paths["parent"]), "rating": 5, "base_prompt": "a fox"}
+    )
+
+    assert hashlib.sha256(family.paths["parent"].read_bytes()).hexdigest() == family.digest
+    comparison = family.service.prepare("review")
+    assert comparison.parent_artifact_verified
+    assert comparison.parent.image.sha256 == family.digest
+
+
 def test_missing_parent_claim_is_disclosed_never_treated_as_verified(family):
     comparison = family.service.prepare("replay")
     assert not comparison.parent_artifact_verified

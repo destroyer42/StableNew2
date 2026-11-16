@@ -12,6 +12,7 @@ from src.learning.learning_record import LearningRecord
 from src.utils.image_metadata import (
     read_portable_review_metadata,
     write_portable_review_metadata,
+    write_review_sidecar,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,9 @@ class PortableReviewSummary:
     stages: list[str] | None = None
     review_context: dict[str, Any] | None = None
     review_record_id: str = ""
+    #: How an internal rating was matched to the file: "digest", "path" or "changed" (empty for embedded/sidecar).
+    identity_status: str = ""
+    artifact_sha256: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +69,8 @@ class PortableReviewSummary:
             "stages": list(self.stages or []),
             "review_context": dict(self.review_context or {}),
             "review_record_id": self.review_record_id,
+            "identity_status": self.identity_status,
+            "artifact_sha256": self.artifact_sha256,
         }
 
 
@@ -191,6 +197,8 @@ class ReviewMetadataService:
             "cfg_scale": feedback.get("cfg_scale") or getattr(record, "primary_cfg_scale", None),
             "review_tags": list(feedback.get("review_tags") or []),
             "lineage": feedback.get("lineage"),
+            "artifact_sha256": metadata.get("artifact_sha256"),
+            "source_job_id": metadata.get("source_job_id"),
             "selection_event": feedback.get("selection_event"),
             "curation_decision": feedback.get("curation_decision"),
             "source_candidate_id": feedback.get("source_candidate_id"),
@@ -215,12 +223,18 @@ class ReviewMetadataService:
         feedback: Mapping[str, Any],
         record: LearningRecord,
     ) -> ReviewMetadataStampResult:
+        """Write ``record`` into the artifact (explicit export only; saving a rating never calls this)."""
         target_path = Path(image_path)
         payload = self.build_review_payload(
             image_path=target_path, feedback=feedback, record=record
         )
 
-        embedded_result = write_portable_review_metadata(target_path, payload)
+        # Only PNG is embedded. JPEG and WebP get a sidecar: embedding would re-encode the pixels.
+        embedded_result = (
+            write_portable_review_metadata(target_path, payload)
+            if target_path.suffix.lower() == ".png"
+            else write_review_sidecar(target_path, payload)
+        )
         if embedded_result.success:
             return ReviewMetadataStampResult(
                 success=True,

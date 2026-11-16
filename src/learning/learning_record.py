@@ -60,12 +60,21 @@ REVISABLE_RATING_KINDS = frozenset({"learning_experiment_rating", "review_tab_fe
 
 
 def rating_revision_key(record: Any) -> tuple[str, str, str] | None:
-    """The sample a rating row describes, or None when the row is not a revisable rating."""
+    """The sample a rating row describes, or None when the row is not a revisable rating.
+
+    The third element is the image path, except that a ``review_tab_feedback`` row with a recorded
+    ``artifact_sha256`` is keyed by ``sha256:<digest>`` (legacy rows without one stay keyed by path).
+    """
     metadata = record.get("metadata") if isinstance(record, dict) else None
     if not isinstance(metadata, dict):
         return None
     kind = str(metadata.get("record_kind") or "").strip()
     image_path = str(metadata.get("image_path") or "").strip()
+    if kind == "review_tab_feedback":
+        # A Review rating is bound to the image bytes when its digest was recorded; the path is only a locator.
+        digest = str(metadata.get("artifact_sha256") or "").strip().lower()
+        if len(digest) == 64:
+            image_path = f"sha256:{digest}"
     if kind not in REVISABLE_RATING_KINDS or not image_path:
         return None
     context = metadata.get("learning_context")

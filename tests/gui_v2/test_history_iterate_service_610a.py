@@ -205,3 +205,31 @@ def test_a_variant_recipe_still_offers_edit_image_but_refuses_regenerate(
         assert environment.iterate.edit_in_review(JOB_ID).done
     finally:
         environment.tab.destroy()
+
+
+def test_rating_the_handed_off_image_leaves_review_preview_and_queueing_valid(env, tmp_path):
+    """PR-REVIEW-EVIDENCE-620 J2: a rating no longer rewrites the file, so the History claim still verifies."""
+    from unittest.mock import Mock
+
+    from src.gui.controllers.learning_controller import LearningController
+    from src.gui.learning_state import LearningState
+    from src.learning.learning_record import LearningRecordWriter
+
+    digest = hashlib.sha256(open(env.image, "rb").read()).hexdigest()
+    assert env.iterate.edit_in_review(JOB_ID).done
+    controller = LearningController(
+        LearningState(), learning_record_writer=LearningRecordWriter(tmp_path / "records.jsonl")
+    )
+    controller.refresh_recommendations = Mock()
+    env.tab._resolve_learning_controller = lambda: controller
+    env.tab._save_feedback()
+
+    assert "Saved 1 feedback record" in env.tab._feedback_status_var.get()
+    assert hashlib.sha256(open(env.image, "rb").read()).hexdigest() == digest
+    summary = controller.get_prior_review_summary(env.image)
+    assert summary is not None and summary["artifact_sha256"] == digest
+    assert summary["identity_status"] == "digest"
+    preview = env.prepare()
+    assert not preview.blocked and len(preview.jobs) == 1
+    preview.require_queueable()
+    assert preview.jobs[0].source.parent_job_id == JOB_ID
