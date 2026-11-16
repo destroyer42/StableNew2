@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import src.main as main_module
+from src.gui import site_connection_dialog
 
 
 class _FakeRoot:
@@ -45,8 +48,10 @@ class _FakeSingleInstanceLock:
 def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     fake_root = _FakeRoot()
     fake_window = _FakeWindow()
+    fake_controller = object()
     captured: dict[str, object] = {}
     emergency_callbacks = []
+    install_site_menu = Mock()
 
     monkeypatch.setattr(main_module, "tk", SimpleNamespace(Tk=lambda: fake_root))
     monkeypatch.setattr(main_module, "messagebox", None)
@@ -56,10 +61,11 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "_async_bootstrap_webui", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(main_module, "graceful_exit", lambda *args, **kwargs: None)
     monkeypatch.setattr(main_module.atexit, "register", emergency_callbacks.append)
+    monkeypatch.setattr(site_connection_dialog, "install_site_connection_menu", install_site_menu)
 
     def _fake_build_v2_app(**kwargs):
         captured.update(kwargs)
-        return fake_root, object(), object(), fake_window
+        return fake_root, object(), fake_controller, fake_window
 
     monkeypatch.setattr(main_module, "build_v2_app", _fake_build_v2_app)
     monkeypatch.delenv("STABLENEW_AUTO_EXIT_SECONDS", raising=False)
@@ -69,3 +75,7 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     assert captured["threaded"] is True
     assert captured["root"] is fake_root
     assert emergency_callbacks == [main_module._emergency_comfy_cleanup]
+    if sys.platform == "win32":
+        install_site_menu.assert_called_once_with(fake_root, fake_controller)
+    else:
+        install_site_menu.assert_not_called()

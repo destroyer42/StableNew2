@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -118,3 +119,74 @@ class QueueRunSubmissionService:
         except Exception as exc:  # noqa: BLE001
             self._append_log(f"[controller] _start_run_v2 bridge error: {exc!r}")
             return False
+
+
+PreviewWitness = tuple[int, tuple[Any, ...]]
+
+
+def same_preview(left: PreviewWitness, right: PreviewWitness) -> bool:
+    """Match the revision and exact live immutable records, including records changed in place in GUI state."""
+    revision, records = left
+    return (
+        revision == right[0]
+        and bool(records)
+        and len(records) == len(right[1])
+        and all(a is b for a, b in zip(records, right[1], strict=True))
+    )
+
+
+def launch_preview_queue_submission(app: Any, *, expected_preview: PreviewWitness | None) -> bool:
+    """Start the existing Add-to-Queue worker. An explicit witness has no draft fallback."""
+    name = threading.current_thread().name
+
+    def log(message: str) -> None:
+        app._append_log(f"[controller] {message} (thread={name})")
+
+    app._append_log(f"[D21] on_add_job_to_queue_v2 ENTRY (thread={name})")
+    try:
+        app._ensure_run_mode_default("add_to_queue")
+        if app._is_preview_queue_submission_blocked():
+            log("Ignoring add-to-queue request because shutdown is in progress")
+            return False
+        controller = getattr(app, "pipeline_controller", None)
+        run_config = app._prepare_queue_run_config()
+        if getattr(app, "_queue_submit_in_progress", False):
+            log("Queue submission already in progress; ignoring duplicate request")
+            return False
+        if controller is None:
+            log("enqueue_draft_jobs unavailable: pipeline_controller missing")
+            return False
+
+        state = getattr(app, "app_state", None)
+        if expected_preview is None:
+            records = list(getattr(state, "preview_jobs", None) or [])
+        else:
+            if state is None:
+                return False
+            current = state.snapshot_accepted_preview()
+            if not same_preview(expected_preview, current):
+                log("Preview changed before Site submission")
+                return False
+            records = list(current[1])
+        try:
+            app._queue_submit_in_progress = True
+            log(
+                f"Queueing preview jobs in background (count={len(records) if records else 'draft'})"
+            )
+            spawn_thread = getattr(app, "_spawn_tracked_thread", None)
+            if callable(spawn_thread):
+                spawn_thread(
+                    target=app._submit_preview_jobs_to_queue_async,
+                    args=(controller, records, run_config, name),
+                    name="PreviewQueueSubmit",
+                    purpose="Submit preview jobs to queue asynchronously",
+                )
+            else:
+                app._submit_preview_jobs_to_queue_async(controller, records, run_config, name)
+        except Exception as exc:  # noqa: BLE001 - keep native callback failure handling
+            app._queue_submit_in_progress = False
+            log(f"enqueue_draft_jobs error: {exc!r}")
+            return False
+        return True
+    finally:
+        app._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={name})")

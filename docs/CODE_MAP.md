@@ -57,6 +57,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `bootstrap.py`: (no docstring)
 - `optional_dependency_probes.py`: (no docstring)
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
+- `site_queue_bridge.py`: Loopback transport for the operator Site
 
 ## src/assets/
 
@@ -274,6 +275,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
 - `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply actions (PR-GUI-UX-520)
 - `sidebar_panel_v2.py`: (no docstring)
+- `site_connection_dialog.py`: Native consent and frozen Preview attachment for the StableNew operator Site
 - `smart_review_dialog.py`: Review's opt-in Smart Review panel: point/box object selection and caption suggestions (PR-IMG-REVIEW-320)
 - `status_bar_v2.py`: Status bar scaffold for GUI v2
 - `theme.py`: Legacy theming shim
