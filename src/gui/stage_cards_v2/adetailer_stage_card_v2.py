@@ -25,6 +25,10 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pair_form_column_specs,
 )
 from src.image_backends.backend_capabilities import configured_adetailer_detector_fallbacks
+from src.pipeline.adetailer_checkpoint import (
+    CHECKPOINT_SELECTION_KEY,
+    ADetailerCheckpointSelection,
+)
 from src.pipeline.adetailer_contract import (
     FRESH_PASS_DEFAULTS,
     MASK_FILTER_METHODS,
@@ -87,6 +91,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
                 list(forge_fallbacks[1]),
             )
         self.stage_model_override_var = tk.StringVar(value="")
+        self._unconfirmed_checkpoint: str | None = None
         self._mode = "single"
         self._editing_profile = "single"
         self._profiles: dict[str, dict[str, Any]] = {}
@@ -212,6 +217,11 @@ class ADetailerStageCardV2(BaseStageCardV2):
             if variable is not self._config_revision:
                 variable.trace_add("write", self._on_working_edit)
 
+    def _confirm_checkpoint_choice(self, _event: object) -> None:
+        if self._unconfirmed_checkpoint is not None:
+            self._unconfirmed_checkpoint = None
+            self._on_working_edit()
+
     def _build_body(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
 
@@ -242,6 +252,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
             [self.STAGE_MODEL_INHERIT],
         )
         self._stage_model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 12), pady=2)
+        self._stage_model_combo.bind(
+            "<<ComboboxSelected>>", self._confirm_checkpoint_choice, add="+"
+        )
         self._attach_setting_help(
             "stage_model_override",
             ADETAILER_STAGE_HELP["stage_model_override"],
@@ -1097,12 +1110,14 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
     def _load_fields(self, cfg: dict[str, Any]) -> None:
         self._legacy_notes = []
-        self.stage_model_override_var.set(
-            self._normalize_stage_model_override(
-                cfg.get("adetailer_checkpoint_model") or cfg.get("sd_model_checkpoint")
-            )
-            or self.STAGE_MODEL_INHERIT
+        selection = ADetailerCheckpointSelection.from_config(cfg)
+        checkpoint = self._normalize_stage_model_override(
+            selection.checkpoint
+            if selection is not None
+            else cfg.get("adetailer_checkpoint_model") or cfg.get("sd_model_checkpoint")
         )
+        self._unconfirmed_checkpoint = (checkpoint or None) if selection is None else None
+        self.stage_model_override_var.set(checkpoint or self.STAGE_MODEL_INHERIT)
         self.enable_face_pass_var.set(bool(cfg.get("enable_face_pass", True)))
         self.face_model_var.set(
             str(cfg.get("adetailer_model") or cfg.get("face_model") or self.MODEL_OPTIONS[0])
@@ -1219,10 +1234,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
         return config
 
     def _raw_config(self) -> dict[str, Any]:
+        checkpoint = self._normalize_stage_model_override(self.stage_model_override_var.get())
         config = {
-            "adetailer_checkpoint_model": self._normalize_stage_model_override(
-                self.stage_model_override_var.get()
-            ),
+            "adetailer_checkpoint_model": checkpoint,
             "adetailer_model": self.face_model_var.get(),
             "adetailer_confidence": self.face_confidence_var.get(),
             "ad_confidence": self.face_confidence_var.get(),
@@ -1289,6 +1303,10 @@ class ADetailerStageCardV2(BaseStageCardV2):
             "adetailer_hands_negative_prompt": self.hands_negative_var.get(),
         }
         config.update(self._legacy_unsupported)
+        if checkpoint != self._unconfirmed_checkpoint:
+            config[CHECKPOINT_SELECTION_KEY] = ADetailerCheckpointSelection.from_operator_choice(
+                checkpoint
+            ).to_dict()
         return config
 
     def watchable_vars(self) -> Iterable[tk.Variable]:
@@ -1390,10 +1408,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
                 else [self.STAGE_MODEL_INHERIT]
             )
             current = self.stage_model_override_var.get().strip() or self.STAGE_MODEL_INHERIT
+            if current not in stage_values:
+                stage_values.append(current)
             self._stage_model_combo.configure(values=tuple(stage_values), state="readonly")
-            self.stage_model_override_var.set(
-                current if current in stage_values else self.STAGE_MODEL_INHERIT
-            )
 
     def _configure_combo(
         self,

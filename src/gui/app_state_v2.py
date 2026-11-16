@@ -713,6 +713,11 @@ class AppStateV2:
         self.preview_jobs = []
         self.preview_error = None
 
+    def snapshot_accepted_preview(self) -> tuple[int, tuple[NormalizedJobRecord, ...]]:
+        """Read the accepted Preview and its revision as one observation."""
+        with self._preview_lock:
+            return self.preview_revision, tuple(self.preview_jobs)
+
     def claim_preview_for_admission(self) -> tuple[list[NormalizedJobRecord], int]:
         """``(accepted records, revision)`` for a queue submission.
 

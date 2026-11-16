@@ -405,7 +405,10 @@ class TestPipelineBatchProcessing:
                     enabled=True,
                     model="hidden-stage-model.safetensors",
                     vae="hidden-stage-vae.safetensors",
-                    extra={"adetailer_model": "face_yolov8n.pt"},
+                    extra={
+                        "adetailer_model": "face_yolov8n.pt",
+                        "adetailer_checkpoint_selection": {"mode": "inherit", "checkpoint": None},
+                    },
                 ),
                 StageConfig(
                     stage_type="upscale",

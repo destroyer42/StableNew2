@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.generation_profiles.identity import ResolvedModel
+from src.learning import study_catalog
 from src.learning.evidence_autopilot import VARIABLES, ProposalPlan
 from src.learning.intelligence_contracts import (
     ACTION_COMPLETE_RATINGS,
@@ -52,6 +53,8 @@ from src.learning.intelligence_sources import (
     STATE_PREPARED,
     STATE_RUNNING,
     ExperimentView,
+    rating_identity,
+    valid_rating,
 )
 from src.learning.profile_publication import PublicationProposal
 
@@ -64,7 +67,6 @@ _STATE_RANK = {
     STATE_PREPARED: 1,
     STATE_DRAFT: 0,
 }
-_RATED_STUDIES = ("ordinary", "controlled_variable")
 _FIELD_OF = dict(VARIABLES)
 _NO_ALTERNATE = "No source-backed alternate"
 
@@ -136,59 +138,78 @@ def _make(
     )
 
 
-def _experiment_actions(inputs: ActionInputs, applicable: list[ExperimentView]) -> list[NextAction]:
-    actions = []
-    for view in applicable:
-        if view.study_type not in _RATED_STUDIES:
+def _experiment_actions(
+    inputs: ActionInputs, relevant: list[ExperimentView]
+) -> tuple[list[NextAction], list[tuple[str, str]]]:
+    """Finish-rating and investigate actions for every cataloged study; a closed experiment is listed, not offered."""
+    actions: list[NextAction] = []
+    suppressed: list[tuple[str, str]] = []
+    for view in relevant:
+        descriptor = study_catalog.lookup(view.study_type)
+        if descriptor is None:
             continue
-        refs = _finding_ids(inputs.findings, f"experiment:{view.experiment_id}")
-        problems = invalid_evidence(view)
-        if problems and view.state in (STATE_COMPLETED, STATE_FAILED):
-            actions.append(
-                _make(
-                    inputs,
-                    ACTION_INVESTIGATE_EXECUTION,
-                    view.experiment_id,
-                    f"Investigate why the {view.variable or 'saved'} experiment has no valid controlled readback.",
-                    [f"Controlled execution evidence is invalid: {'; '.join(problems[:3])}."],
-                    ["invalid_readback"],
-                    ("Whether the run can count as evidence at all.", "invalid_readback"),
-                    workflow=WORKFLOW_LEARNING_REVIEW,
-                    workload={"images_to_generate": 0, "images_to_rate": 0},
-                    refs=refs,
-                    severity=3,
-                    relevance=2,
+        found = _view_actions(inputs, view)
+        if found and view.closure:
+            suppressed.append(
+                (
+                    view.variable or descriptor.label,
+                    f"Not offered: the {descriptor.label} experiment {view.experiment_id[-8:]} was closed by the "
+                    "operator; reopen it in the Experiment Library to finish it.",
                 )
             )
             continue
-        if view.state != STATE_COMPLETED:
-            continue
-        unrated = [
-            (v, img) for v, img in view.images if (view.experiment_id, img) not in inputs.rated
-        ]
-        if unrated:
-            actions.append(
-                _make(
-                    inputs,
-                    ACTION_COMPLETE_RATINGS,
-                    view.experiment_id,
-                    f"Finish rating the {len(unrated)} unrated image(s) already generated for {view.variable or 'this experiment'}.",
-                    [
-                        f"{len(unrated)} of {len(view.images)} generated images have no saved rating.",
-                        "Completing existing work needs no new generation.",
-                    ],
-                    ["unrated_images"],
-                    (
-                        "The missing ratings that stop the experiment reaching a conclusion.",
-                        "unrated_images",
-                    ),
-                    workflow=WORKFLOW_LEARNING_REVIEW,
-                    workload={"images_to_generate": 0, "images_to_rate": len(unrated)},
-                    refs=refs,
-                    severity=2,
-                    relevance=2,
-                )
+        actions.extend(found)
+    return actions, suppressed
+
+
+def _view_actions(inputs: ActionInputs, view: ExperimentView) -> list[NextAction]:
+    actions: list[NextAction] = []
+    refs = _finding_ids(inputs.findings, f"experiment:{view.experiment_id}")
+    problems = invalid_evidence(view)
+    if problems and view.state in (STATE_COMPLETED, STATE_FAILED):
+        actions.append(
+            _make(
+                inputs,
+                ACTION_INVESTIGATE_EXECUTION,
+                view.experiment_id,
+                f"Investigate why the {view.variable or 'saved'} experiment has no valid controlled readback.",
+                [f"Controlled execution evidence is invalid: {'; '.join(problems[:3])}."],
+                ["invalid_readback"],
+                ("Whether the run can count as evidence at all.", "invalid_readback"),
+                workflow=WORKFLOW_LEARNING_REVIEW,
+                workload={"images_to_generate": 0, "images_to_rate": 0},
+                refs=refs,
+                severity=3,
+                relevance=2,
             )
+        )
+        return actions
+    if view.state != STATE_COMPLETED:
+        return actions
+    unrated = [(v, img) for v, img in view.images if (view.experiment_id, img) not in inputs.rated]
+    if unrated:
+        actions.append(
+            _make(
+                inputs,
+                ACTION_COMPLETE_RATINGS,
+                view.experiment_id,
+                f"Finish rating the {len(unrated)} unrated image(s) already generated for {view.variable or 'this experiment'}.",
+                [
+                    f"{len(unrated)} of {len(view.images)} generated images have no saved rating.",
+                    "Completing existing work needs no new generation.",
+                ],
+                ["unrated_images"],
+                (
+                    "The missing ratings that stop the experiment reaching a conclusion.",
+                    "unrated_images",
+                ),
+                workflow=WORKFLOW_LEARNING_REVIEW,
+                workload={"images_to_generate": 0, "images_to_rate": len(unrated)},
+                refs=refs,
+                severity=2,
+                relevance=2,
+            )
+        )
     return actions
 
 
@@ -250,7 +271,9 @@ def _plan_actions(
                         STATE_FAILED: "an equivalent experiment failed; investigate it first",
                     }.get(best.state)
                     if why is None:
-                        if invalid_evidence(best):
+                        if best.closure:
+                            why = "an equivalent experiment was closed by the operator"
+                        elif invalid_evidence(best):
                             why = "an equivalent run has invalid execution evidence; investigate it first"
                         elif conclusion is None or conclusion.status == "insufficient":
                             why = "an equivalent run is awaiting ratings"
@@ -430,10 +453,20 @@ def build_actions(inputs: ActionInputs) -> NextActionSet:
         (v for v in inputs.experiments if is_applicable(v, inputs.target)),
         key=lambda v: v.experiment_id,
     )
-    ranked: list[tuple[int, NextAction]] = [
-        (-1, a) for a in _experiment_actions(inputs, applicable)
-    ]
+    sha = inputs.target.identity.sha256 or ""
+    relevant = sorted(
+        (
+            v
+            for v in inputs.experiments
+            if is_applicable(v, inputs.target)
+            or (sha and (sha, inputs.target.identity.family) in v.model_pairs)
+        ),
+        key=lambda v: v.experiment_id,
+    )
+    experiment_actions, closed = _experiment_actions(inputs, relevant)
+    ranked: list[tuple[int, NextAction]] = [(-1, a) for a in experiment_actions]
     planned, suppressed, blockers = _plan_actions(inputs, applicable)
+    suppressed.extend(closed)
     ranked.extend(planned)
     ranked.extend((-1, a) for a in _recommendation_action(inputs))
     offered = {a.kind for _, a in ranked if a.eligibility == ELIGIBILITY_READY}
@@ -465,10 +498,25 @@ def build_actions(inputs: ActionInputs) -> NextActionSet:
     )
 
 
-def rated_map(attributions: Iterable[Any]) -> dict[tuple[str, str], float]:
-    """(experiment, image) -> operator overall rating, for every image that has a valid saved rating."""
-    return {
+def rated_map(
+    attributions: Iterable[Any], study_rows: Iterable[Mapping[str, Any]] = ()
+) -> dict[tuple[str, str], float]:
+    """(experiment, image) -> operator overall rating, for every image that has a valid saved rating.
+
+    ``study_rows`` are the saved ratings of the other cataloged studies (their own record kinds); they only mark an
+    image as rated and never enter preference or recommendation evidence.
+    """
+    rated = {
         (item.experiment, item.image): item.overall
         for item in attributions
         if item.overall is not None
     }
+    for row in study_rows:
+        identity = rating_identity(row)
+        meta = row.get("metadata") or {}
+        overall = valid_rating(meta.get("user_rating_raw"))
+        if overall is None:
+            overall = valid_rating(meta.get("user_rating"))
+        if identity is not None and overall is not None:
+            rated[(identity[0], identity[2])] = overall
+    return rated

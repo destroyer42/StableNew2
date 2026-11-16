@@ -1266,6 +1266,8 @@ class SDWebUIClient:
         unload_model: bool = False,
         force_gc: bool = True,
         refresh_checkpoints: bool = False,
+        *,
+        operation_evidence: dict[str, dict[str, Any]] | None = None,
     ) -> bool:
         """
         Free VRAM by unloading cached data.
@@ -1277,6 +1279,7 @@ class SDWebUIClient:
             force_gc: If True, also run Python garbage collection in the StableNew process
             refresh_checkpoints: If True, call WebUI's refresh-checkpoints endpoint.
                 This is an aggressive maintenance operation and should not run on every job.
+            operation_evidence: Optional observations that distinguish an endpoint response from local GC.
 
         Returns:
             True if successful, False otherwise
@@ -1286,14 +1289,24 @@ class SDWebUIClient:
         try:
             # First try the unload-checkpoint endpoint if available (A1111 1.6+)
             if unload_model:
-                with self._request_context(
-                    "post",
-                    "/sdapi/v1/unload-checkpoint",
-                    timeout=30,
-                ) as response:
-                    if response is not None:
-                        logger.info("Unloaded SD model to free VRAM")
-                        freed = True
+                started = time.monotonic()
+                acknowledged = False
+                try:
+                    with self._request_context(
+                        "post",
+                        "/sdapi/v1/unload-checkpoint",
+                        timeout=30,
+                    ) as response:
+                        if response is not None:
+                            logger.info("Unloaded SD model to free VRAM")
+                            acknowledged = True
+                            freed = True
+                finally:
+                    if operation_evidence is not None:
+                        operation_evidence["unload_checkpoint"] = {
+                            "outcome": "acknowledged" if acknowledged else "failed",
+                            "duration_ms": round(max(0.0, time.monotonic() - started) * 1000, 3),
+                        }
 
             if refresh_checkpoints:
                 # refresh-checkpoints can hang under memory pressure; keep it opt-in and bounded.
@@ -1309,15 +1322,24 @@ class SDWebUIClient:
 
             # Optional: Force Python garbage collection
             if force_gc:
+                started = time.monotonic()
+                collected_ok = False
                 try:
                     import gc
 
                     collected = gc.collect()
+                    collected_ok = True
                     freed = True
                     if collected > 100:  # Only log if significant
                         logger.debug("Python GC freed %d objects", collected)
                 except Exception:
                     pass
+                finally:
+                    if operation_evidence is not None:
+                        operation_evidence["python_gc"] = {
+                            "outcome": "completed" if collected_ok else "failed",
+                            "duration_ms": round(max(0.0, time.monotonic() - started) * 1000, 3),
+                        }
 
             return freed
 

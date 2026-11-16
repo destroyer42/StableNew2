@@ -46,6 +46,7 @@ def _normalize_scheduler_name(scheduler: str | None) -> str | None:
 
 
 ADETAILER_DEFAULT_KEY = "adetailer_defaults"
+ADETAILER_CHECKPOINT_SELECTION_KEY = "adetailer_checkpoint_selection"
 
 
 def _normalize_adetailer_prompts(config: dict[str, Any]) -> dict[str, Any]:
@@ -423,6 +424,16 @@ class ConfigManager:
             config = self._merge_configs(config, _normalize_adetailer_prompts(layer))
             adetailer = layer.get("adetailer")
             if isinstance(adetailer, dict):
+                if ADETAILER_CHECKPOINT_SELECTION_KEY in adetailer or any(
+                    key in adetailer
+                    for key in ("adetailer_checkpoint_model", "sd_model_checkpoint")
+                ):
+                    # Replace checkpoint provenance atomically when a layer supplies its own choice.
+                    config["adetailer"].pop(ADETAILER_CHECKPOINT_SELECTION_KEY, None)
+                    if ADETAILER_CHECKPOINT_SELECTION_KEY in adetailer:
+                        config["adetailer"][ADETAILER_CHECKPOINT_SELECTION_KEY] = deepcopy(
+                            adetailer[ADETAILER_CHECKPOINT_SELECTION_KEY]
+                        )
                 for key in ("face_mode", "face_mode_profiles"):
                     # The later ADetailer authoring scope supplies its own mode and profile collection.
                     config["adetailer"].pop(key, None)

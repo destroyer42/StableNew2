@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 from src.video.workflow_catalog_fun_control import build_fun_control_spec
+from src.video.workflow_catalog_wan_a14b import build_wan_a14b_spec
 from src.video.workflow_catalog_wan_animate2 import build_wan_animate2_specs
 from src.video.workflow_contracts import (
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
@@ -21,12 +24,15 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_wan22_ti2v_5b_i2v_v1_1(),
         _build_wan22_ti2v_5b_i2v_v1_2(),
         _build_wan22_ti2v_5b_i2v_v1_3(),
+        _build_wan22_ti2v_5b_i2v_v1_4(),
         *build_wan_animate2_specs(),
         build_fun_control_spec(_build_wan22_ti2v_5b_i2v_v1_3()),
+        build_wan_a14b_spec(),
     )
 
 
 __all__ = [
+    "WAN22_720P_VERSION",
     "WAN22_FRAMES_VERSION",
     "WAN22_RUNTIME_PROVENANCE",
     "WAN22_RUNTIME_VERSION",
@@ -125,6 +131,13 @@ WAN22_RUNTIME_PROVENANCE = {
 # PNG (``SaveImage``) and StableNew encodes them with its one encoder, so every clip gets the CRF,
 # colour tags, cancellation and optional RIFE smoothing, and the last frame exists exactly.
 WAN22_FRAMES_VERSION = "1.3.0"
+# VID-CLIP-370: the 1.3.0 frames-out graph at the model's 720p design point (1280x704, both sides
+# multiples of 32), an EXPERIMENTAL eval candidate beside the approved 1.3.0.
+WAN22_720P_VERSION = "1.4.0"
+WAN22_720P_TARGETS = {
+    "portrait_target": {"width": 704, "height": 1280},
+    "landscape_target": {"width": 1280, "height": 704},
+}
 
 
 def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
@@ -171,6 +184,49 @@ def _build_wan22_ti2v_5b_i2v_v1_3() -> WorkflowSpec:
         provenance_overrides=WAN22_RUNTIME_PROVENANCE,
         governance_state=WORKFLOW_GOVERNANCE_APPROVED,
         frames_out=True,
+    )
+
+
+def _build_wan22_ti2v_5b_i2v_v1_4() -> WorkflowSpec:
+    """The 1.3.0 frames-out graph, files, frame-count and runtime policy with 704x1280 / 1280x704
+    targets (VID-CLIP-370).  EXPERIMENTAL: it needs the job's own opt-in, is never recommended or
+    preselected (the picker keeps offering the approved 1.3.0) and has no physical evidence at this
+    geometry; the readiness floors are 1.3.0's, not measured at 720p."""
+
+    base = _build_wan22_ti2v_5b_i2v(
+        workflow_version=WAN22_720P_VERSION,
+        frame_count_policy=WAN22_FRAME_COUNT_POLICY,
+        runtime_policy=WAN22_RUNTIME_POLICY,
+        provenance_overrides=WAN22_RUNTIME_PROVENANCE,
+        governance_state=WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+        frames_out=True,
+    )
+    defaults = deepcopy(base.backend_defaults)
+    defaults["source_preparation"].update(deepcopy(WAN22_720P_TARGETS))
+    defaults["provenance"]["qualification"] = (
+        "1.3.0 graph and files at 704x1280 / 1280x704; NOT QUALIFIED at this geometry "
+        "(VID-CLIP-370 eval candidate)"
+    )
+    fixed = defaults["operator_projection"]["fixed_settings"]
+    fixed["geometry"] = "source-aware: portrait 704x1280; landscape 1280x704; square uses portrait"
+    fixed["hardware"] = "NOT QUALIFIED at this geometry; GPU memory at 720p is unmeasured"
+    return replace(
+        base,
+        display_name="Wan2.2 TI2V-5B Prompt-Directed I2V 720p (Experimental)",
+        description=(
+            "Experimental prompt-directed image-to-video with the same stock ComfyUI nodes and "
+            "Wan2.2 TI2V-5B files as the approved 1.3.0, at the model's 720p design point "
+            "(704x1280 portrait, 1280x704 landscape). One source image and a prompt; no anchors, "
+            "control video or pose video. Offered for side-by-side evaluation against 1.3.0."
+        ),
+        governance_notes=(
+            "EXPERIMENTAL, per-job opt-in only. The 1.3.0 frames-out graph, files, frame-count "
+            "envelope and runtime policy with 704x1280 / 1280x704 targets. Not qualified at this "
+            "geometry: GPU memory and visual quality at 720p are unmeasured, and the readiness "
+            "floors are 1.3.0's. The approved 1.3.0 stays the version the picker offers. The "
+            "StableNew-owned ComfyUI is released after every job (PR-VID-190)."
+        ),
+        backend_defaults=defaults,
     )
 
 

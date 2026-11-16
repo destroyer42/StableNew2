@@ -1,0 +1,20 @@
+{
+  "schema": "stablenew.video-eval-suite.v1",
+  "suite_id": "three-engines-v1",
+  "description": "Example only: three engines on identical cases. Replace the synthetic image names with your own sources before running.",
+  "seed": 370,
+  "baseline_arm": "ti2v_480p",
+  "cases": [
+    {"case_id": "walk_forward", "image": "images/synthetic_fullbody_portrait.png", "prompt": "the person takes one small step forward and raises their right hand, static camera, continuous natural movement", "tags": ["body", "locomotion"]},
+    {"case_id": "turn_head", "image": "images/synthetic_closeup_portrait.png", "prompt": "the person slowly turns their head toward the camera and smiles, static camera", "tags": ["face"]},
+    {"case_id": "harbor_pan", "image": "images/synthetic_harbor_landscape.png", "prompt": "the camera pans slowly right across the harbor at dusk", "tags": ["scene", "camera"]}
+  ],
+  "arms": [
+    {"arm_id": "ti2v_480p", "label": "TI2V-5B 1.3.0 480p (approved baseline)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_ti2v_5b_i2v_v1", "workflow_version": "1.3.0", "frame_count": 81}},
+    {"arm_id": "ti2v_720p", "label": "TI2V-5B 1.4.0 720p (experimental)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_ti2v_5b_i2v_v1", "workflow_version": "1.4.0", "frame_count": 81, "experimental_opt_in": true}},
+    {"arm_id": "a14b_480p", "label": "I2V-A14B 4-step 480p (experimental)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_i2v_a14b_4step_v1", "workflow_version": "1.0.0", "frame_count": 81, "experimental_opt_in": true}}
+  ]
+}

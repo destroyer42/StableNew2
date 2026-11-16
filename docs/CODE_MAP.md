@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-733 of 888 modules have a docstring.
+740 of 895 modules have a docstring.
 
 ## src/
 
@@ -57,6 +57,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `bootstrap.py`: (no docstring)
 - `optional_dependency_probes.py`: (no docstring)
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
+- `site_queue_bridge.py`: Loopback transport for the operator Site
 
 ## src/assets/
 
@@ -274,6 +275,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
 - `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply actions (PR-GUI-UX-520)
 - `sidebar_panel_v2.py`: (no docstring)
+- `site_connection_dialog.py`: Native consent and frozen Preview attachment for the StableNew operator Site
 - `smart_review_dialog.py`: Review's opt-in Smart Review panel: point/box object selection and caption suggestions (PR-IMG-REVIEW-320)
 - `status_bar_v2.py`: Status bar scaffold for GUI v2
 - `theme.py`: Legacy theming shim
@@ -585,6 +587,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `experiment_freeze.py`: Immutable controlled-experiment seed policy helpers
 - `experiment_lifecycle.py`: Pure lifecycle rules for Working Draft and Experiment Library placement
 - `experiment_naming.py`: (no docstring)
+- `experiment_outcome.py`: The derived outcome of a Learning experiment, and the operator's closure of it
 - `experiment_reconciliation.py`: Exact admitted Learning identity and repository evidence projections; never dispatches
 - `experiment_store.py`: (no docstring)
 - `feedback_manager.py`: Feedback capture helpers for pipeline runs
@@ -644,6 +647,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `setting_evidence.py`: Frozen Research -> selection -> compiled -> dispatch -> reported comparison
 - `stage_capabilities.py`: (no docstring)
 - `staged_recommendations.py`: Non-mutating recommendation patches for staged-curation derived jobs
+- `study_catalog.py`: One declarative catalog of the Learning study types: data and references, no behaviour
 - `two_axis_grid.py`: Two-axis (CFG Scale / Steps / LoRA Strength) exploratory comparison: plan once, materialize frozen cells
 - `value_identity.py`: Deterministic grouping identity for JSON-like Learning variant values
 - `variable_metadata.py`: Variable metadata registry for learning experiments
@@ -683,6 +687,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/pipeline/
 
 - `__init__.py`: Pipeline module
+- `adetailer_checkpoint.py`: Frozen ADetailer checkpoint selection and the legacy compatibility rule
 - `adetailer_contract.py`: ADetailer-Neo control truth (PR-REFINE-160): the arguments the pinned extension accepts, and the facts derive…
 - `adetailer_effectiveness.py`: Versioned ADetailer effectiveness evidence (PR-REFINE-160): what was detected, what ran, what changed, what w…
 - `adetailer_localized.py`: Localized-only ADetailer refinement (PR-IMG-ADETAILER-LOCAL-240B): execution mode, mask evidence and preserva…
@@ -704,6 +709,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `history_variation_compiler.py`: Pure compiler for "Regenerate with Changes" from a persisted history job (PR-HISTORY-610A)
 - `history_variation_marker.py`: The persisted marker of an edited history variation (PR-HISTORY-610A); dependency-free so projections can rea…
 - `image_edit_inputs.py`: Bounded, content-addressed image-edit inputs in existing mutable state, like OpenPose snapshots
+- `image_performance.py`: Bounded, per-run observations at the image executor's controlled boundaries
 - `intent_artifact_contract.py`: (no docstring)
 - `job_builder_v2.py`: JobBuilderV2: the expansion planner for merged image configurations, and the generic (Pipeline tab) route
 - `job_models_v2.py`: Job models for V2 queue system
@@ -991,6 +997,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_asset_integrity.py`: Read-only verification of catalog-pinned assets in the configured Comfy model folders
 - `workflow_catalog.py`: (no docstring)
 - `workflow_catalog_fun_control.py`: Pinned stock-node Fun Control graph; no installation or physical qualification
+- `workflow_catalog_wan_a14b.py`: Wan2.2 I2V-A14B lightx2v 4-step experimental workflow spec (VID-CLIP-370)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
 - `workflow_compiler.py`: (no docstring)
 - `workflow_contracts.py`: (no docstring)

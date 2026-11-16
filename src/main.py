@@ -648,6 +648,11 @@ def main() -> None:
         threaded=True,
     )
 
+    if sys.platform == "win32":
+        from src.gui.site_connection_dialog import install_site_connection_menu
+
+        install_site_connection_menu(root, app_controller)
+
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(
             app_controller,
