@@ -82,6 +82,10 @@
     "extra": {
      "ad_mask_k_largest": 0,
      "ad_mask_merge_invert": "None",
+     "adetailer_checkpoint_selection": {
+      "checkpoint": null,
+      "mode": "inherit"
+     },
      "adetailer_confidence": 0.4,
      "adetailer_enabled": true,
      "adetailer_execution_mode": "localized_only",

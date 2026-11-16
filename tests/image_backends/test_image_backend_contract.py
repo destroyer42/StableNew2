@@ -232,7 +232,11 @@ def test_runner_keeps_model_vae_policy_neutral_and_adapter_translates_aliases(
                 "img2img", model="hidden-model", vae="hidden-vae", extra={"strength": 0.3}
             ),
             make_stage_config(
-                "adetailer", model="hidden-model", vae="hidden-vae", extra={"prompt": "face"}
+                "adetailer", model="hidden-model", vae="hidden-vae",
+                extra={
+                    "prompt": "face",
+                    "adetailer_checkpoint_selection": {"mode": "inherit", "checkpoint": None},
+                },
             ),
             make_stage_config(
                 "upscale", model="hidden-model", vae="hidden-vae", extra={"upscaler": "R-ESRGAN 4x+"}

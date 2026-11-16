@@ -70,7 +70,11 @@ class WebUIFamilyImageBackend:
         extra = config.pop("extra", {})
         if isinstance(extra, Mapping):
             config.update(extra)
-        if request.selected_model:
+        if request.stage_name == "adetailer":
+            config.pop("adetailer_checkpoint_model", None)
+            config["model"] = request.selected_model
+            config["sd_model_checkpoint"] = request.selected_model
+        elif request.selected_model:
             config["model"] = request.selected_model
             config["sd_model_checkpoint"] = request.selected_model
         if request.selected_vae:

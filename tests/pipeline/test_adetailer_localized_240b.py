@@ -22,6 +22,7 @@ from src.api.client import LOCALIZED_ADETAILER_SCHEMA, SDWebUIClient
 from src.image_backends.a1111_webui_backend import A1111WebUIImageBackend
 from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
 from src.pipeline import adetailer_localized as localized
+from src.pipeline.adetailer_checkpoint import CHECKPOINT_SELECTION_KEY
 from src.pipeline.adetailer_localized import (
     EXECUTION_MODE_KEY,
     LEGACY_WHOLE_IMAGE,
@@ -675,7 +676,11 @@ def _stages(extra: dict[str, Any], *, enabled: bool = True) -> tuple[StageConfig
 def test_newly_compiled_stages_state_localized_only_and_refuse_inversion_at_compile():
     txt2img, adetailer = _with_fresh_adetailer_mode(_stages({"adetailer_steps": 12}))
     assert EXECUTION_MODE_KEY not in thaw_json(txt2img.extra)
-    assert thaw_json(adetailer.extra) == {"adetailer_steps": 12, EXECUTION_MODE_KEY: LOCALIZED_ONLY}
+    assert thaw_json(adetailer.extra) == {
+        "adetailer_steps": 12,
+        EXECUTION_MODE_KEY: LOCALIZED_ONLY,
+        CHECKPOINT_SELECTION_KEY: {"mode": "inherit", "checkpoint": None},
+    }
     [_, disabled] = _with_fresh_adetailer_mode(_stages({}, enabled=False))
     assert EXECUTION_MODE_KEY not in thaw_json(disabled.extra)
     [_, explicit] = _with_fresh_adetailer_mode(

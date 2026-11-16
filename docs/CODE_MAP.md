@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-735 of 890 modules have a docstring.
+737 of 892 modules have a docstring.
 
 ## src/
 
@@ -685,6 +685,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/pipeline/
 
 - `__init__.py`: Pipeline module
+- `adetailer_checkpoint.py`: Frozen ADetailer checkpoint selection and the legacy compatibility rule
 - `adetailer_contract.py`: ADetailer-Neo control truth (PR-REFINE-160): the arguments the pinned extension accepts, and the facts derive…
 - `adetailer_effectiveness.py`: Versioned ADetailer effectiveness evidence (PR-REFINE-160): what was detected, what ran, what changed, what w…
 - `adetailer_localized.py`: Localized-only ADetailer refinement (PR-IMG-ADETAILER-LOCAL-240B): execution mode, mask evidence and preserva…
@@ -706,6 +707,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `history_variation_compiler.py`: Pure compiler for "Regenerate with Changes" from a persisted history job (PR-HISTORY-610A)
 - `history_variation_marker.py`: The persisted marker of an edited history variation (PR-HISTORY-610A); dependency-free so projections can rea…
 - `image_edit_inputs.py`: Bounded, content-addressed image-edit inputs in existing mutable state, like OpenPose snapshots
+- `image_performance.py`: Bounded, per-run observations at the image executor's controlled boundaries
 - `intent_artifact_contract.py`: (no docstring)
 - `job_builder_v2.py`: JobBuilderV2: the expansion planner for merged image configurations, and the generic (Pipeline tab) route
 - `job_models_v2.py`: Job models for V2 queue system

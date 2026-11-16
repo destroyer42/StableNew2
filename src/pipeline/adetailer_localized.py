@@ -250,6 +250,13 @@ def verify_and_composite(
         masks = entry.get("masks")
         if not isinstance(masks, list) or entry.get("mask_count") != len(masks):
             raise LocalizedRefinementError(f"the {label} pass mask count does not match its masks")
+        sampled_masks = entry.get("sampled_masks")
+        if sampled_masks is not None and (
+            type(sampled_masks) is not int
+            or not 0 <= sampled_masks <= len(masks)
+            or (sampled_masks > 0 and not sampled)
+        ):
+            raise LocalizedRefinementError(f"the {label} pass sampled-mask count is invalid")
         total_masks += len(masks)
         if total_masks > MAX_MASKS:
             raise LocalizedRefinementError(f"more than {MAX_MASKS} effective masks were returned")
@@ -275,11 +282,15 @@ def verify_and_composite(
                 "label": label,
                 "detector": args.get("ad_model"),
                 "effective_mask_count": len(masks),
+                "sampled_masks": sampled_masks,
                 "mask_blur": args.get("ad_mask_blur", 0),
                 "blend_margin_px": margin,
                 "masks": regions,
             }
         )
+
+    if sampled and all(entry["sampled_masks"] == 0 for entry in pass_records):
+        raise LocalizedRefinementError("evidence reports sampling but no pass sampled a mask")
 
     authorized_pixels = _count(authorized)
     total_pixels = source.width * source.height

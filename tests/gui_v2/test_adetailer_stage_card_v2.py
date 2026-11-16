@@ -5,6 +5,7 @@ import tkinter as tk
 import pytest
 
 from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
+from src.pipeline.adetailer_checkpoint import CHECKPOINT_SELECTION_KEY
 
 
 @pytest.mark.gui
@@ -42,6 +43,23 @@ def test_adetailer_stage_card_roundtrip_includes_face_hand_and_stage_model(tk_ro
     assert exported["ad_hands_inpaint_only_masked"] is False
     assert exported["ad_hands_inpaint_width"] == 768
     assert exported["ad_hands_inpaint_height"] == 896
+    assert CHECKPOINT_SELECTION_KEY not in exported
+    card.stage_model_override_var.set("temporary-recommendation.safetensors")
+    card.stage_model_override_var.set(sample["adetailer_checkpoint_model"])
+    assert CHECKPOINT_SELECTION_KEY not in card.to_config_dict()
+    card.stage_model_override_var.set("operator-choice.safetensors")
+    explicit = card.to_config_dict()
+    assert explicit[CHECKPOINT_SELECTION_KEY] == {
+        "mode": "explicit",
+        "checkpoint": "operator-choice.safetensors",
+    }
+    card.load_from_dict(explicit)
+    assert card.to_config_dict()[CHECKPOINT_SELECTION_KEY] == explicit[CHECKPOINT_SELECTION_KEY]
+    card.stage_model_override_var.set(card.STAGE_MODEL_INHERIT)
+    assert card.to_config_dict()[CHECKPOINT_SELECTION_KEY] == {
+        "mode": "inherit",
+        "checkpoint": None,
+    }
 
 
 @pytest.mark.gui

@@ -33,6 +33,7 @@ import hashlib
 import logging
 import os
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +117,7 @@ from src.image_backends.image_backend_types import (
 from src.image_backends.model_readiness import ModelReadiness
 from src.image_backends.model_readiness_probe import probe_model_readiness
 from src.image_backends.webui_family_backend import WebUIFamilyImageBackend
+from src.pipeline.image_performance import ImagePerformanceTrace
 from src.services.runtime_transition_service import (
     RUNTIME_FORGE_WEBUI,
     RuntimeTransitionCoordinator,
@@ -644,17 +646,31 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             observed,
             desired or "Automatic (no modules)",
         )
-        if setter(list(desired)) is not True:
-            raise ForgeVAEError(
-                f"Forge module selection {desired or 'Automatic'} was not applied; refusing to dispatch "
-                f"{request.stage_name} with stale modules {observed}."
+        trace = getattr(pipeline, "_image_performance", None)
+        measurement: AbstractContextManager[dict[str, Any]] = (
+            trace.operation(
+                "vae_switch", "forge_module_baseline", stage=request.stage_name,
+                write_requested=True, target="forge_modules",
             )
-        after = reader()
-        if not isinstance(after, list) or module_set_key(after) != module_set_key(desired):
-            raise ForgeVAEError(
-                f"Forge reports modules {after} after selecting {desired or 'Automatic'}; refusing to "
-                f"dispatch {request.stage_name} with an unverified module baseline."
-            )
+            if isinstance(trace, ImagePerformanceTrace) else nullcontext({})
+        )
+        with measurement as evidence:
+            if setter(list(desired)) is not True:
+                evidence["outcome"] = "refused"
+                raise ForgeVAEError(
+                    f"Forge module selection {desired or 'Automatic'} was not applied; refusing to dispatch "
+                    f"{request.stage_name} with stale modules {observed}."
+                )
+            after = reader()
+            if not isinstance(after, list) or module_set_key(after) != module_set_key(desired):
+                evidence["outcome"] = "refused"
+                raise ForgeVAEError(
+                    f"Forge reports modules {after} after selecting {desired or 'Automatic'}; refusing to "
+                    f"dispatch {request.stage_name} with an unverified module baseline."
+                )
+            evidence["outcome"] = "verified"
+        if isinstance(trace, ImagePerformanceTrace):
+            pipeline._record_vae_switch()
         event["applied"] = True
         event["observed_after"] = list(after)
         return event
@@ -691,6 +707,11 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         readiness = probe_model_readiness(
             getattr(pipeline, "client", None), model_name, evidence=self._component_evidence
         )
+        if request.stage_name == "adetailer" and readiness.reason_code == "served_file_ambiguous":
+            raise ForgeUnsupportedIntentError(
+                "Forge lists multiple files for the requested ADetailer checkpoint. "
+                "Choose a uniquely named checkpoint in a fresh job."
+            )
         if readiness.blocks_dispatch:
             logger.warning(
                 "[forge/dependency-gate] job=%s stage=%s refused before any module write or generation POST: %s (%s)",

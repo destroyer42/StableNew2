@@ -25,6 +25,7 @@ from src.image_backends.exact_model_profile import validate_profile_njr
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import apply_model_compile_policy
 from src.image_backends.operation_compatibility import require_njr_operation
+from src.pipeline.adetailer_checkpoint import stamp_fresh_checkpoint_selection
 from src.pipeline.adetailer_localized import (
     LOCALIZED_ONLY,
     execution_mode,
@@ -270,6 +271,7 @@ def _with_fresh_adetailer_mode(stages: tuple[StageConfig, ...]) -> tuple[StageCo
     for stage in stages:
         if stage.stage_type == "adetailer" and stage.enabled:
             extra = stamp_fresh_execution_mode(thaw_json(stage.extra))
+            stamp_fresh_checkpoint_selection(extra)
             if execution_mode(extra) == LOCALIZED_ONLY and (refusals := stage_refusals(extra)):
                 raise ValueError("ADetailer stage refused: " + "; ".join(refusals))
             stage = replace(stage, extra=extra)

@@ -26,6 +26,11 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from src.pipeline.adetailer_checkpoint import (
+    CHECKPOINT_SELECTION_KEY,
+    ADetailerCheckpointSelection,
+)
+
 # ---------------------------------------------------------------------------
 # Protocols for type safety without importing concrete types
 # ---------------------------------------------------------------------------
@@ -155,6 +160,7 @@ class ADetailerOverrides:
     face_mode: str | None = None
     face_mode_profiles: dict[str, Any] | None = None
     replace_face_mode: bool = False
+    checkpoint_selection: ADetailerCheckpointSelection | None = None
 
     @classmethod
     def from_stage_config(cls, adetailer_config: dict[str, Any]) -> ADetailerOverrides | None:
@@ -171,6 +177,7 @@ class ADetailerOverrides:
             face_mode=adetailer_config.get("face_mode"),
             face_mode_profiles=adetailer_config.get("face_mode_profiles"),
             replace_face_mode=True,
+            checkpoint_selection=ADetailerCheckpointSelection.from_config(adetailer_config),
             enabled=_first_defined(
                 adetailer_config.get("adetailer_enabled"),
                 adetailer_config.get("enabled"),
@@ -572,6 +579,10 @@ class ConfigMergerV2:
         if override_adetailer.face_mode_profiles is not None:
             merged["face_mode_profiles"] = deepcopy(override_adetailer.face_mode_profiles)
 
+        if override_adetailer.checkpoint_selection is not None:
+            merged[CHECKPOINT_SELECTION_KEY] = override_adetailer.checkpoint_selection.to_dict()
+        elif override_adetailer.checkpoint_model is not None:
+            merged.pop(CHECKPOINT_SELECTION_KEY, None)
         if override_adetailer.checkpoint_model is not None:
             merged["adetailer_checkpoint_model"] = override_adetailer.checkpoint_model
             merged["sd_model_checkpoint"] = override_adetailer.checkpoint_model

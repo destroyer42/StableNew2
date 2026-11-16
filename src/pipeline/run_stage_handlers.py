@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from src.learning.experiment_naming import build_learning_filename_prefix
+from src.pipeline.image_performance import ImagePerformanceTrace, observe_cleanup
 from src.pipeline.njr_core_v26 import thaw_json
 from src.utils.file_io import build_safe_image_name
 
@@ -60,6 +61,16 @@ class StageRunContext:
     paths: list[str] = field(default_factory=list)
     #: The stage being (or last) started, for error reporting.
     current_stage_name: str = ""
+    image_performance: ImagePerformanceTrace | None = None
+    final_image_stage: str | None = None
+    final_image_paths: set[str] = field(default_factory=set)
+    image_stage_executions: int = 0
+    requested_image_count: int | None = None
+    returned_base_images: int | None = None
+
+    def record_image_outputs(self, stage: str, paths: list[str]) -> None:
+        if stage == self.final_image_stage:
+            self.final_image_paths.update(paths)
 
 
 class StageHandler:
@@ -112,6 +123,7 @@ class Txt2ImgHandler(StageHandler):
             max_length=_MAX_NAME_LENGTH,
         )
 
+        ctx.image_stage_executions += 1
         result = runner._execute_image_backend(
             backend_id=ctx.image_backend_id,
             stage_name="txt2img",
@@ -138,7 +150,9 @@ class Txt2ImgHandler(StageHandler):
         else:
             next_paths = []
         if result is not None:
+            ctx.returned_base_images = len(next_paths)
             ctx.variants.append(result)
+        ctx.record_image_outputs("txt2img", next_paths)
         return next_paths
 
 
@@ -230,7 +244,7 @@ class PerImageStageHandler(StageHandler):
         for img_idx, input_path in enumerate(paths):
             logger.debug("[pipeline/%s] processing image %s/%s", name, img_idx + 1, len(paths))
             if spec.free_vram_before and use_original_name and img_idx > 0:
-                self._free_vram(ctx, f"[pipeline/{name}] freeing VRAM before image", settle=True)
+                self._free_vram(ctx, name, img_idx, settle=True)
 
             if use_original_name and img_idx < len(original_inputs):
                 input_stem = Path(original_inputs[img_idx]).stem[:_ORIGINAL_STEM_CHARS]
@@ -272,6 +286,7 @@ class PerImageStageHandler(StageHandler):
                     )
                     stage_config["adaptive_refinement"] = image_refinement_payload
 
+            ctx.image_stage_executions += 1
             result = runner._execute_image_backend(
                 backend_id=ctx.image_backend_id,
                 stage_name=name,
@@ -293,6 +308,7 @@ class PerImageStageHandler(StageHandler):
                 if spec.log_outputs:
                     logger.info("[pipeline/%s] saved output=%s", name, result["path"])
                 next_paths.append(result["path"])
+                ctx.record_image_outputs(name, [result["path"]])
             elif spec.log_outputs:
                 logger.warning("[pipeline/%s] no output from image index=%s", name, img_idx)
             if (
@@ -313,18 +329,29 @@ class PerImageStageHandler(StageHandler):
             ctx.variants.append(result)
 
             if spec.free_vram_after and use_original_name and img_idx < len(paths) - 1:
-                self._free_vram(ctx, f"[pipeline/{name}] freeing VRAM between images", settle=False)
+                self._free_vram(ctx, name, img_idx, settle=False)
 
         logger.info("[pipeline/%s] completed %s image(s)", name, len(next_paths))
         return next_paths
 
     @staticmethod
-    def _free_vram(ctx: StageRunContext, message: str, *, settle: bool) -> None:
+    def _free_vram(ctx: StageRunContext, stage: str, image_index: int, *, settle: bool) -> None:
         try:
             client = ctx.client
             if client and hasattr(client, "free_vram"):
-                logger.info(message)
-                client.free_vram(unload_model=True)
+                logger.info(
+                    "[pipeline/%s] freeing VRAM %s",
+                    stage,
+                    "before image" if settle else "between images",
+                )
+                observe_cleanup(
+                    client,
+                    ctx.image_performance,
+                    stage=stage,
+                    image_index=image_index,
+                    reason="reprocessing_before_image" if settle else "reprocessing_between_images",
+                    unload_model=True,
+                )
                 if settle:
                     time.sleep(1.0)  # give the WebUI time to stabilize
         except Exception:  # noqa: BLE001 - non-fatal housekeeping

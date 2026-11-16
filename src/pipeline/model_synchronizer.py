@@ -45,11 +45,13 @@ class ModelSynchronizationError(RuntimeError):
         kind: str = "unspecified",
         requested: str | None = None,
         actual: str | None = None,
+        switch_requested: bool = False,
     ) -> None:
         super().__init__(message)
         self.kind = kind
         self.requested = requested
         self.actual = actual
+        self.switch_requested = switch_requested
 
     @property
     def is_checkpoint_problem(self) -> bool:
@@ -108,6 +110,18 @@ def normalize_model_name(raw: str | None) -> str | None:
     return cleaned.lower()
 
 
+def checkpoint_names_match(left: str | None, right: str | None) -> bool:
+    """Allow display-name variations, while retaining a conflict between two stated hashes."""
+    if normalize_model_name(left) != normalize_model_name(right):
+        return False
+    first = re.search(r"\[([a-f0-9]+)\]$", str(left or "").strip(), re.IGNORECASE)
+    second = re.search(r"\[([a-f0-9]+)\]$", str(right or "").strip(), re.IGNORECASE)
+    if first is None or second is None:
+        return True
+    first_hash, second_hash = first[1].lower(), second[1].lower()
+    return first_hash.startswith(second_hash) or second_hash.startswith(first_hash)
+
+
 class A1111ModelSynchronizer:
     """Synchronize and verify A1111's actual checkpoint before generation."""
 
@@ -136,7 +150,7 @@ class A1111ModelSynchronizer:
             )
 
         actual = self._read_actual(requested, phase="before switch")
-        if normalize_model_name(actual) == requested_key:
+        if checkpoint_names_match(actual, requested):
             return ModelSynchronizationResult(actual_model=actual, switched=False)
 
         if not bool(getattr(self._client, "options_write_enabled", False)):
@@ -166,7 +180,7 @@ class A1111ModelSynchronizer:
         last_actual = actual
         while True:
             last_actual = self._read_actual(requested, phase="after switch")
-            if normalize_model_name(last_actual) == requested_key:
+            if checkpoint_names_match(last_actual, requested):
                 return ModelSynchronizationResult(actual_model=last_actual, switched=True)
 
             remaining = deadline - self._monotonic()
@@ -188,6 +202,7 @@ class A1111ModelSynchronizer:
                 None,
                 f"could not query WebUI {phase}: {exc}",
                 kind="query_failed",
+                after_switch=phase == "after switch",
             )
         if not isinstance(actual, str) or not actual.strip():
             self._raise_failure(
@@ -195,6 +210,7 @@ class A1111ModelSynchronizer:
                 None,
                 f"WebUI returned no current checkpoint {phase}",
                 kind="query_failed",
+                after_switch=phase == "after switch",
             )
         return actual.strip()
 
@@ -205,6 +221,7 @@ class A1111ModelSynchronizer:
         reason: str,
         *,
         kind: str,
+        after_switch: bool = False,
     ) -> NoReturn:
         raise ModelSynchronizationError(
             "A1111 checkpoint synchronization failed: "
@@ -212,6 +229,8 @@ class A1111ModelSynchronizer:
             kind=kind,
             requested=requested,
             actual=actual,
+            switch_requested=after_switch
+            or kind in {"change_error", "change_rejected", "not_applied"},
         )
 
 
