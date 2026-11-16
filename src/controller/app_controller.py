@@ -93,7 +93,9 @@ from src.controller.app_controller_services.pack_settings_apply_service import (
     bind_preview_invalidation,
 )
 from src.controller.app_controller_services.run_submission_service import (
+    PreviewWitness,
     QueueRunSubmissionService,
+    launch_preview_queue_submission,
 )
 from src.controller.app_controller_services.runtime_projection_coordinator import (
     RuntimeProjectionCoordinator,
@@ -1601,64 +1603,11 @@ class AppController:
 
     def on_add_job_to_queue_v2(self) -> None:
         """Queue-first Add-to-Queue entrypoint for preview-backed jobs."""
-        import threading
+        launch_preview_queue_submission(self, expected_preview=None)
 
-        thread_name = threading.current_thread().name
-        self._append_log(f"[D21] on_add_job_to_queue_v2 ENTRY (thread={thread_name})")
-        self._ensure_run_mode_default("add_to_queue")
-        if self._is_preview_queue_submission_blocked():
-            self._append_log(
-                f"[controller] Ignoring add-to-queue request because shutdown is in progress "
-                f"(thread={thread_name})"
-            )
-            self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
-            return
-        controller = getattr(self, "pipeline_controller", None)
-        run_config = self._prepare_queue_run_config()
-        if getattr(self, "_queue_submit_in_progress", False):
-            self._append_log(
-                f"[controller] Queue submission already in progress; ignoring duplicate request "
-                f"(thread={thread_name})"
-            )
-            self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
-            return
-        if controller is not None:
-            preview_records = list(getattr(getattr(self, "app_state", None), "preview_jobs", None) or [])
-            try:
-                self._queue_submit_in_progress = True
-                self._append_log(
-                    f"[controller] Queueing preview jobs in background "
-                    f"(count={len(preview_records) if preview_records else 'draft'}) "
-                    f"(thread={thread_name})"
-                )
-                spawn_thread = getattr(self, "_spawn_tracked_thread", None)
-                if callable(spawn_thread):
-                    spawn_thread(
-                        target=self._submit_preview_jobs_to_queue_async,
-                        args=(controller, preview_records, run_config, thread_name),
-                        name="PreviewQueueSubmit",
-                        purpose="Submit preview jobs to queue asynchronously",
-                    )
-                else:
-                    self._submit_preview_jobs_to_queue_async(
-                        controller,
-                        preview_records,
-                        run_config,
-                        thread_name,
-                    )
-                self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
-                return
-            except Exception as exc:  # noqa: BLE001
-                self._queue_submit_in_progress = False
-                self._append_log(
-                    f"[controller] enqueue_draft_jobs error: {exc!r} (thread={thread_name})"
-                )
-        else:
-            self._append_log(
-                f"[controller] enqueue_draft_jobs unavailable: pipeline_controller missing "
-                f"(thread={thread_name})"
-            )
-        self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
+    def submit_frozen_site_preview(self, expected_preview: PreviewWitness) -> bool:
+        """Start the native Preview worker with the exact approved Site witness."""
+        return launch_preview_queue_submission(self, expected_preview=expected_preview)
 
     def _is_preview_queue_submission_blocked(self) -> bool:
         return bool(getattr(self, "_is_shutting_down", False))
