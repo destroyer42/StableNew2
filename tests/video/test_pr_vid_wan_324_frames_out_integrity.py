@@ -564,7 +564,7 @@ def test_approved_1_3_0_is_the_offered_version_and_approved_1_2_0_still_resolves
         (spec.workflow_id, spec.workflow_version) for spec in build_builtin_workflow_specs()
     }
     registry = build_default_workflow_registry()
-    assert registry.list_versions(WAN_ID)[-2:] == ["1.2.0", WAN22_FRAMES_VERSION]
+    assert registry.list_versions(WAN_ID)[-3:] == ["1.2.0", WAN22_FRAMES_VERSION, "1.4.0"]
 
     offered = _offered(registry)[WAN_ID]
     assert (offered["workflow_version"], offered["governance_state"]) == (
