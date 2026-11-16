@@ -232,6 +232,8 @@ def _walk(container: tk.Misc) -> list[tk.Misc]:
     stack = list(container.winfo_children())
     while stack:
         node = stack.pop(0)
+        if isinstance(node, tk.Toplevel):
+            continue  # a tooltip or dialog is its own transient window, not a control of the page
         out.append(node)
         stack[0:0] = list(node.winfo_children())
     return out
@@ -245,8 +247,13 @@ def probe(root: tk.Misc, container: tk.Misc, *, keyboard: bool = False) -> Probe
     root.update()
     frames = [n for n in _walk(container) if isinstance(n, ScrollableFrame)]
     for widget in _walk(container):
-        if widget.winfo_class() not in ACTIONABLE_CLASSES or not logically_shown(widget, container):
-            continue
+        try:
+            if widget.winfo_class() not in ACTIONABLE_CLASSES or not logically_shown(
+                widget, container
+            ):
+                continue
+        except tk.TclError:
+            continue  # destroyed since the walk began (a hover popup going away): it is no longer a control
         try:
             if not widget.winfo_exists():
                 continue
