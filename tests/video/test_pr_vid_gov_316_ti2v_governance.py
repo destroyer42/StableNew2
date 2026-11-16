@@ -55,6 +55,8 @@ def test_exactly_two_catalog_versions_are_approved_and_both_are_ti2v() -> None:
     ]
     assert {key for key, state in states.items() if state == "experimental"} == {
         ("wan22_fun_control_5b_canny_i2v_v1", "1.0.0"),
+        ("wan22_i2v_a14b_4step_v1", "1.0.0"),  # VID-CLIP-370 eval candidates
+        ("wan22_ti2v_5b_i2v_v1", "1.4.0"),
         *OLDER_TI2V,
         *(
             (wid, ver)
@@ -63,8 +65,8 @@ def test_exactly_two_catalog_versions_are_approved_and_both_are_ti2v() -> None:
         ),
     }
     assert (
-        len(states) == 11
-    )  # Fun Control adds one experimental identity; approvals stay unchanged.
+        len(states) == 13
+    )  # Fun Control and the two VID-CLIP-370 candidates add experimental identities only.
 
 
 def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_is_unchanged() -> (
@@ -75,7 +77,7 @@ def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
     ] == [APPROVED, APPROVED_FRAMES_OUT]
-    assert len(registry.list_offerable_specs("comfy")) == 11
+    assert len(registry.list_offerable_specs("comfy")) == 13
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:

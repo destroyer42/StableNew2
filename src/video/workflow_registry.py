@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.video.workflow_catalog import build_builtin_workflow_specs
-from src.video.workflow_contracts import WorkflowSpec
+from src.video.workflow_contracts import WORKFLOW_GOVERNANCE_APPROVED, WorkflowSpec
 
 
 class WorkflowLookupError(KeyError):
@@ -153,16 +153,24 @@ def _version_key(version: str) -> tuple[Any, ...]:
 
 
 def latest_spec_per_workflow(specs: list[Any]) -> list[Any]:
-    """One selectable entry per workflow: its newest registered version, ordered by workflow id.
+    """One selectable entry per workflow, ordered by workflow id.
 
-    Older versions stay registered so existing jobs replay against their exact pinned revision."""
+    The entry is the newest ``approved`` version when the workflow has one, otherwise its newest
+    registered version.  A newer experimental version (an eval-only candidate such as TI2V-5B
+    1.4.0) therefore never displaces the approved version the picker offers and recommends; it
+    stays registered and reachable only by an explicit version plus the job's own opt-in.  Older
+    versions stay registered so existing jobs replay against their exact pinned revision."""
+
+    def rank(spec: Any) -> tuple[bool, tuple[Any, ...]]:
+        return (
+            spec.governance_state == WORKFLOW_GOVERNANCE_APPROVED,
+            _version_key(spec.workflow_version),
+        )
 
     latest: dict[str, Any] = {}
     for spec in specs:
         current = latest.get(spec.workflow_id)
-        if current is None or _version_key(spec.workflow_version) > _version_key(
-            current.workflow_version
-        ):
+        if current is None or rank(spec) > rank(current):
             latest[spec.workflow_id] = spec
     return [latest[workflow_id] for workflow_id in sorted(latest)]
 
