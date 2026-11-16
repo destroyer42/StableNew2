@@ -387,7 +387,7 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1214,
+      "BLE001": 1213,
       "S110": 479,
       "S112": 35
     },
@@ -508,7 +508,7 @@
         "S110": 11
       },
       "src/gui/controllers/learning_controller.py": {
-        "BLE001": 32,
+        "BLE001": 31,
         "S110": 8,
         "S112": 3
       },

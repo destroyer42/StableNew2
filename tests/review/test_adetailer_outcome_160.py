@@ -146,7 +146,7 @@ def controller(tmp_path):
     ("face", "hands", "expected"),
     [("Improved", "Improved", "improved"), ("Worsened", "Unchanged", "worsened")],
 )
-def test_judgments_persist_through_the_existing_feedback_record_and_stamp(
+def test_judgments_persist_through_the_existing_feedback_record_without_stamping(
     tmp_path, monkeypatch, face, hands, expected
 ):
     pair = pair_of(tmp_path, monkeypatch)
@@ -161,16 +161,20 @@ def test_judgments_persist_through_the_existing_feedback_record_and_stamp(
         "context": context,
         "subscores": {"anatomy": 3, "composition": 3, "prompt_adherence": 3},
     }
-    record = controller(tmp_path).save_review_feedback(feedback)
+    review_controller = controller(tmp_path)
+    record = review_controller.save_review_feedback(feedback)
     assert (
         record.metadata["user_rating"] == 3
     )  # the overall rating is the operator's own, separate input
     saved = record.metadata["review_context"]["adetailer_outcome_review"]
     assert saved["face"] == expected
     assert saved["source"] == "operator_review"
-    stamped = ReviewMetadataService().read_review_summary(pair.output)
-    assert stamped is not None
-    assert stamped.review_context["adetailer_outcome_review"]["reviewed_pair"][
+    assert (
+        ReviewMetadataService().read_review_summary(pair.output) is None
+    )  # saving never stamps the file
+    saved_summary = review_controller.get_prior_review_summary(str(pair.output))
+    assert saved_summary is not None
+    assert saved_summary["review_context"]["adetailer_outcome_review"]["reviewed_pair"][
         "input_image"
     ] == str(pair.source)
 

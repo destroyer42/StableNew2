@@ -79,18 +79,16 @@ def test_partial_batch_tokens_and_undo_match_persisted_identities(review, monkey
     assert frame._feedback_undo_stack == []
 
 
-def test_annotation_failure_is_saved_evidence_and_keeps_undo(review, monkeypatch):
+def test_saving_feedback_never_stamps_the_image_and_keeps_undo(review, monkeypatch):
     frame, controller, writer, _ = review
-    monkeypatch.setattr(
-        controller._review_metadata_service,
-        "stamp_review_metadata",
-        Mock(side_effect=OSError("image read-only")),
-    )
+    stamp = Mock(side_effect=OSError("image read-only"))
+    monkeypatch.setattr(controller._review_metadata_service, "stamp_review_metadata", stamp)
     frame._save_feedback()
+    stamp.assert_not_called()
     assert len(writer.records_path.read_text().splitlines()) == 1
     assert len(frame._feedback_undo_stack[-1]) == 1
-    assert "Learning record is saved" in frame._feedback_status_var.get()
-    assert "annotation failed" in frame._feedback_status_var.get()
+    assert "The image file was not changed" in frame._feedback_status_var.get()
+    assert "annotation" not in frame._feedback_status_var.get()
 
 
 @pytest.mark.parametrize("batch", [False, True])

@@ -229,8 +229,8 @@ digest. It can show an unverified recorded pair for inspection. Saving region ju
 verified source lineage. The summary shows request and backend acknowledgement, pixel change,
 operator region judgments, overall preference and controlled experiment evidence independently.
 Review Feedback keeps the existing rating and Undo behavior. Guided judgments are stored in
-Learning with both file digests. Normal Review feedback can stamp portable metadata, changing
-a file digest and expiring a source-bound Preview. Mask edits freeze input snapshots. Ordinary
+Learning with both file digests. Normal Review feedback never rewrites the image (section 5.3),
+so it does not expire a source-bound Preview. Mask edits freeze input snapshots. Ordinary
 reprocess checks the source at Preview and admission, then the runner opens its recorded path.
 
 ### 3.4 Thumbnails and compare
@@ -288,9 +288,13 @@ Behavior that must hold:
 - The model recorded in the artifact wins over the live pipeline model; preview and submission use the same precedence (`effective_model`).
 - Never infer a profile from the file name; `normalize_image_backend_options` resolves it from the resolved model name.
 
-### 5.3 Review stamping rewrites the image [V]
+### 5.3 Review evidence does not rewrite the image [V]
 
-`LearningController.save_review_feedback` calls `ReviewMetadataService.stamp_review_metadata`, which calls `write_portable_review_metadata`: it adds a `stablenew_review` key by re-saving the image (`write_png_metadata` / `write_jpg_metadata`: temp file then replace; fixed `<stem>.tmp<suffix>` name) or, if that fails, writes `<image>.review.json` (`write_review_sidecar`, plain `write_text`). The pixels are unchanged but the file bytes and SHA-256 are not. `source_artifact_id` is computed from current bytes, so saving feedback on an image after a Review preview makes `require_queueable` refuse ("Source content changed; preview again"), and lineage ids refer to the stamped file.
+PR-REVIEW-EVIDENCE-620 (owner decision 2026-11-15). `LearningController.save_review_feedback` delegates to `src/review/review_evidence.py` and appends one `review_tab_feedback` record through `LearningRecordWriter.append_record`; it never opens the image for writing. The record carries `artifact_sha256` (the SHA-256 of the bytes Review showed, hashed in the image-context worker, or by the controller for other images; the path stays as a locator) and `source_job_id`. A path that cannot be read yields a path-only record. `rating_revision_key` keys a digest-bound row by `sha256:<digest>`, so the same bytes at two paths are one rated sample, and legacy rows without a digest stay keyed by path. A `review_disposition` record kind (retain / discard / rework; latest row wins per digest; read/write API only, no UI yet) is bound the same way; it uses its own `source`, so rating lists and Undo ignore it, and the recommendation engine's record-kind allow-list ignores it.
+
+Reading (`get_prior_review_summary`, used when an image is shown): by digest, then by path (a legacy row, `identity_status` `path`), then the legacy embedded or sidecar stamp. A path whose rating was recorded for different bytes is returned as `identity_status: "changed"` only when nothing else describes the file; Review says so and leaves its rating controls unrated. Review loads the saved rating into its controls when an image is shown and resets them to the unrated state (3 / 3 / 3, "okay", no notes) first, so an unrated image never shows the previous image's values.
+
+The explicit **Write rating to file...** action (beside Undo Last Save) (`write_rating_into_file`) is the only way a rating reaches a file now: PNG is embedded (the file's bytes, and so its identity, change; History lineage, Compare with Parent and Review Preview treat it as a different file, and Review asks first and says so); JPEG and WebP get a `<image>.review.json` sidecar and are never re-encoded (before this change a JPEG was re-encoded, so both its bytes and its pixels changed on every save). Files already stamped, and existing records, are not migrated or rewritten.
 
 ## 6. Photo Optimize
 
@@ -412,6 +416,7 @@ Configuration is `pyproject.toml` only. Run focused tests first, then `python to
 | Quick Edit / Managed Photo Set (PR-GUI-UX-580) | `tests/gui_v2/test_review_async_580.py`, `tests/gui_v2/test_photo_baseline_save_580.py`, `tests/gui_v2/test_photo_save_gui_580.py`, `tests/gui_v2/test_edit_handoff_580.py`, `tests/photo_optimize/test_managed_import_580.py` | `tests/gui_v2/edit_work_helpers.py` (`ManualRegistry` runs a worker when the test says; `HeldDelivery` holds the UI-thread delivery so a result can arrive after the operator moved on); the autouse `inline_edit_work` fixture in `tests/gui_v2/conftest.py` runs this work inline everywhere else |
 | Thumbnails | `tests/gui_v2/test_thumbnail_widget_v2.py`, `tests/gui_v2/test_thumbnail_tooltip_recovery_111.py` | Fake loader |
 | Metadata contract and review stamping | `tests/utils/test_image_metadata_contract.py`, `tests/review/test_review_metadata_service.py`, `tests/review/test_artifact_metadata_inspector.py` | Synthetic PNG/JPEG |
+| Non-mutating, digest-bound Review evidence (PR-REVIEW-EVIDENCE-620) | `tests/review/test_review_evidence_620.py`, `tests/gui_v2/test_review_evidence_620_gui.py`, `tests/gui_v2/test_history_iterate_service_610a.py`, `tests/gui_v2/test_history_compare_610b.py` | Temp records file; assert file SHA-256, size and pixels unchanged after rating |
 
 For a new refusal, assert both the error and that nothing was submitted (the repository has no new identities). For a source-changing race, mutate the file between prepare and confirm and assert `require_queueable` refuses.
 

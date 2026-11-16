@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-737 of 892 modules have a docstring.
+740 of 895 modules have a docstring.
 
 ## src/
 
@@ -825,6 +825,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `findings.py`: Bounded, source-bound observations and advisory choices for guided Review
 - `improvement_evidence.py`: Verify Review comparison evidence and prepare bounded judgments for the existing feedback writer
 - `inspection.py`: Bounded inspection and explicit Smart Review imports for the guided finding workspace
+- `review_evidence.py`: Non-mutating, digest-bound Review evidence (PR-REVIEW-EVIDENCE-620)
 - `review_metadata_service.py`: Portable review metadata stamping for reviewed image artifacts
 - `workflow_adapter.py`: Non-render review workflow logic for Review tab
 - `workspace_io.py`: Worker-side file work for the Review workspace (PR-GUI-UX-580)

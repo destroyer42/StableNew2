@@ -112,7 +112,7 @@ retains its specialized bounded contact-sheet layout; selecting a cell opens its
 | Designed experiment image | `LearningController.record_rating` (aggregate rating, subscores, context flags, notes; embeds the frozen snapshot, executed config, seed read-back) | `learning_experiment_rating` |
 | Model Comparison image | same method; `rating_classification` picks the kind | `learning_model_comparison_rating` |
 | Two-Axis Grid image | same method; `two_axis_grid.rating_classification` | `learning_grid_rating` |
-| Review tab | `LearningController.save_review_feedback` (also stamps embedded/sidecar review metadata through `ReviewMetadataService`) | `review_tab_feedback` |
+| Review tab | `LearningController.save_review_feedback` (digest-bound record via `src/review/review_evidence.py`; the image file is never rewritten) | `review_tab_feedback` |
 | Staged curation decision | `record_staged_curation_selection` -> `CurationLearningBridge.build_learning_record` | `staged_curation_event` |
 | Video experiment clip review and manual preference | Review Experiment window -> `VideoReviewService` (`src/learning/video_review_service.py`, `video_quality_review.py`) | `video_workflow_quality_rating` |
 
@@ -122,11 +122,10 @@ Guided rating behavior (PR-LEARN-UX-590) [V]: saving a rating that is identical 
 
 **Video review evidence is isolated by construction.** `video_workflow_quality_rating` records keep every field inside `metadata.video_quality_review` (schema `stablenew.video-quality-review.v1`) and carry none of the image keys other readers use (`user_rating`, `image_path`, `experiment_id`, `experiment_name`, `learning_context`, `variant_value`, `variable_under_test`), so the recommendation engine (unknown kind), `LearningAnalytics` and the `LearningRecordWriter` per-experiment readers ignore them even at 5 stars. A clip review is identified by `(job_id, artifact_sha256)`, edits append a higher `revision` (readers resolve the latest valid one), an unchanged save appends nothing and a failed write raises (`ReviewSaveError`) so no UI reports a save that did not happen. The rubric separates the overall 1 to 5 rating from the requested-action outcome (achieved, partially, not, cannot assess); a manual preference is the operator's own pick, not a computed winner. Detail: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`.
 
-Review Feedback also raises on an unconfirmed append before artifact metadata stamping or
-recommendation refresh. Its inline status reports the exact successful and unconfirmed batch
-paths; only confirmed record identities enter Undo. Artifact annotation failure after a successful
-append is shown separately: the Learning evidence is saved, so repeating Save would append another
-identity rather than repair the annotation. An unconfirmed append is not automatically replayed;
+Review Feedback also raises on an unconfirmed append before recommendation refresh. It no longer
+annotates the image (PR-REVIEW-EVIDENCE-620); an explicit "Write rating into file" export does.
+Its inline status reports the exact successful and unconfirmed batch
+paths; only confirmed record identities enter Undo. An unconfirmed append is not automatically replayed;
 inspect the log before retrying because a late filesystem error can leave an uncertain append.
 Successful operator repetition appends a fresh identity and preserves earlier rating lines. Existing
 Undo semantics remain scoped to the selected saved identities; no historical migration is performed.
@@ -676,7 +675,7 @@ Each study keeps its own frozen mechanism (sections 3.1-3.14). `study_catalog.ST
 | Discovered/curation groups | `data/learning/discovered_experiments/<group_id>/meta.json`, `items.json`, `review_state.json`, `selection_events.json`; `scan_index.json` in the same folder | `DiscoveredReviewStore` via `atomic_write_text` | Yes |
 | Tab session, last experiment, learning toggle | `state/ui_state.json` key `learning` (`get_ui_state_store`) | `LearningTabFrame._persist_learning_session_state` | Yes (errors swallowed) |
 | Run metadata, per-run feedback | `runs/<run_id>/run_metadata.json`, `feedback.json` | `write_run_metadata` (async worker or sync); `record_feedback` (no callers in `src`) | Yes |
-| Review stamps | Embedded in the image or a sidecar next to it | `ReviewMetadataService.stamp_review_metadata` | Per service |
+| Review stamps (explicit export only; legacy files may carry them) | Embedded in a PNG or a sidecar next to the image | `ReviewMetadataService.stamp_review_metadata` via `write_rating_into_file` | Per service |
 | Analytics export | caller-chosen path | `LearningAnalytics.export_to_json`/`export_to_csv` | No (`json.dump` direct) |
 
 `data/learning/` is git-ignored operator data. Audit B4 is largely fixed: the experiment, discovered, UI-state, run-metadata and feedback writers use `src/utils/atomic_io.py`. Read paths scan the whole JSONL: `get_ratings_for_experiment`, `get_rating_details_for_experiment`, `get_average_rating_for_variant`, `LearningAnalytics._read_all_records`. Tests must point the writer at a temp path and never at the repository `data/learning/` (audit: tests have leaked debris there [A]).

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from PIL import Image
@@ -7,7 +8,7 @@ from PIL import Image
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningState
 from src.learning.learning_record import LearningRecordWriter
-from src.review.review_metadata_service import REVIEW_METADATA_SCHEMA, ReviewMetadataService
+from src.review.review_metadata_service import ReviewMetadataService
 
 
 def _build_controller(tmp_path):
@@ -80,10 +81,11 @@ def test_list_recent_review_feedback_returns_newest_first(tmp_path) -> None:
     assert rows[1]["rating"] == 2
 
 
-def test_save_review_feedback_stamps_embedded_review_metadata(tmp_path: Path) -> None:
+def test_save_review_feedback_never_rewrites_the_image_and_binds_its_digest(tmp_path: Path) -> None:
     controller = _build_controller(tmp_path)
     image_path = tmp_path / "reviewed.png"
     _write_png(image_path)
+    before = image_path.read_bytes()
 
     record = controller.save_review_feedback(
         {
@@ -92,36 +94,24 @@ def test_save_review_feedback_stamps_embedded_review_metadata(tmp_path: Path) ->
             "quality_label": "good",
             "notes": "hands improved",
             "base_prompt": "portrait",
-            "base_negative_prompt": "blurry",
             "after_prompt": "portrait, detailed hands",
-            "after_negative_prompt": "blurry, extra fingers",
-            "prompt_delta": "detailed hands",
-            "negative_prompt_delta": "extra fingers",
-            "prompt_mode": "append",
-            "negative_prompt_mode": "append",
             "stages": ["adetailer"],
             "model": "modelA.safetensors",
+            "source_job_id": "job-1",
             "context": {"actor": "user", "panel": "review"},
-            "subscores": {
-                "anatomy": 5,
-                "composition": 4,
-                "prompt_adherence": 3,
-            },
+            "subscores": {"anatomy": 5, "composition": 4, "prompt_adherence": 3},
         }
     )
 
-    stamp_state = record.metadata.get("artifact_review_metadata") or {}
-    read_result = ReviewMetadataService().read_review_metadata(image_path)
-
-    assert stamp_state["success"] is True
-    assert stamp_state["storage"] == "embedded"
-    assert read_result.payload is not None
-    assert read_result.payload["schema"] == REVIEW_METADATA_SCHEMA
-    assert read_result.payload["run_id"] == record.run_id
-    assert read_result.payload["user_rating"] == 4
+    assert image_path.read_bytes() == before
+    assert not list(tmp_path.glob("*.review.json"))
+    assert "artifact_review_metadata" not in record.metadata
+    assert record.metadata["artifact_sha256"] == hashlib.sha256(before).hexdigest()
+    assert record.metadata["source_job_id"] == "job-1"
+    assert ReviewMetadataService().read_review_metadata(image_path).payload is None
 
 
-def test_save_review_feedback_falls_back_to_sidecar_when_embedding_is_unsupported(
+def test_write_rating_into_file_is_the_explicit_export_and_sidecars_unsupported_formats(
     tmp_path: Path,
 ) -> None:
     controller = _build_controller(tmp_path)
@@ -137,17 +127,18 @@ def test_save_review_feedback_falls_back_to_sidecar_when_embedding_is_unsupporte
             "after_prompt": "portrait, refined",
         }
     )
+    assert ReviewMetadataService().read_review_metadata(image_path).payload is None
 
-    stamp_state = record.metadata.get("artifact_review_metadata") or {}
+    result = controller.write_review_rating_into_file(image_path)
     read_result = ReviewMetadataService().read_review_metadata(image_path)
 
-    assert stamp_state["success"] is True
-    assert stamp_state["storage"] == "sidecar"
-    assert stamp_state["sidecar_path"]
-    assert Path(str(stamp_state["sidecar_path"])).exists()
+    assert result.success is True
+    assert result.storage == "sidecar"
+    assert Path(str(result.sidecar_path)).exists()
     assert read_result.source == "sidecar"
     assert read_result.payload is not None
     assert read_result.payload["run_id"] == record.run_id
+    assert read_result.payload["artifact_sha256"] == record.metadata["artifact_sha256"]
 
 
 def test_get_prior_review_summary_prefers_internal_learning_record(tmp_path: Path) -> None:

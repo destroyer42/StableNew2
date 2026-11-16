@@ -121,10 +121,15 @@ from src.pipeline.job_models_v2 import (
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
 from src.review.artifact_metadata_inspector import ArtifactMetadataInspector
 from src.review.improvement_evidence import ImprovementPair
+from src.review.review_evidence import (
+    build_review_rating_record,
+    resolve_prior_review_summary,
+    write_rating_into_file,
+)
 from src.review.review_metadata_service import (
     INTERNAL_REVIEW_SUMMARY_SCHEMA,
-    PortableReviewSummary,
     ReviewMetadataService,
+    ReviewMetadataStampResult,
 )
 from src.review.workflow_adapter import (
     ReviewWorkflowAdapter,
@@ -2475,100 +2480,11 @@ class LearningController:
             return None
 
     def save_review_feedback(self, feedback: dict[str, Any]) -> LearningRecord:
-        """Persist review-tab feedback into learning records for downstream analysis."""
+        """Persist review-tab feedback as a digest-bound Learning record; the image file is never modified."""
         if not self._learning_record_writer:
             raise RuntimeError("LearningRecordWriter not configured")
-
-        image_path = str(feedback.get("image_path") or "").strip()
-        if not image_path:
-            raise ValueError("image_path is required")
-
-        try:
-            rating = int(feedback.get("rating", 0))
-        except Exception as exc:
-            raise ValueError("rating must be an integer") from exc
-        if rating < 1 or rating > 5:
-            raise ValueError("rating must be between 1 and 5")
-        subscores_raw = feedback.get("subscores") or {}
-        subscores = {
-            "anatomy": int(subscores_raw.get("anatomy", rating) or rating),
-            "composition": int(subscores_raw.get("composition", rating) or rating),
-            "prompt_adherence": int(subscores_raw.get("prompt_adherence", rating) or rating),
-        }
-        for key, value in subscores.items():
-            if value < 1 or value > 5:
-                raise ValueError(f"{key} must be between 1 and 5")
-        weighted_score = (
-            (rating * 0.4)
-            + (subscores["anatomy"] * 0.2)
-            + (subscores["composition"] * 0.2)
-            + (subscores["prompt_adherence"] * 0.2)
-        )
-        blended_rating = int(min(5, max(1, round(weighted_score))))
-
-        base_prompt = str(feedback.get("base_prompt") or "")
-        base_negative = str(feedback.get("base_negative_prompt") or "")
-        after_prompt = str(feedback.get("after_prompt") or base_prompt)
-        after_negative = str(feedback.get("after_negative_prompt") or base_negative)
-        model = str(feedback.get("model") or "")
-        stage = str(feedback.get("stage") or "review")
-        metadata = {
-            "source": "review_tab",
-            "record_kind": "review_tab_feedback",
-            "image_path": image_path,
-            "user_rating": blended_rating,
-            "user_rating_raw": rating,
-            "advanced_rating_enabled": True,
-            "subscores": subscores,
-            "weighted_score": weighted_score,
-            "quality_label": str(feedback.get("quality_label") or ""),
-            "user_notes": str(feedback.get("notes") or ""),
-            "stage": stage,
-            "model": model,
-            "prompt_before": base_prompt,
-            "prompt_after": after_prompt,
-            "negative_prompt_before": base_negative,
-            "negative_prompt_after": after_negative,
-            "prompt_delta": str(feedback.get("prompt_delta") or ""),
-            "negative_prompt_delta": str(feedback.get("negative_prompt_delta") or ""),
-            "prompt_mode": str(feedback.get("prompt_mode") or "append"),
-            "negative_prompt_mode": str(feedback.get("negative_prompt_mode") or "append"),
-            "stages": list(feedback.get("stages") or []),
-            "review_context": dict(feedback.get("context") or {}),
-        }
-        primary_sampler = str(feedback.get("sampler") or "")
-        primary_scheduler = str(feedback.get("scheduler") or "")
-        primary_steps = feedback.get("steps")
-        primary_cfg_scale = feedback.get("cfg_scale")
-
-        def _extract_primary(_cfg: dict[str, Any]) -> dict[str, Any]:
-            return {
-                "model": model,
-                "sampler": primary_sampler,
-                "scheduler": primary_scheduler,
-                "steps": primary_steps,
-                "cfg_scale": primary_cfg_scale,
-            }
-
-        record = LearningRecord.from_pipeline_context(
-            base_config={
-                "stage": stage,
-                "model": model,
-                "prompt": base_prompt,
-                "negative_prompt": base_negative,
-            },
-            variant_configs=[
-                {
-                    "prompt": after_prompt,
-                    "negative_prompt": after_negative,
-                    "model": model,
-                }
-            ],
-            randomizer_mode="review_feedback",
-            randomizer_plan_size=1,
-            extract_primary=_extract_primary,
-            metadata=metadata,
-        )
+        record = build_review_rating_record(feedback)
+        image_path = record.metadata["image_path"]
         proof = feedback.get("guided_source_proof")
         if proof is not None:
             # Check again at the writer, after any delay in GUI dispatch and payload preparation.
@@ -2583,32 +2499,6 @@ class LearningController:
             raise OSError(
                 "Review feedback was not confirmed saved to Learning records; see the log before retrying."
             )
-        if proof is not None:
-            # Keep these digest-bound observations in Learning. Stamping a mutable
-            # path would reopen the identity race and rewrite the reviewed result.
-            record.metadata["recommendation_refresh_error"] = refresh_saved_feedback(self.refresh_recommendations)
-            return record
-        try:
-            stamp_result = self._review_metadata_service.stamp_review_metadata(
-                image_path=image_path,
-                feedback=feedback,
-                record=record,
-            )
-            record.metadata["artifact_review_metadata"] = {
-                "success": bool(stamp_result.success),
-                "storage": stamp_result.storage,
-                "stamped_path": stamp_result.stamped_path,
-                "sidecar_path": stamp_result.sidecar_path,
-                "error": stamp_result.error,
-            }
-        except Exception as exc:
-            record.metadata["artifact_review_metadata"] = {
-                "success": False,
-                "storage": "failed",
-                "stamped_path": image_path,
-                "sidecar_path": None,
-                "error": str(exc),
-            }
         record.metadata["recommendation_refresh_error"] = refresh_saved_feedback(self.refresh_recommendations)
         return record
 
@@ -2695,51 +2585,19 @@ class LearningController:
 
         return rows[: max(1, int(limit))]
 
-    def get_prior_review_summary(self, image_path: str | Path) -> dict[str, Any] | None:
-        """Return the latest normalized prior review summary for one image path.
+    def get_prior_review_summary(
+        self, image_path: str | Path, artifact_sha256: str | None = None
+    ) -> dict[str, Any] | None:
+        """The saved review for an image: by file digest, then path, then legacy embedded/sidecar metadata."""
+        return resolve_prior_review_summary(
+            self._learning_record_writer, self._review_metadata_service, image_path, artifact_sha256
+        )
 
-        Precedence:
-        1. internal learning-record review feedback
-        2. embedded portable review metadata
-        3. sidecar portable review metadata
-        """
-        normalized_path = str(Path(str(image_path or "").strip()))
-        if not normalized_path:
-            return None
-
-        recent_rows = self.list_recent_review_feedback(limit=1, image_path=normalized_path)
-        if recent_rows:
-            row = dict(recent_rows[0])
-            summary = PortableReviewSummary(
-                source_type="internal_learning_record",
-                schema=INTERNAL_REVIEW_SUMMARY_SCHEMA,
-                review_timestamp=str(row.get("timestamp") or ""),
-                user_rating=row.get("user_rating"),
-                user_rating_raw=row.get("user_rating_raw"),
-                quality_label=str(row.get("quality_label") or ""),
-                subscores=dict(row.get("subscores") or {}),
-                weighted_score=row.get("weighted_score"),
-                user_notes=str(row.get("user_notes") or row.get("notes") or ""),
-                prompt_before=str(row.get("prompt_before") or ""),
-                prompt_after=str(row.get("prompt_after") or ""),
-                negative_prompt_before=str(row.get("negative_prompt_before") or ""),
-                negative_prompt_after=str(row.get("negative_prompt_after") or ""),
-                prompt_delta=str(row.get("prompt_delta") or ""),
-                negative_prompt_delta=str(row.get("negative_prompt_delta") or ""),
-                prompt_mode=str(row.get("prompt_mode") or ""),
-                negative_prompt_mode=str(row.get("negative_prompt_mode") or ""),
-                stages=[
-                    str(stage)
-                    for stage in list(row.get("stages") or [])
-                    if str(stage or "").strip()
-                ],
-                review_context=dict(row.get("review_context") or {}),
-                review_record_id=str(row.get("run_id") or ""),
-            )
-            return summary.to_dict()
-
-        portable_summary = self._review_metadata_service.read_review_summary(normalized_path)
-        return portable_summary.to_dict() if portable_summary is not None else None
+    def write_review_rating_into_file(self, image_path: str | Path) -> ReviewMetadataStampResult:
+        """Explicit export of the saved rating into the file (PNG embedded; JPEG/WebP sidecar only)."""
+        return write_rating_into_file(
+            self._learning_record_writer, self._review_metadata_service, image_path
+        )
 
     def inspect_artifact_metadata(self, image_path: str | Path) -> dict[str, Any]:
         """Return a unified inspection payload for one artifact path."""
@@ -3824,14 +3682,14 @@ class LearningController:
         seed_value = (
             stage_manifest.get("final_seed") or generation.get("seed") or config.get("seed") or -1
         )
-        portable_review_summary = self._review_metadata_service.read_review_summary(path_obj)
+        portable_review_summary = self.get_prior_review_summary(path_obj)
         extra_fields: dict[str, Any] = {
             "job_id": str(payload.get("job_id") or ""),
             "run_id": str(payload.get("run_id") or ""),
             "source": "manual_import",
         }
         if portable_review_summary is not None:
-            extra_fields["portable_review_summary"] = portable_review_summary.to_dict()
+            extra_fields["portable_review_summary"] = portable_review_summary
         return DiscoveredReviewItem(
             item_id=f"manual-{index + 1}-{uuid.uuid4().hex[:8]}",
             artifact_path=str(path_obj),

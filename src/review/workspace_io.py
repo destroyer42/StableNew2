@@ -2,8 +2,8 @@
 
 Everything here is blocking filesystem or decode work that must never run on the Tk thread: the recursive folder scan,
 the per-image metadata and ADetailer-pair lookup, and the bounded comparison composite. The functions are Tk-free,
-read-only (no file is written, renamed or stamped) and return immutable results the view publishes only while the
-request that started them is still the latest.
+read-only (no file is written, renamed or stamped; hashing only reads) and return immutable results the view
+publishes only while the request that started them is still the latest.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Any
 from PIL import Image
 
 from src.review.adetailer_outcome import AdetailerPair, resolve_adetailer_pair
+from src.review.review_evidence import file_sha256
 from src.utils.image_metadata import (
     extract_embedded_metadata,
     resolve_model_vae_fields,
@@ -86,6 +87,8 @@ class ImageContext:
     adetailer_pair: AdetailerPair | None = None
     prior_summary: Any = None
     prior_summary_available: bool = False
+    #: SHA-256 of the bytes Review is showing ("" when unreadable); a saved rating binds to it.
+    artifact_sha256: str = ""
 
 
 def load_image_context(
@@ -95,9 +98,10 @@ def load_image_context(
     extract_metadata: Callable[[Path], Any] = extract_embedded_metadata,
     resolve_pair: Callable[[Path], AdetailerPair | None] = resolve_adetailer_pair,
 ) -> ImageContext:
-    """Read embedded metadata, the verified ADetailer source and the prior review summary for ``path``."""
+    """Read embedded metadata, the verified ADetailer source, the file digest and the prior review for ``path``."""
 
     pair = resolve_pair(path)
+    digest = file_sha256(path) or ""
     summary: Any = None
     available = False
     if callable(prior_summary_getter):
@@ -114,6 +118,7 @@ def load_image_context(
             adetailer_pair=pair,
             prior_summary=summary,
             prior_summary_available=available,
+            artifact_sha256=digest,
         )
     prompt, negative_prompt = resolve_prompt_fields(result.payload)
     model, vae = resolve_model_vae_fields(result.payload)
@@ -128,6 +133,7 @@ def load_image_context(
         adetailer_pair=pair,
         prior_summary=summary,
         prior_summary_available=available,
+        artifact_sha256=digest,
     )
 
 
