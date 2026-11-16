@@ -13,6 +13,7 @@ import pytest
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
+from src.learning import study_catalog
 from src.learning.execution_controller import LearningExecutionController
 from src.learning.experiment_execution import thaw_snapshot
 from src.learning.guided_workflow import (
@@ -161,16 +162,9 @@ def test_advanced_study_types_stay_reachable_and_keep_their_own_forms(tab_and_se
     panel = tab.experiment_panel
 
     panel.study_section.set_expanded(True)  # the disclosure is a real, labelled control
-    assert "Advanced study types" in panel.study_section.header_text()
-    assert list(panel.study_type_combo.cget("values")) == [
-        "Controlled Variable",
-        "Prompt Slot",
-        "LoRA Composition",
-        "Embedding",
-        "Model Comparison",
-        "Two-Axis Grid",
-        "Prompt x Model Matrix",
-    ]
+    assert "Study objective" in panel.study_section.header_text()
+    # The objective chooser offers every study (LEARN-NAV-871); the form-opening ones set the same study_type_var.
+    assert sorted(panel.objective_choices) == sorted(study_catalog.slugs())
     panel.study_type_var.set("Model Comparison")
     panel._on_study_type_changed()
     root.update()

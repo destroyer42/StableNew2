@@ -15,6 +15,7 @@ from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.image_backends.model_policy import ModelPolicy
 from src.learning import baseline_authoring as authoring
 from src.learning import baseline_exclusions as exclusions
+from src.learning import study_catalog
 from src.learning.design_estimate import estimate_design
 from src.learning.evidence_proposals import proposal_form_fields
 from src.learning.experiment_naming import build_experiment_identity
@@ -24,12 +25,17 @@ from src.learning.model_capabilities import (
     project_learning_capabilities,
 )
 from src.learning.model_policy_service import live_capabilities, resolve_policy, selected_model
-from src.learning.resource_access import get_resource_choices, resolve_app_state
+from src.learning.resource_access import (
+    get_projected_resources,
+    get_resource_choices,
+    resolve_app_state,
+)
 from src.learning.stage_capabilities import (
     get_stage_capability,
     get_variables_for_stage,
     list_supported_stages,
 )
+from src.learning.study_eligibility import EligibleStudies, eligible_studies
 from src.promptpacks.paths import resolve_prompt_pack_dir
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.file_io import read_prompt_pack
@@ -84,6 +90,10 @@ STUDY_HINTS = {
         "settings. A preference within this study, not a one-variable test."
     ),
     "Controlled Variable": "Test several values for one setting while keeping the other settings consistent.",
+    "Compatibility Probe": (
+        "A saved Compatibility Probe: it runs from the Model Evidence Catalog, where Review Probe Result records "
+        "what you saw."
+    ),
     "Model Comparison": (
         "Compare several models, each with its own validated settings and prompt. "
         "A preference between models, not a one-variable test."
@@ -122,6 +132,7 @@ class ExperimentDesignPanel(ttk.Frame):
         self._prompt_pack_paths: dict[str, Path] = {}
         self._prompt_option_payloads: dict[str, dict[str, Any]] = {}
         self._study_mode = "controlled"
+        self._restored_probe = False  # a reopened Compatibility Probe session has no design frame of its own
         self._grid_preview_signature: Any = None
         # Signature of the inputs the current Preview was built from (None: unknown, e.g. built elsewhere).
         self._preview_signature: Any = None
@@ -194,19 +205,10 @@ class ExperimentDesignPanel(ttk.Frame):
             study_frame, textvariable=self.study_hint_var, wraplength=360, justify="left",
             foreground=TOKENS.colors.text_muted,
         ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
-        self.study_section = DisclosureSection(study_frame, title="Advanced study types", expanded=False)
+        self.study_section = DisclosureSection(study_frame, title="Study objective", expanded=False)
         self.study_section.grid(row=1, column=0, sticky="ew", pady=(0, 6))
-        study_body = self.study_section.body
-        study_body.columnconfigure(1, weight=1)
-        ttk.Label(study_body, text="Study Type:").grid(row=0, column=0, sticky="w")
         self.study_type_var = tk.StringVar(value="Controlled Variable")
-        self.study_type_combo = ttk.Combobox(study_body, textvariable=self.study_type_var,
-                                             values=("Controlled Variable", "Prompt Slot", "LoRA Composition", "Embedding", "Model Comparison", "Two-Axis Grid", "Prompt x Model Matrix"), state="readonly")
-        self.study_type_combo.grid(row=0, column=1, sticky="ew")
-        self.study_type_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_study_type_changed())
-        ttk.Button(study_frame, text="Prompt Slot Experiment", command=self._choose_prompt_slot).grid(row=0, column=1, padx=4)
-        ttk.Button(study_frame, text="LoRA Composition", command=self._choose_lora_composition).grid(row=1, column=1, padx=4)
-        ttk.Button(study_frame, text="Embedding", command=self._choose_embedding).grid(row=0, column=2, padx=4)
+        self._build_objective_chooser(self.study_section.body)
         ttk.Label(study_frame, text="Target Stage:").grid(row=2, column=0, sticky="w")
         self.stage_var = tk.StringVar(value="txt2img")
         self.stage_combo = ttk.Combobox(
@@ -531,6 +533,125 @@ class ExperimentDesignPanel(ttk.Frame):
         self._sync_study_presentation()
         self._refresh_estimate()
 
+    def _build_objective_chooser(self, body: ttk.Frame) -> None:
+        """One entry per objective (owner decision OD-2); every choice opens the existing design frame.
+
+        The chooser only sets ``study_type_var`` (the saved study literal is derived from it exactly as before) and
+        shows, per study, whether the Learning baseline's model can use it and the study's own refusal when it cannot.
+        An unavailable study stays selectable: its design page reports the same refusal and the baseline editor's
+        Turn Off for This Study is reachable from there.
+        """
+        body.columnconfigure(0, weight=1)
+        self._objective_status: dict[str, tk.StringVar] = {}
+        self._objective_labels: dict[str, ttk.Label] = {}
+        self.objective_choices: dict[str, ttk.Widget] = {}
+        row = 0
+        for objective in study_catalog.OBJECTIVES:
+            ttk.Label(body, text=objective.label, font=("TkDefaultFont", 10, "bold")).grid(
+                row=row, column=0, sticky="w", pady=(6, 0)
+            )
+            row += 1
+            for descriptor in (d for d in study_catalog.STUDIES if d.objective_group == objective.key):
+                if descriptor.slug == "compatibility_probe":
+                    choice: ttk.Widget = ttk.Button(
+                        body, text="Compatibility Probe (opens the Model Evidence Catalog)",
+                        command=self._open_model_evidence_catalog,
+                    )
+                else:
+                    choice = ttk.Radiobutton(
+                        body, text=descriptor.label, value=descriptor.label, variable=self.study_type_var,
+                        command=self._on_study_type_changed,
+                    )
+                choice.grid(row=row, column=0, sticky="w", padx=(12, 0))
+                self.objective_choices[descriptor.slug] = choice
+                status = tk.StringVar(value="")
+                label = ttk.Label(
+                    body, textvariable=status, wraplength=340, justify="left", foreground=TOKENS.colors.text_muted
+                )
+                label.grid(row=row + 1, column=0, sticky="ew", padx=(32, 0))
+                label.grid_remove()
+                self._objective_status[descriptor.slug] = status
+                self._objective_labels[descriptor.slug] = label
+                row += 2
+
+    def choose_study(self, slug: str) -> None:
+        """Open the existing design frame of one study (the only way any objective reaches a form)."""
+        descriptor = study_catalog.lookup(slug)
+        if descriptor is None or descriptor.slug == "compatibility_probe":
+            raise ValueError(f"{slug!r} is not a study the design page can author")
+        self.study_type_var.set(descriptor.label)
+        self._on_study_type_changed()
+
+    def set_on_open_model_evidence(self, callback: Any) -> None:
+        """Replace how the Compatibility Probe entry opens the Model Evidence Catalog (tests inject a recorder)."""
+        self._open_model_evidence_callback = callback
+
+    def _open_model_evidence_catalog(self) -> None:
+        callback = getattr(self, "_open_model_evidence_callback", None)
+        if callable(callback):
+            callback()
+            return
+        widget: tk.Misc | None = self.master
+        while widget is not None and getattr(widget, "experiment_panel", None) is not self:
+            widget = getattr(widget, "master", None)
+        if widget is None:
+            self._say("Open the Model Evidence Catalog from the Learning header to run a Compatibility Probe.")
+            return
+        from src.gui.views.model_evidence_window import open_model_evidence
+
+        open_model_evidence(widget)
+
+    def _objective_policy(self) -> tuple[Any, dict[str, Any], str]:
+        """The Learning baseline's policy, baseline and model, read without touching the panel's own target state."""
+        authored = getattr(self.learning_controller, "authoring_baseline", None)
+        baseline = dict(authored() or {}) if callable(authored) else {}
+        model = selected_model(baseline, "txt2img")
+        if not model:
+            return None, baseline, ""
+        return resolve_policy(model, self.learning_controller, baseline), baseline, model
+
+    def _objective_availability(self) -> EligibleStudies | str:
+        """The eligibility projection, or the plain reason it cannot be made yet."""
+        policy, baseline, model = self._objective_policy()
+        if policy is None:
+            return "Choose a model in the Learning baseline to see what it can test."
+        live = self._learning_capabilities if self._study_mode == "controlled" else None
+        stage = self.stage_var.get() if live is not None else "txt2img"
+        return eligible_studies(
+            policy, baseline, get_projected_resources(self.learning_controller), stage=stage, model=model,
+            capabilities=live,
+        )
+
+    def _refresh_objective_availability(self) -> None:
+        """Show, beside each study, whether the Learning baseline's model can use it and why not."""
+        if not getattr(self, "_objective_status", None):
+            return
+        try:
+            result = self._objective_availability()
+        except (AttributeError, KeyError, TypeError, ValueError, tk.TclError) as exc:
+            result = f"Availability cannot be shown yet ({exc.__class__.__name__})."
+        for slug, status in self._objective_status.items():
+            if isinstance(result, str):
+                text = result
+            else:
+                study = result.get(slug)
+                text = ""
+                if study is not None and not study.available:
+                    text = f"Not available on this model: {study.reason}"
+                elif study is not None and slug == "controlled_variable" and result.variables:
+                    text = "You can vary: " + ", ".join(result.variables)
+                if slug == "controlled_variable" and result.unavailable_variables:
+                    skipped = "; ".join(f"{name} ({reason})" for name, reason in result.unavailable_variables)
+                    text = f"{text}\nNot testable here: {skipped}" if text else f"Not testable here: {skipped}"
+                if study is not None and study.note:
+                    text = f"{text}\n{study.note}" if text else study.note
+            status.set(text)
+            label = self._objective_labels[slug]
+            if text:
+                label.grid()
+            else:
+                label.grid_remove()
+
     def _on_prompt_source_changed(self) -> None:
         if getattr(self, "prompt_slot_frame", None) is not None:
             self.prompt_slot_frame.clear_frozen_source()
@@ -569,12 +690,10 @@ class ExperimentDesignPanel(ttk.Frame):
         return self.study_type_var.get() == "Prompt Slot"
 
     def _choose_lora_composition(self) -> None:
-        self.study_type_var.set("LoRA Composition")
-        self._on_study_type_changed()
+        self.choose_study("lora_composition")
 
     def _choose_embedding(self) -> None:
-        self.study_type_var.set("Embedding")
-        self._on_study_type_changed()
+        self.choose_study("embedding_experiment")
 
     def _special_frame(self) -> Any:
         if _embedding(self):
@@ -609,8 +728,7 @@ class ExperimentDesignPanel(ttk.Frame):
         return "nsfw" if self._comparison_show_names() else "sfw"
 
     def _choose_prompt_slot(self) -> None:
-        self.study_type_var.set("Prompt Slot")
-        self._on_study_type_changed()
+        self.choose_study("prompt_slot")
 
     def _grid_lora_choices(self) -> list[str]:
         known = getattr(self.learning_controller, "known_loras", None)
@@ -697,6 +815,7 @@ class ExperimentDesignPanel(ttk.Frame):
         )
 
     def _on_study_type_changed(self) -> None:
+        self._restored_probe = False
         self._cancel_comparison_evidence()
         from src.learning.variable_metadata import get_variable_metadata
 
@@ -1373,8 +1492,15 @@ class ExperimentDesignPanel(ttk.Frame):
             foreground=TOKENS.colors.status_success if ok else TOKENS.colors.status_error
         )
 
+    def current_study_slug(self) -> str:
+        """The catalog study the Design page is on: the chosen entry, or the reopened probe session's."""
+        if self._restored_probe:
+            return "compatibility_probe"
+        descriptor = next((d for d in study_catalog.STUDIES if d.label == self.study_type_var.get()), None)
+        return descriptor.slug if descriptor is not None else "controlled_variable"
+
     def _sync_study_presentation(self) -> None:
-        name = self.study_type_var.get()
+        name = "Compatibility Probe" if self._restored_probe else self.study_type_var.get()
         self.study_hint_var.set(STUDY_HINTS.get(name, ""))
         advanced = name != "Controlled Variable"
         if advanced:
@@ -1674,6 +1800,12 @@ class ExperimentDesignPanel(ttk.Frame):
             self._target_model = model
 
     def _refresh_model_capabilities(self) -> None:
+        try:
+            self._refresh_study_capabilities()
+        finally:
+            self._refresh_objective_availability()
+
+    def _refresh_study_capabilities(self) -> None:
         if _special(self):
             self._ensure_baseline()
             self._sync_target_from_baseline()
@@ -2473,6 +2605,7 @@ class ExperimentDesignPanel(ttk.Frame):
     def restore_state(self, experiment: Any) -> None:
         from src.learning.model_comparison import study_type
 
+        self._restored_probe = study_type(experiment) == "compatibility_probe"
         self.study_type_var.set(
             {"model_comparison": "Model Comparison", "two_axis_grid": "Two-Axis Grid", "prompt_slot": "Prompt Slot", "lora_composition": "LoRA Composition", "embedding_experiment": "Embedding", "prompt_model_matrix": "Prompt x Model Matrix"}.get(
                 study_type(experiment), "Controlled Variable"

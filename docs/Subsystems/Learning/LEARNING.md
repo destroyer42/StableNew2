@@ -42,7 +42,8 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | Prompt x Model Matrix | `prompt_model_matrix.py` (`learning_prompt_model_matrix/1`: bounds, `build_matrix_snapshot`, `frozen_cell`, `materialize_njr`, aesthetic/excluded-conditioning refusals, per-cell readback, descriptive `conclusion`, `RECORD_KIND`); `prompt_model_matrix_results.py` (`build_matrix_model`, the existing `GridModel`); `learning_controller_services/prompt_model_matrix.py` (plan/variant coordination); `src/gui/views/prompt_model_matrix_design_frame.py`; arm sealing and envelope preparation are the shared helpers in `model_comparison.py` (`prepare_arm_envelope`, `build_arm`, `verify_arm`, `arm_njr`) |
 | Two-Axis Grid | `two_axis_grid.py` (`parse_axis`, `plan_cells`, `build_grid_snapshot`, `frozen_cell`, `materialize_njr`, `rating_classification`, limits); `grid_results.py` (`build_grid_model`: exact cell/job/artifact projection, placeholders, visibility); `grid_contact_sheet.py` (`render_contact_sheet`, `export_contact_sheet`, bounded `load_thumbnail`); `learning_njr.py` (`assemble_txt2img_njr`, the one assembly Model Comparison and the grid share) |
 | Execution tracking and recovery | `execution_controller.py` (`LearningExecutionController`: sole job-to-variant callback owner, admission integrity, serialized restore/completion); `experiment_reconciliation.py` (exact repository lookup, immutable Learning identity/snapshot checks, evidence and status projections) |
-| Study catalog and outcome (LEARN-OUTCOME-870) | `study_catalog.py` (one frozen `StudyDescriptor` per study: objective, evidence class, eligibility/conclusion/exclusion references, rating record kind, feeds-recommendations flag; data and references only); `experiment_outcome.py` (`derive_outcome`, `closure_blocker`, `build_closure`, `close_experiment`, `reopen_experiment`: a pure derivation that delegates to each study's own rule, plus the operator's closure); section 3.17 |
+| Study eligibility (LEARN-NAV-871; pure, no Tk) | `study_eligibility.py` (`eligible_studies`, `EligibleStudies`, `StudyEligibility`, `describe`: each study available or unavailable for the Learning baseline's model with the study's own refusal, plus the testable variables; delegates to each descriptor's `target_check_ref`, adds no rule); section 3.18 |
+| Study catalog and outcome (LEARN-OUTCOME-870) | `study_catalog.py` (one frozen `StudyDescriptor` per study: objective, evidence class, eligibility/target-check/conclusion/exclusion references, objective group and navigation tier, rating record kind, feeds-recommendations flag, plus `OBJECTIVES`; data and references only); `experiment_outcome.py` (`derive_outcome`, `closure_blocker`, `build_closure`, `close_experiment`, `reopen_experiment`: a pure derivation that delegates to each study's own rule, plus the operator's closure); section 3.17 |
 | Evidence intelligence (AI-LEARN-830; read-only) | `evidence_intelligence.py` (`assess`, `load_sources`), `intelligence_contracts.py` (finding/action/report values), `intelligence_sources.py` (tolerant rating-log and experiment loaders), `intelligence_findings.py`, `preference_evidence.py`, `next_actions.py` (classification and ranking), `ai_evidence_summary.py` (bounded AI-facing summary); section 3.16 |
 | Evidence records and ratings | `learning_record.py` (`LearningRecord`, `LearningRecordWriter`, `extract_rating_detail`); `rating_schema.py`; `learning_record_builder.py` (record from a pipeline run result); `learning_profile_sidecar.py` |
 | Recommendations | `recommendation_engine.py` (`RecommendationEngine.recommend`, `RecommendationSet`, evidence tiers); `staged_recommendations.py` (`build_derived_recommendation_patch`, `apply_derived_recommendation_patch`); `model_profiles.py` (style priors, not `ModelPolicy`; the name-substring GUI defaults and `model_defaults_resolver.py` were removed. Generation recommendations now live in `src/generation_profiles/`, whose `GenerationProfileStore.publish_learning_profile` is the narrow seam a later Learning package uses to publish immutable Learning profile revisions) |
@@ -61,6 +62,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | The coordinator | `LearningController` in `src/gui/controllers/learning_controller.py` (about 4k lines). Experiment design/plan, Run, ratings and drafts, recommendations and Apply, review feedback from the Review tab, discovered inbox, staged curation, resume state, background scan |
 | UI state | `LearningState`, `LearningExperiment`, `LearningVariant` in `src/gui/learning_state.py` (dataclasses with `to_dict`/`from_dict`; `review_drafts` live here) |
 | The live tab | `LearningTabFrame` in `src/gui/views/learning_tab_frame_v2.py`, three notebook tabs: Designed Experiments (`ExperimentDesignPanel` in `experiment_design_panel.py`, `LearningPlanTable` in `learning_plan_table.py`, `LearningReviewPanel` in `learning_review_panel.py`), Discovered Outputs (`discovered_review_inbox_panel.py`, `discovered_review_table.py`), Staged Curation |
+| Design objective chooser (LEARN-NAV-871) | `ExperimentDesignPanel` (`_build_objective_chooser`, `choose_study`, `current_study_slug`, `_refresh_objective_availability`) in `experiment_design_panel.py`; the Compatibility Probe entry opens `ModelEvidenceWindow`; section 3.18 |
 | Two-Axis Grid views | `grid_design_frame.py` (`TwoAxisDesignFrame`: axes, values or ranges, fixed LoRA, live cell/image totals) inside `ExperimentDesignPanel`; `learning_grid_view.py` (`LearningGridView`: the Comparison Grid pane, lazy thumbnails on a tracked worker, Export Contact Sheet) added to the workspace panes by `LearningTabFrame` only while a grid experiment is open |
 | Guided workflow widgets | `LearningWorkflowBar` (`learning_workflow_bar.py`: five step buttons, status, headline, the single primary button) and `LearningPreviewCard` (`learning_preview_card.py`) render the projections above; `LearningTabFrame` owns the tab-local viewed step and the pane layout per step |
 | Analytics window | `learning_analytics_panel.py` opened from the review panel's View Analytics |
@@ -176,7 +178,7 @@ it is not a cryptographic integrity claim about externally rewritten history.
 
 The Designed Experiments tab is presented as Design, Preview, Run, Compare, Rate. This is presentation only [V]: the step state is projected from the experiment, plan and rating facts on every refresh (`guided_workflow.project_guided_workflow`) and is never persisted, so restore and restart reopen at the step the facts imply (a queued experiment reopens at Run and never resubmits). The viewed step is tab-local; only explicit actions (Build Preview, Run, restore, a new experiment, a step button) move it, never a timer refresh.
 
-- Design defaults to Controlled Variable with an estimate line (variants x images). Model Comparison and Two-Axis Grid sit under *Advanced study types* and keep their own forms, validation and ratings isolation.
+- Design defaults to Controlled Variable with an estimate line (variants x images). The other studies are one disclosure away under *Study objective* (LEARN-NAV-871, section 3.18): the operator picks an objective, not a study type. Every choice opens the study's existing design frame, which keeps its own form, validation and ratings isolation; the old Study Type combobox and the three shortcut buttons (Prompt Slot Experiment, LoRA Composition, Embedding) are gone.
 - **Readiness says why.** When Build Preview is unavailable, the Design panel shows the exact refusal under the button (`ExperimentDesignPanel.readiness_reason`), and the guide bar shows the same text. Examples: the LoRA operation rule that was broken, a missing named slot, the number of models still to choose, a baseline setting still needed, or an inherited setting the study refuses. These are the existing checks (`require_target`, the design frames' `validation_error`, `baseline_problems`, and for the Matrix the same `require_matrix_baseline` that Preview applies). No new rule is added. Before PR `fix/learn-design-readiness` the panel computed these and discarded them.
 - **Not used by this study.** A Pipeline copy can carry settings that a controlled study refuses but that have no baseline field: the prompt optimizer, Style Consistency, hires fix, the refiner (every spelling, including `txt2img.use_refiner`), stage LoRA settings, extra stages, a hypernetwork, aesthetic conditioning and ControlNet. The baseline editor lists those it finds for the selected study (`baseline_exclusions.STUDY_EXCLUSIONS`). **Turn Off for This Study** turns them off in the Learning draft only (`LearningController.clear_baseline_exclusions`, recorded as Learning edits) and never writes the Pipeline. Ordinary sweeps keep these settings as fixed settings and show no such control.
 - Build Preview freezes the snapshot and queues nothing. The Preview card reads counts from that frozen snapshot. The design inputs are fingerprinted at Preview; editing them afterwards marks the Preview out of date and blocks Run until it is rebuilt. A Preview built elsewhere has no fingerprint and is not called stale. Staleness only blocks Run before admission.
@@ -237,7 +239,7 @@ findings are refused. No ratings, experiment state, jobs, favorites or startup d
 
 ### 3.11 Controlled Prompt Slot experiments
 
-Design offers **Prompt Slot Experiment** beside the existing study selector. The initial
+Design offers **Prompt Slot** under the *Which do I prefer* objective (section 3.18). The initial
 target is registry-verified SDXL txt2img. Choose Custom Template or a native PromptPack row
 (write each slot as `[[slot_name]]`; the named-slot list follows the prompt as it is edited), choose exactly one to vary and explicitly fill every other slot.
 Repeated occurrences and normalized aliases of the selected slot share one candidate value.
@@ -284,7 +286,7 @@ returns no parameter recommendations and generation-profile publication remains 
 
 ### 3.12 Controlled LoRA Composition experiments
 
-Design offers **LoRA Composition** beside the study selector (target: registry-verified SDXL
+Design offers **LoRA Composition** under the *Is this adapter worth using* objective (section 3.18) (target: registry-verified SDXL
 txt2img, one frozen Learning baseline, optimizer and Style Consistency off). One experiment tests
 **one designated LoRA position**; every other LoRA, the prompt text (trigger words included),
 negative prompt, settings and seed cohort stay fixed. Operations: **Add / Remove** (one LoRA at
@@ -328,7 +330,7 @@ excluded from `RecommendationEngine`, Apply and profile publication.
 
 ### 3.13 Controlled Textual Inversion Embedding experiments
 
-Design offers **Embedding** beside the study selector (target: registry-verified SDXL txt2img on
+Design offers **Embedding** under the *Is this adapter worth using* objective (section 3.18) (target: registry-verified SDXL txt2img on
 the Forge backend, one frozen Learning baseline, optimizer and Style Consistency off). One
 experiment tests **one designated embedding position** in **one channel** (positive or negative);
 every other embedding, the prompt text, the other channel, settings and seed cohort stay fixed.
@@ -666,6 +668,26 @@ Each study keeps its own frozen mechanism (sections 3.1-3.14). `study_catalog.ST
 
 **Owner decision OD-1 (2026-11-15).** An experiment MAY be closed while some images are unrated. It is labelled "insufficient evidence, closed by operator", and the act is recorded in the existing session payload (the `closure` block above). A closed experiment is not offered again by What Should I Test Next? and its reason is listed.
 
+### 3.18 Objective-first navigation and study eligibility (LEARN-NAV-871)
+
+The Design step starts from an objective. The eight study engines, their forms, validation, freezing, bounds, ratings and evidence rules are unchanged; only how the operator reaches them changed. The grouping lives in `study_catalog` (`OBJECTIVES`, and per study `objective_group`, `nav_tier` and `target_check_ref`; data and lazy `"module:attribute"` references only).
+
+| Objective | Studies | Opens |
+|---|---|---|
+| Does this model work here | Compatibility Probe | the Model Evidence Catalog (its existing Compatibility Probe action; the probe has no Design frame) |
+| Find a better setting | Controlled Variable | the ordinary design frame |
+| Is this adapter worth using | LoRA Composition, Embedding | the existing frames |
+| Which do I prefer | Model Comparison, Prompt Slot | the existing frames |
+| More comparisons | Two-Axis Grid, Prompt x Model Matrix | the existing frames |
+
+`ExperimentDesignPanel` keeps `study_type_var` and its display names as the single selection state, so the `study_type` literals written to saved sessions and frozen snapshots, Preview staleness (`design_signature` includes the study type) and `restore_state` are untouched. `choose_study(slug)` is the one way an objective sets it; a reopened Compatibility Probe session is marked as the probe entry (`current_study_slug`) and keeps the form it always had.
+
+**Eligibility (`study_eligibility.eligible_studies(policy, baseline, resources)`).** A pure projection, no Tk and no I/O: each study is available or unavailable for the Learning baseline's model, with the refusal text the study's own target check raises, plus the model's testable variables from `project_learning_capabilities`. It adds no rule; it calls `require_target` (Prompt Slot, LoRA Composition, Embedding on the positive channel), `candidate_ineligibility` (Model Comparison; the Matrix adds `require_matrix_baseline`), the grid's policy check and `require_plain_txt2img`, and `require_probe_target` over the recipes the probe offers for the family (a probe runs on its own optimizer-free baseline, so the authored baseline is not passed). Controlled Variable is available when the capability projection supports the stage and offers a variable. `resources` only adds inventory notes (for example no LoRAs listed) and never changes a verdict. For Model Comparison and the Matrix the verdict judges the baseline's model as one candidate; each compared model is still checked when chosen.
+
+**Unavailable is shown, not hidden.** Each unavailable study stays selectable and shows "Not available on this model: <reason>" under its entry. Opening it shows the same refusal as the existing readiness text (`ExperimentDesignPanel.readiness_reason`), and for an inherited baseline setting the baseline editor's Turn Off for This Study remains reachable; a disabled entry would have made that unreachable. Model Evidence Catalog details add a "What you can test on this model" block from the same projection for the selected checkpoint's own policy (details only; no other catalog behaviour changed).
+
+**Owner decision OD-2 (2026-11-16).** Four objectives group the studies as in the table; Two-Axis Grid and Prompt x Model Matrix move under "More comparisons"; the three duplicate shortcut buttons are removed; no study type is retired or deleted.
+
 ## 4. Data and persistence
 
 | Data | Location | Writer | Atomic |
@@ -697,7 +719,9 @@ profile or change defaults.
 
 ## 5. The Learning tab and what is reachable
 
-Reachable and working [V]: Learning mode toggle (`LearningTabFrame._on_learning_toggle`; it stores a flag and does not gate `record_rating`); New / Clone / Experiment Library / save and resume; Build Preview and Run; plan table; per-image rating with subscores, Save & Next, drafts and Discard Draft; View Analytics; send to curation; Discovered Outputs scan, rating and cleanup; Staged Curation decisions, derived-job queueing, Review handoff and the derived-job suggestion preview/apply; Model Comparison; Two-Axis Grid design (Study Type), the Comparison Grid pane and Export Contact Sheet.
+Reachable and working [V]: Learning mode toggle (`LearningTabFrame._on_learning_toggle`; it stores a flag and does not gate `record_rating`); New / Clone / Experiment Library / save and resume; Build Preview and Run; plan table; per-image rating with subscores, Save & Next, drafts and Discard Draft; View Analytics; send to curation; Discovered Outputs scan, rating and cleanup; Staged Curation decisions, derived-job queueing, Review handoff and the derived-job suggestion preview/apply; Model Comparison; Two-Axis Grid design (reached from the *More comparisons* objective), the Comparison Grid pane and Export Contact Sheet.
+
+The Design step is reached by objective (Does this model work here, Find a better setting, Is this adapter worth using, Which do I prefer, More comparisons), and each entry shows whether the Learning baseline's model can use it and why not; every one of the eight studies stays reachable, the Compatibility Probe through the Model Evidence Catalog (section 3.18).
 
 Apply to Pipeline is reachable through the Recommendations selector (section 3.6). Each experiment shows its derived outcome under the plan summary with Close Experiment and Reopen Experiment buttons, and the Experiment Library lists an Outcome column, an Open / Closed / All filter and the same two actions for the selected row (section 3.17).
 
@@ -750,6 +774,7 @@ Because both layers stay in the compiler, the invariant "randomization never hap
 11. Learning tests must not contact a WebUI, model or GPU.
 12. Protected actions need explicit owner approval (`AGENTS.md` section 5).
 13. The outcome is derived; closure records an operator act, not a conclusion. `derive_outcome` adds no threshold or evidence rule and persists nothing; the `closure` block is written only by `LearningExperimentStore.set_closure`, never touches jobs, the repository, ratings, drafts or associations, and is never called a finding. Owner decision of 2026-11-15: an experiment may be closed with unrated images and is then shown as insufficient evidence, closed by operator (section 3.17).
+14. Navigation adds no rule. The objective chooser and `study_eligibility` only call each study's existing target check and show its text; an unavailable study stays selectable, no study type is retired, and `study_type` literals, frozen snapshots and Preview staleness are unchanged. Owner decision OD-2 of 2026-11-16 fixes the grouping (section 3.18).
 
 ## 8. How to test
 
@@ -765,6 +790,7 @@ Configuration is `pyproject.toml` only; run focused tests first, then `python to
 | Prompt x Model Matrix | `tests/learning_v2/test_prompt_model_matrix_710.py` (freeze, bounds, refusals including the aesthetic prohibition, tamper, admission, reconciliation, ratings, conclusion, isolation), `tests/gui_v2/test_learning_prompt_model_matrix_710.py` (real Tk design mode and results grid) | Real controller over a recording JobService; no WebUI or GPU |
 | Evidence intelligence (AI-LEARN-830) | `tests/learning_v2/test_learning_intelligence_830.py` (fixtures `intelligence_fixtures_830.py`: conflicting claim, identity, unrated, supported and inconclusive results, uncontrolled evidence, duplicates, preference pooling, staleness, determinism, AI-summary privacy, corrupt input), `tests/gui_v2/test_next_test_surface_830.py` (view model, real Tk dialog, worker routing) | Temp stores and fake observations; no backend, model, GPU or network |
 | Evidence consistency (`fix/learn-evidence-consistency`) | `tests/learning_v2/test_learning_evidence_consistency.py` (rating revisions, quality-first ranking in engine and publication, integer Steps, saved-vs-refresh warning, one recommendation eligibility rule), `tests/learning_v2/test_library_status.py` (Library projection over a temp `JobRepository`, real Tk background update), additions to `tests/gui_v2/test_learning_rating_flow_590.py` and `tests/gui_v2/test_learning_recovery_260.py` | Temp records and repository; fake JobService; no backend |
+| Objective chooser and study eligibility (LEARN-NAV-871) | `tests/learning_v2/test_study_eligibility_871.py` (verdict and message parity with each study's own target check for registry SDXL, unverified generic, exact-profile and unknown-family policies; the owner grouping as catalog data; toolkit neutrality); `tests/gui_v2/test_learning_objective_chooser_871.py` (real Tk: selector and shortcut buttons gone, every entry opens its existing frame, reasons shown, saved sessions of each study type reopen on their entry, staleness unchanged, Model Evidence details block) |
 | Study catalog, outcome and closure (LEARN-OUTCOME-870) | `tests/learning_v2/test_study_catalog_870.py` (one descriptor per study literal, parity with `LOCAL_ONLY_STUDIES` and the engine's exclusions), `test_experiment_outcome_870.py` (table-driven outcome per study, engine-threshold and 2 x 6 pilot parity, closure semantics), `test_experiment_closure_870.py` (store-level closure: only the block is written, restart, ordinary saves, no `JobService` or repository change, next actions for every study), `tests/gui_v2/test_learning_outcome_870.py` (real Tk: outcome line, Close/Reopen with injected confirmation, Library filter and Outcome column) | Temp store/records roots, a temp `JobRepository`, injected confirmation (a live messagebox hangs tests); no backend |
 | Curation | `tests/curation/` | In-memory models |
 | Video experiment review evidence | `tests/learning/test_video_quality_review_211.py`, `test_video_review_service_211.py` | Temp record files and a temp `JobRepository`; no `data/learning` |
