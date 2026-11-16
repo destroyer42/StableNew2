@@ -1344,15 +1344,17 @@ class ReviewTabFrame(ttk.Frame):
             or summary.get("user_rating_raw") is None
         ):
             return
-        subscores = summary.get("subscores") if isinstance(summary.get("subscores"), dict) else {}
+        raw_subscores = summary.get("subscores")
+        subscores: dict[str, Any] = raw_subscores if isinstance(raw_subscores, dict) else {}
         self._applying_saved_rating = True
         try:
-            for var, value in (
+            values: tuple[tuple[tk.IntVar, Any], ...] = (
                 (self.rating_var, summary.get("user_rating_raw")),
                 (self.anatomy_rating_var, subscores.get("anatomy")),
                 (self.composition_rating_var, subscores.get("composition")),
                 (self.prompt_adherence_rating_var, subscores.get("prompt_adherence")),
-            ):
+            )
+            for var, value in values:
                 try:
                     var.set(max(1, min(5, int(value))))
                 except (TypeError, ValueError):
