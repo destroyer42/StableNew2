@@ -52,6 +52,7 @@ class PreviewJob:
 class PreviewView:
     preview_id: str
     jobs: tuple[PreviewJob, ...]
+    preparation_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,12 @@ class SubmissionReceipt:
 class SiteSession:
     """A UI command mailbox with one request in flight and no job lifecycle ownership."""
 
-    def __init__(self, get_job: Callable[[str], JobHistoryEntry | None] | None = None) -> None:
+    def __init__(
+        self,
+        get_job: Callable[[str], JobHistoryEntry | None] | None = None,
+        *,
+        allow_promptpack_queue: bool = False,
+    ) -> None:
         self.code = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + PAIR_SECONDS
         self._revoked = Event()
@@ -80,6 +86,7 @@ class SiteSession:
         self._packs: SitePackCatalog | None = None
         self._prepare: PreparePack | None = None
         self._prepare_state = "idle"
+        self.allow_promptpack_queue = allow_promptpack_queue
 
     @property
     def expired(self) -> bool:
@@ -119,6 +126,7 @@ class SiteSession:
             if self._receipt and self._receipt.state in {"awaiting_confirmation", "submitting"}:
                 return False
             self._prepare, self._prepare_state = command, "requested"
+            self._preview, self._reason = None, "preparing_promptpack"
             return True
 
     def take_preparation(self) -> PreparePack | None:
@@ -160,6 +168,18 @@ class SiteSession:
 
     def publish(self, view: PreviewView | None, reason: str = "") -> None:
         with self._lock:
+            if self._prepare_state in {"requested", "preparing"}:
+                return
+            if (
+                view
+                and view.preparation_id
+                and (
+                    self._prepare_state != "draft_added"
+                    or not self._prepare
+                    or self._prepare.request_id != view.preparation_id
+                )
+            ):
+                view, reason = None, "preview_changed"
             self._preview = view
             self._reason = reason
 
@@ -171,6 +191,14 @@ class SiteSession:
             return {
                 "state": "ready",
                 "preview_id": view.preview_id,
+                **(
+                    {
+                        "preparation_id": view.preparation_id,
+                        "desktop_confirmation": not self.allow_promptpack_queue,
+                    }
+                    if view.preparation_id
+                    else {}
+                ),
                 "jobs": [
                     {
                         "job_id": job.job_id,
@@ -251,14 +279,19 @@ def parse_submission(raw: bytes) -> str:
     return preview_id
 
 
-def parse_preparation(raw: bytes) -> tuple[str, str, tuple[int, ...]]:
+def parse_preparation(raw: bytes) -> tuple[str, str, tuple[int, ...], dict[str, Any]]:
     def fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        if len(pairs) != 3 or {key for key, _ in pairs} != {"pack_id", "revision", "slots"}:
+        values = dict(pairs)
+        if len(values) != len(pairs):
             raise ValueError("invalid_preparation")
-        return dict(pairs)
+        return values
 
     body = json.loads(raw, object_pairs_hook=fields)
-    if not isinstance(body, dict):
+    if (
+        not isinstance(body, dict)
+        or body.keys() - {"pack_id", "revision", "slots", "settings"}
+        or not {"pack_id", "revision", "slots"} <= body.keys()
+    ):
         raise ValueError("invalid_preparation")
     pack, revision, slots = body["pack_id"], body["revision"], body["slots"]
     if (
@@ -272,7 +305,10 @@ def parse_preparation(raw: bytes) -> tuple[str, str, tuple[int, ...]]:
         or len(set(slots)) != len(slots)
     ):
         raise ValueError("invalid_preparation")
-    return pack, revision, tuple(sorted(slots))
+    settings = body.get("settings", {})
+    if not isinstance(settings, dict):
+        raise ValueError("invalid_txt2img_settings")
+    return pack, revision, tuple(sorted(slots)), settings
 
 
 def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler]:
@@ -419,7 +455,7 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
             if (
                 self.headers.get_all("Content-Type") != ["application/json"]
                 or self.headers.get("Transfer-Encoding") is not None
-                or not 0 < length <= (1024 if self.path == _PREPARE else MAX_BODY)
+                or not 0 < length <= (4096 if self.path == _PREPARE else MAX_BODY)
             ):
                 self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
                 return
@@ -442,8 +478,13 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 return
             try:
                 command = packs.prepare(*parse_preparation(raw))
-            except (ValueError, OSError, RecursionError):
-                self._reply(HTTPStatus.CONFLICT, {"error": "promptpack_changed"})
+            except (ValueError, OSError, RecursionError) as exc:
+                reason = (
+                    str(exc)
+                    if str(exc) in {"invalid_txt2img_settings", "invalid_preparation"}
+                    else "promptpack_changed"
+                )
+                self._reply(HTTPStatus.CONFLICT, {"error": reason})
                 return
             if session.pack_catalog is not packs or not session.request_preparation(command):
                 self._reply(HTTPStatus.CONFLICT, {"error": "submission_in_progress"})

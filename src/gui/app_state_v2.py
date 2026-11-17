@@ -577,20 +577,30 @@ class AppStateV2:
         self._notify("history_items")
 
     def add_packs_to_job_draft(
-        self, entries: list[PackJobEntry], *, expected_empty_revision: int | None = None
+        self,
+        entries: list[PackJobEntry],
+        *,
+        expected_empty_revision: int | None = None,
+        site_entries: tuple[PackJobEntry, ...] = (),
     ) -> bool:
-        """Add pack entries; False (nothing changed) while an unsent history variation is the draft."""
+        """Add pack entries or replace the exact draft held by the Site at the expected revision."""
         logger.info(
             f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects"
         )
         with self._preview_lock:
             if self.job_draft.history_variation is not None:
                 return False  # draft modes never mix and an unsent variation is never discarded implicitly
-            if expected_empty_revision is not None and (
-                self.preview_revision != expected_empty_revision
-                or self.job_draft.packs or self.job_draft.parts or self.preview_jobs
-            ):
-                return False
+            if expected_empty_revision is not None:
+                existing = self.job_draft.packs
+                if (
+                    self.preview_revision != expected_empty_revision
+                    or self.job_draft.parts
+                    or (not site_entries and self.preview_jobs)
+                    or len(existing) != len(site_entries)
+                    or any(a is not b for a, b in zip(existing, site_entries, strict=True))
+                ):
+                    return False
+                existing.clear()
             self.job_draft.packs.extend(entries)
             self._reset_preview_locked()
         self._notify("preview_jobs")

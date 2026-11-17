@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from src.pipeline.site_create_settings import Choice, describe_settings, validate_settings
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo
 
@@ -27,12 +30,21 @@ class PreparePack:
     pack: PromptPackInfo
     digest: str
     slots: tuple[int, ...]
+    overrides: tuple[tuple[str, Choice], ...] = ()
 
 
 class SitePackCatalog:
-    def __init__(self, root: Path, packs: list[PromptPackInfo]) -> None:
+    def __init__(
+        self,
+        root: Path,
+        packs: list[PromptPackInfo],
+        load_config: Callable[[str], Mapping[str, Any] | None] | None = None,
+        resources: Mapping[str, Any] | None = None,
+    ) -> None:
         root = root.resolve()
         self.packs: dict[str, PromptPackInfo] = {}
+        self._load_config = load_config
+        self._resources = dict(resources or {})
         for pack in packs[:500]:
             path = pack.path.resolve()
             if path.parent == root and path.suffix.lower() == ".json" and path.is_file():
@@ -55,14 +67,22 @@ class SitePackCatalog:
             "id": key,
             "title": pack.name,
             "revision": digest,
+            **(
+                {"settings": describe_settings(self._load_config(pack.name) or {}, self._resources)}
+                if self._load_config is not None
+                else {}
+            ),
             "slots": [
                 {"index": index, "prompt": str(row.get("positive", ""))[:240]}
                 for index, row in enumerate(rows[:500])
             ],
         }
 
-    def prepare(self, key: str, digest: str, slots: tuple[int, ...]) -> PreparePack:
+    def prepare(
+        self, key: str, digest: str, slots: tuple[int, ...], settings: object = None
+    ) -> PreparePack:
         pack = self.packs.get(key)
         if pack is None or pack_digest(pack.path) != digest:
             raise ValueError("promptpack_changed")
-        return PreparePack(secrets.token_hex(16), pack, digest, slots)
+        overrides = validate_settings({} if settings is None else settings, self._resources)
+        return PreparePack(secrets.token_hex(16), pack, digest, slots, tuple(overrides.items()))

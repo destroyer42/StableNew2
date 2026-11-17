@@ -18,6 +18,7 @@ from src.app.site_queue_bridge import (
     SiteSession,
     SubmissionReceipt,
 )
+from src.contracts import PackJobEntry
 from src.controller.app_controller_services.pack_draft_service import SitePackDraft
 from src.controller.app_controller_services.run_submission_service import (
     PreviewWitness,
@@ -45,6 +46,19 @@ class PreviewQueueConnection:
         self.pending: tuple[SubmissionReceipt, tuple[str, ...], float] | None = None
         self.uncertain: PreviewWitness | None = None
         self.prepared: PreparePack | None = None
+        self.prepared_entries: tuple[PackJobEntry, ...] = ()
+
+    def _owns_draft(self) -> bool:
+        draft = self.app.app_state.job_draft
+        return (
+            bool(self.prepared_entries)
+            and not draft.parts
+            and draft.history_variation is None
+            and (
+                len(self.prepared_entries) == len(draft.packs)
+                and all(a is b for a, b in zip(self.prepared_entries, draft.packs, strict=True))
+            )
+        )
 
     def _draft_pack_matches(self, record: Any) -> bool:
         return self.prepared is None or (
@@ -56,6 +70,8 @@ class PreviewQueueConnection:
         settings = None
         if self.prepared is not None:
             summary = UnifiedJobSummary.from_normalized_record(record)
+            effective = record.config
+            txt2img = effective.get("txt2img", {})
             settings = {
                 "pack": summary.prompt_pack_name,
                 "slot": summary.prompt_pack_row_index + 1,
@@ -66,6 +82,13 @@ class PreviewQueueConnection:
                 "steps": summary.steps,
                 "cfg": summary.cfg_scale,
                 "seed": record.seed,
+                "vae": txt2img.get("vae", effective.get("vae")),
+                "scheduler": txt2img.get("scheduler", effective.get("scheduler")),
+                "subseed": txt2img.get("subseed", effective.get("subseed")),
+                "subseed_strength": txt2img.get(
+                    "subseed_strength", effective.get("subseed_strength")
+                ),
+                "loop_count": record.batch_total,
             }
         return PreviewJob(record.job_id, tuple(record.stage_chain_labels), settings)
 
@@ -81,8 +104,14 @@ class PreviewQueueConnection:
         app_state = self.app.app_state
         revision, accepted = app_state.snapshot_accepted_preview()
         draft = app_state.job_draft
-        if accepted or draft.packs or draft.parts or draft.history_variation is not None:
+        owned = self.session.allow_promptpack_queue and self._owns_draft()
+        if not owned and (
+            accepted or draft.packs or draft.parts or draft.history_variation is not None
+        ):
             self.session.finish_preparation(command, "desktop_draft_open")
+            return
+        if command.overrides and not self.app._build_stage_flags().get("txt2img", True):
+            self.session.finish_preparation(command, "txt2img_disabled")
             return
         if not any(
             pack.name == command.pack.name and pack.path.resolve() == command.pack.path
@@ -90,19 +119,27 @@ class PreviewQueueConnection:
         ) or not self._pack_current(command):
             self.session.finish_preparation(command, "refused")
             return
-        if self.confirm_prepare is None or not self.confirm_prepare(command):
+        if not self.session.allow_promptpack_queue and (
+            self.confirm_prepare is None or not self.confirm_prepare(command)
+        ):
             self.session.finish_preparation(command, "declined")
             return
 
         def complete(state: str) -> None:
             if state == "draft_added":
                 self.prepared = command
+                self.prepared_entries = tuple(app_state.job_draft.packs)
             self.session.finish_preparation(command, state)
 
         self.app.on_pipeline_add_packs_to_job(
             [command.pack.name],
             selection=SitePackDraft(
-                command.slots, revision, lambda: self._pack_current(command), complete
+                command.slots,
+                revision,
+                lambda: self._pack_current(command),
+                complete,
+                self.prepared_entries if owned else (),
+                command.overrides,
             ),
         )
 
@@ -110,13 +147,19 @@ class PreviewQueueConnection:
         current = self.app.app_state.snapshot_accepted_preview()
         records = current[1]
         if not records:
-            self.session.publish(None, "open_an_image_preview")
+            reason = (
+                "preview_failed"
+                if self.prepared is not None and getattr(self.app.app_state, "preview_error", None)
+                else "open_an_image_preview"
+            )
+            self.session.publish(None, reason)
         elif len(records) > _MAX_PREVIEW_JOBS:
             self.session.publish(None, "preview_too_large")
         elif any(record.workload_kind != WorkloadKind.IMAGE for record in records):
             self.session.publish(None, "image_preview_required")
         elif self.prepared is not None and (
-            not all(self._draft_pack_matches(record) for record in records)
+            not self._owns_draft()
+            or not all(self._draft_pack_matches(record) for record in records)
             or {record.prompt_pack_row_index for record in records} != set(self.prepared.slots)
         ):
             self.session.publish(None, "preview_changed")
@@ -131,6 +174,7 @@ class PreviewQueueConnection:
                 PreviewView(
                     self.preview_id,
                     tuple(self._preview_job(record) for record in records),
+                    self.prepared.request_id if self.prepared else None,
                 )
             )
             return
@@ -163,6 +207,7 @@ class PreviewQueueConnection:
         if committed == job_ids:
             self._finish(receipt, "queued", committed)
             self.prepared = None
+            self.prepared_entries = ()
         elif time.monotonic() >= timeout or not self.app._queue_submit_in_progress:
             self.uncertain = self.witness
             self._finish(receipt, "check_native_queue")
@@ -173,7 +218,10 @@ class PreviewQueueConnection:
             self._finish(receipt, "preview_changed")
             return
         job_ids = tuple(record.job_id for record in witness[1])
-        if not self.confirm(len(job_ids)):
+        delegated = (
+            self.session.allow_promptpack_queue and self.prepared is not None and self._owns_draft()
+        )
+        if not delegated and not self.confirm(len(job_ids)):
             self._finish(receipt, "declined")
             return
         if self.session.expired or self.app._is_shutting_down:
@@ -182,7 +230,9 @@ class PreviewQueueConnection:
         if not same_preview(witness, self.app.app_state.snapshot_accepted_preview()):
             self._finish(receipt, "preview_changed")
             return
-        if self.prepared is not None and not self._pack_current(self.prepared):
+        if self.prepared is not None and (
+            not self._owns_draft() or not self._pack_current(self.prepared)
+        ):
             self._finish(receipt, "preview_changed")
             return
         try:
@@ -232,7 +282,9 @@ class SiteConnectionDialog:
             return
         if self.app._is_shutting_down:
             return
-        session = SiteSession(self.app.job_service.history_store.get_job)
+        session = SiteSession(
+            self.app.job_service.history_store.get_job, allow_promptpack_queue=True
+        )
         try:
             self.listener = SiteListener(session)
         except OSError:
@@ -267,7 +319,7 @@ class SiteConnectionDialog:
         )
         ttk.Label(
             frame,
-            text="Keep this window open. Queue requests ask for confirmation in StableNew.",
+            text="The paired Site can read visible PromptPacks, build Previews and submit its own Preview to the queue. Keep this window open. Close it to revoke access.",
             wraplength=370,
         ).pack(anchor="w", pady=(4, 8))
         output_status = ttk.Label(frame, text="Output folder is private.", wraplength=370)
@@ -288,9 +340,10 @@ class SiteConnectionDialog:
         pack_status.pack(anchor="w")
         ttk.Button(
             frame,
-            text="Share visible PromptPacks",
+            text="Refresh shared PromptPacks",
             command=lambda: self._share_packs(session, pack_status),
         ).pack(anchor="w", pady=(3, 10))
+        self._share_packs(session, pack_status)
         ttk.Button(frame, text="Disconnect", command=self.close).pack(anchor="e")
         self.connection = PreviewQueueConnection(
             self.app, session, self._confirm, self._confirm_prepare
@@ -305,7 +358,14 @@ class SiteConnectionDialog:
         if session.expired:
             return
         try:
-            session.share_packs(SitePackCatalog(self.app._packs_dir, list(self.app.packs)))
+            session.share_packs(
+                SitePackCatalog(
+                    self.app._packs_dir,
+                    list(self.app.packs),
+                    self.app._config_manager.load_pack_config,
+                    self.app.app_state.resources,
+                )
+            )
         except (OSError, ValueError):
             status.configure(text="The visible PromptPacks could not be shared.")
             return

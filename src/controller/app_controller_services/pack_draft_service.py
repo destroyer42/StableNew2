@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from src.contracts import PackJobEntry
+from src.pipeline.site_create_settings import Choice, apply_site_settings
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +20,8 @@ class SitePackDraft:
     revision: int
     current: Callable[[], bool]
     complete: Callable[[str], None]
+    previous: tuple[PackJobEntry, ...] = ()
+    overrides: tuple[tuple[str, Choice], ...] = ()
 
 
 def prepare_pack_draft(
@@ -70,6 +73,10 @@ def prepare_pack_draft(
 
                 try:
                     config_snapshot = draft_config.merge(pack_config or {})
+                    if selection is not None and selection.overrides:
+                        config_snapshot = apply_site_settings(
+                            config_snapshot, dict(selection.overrides)
+                        )
                 except (TypeError, ValueError, AttributeError) as exc:
                     raise ValueError(f"Could not merge settings for '{pack_id}'. {exc}") from exc
 
@@ -123,7 +130,14 @@ def prepare_pack_draft(
                 if (
                     app.app_state.add_packs_to_job_draft(
                         entries,
-                        **({"expected_empty_revision": selection.revision} if selection else {}),
+                        **(
+                            {
+                                "expected_empty_revision": selection.revision,
+                                "site_entries": selection.previous,
+                            }
+                            if selection
+                            else {}
+                        ),
                     )
                     is not False
                 ):
