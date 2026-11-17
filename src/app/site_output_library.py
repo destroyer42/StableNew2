@@ -6,15 +6,17 @@ import base64
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import secrets
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event, Lock
+from time import monotonic
 from typing import Any
 
 from PIL import Image, UnidentifiedImageError
@@ -38,8 +40,16 @@ from src.utils.thread_registry import get_thread_registry
 
 _STORAGE = ".stablenew-library"
 _IMAGE_LIMIT = 32 * 1024 * 1024
-_SEARCH_LIMIT = 25_000
+_SEARCH_LIMIT = 100_000
+_ENTRY_LIMIT = 250_000
 _METADATA_BUDGET = 128 * 1024 * 1024
+_SOURCE_ORDER = {
+    "image": ("pipeline", "learning", "reprocess", "movie_clips", "svd", "video_eval", "other"),
+    "video": ("movie_clips", "svd", "reprocess", "pipeline", "learning", "video_eval", "other"),
+}
+SOURCES = frozenset(_SOURCE_ORDER["image"])
+_SCAN_FIRST = ("pipeline", "movie_clips", "svd", "learning", "reprocess", "video_eval")
+logger = logging.getLogger(__name__)
 _DOCUMENT_LIMIT = 512 * 1024
 _IMAGE_TYPES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
 _ID = re.compile(r"[a-f0-9]{32}")
@@ -79,6 +89,12 @@ class LibraryItem:
     provenance: str = "unknown"
     canonical_id: str | None = None
 
+    @property
+    def source(self) -> str:
+        folder, slash, _ = self.path.partition("/")
+        source = folder.casefold()
+        return source if slash and source in SOURCES else "other"
+
     def public(self, identifier: str) -> dict[str, Any]:
         return {
             "id": identifier,
@@ -91,6 +107,7 @@ class LibraryItem:
             "tags": self.tags,
             "seed": self.seed,
             "provenance": self.provenance,
+            "source": self.source,
         }
 
 
@@ -102,8 +119,10 @@ def _version(status: os.stat_result) -> tuple[int, int, int, int]:
 class Index:
     items: dict[str, LibraryItem] = field(default_factory=dict)
     revision: str = field(default_factory=lambda: secrets.token_hex(16))
+    metadata_revision: str = field(default_factory=lambda: secrets.token_hex(16))
     scanning: bool = False
     limited: bool = False
+    metadata_limited: bool = False
     error: bool = False
 
 
@@ -116,9 +135,12 @@ class OutputLibrary:
         self._lock = Lock()
         self._write_lock = Lock()
         self._started = False
+        self._scan_cancel: Event | None = None
 
     def close(self) -> None:
         with self._lock:
+            if self._scan_cancel is not None:
+                self._scan_cancel.set()
             self.index = Index()
 
     def _id(self, relative: str) -> str:
@@ -223,60 +245,145 @@ class OutputLibrary:
         ]
         return fields.get("prompt", prompt), _seed(found[1] if found else fields.get("seed")), tags
 
-    def _scan(self, cancel: Event) -> None:
+    def _publish(
+        self,
+        items: dict[str, LibraryItem],
+        *,
+        scanning: bool,
+        limited: bool,
+        error: bool,
+        inventory_revision: str | None = None,
+        metadata_limited: bool = False,
+    ) -> None:
+        with self._lock:
+            self.require_active()
+            self.index = Index(
+                items,
+                scanning=scanning,
+                limited=limited,
+                error=error,
+                metadata_limited=metadata_limited,
+            )
+            if inventory_revision is not None:
+                self.index.revision = inventory_revision
+
+    @staticmethod
+    def _sort_key(entry: tuple[str, LibraryItem]) -> tuple[int, int, str]:
+        item = entry[1]
+        sources = _SOURCE_ORDER[item.mime.split("/")[0]]
+        return sources.index(item.source), -item.version[3], item.path
+
+    def _inventory(self, cancel: Event) -> tuple[dict[str, LibraryItem], bool, bool]:
         items: dict[str, LibraryItem] = {}
         limited = False
         error = False
         visited = 0
-        metadata_bytes = 0
-        try:
-            for parent, directories, files in os.walk(self.root, topdown=True, followlinks=False):
-                if cancel.is_set():
-                    return
-                self.require_active()
-                directory = inside(self.root, Path(parent))
-                allowed = []
-                for name in directories:
-                    try:
-                        if name.casefold() != _STORAGE and not is_link((directory / name).lstat()):
-                            allowed.append(name)
-                    except OSError:
-                        error = True
-                directories[:] = allowed
-                for name in files:
-                    if cancel.is_set():
-                        return
-                    visited += 1
-                    if visited > 100_000 or len(items) >= _SEARCH_LIMIT:
-                        limited = True
-                        break
-                    path = directory / name
-                    mime = MEDIA_TYPES.get(path.suffix.lower())
-                    if mime is None or name.startswith("."):
-                        continue
-                    try:
-                        self.require_active()
-                        info = inside(self.root, path).stat()
-                    except (OSError, SiteOutputError):
-                        continue
-                    relative = path.relative_to(self.root).as_posix()
-                    item = self._metadata(path, relative, mime, _version(info))
-                    metadata_bytes += 4 * (len(item.prompt) + sum(map(len, item.tags)))
-                    if metadata_bytes > _METADATA_BUDGET:
-                        limited = True
-                        break
-                    items[self._id(relative)] = item
-                if limited:
-                    break
-        except (OSError, SiteOutputError):
+        next_publish = monotonic() + 1
+        published = 0
+
+        def walk_error(_error: OSError) -> None:
+            nonlocal error
             error = True
-        result = dict(sorted(items.items(), key=lambda pair: (-pair[1].version[3], pair[1].path)))
-        with self._lock:
+
+        for parent, directories, files in os.walk(
+            self.root, topdown=True, onerror=walk_error, followlinks=False
+        ):
+            if cancel.is_set():
+                break
+            self.require_active()
             try:
+                directory = inside(self.root, Path(parent))
+            except (OSError, SiteOutputError):
+                directories.clear()
+                error = True
+                continue
+            allowed = []
+            for name in directories:
+                try:
+                    if name.casefold() != _STORAGE and not is_link((directory / name).lstat()):
+                        allowed.append(name)
+                except OSError:
+                    error = True
+            if directory == self.root:
+                allowed.sort(
+                    key=lambda name: (
+                        _SCAN_FIRST.index(name.casefold())
+                        if name.casefold() in _SCAN_FIRST
+                        else len(_SCAN_FIRST),
+                        name.casefold(),
+                    )
+                )
+            directories[:] = allowed
+            for name in files:
+                if cancel.is_set():
+                    break
                 self.require_active()
-            except SiteOutputError:
+                visited += 1
+                if visited > _ENTRY_LIMIT or len(items) >= _SEARCH_LIMIT:
+                    limited = True
+                    break
+                path = directory / name
+                mime = MEDIA_TYPES.get(path.suffix.lower())
+                if mime is None or name.startswith("."):
+                    continue
+                try:
+                    info = path.lstat()
+                except OSError:
+                    error = True
+                    continue
+                if is_link(info):
+                    continue
+                relative = path.relative_to(self.root).as_posix()
+                items[self._id(relative)] = LibraryItem(relative, mime, _version(info))
+                if (published == 0 and len(items) == 24) or monotonic() >= next_publish:
+                    snapshot = dict(sorted(items.items(), key=self._sort_key))
+                    self._publish(snapshot, scanning=True, limited=False, error=error)
+                    published = len(items)
+                    next_publish = monotonic() + 1
+            if limited:
+                break
+        return dict(sorted(items.items(), key=self._sort_key)), limited, error
+
+    def _scan(self, cancel: Event) -> None:
+        inventory, limited, error = self._inventory(cancel)
+        if cancel.is_set():
+            return
+        self._publish(inventory, scanning=True, limited=limited, error=error)
+        with self._lock:
+            revision = self.index.revision
+        items = inventory.copy()
+        metadata_bytes = 0
+        metadata_limited = False
+        next_publish = monotonic() + 2
+        for key, basic in inventory.items():
+            if cancel.is_set():
                 return
-            self.index = Index(result, limited=limited, error=error)
+            self.require_active()
+            if not basic.mime.startswith("image/"):
+                continue
+            item = self._metadata(self.root / basic.path, basic.path, basic.mime, basic.version)
+            metadata_bytes += 4 * (len(item.prompt) + sum(map(len, item.tags)))
+            if metadata_bytes > _METADATA_BUDGET:
+                metadata_limited = True
+                break
+            items[key] = item
+            if monotonic() >= next_publish:
+                self._publish(
+                    items.copy(),
+                    scanning=True,
+                    limited=limited,
+                    error=error,
+                    inventory_revision=revision,
+                )
+                next_publish = monotonic() + 2
+        self._publish(
+            items,
+            scanning=False,
+            limited=limited,
+            error=error,
+            inventory_revision=revision,
+            metadata_limited=metadata_limited,
+        )
 
     def start(self, *, refresh: bool = False) -> None:
         with self._lock:
@@ -286,17 +393,32 @@ class OutputLibrary:
             self._started = True
             registry = get_thread_registry()
             cancel = Event()
+            self._scan_cancel = cancel
             remove_listener = registry.add_shutdown_listener(cancel.set)
 
             def run_scan() -> None:
                 try:
                     self._scan(cancel)
+                except SiteOutputError:
+                    logger.info("Output library grant ended during indexing")
+                except (OSError, ValueError, TypeError, RuntimeError):
+                    logger.exception("Output library indexing failed")
                 finally:
                     remove_listener()
+                    with self._lock:
+                        if self._scan_cancel is cancel and self.index.scanning:
+                            self.index.scanning = False
+                            self.index.error = True
 
-            registry.spawn(
-                target=run_scan, name="Site Output index", purpose="Browse paired Output"
-            )
+            try:
+                registry.spawn(
+                    target=run_scan, name="Site Output index", purpose="Browse paired Output"
+                )
+            except RuntimeError:
+                remove_listener()
+                self.index.scanning = False
+                self.index.error = True
+                logger.exception("Could not start Output library indexing")
 
     @staticmethod
     def _match(item: LibraryItem, field: str, query: str) -> bool:
@@ -319,6 +441,7 @@ class OutputLibrary:
 
     def search(self, body: dict[str, Any]) -> dict[str, Any]:
         field, kind, query, offset = (body.get(key) for key in ("field", "kind", "query", "offset"))
+        source = body.get("source", "")
         if (
             field not in ("all", "name", "tag", "prompt", "seed")
             or kind not in ("image", "video")
@@ -327,26 +450,34 @@ class OutputLibrary:
             or type(offset) is not int
             or not 0 <= offset <= _SEARCH_LIMIT
             or type(body.get("refresh")) is not bool
+            or not isinstance(source, str)
+            or (source and source not in SOURCES)
         ):
             raise SiteOutputError("invalid_library_request")
+        query = query.strip().casefold()
+        needs_metadata = bool(
+            query and field in ("all", "tag", "prompt", "seed") and kind == "image"
+        )
         self.start(refresh=body["refresh"])
         with self._lock:
-            items, revision, scanning, limited, error = (
+            items, revision, scanning, limited, metadata_limited, error = (
                 self.index.items,
-                self.index.revision,
+                self.index.metadata_revision if needs_metadata else self.index.revision,
                 self.index.scanning,
                 self.index.limited,
+                self.index.metadata_limited,
                 self.index.error,
             )
         if offset and body.get("revision") != revision:
             raise SiteOutputError("stale_library_page")
-        query = query.strip().casefold()
         if field == "seed" and query:
             query = _seed(query) or "\0"
         matches = [
             (key, item)
             for key, item in items.items()
-            if item.mime.startswith(kind + "/") and self._match(item, field, query)
+            if item.mime.startswith(kind + "/")
+            and (not source or item.source == source)
+            and self._match(item, field, query)
         ]
         return {
             "items": [item.public(key) for key, item in matches[offset : offset + 24]],
@@ -354,6 +485,7 @@ class OutputLibrary:
             "revision": revision,
             "scanning": scanning,
             "limited": limited,
+            "metadata_limited": metadata_limited,
             "scan_error": error,
         }
 
@@ -374,8 +506,10 @@ class OutputLibrary:
 
     def image(self, identifier: object, *, thumb: bool = False) -> tuple[LibraryItem, bytes, str]:
         item = self.item(identifier)
-        if not item.mime.startswith("image/") or not item.width:
+        if not item.mime.startswith("image/"):
             raise SiteOutputError("unsupported_media")
+        if not thumb and not item.width:
+            item = self._metadata(self.path_for(item), item.path, item.mime, item.version)
         with open_scoped(self.root, self.path_for(item)) as stream:
             raw = stream.read(_IMAGE_LIMIT + 1)
         self.path_for(item)
@@ -394,6 +528,7 @@ class OutputLibrary:
                     output = io.BytesIO()
                     image.convert("RGB").save(output, "JPEG", quality=76)
                     return item, output.getvalue(), digest
+                item = replace(item, width=image.width, height=image.height)
                 image.verify()
         except (UnidentifiedImageError, Image.DecompressionBombError, OSError) as exc:
             raise SiteOutputError("unsupported_media") from exc
