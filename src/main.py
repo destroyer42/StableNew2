@@ -648,10 +648,11 @@ def main() -> None:
         threaded=True,
     )
 
+    site_connection = None
     if sys.platform == "win32":
         from src.gui.site_connection_dialog import install_site_connection_control
 
-        install_site_connection_control(root, app_controller, window.header_zone)
+        site_connection = install_site_connection_control(root, app_controller, window.header_zone)
 
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(
@@ -691,6 +692,8 @@ def main() -> None:
             app_controller, root, single_instance_lock, logger, window=window, reason="fatal-error"
         )
     finally:
+        if site_connection is not None:
+            site_connection.shutdown()
         stop_gpu_session_telemetry("mainloop_exit")
         if single_instance_lock.is_acquired():
             single_instance_lock.release()

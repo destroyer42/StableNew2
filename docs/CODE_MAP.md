@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-754 of 909 modules have a docstring.
+755 of 910 modules have a docstring.
 
 ## src/
 
@@ -62,6 +62,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `site_output_library.py`: Browse Output and persist gallery records within one approved desktop grant
 - `site_output_routes.py`: Typed media operations behind the existing native Site authentication
 - `site_pack_catalog.py`: Session-scoped selection of visible, local PromptPacks
+- `site_pairing_protocol.py`: One-use Windows protocol handoff for the private Site's loopback connection
 - `site_queue_bridge.py`: Loopback transport for the operator Site
 - `site_video_playback.py`: Bounded video snapshots for range playback over the existing Site relay
 

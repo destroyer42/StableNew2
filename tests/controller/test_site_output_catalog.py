@@ -203,13 +203,15 @@ def test_operator_site_registers_a_visible_toolbar_button_without_opening_connec
     header = Mock()
     header.grid_size.return_value = (8, 1)
 
-    site_connection_dialog.install_site_connection_control(Mock(), Mock(), header)
+    root = Mock()
+    site_connection_dialog.install_site_connection_control(root, Mock(), header)
 
     constructor.assert_called_once_with(
         header, text="Operator Site", style="Secondary.TButton", command=native_dialog.open
     )
     button.grid.assert_called_once_with(row=0, column=8, padx=4, pady=4)
     native_dialog.open.assert_not_called()
+    root.after.assert_called_once_with(0, native_dialog.start_default)
 
 
 def test_site_routes_one_selected_slot_to_the_existing_empty_desktop_draft(tmp_path):

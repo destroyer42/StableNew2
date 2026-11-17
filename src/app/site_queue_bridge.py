@@ -42,6 +42,7 @@ _PACK = re.compile(r"/v1/promptpacks/([a-f0-9]{32})")
 _PREPARE = "/v1/prepare"
 _PREPARE_STATUS = "/v1/prepare-status"
 _RESULT = re.compile(r"/v1/results/([a-f0-9]{32})")
+_OPERATOR_PAIR = re.compile(r"/v1/operator-pair/([a-f0-9]{32})")
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class SiteSession:
         get_job: Callable[[str], JobHistoryEntry | None] | None = None,
         *,
         allow_promptpack_queue: bool = False,
+        claim_ticket: Callable[[str], bool] | None = None,
     ) -> None:
         self.code = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + PAIR_SECONDS
@@ -90,6 +92,7 @@ class SiteSession:
         self._prepare: PreparePack | None = None
         self._prepare_state = "idle"
         self.allow_promptpack_queue = allow_promptpack_queue
+        self.claim_ticket = claim_ticket
 
     @property
     def expired(self) -> bool:
@@ -387,8 +390,13 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 or method == "POST"
                 and output_post(self.path)
             )
+            pairing_route = (
+                method == "POST"
+                and session.claim_ticket is not None
+                and _OPERATOR_PAIR.fullmatch(self.path)
+            )
             if self._same_site() and (
-                (method, self.path) in allowed or legacy_output_read or media_route
+                (method, self.path) in allowed or legacy_output_read or media_route or pairing_route
             ):
                 self._reply(HTTPStatus.NO_CONTENT)
             else:
@@ -489,6 +497,9 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 self._reply(HTTPStatus.OK, result)
 
         def do_POST(self) -> None:
+            if ticket := _OPERATOR_PAIR.fullmatch(self.path):
+                self._claim_operator_ticket(ticket[1])
+                return
             if not self._authorized():
                 return
             media_route = output_post(self.path)
@@ -526,6 +537,22 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 return
             status, data = session.request(preview_id)
             self._reply(status, data)
+
+        def _claim_operator_ticket(self, nonce: str) -> None:
+            if not self._same_site():
+                self._reply(HTTPStatus.FORBIDDEN, {"error": "site_origin_refused"})
+            elif self.headers.get_all("Content-Length") not in (None, ["0"]) or self.headers.get(
+                "Transfer-Encoding"
+            ):
+                self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
+            elif session.claim_ticket is None:
+                self._reply(HTTPStatus.NOT_FOUND, {"error": "pairing_unavailable"})
+            elif session.expires_at - time.monotonic() < 20 or session.expired:
+                self._reply(HTTPStatus.CONFLICT, {"error": "pairing_pending"})
+            elif not session.claim_ticket(nonce) or session.expired:
+                self._reply(HTTPStatus.CONFLICT, {"error": "pairing_pending"})
+            else:
+                self._reply(HTTPStatus.OK, {"code": session.code})
 
         def _prepare_promptpack(self, raw: bytes) -> None:
             packs = session.pack_catalog
