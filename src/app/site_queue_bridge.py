@@ -18,6 +18,9 @@ from threading import Event, Lock
 from typing import Any
 
 from src.app.site_output_catalog import SiteOutputCatalog, SiteOutputError
+from src.app.site_output_routes import output_post, output_read, parse_body
+from src.app.site_output_routes import post as post_output
+from src.app.site_output_routes import read as read_output
 from src.app.site_pack_catalog import PreparePack, SitePackCatalog
 from src.pipeline.reprocess_builder import extract_reprocess_output_paths
 from src.queue.job_history_store import JobHistoryEntry
@@ -94,6 +97,7 @@ class SiteSession:
 
     def revoke(self) -> None:
         self._revoked.set()
+        self.set_output_folder(None)
 
     def authorizes(self, value: str) -> bool:
         return not self.expired and hmac.compare_digest(
@@ -101,9 +105,16 @@ class SiteSession:
         )
 
     def set_output_folder(self, folder: Path | None) -> None:
-        catalog = SiteOutputCatalog(folder) if folder is not None else None
+        catalog = (
+            SiteOutputCatalog(folder, active=lambda: not self.expired)
+            if folder is not None
+            else None
+        )
         with self._lock:
+            previous = self._catalog
             self._catalog = catalog
+        if previous is not None:
+            previous.revoke()
 
     @property
     def output_catalog(self) -> SiteOutputCatalog | None:
@@ -363,14 +374,22 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 ("GET", _PREPARE_STATUS),
                 ("POST", _PREPARE),
             }
-            output_read = method == "GET" and (
+            legacy_output_read = method == "GET" and (
                 self.path == _OUTPUT_RUNS
                 or _OUTPUT_RUN.fullmatch(self.path)
                 or _OUTPUT_MEDIA.fullmatch(self.path)
                 or _PACK.fullmatch(self.path)
                 or _RESULT.fullmatch(self.path)
             )
-            if self._same_site() and ((method, self.path) in allowed or output_read):
+            media_route = (
+                method == "GET"
+                and output_read(self.path)
+                or method == "POST"
+                and output_post(self.path)
+            )
+            if self._same_site() and (
+                (method, self.path) in allowed or legacy_output_read or media_route
+            ):
                 self._reply(HTTPStatus.NO_CONTENT)
             else:
                 self._reply(HTTPStatus.FORBIDDEN, {"error": "site_origin_or_route_refused"})
@@ -386,6 +405,8 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 self._output()
             elif _OUTPUT_MEDIA.fullmatch(self.path):
                 self._output()
+            elif output_read(self.path):
+                self._media_workspace()
             elif self.path == _PREPARE_STATUS:
                 self._reply(HTTPStatus.OK, session.preparation())
             elif self.path == _PACKS or _PACK.fullmatch(self.path):
@@ -440,27 +461,62 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
             else:
                 self._reply(HTTPStatus.OK, result)
 
+        def _media_workspace(self, raw: bytes | None = None) -> None:
+            catalog = session.output_catalog
+            if catalog is None:
+                self._reply(HTTPStatus.FORBIDDEN, {"error": "output_folder_not_shared"})
+                return
+            try:
+                catalog.require_active()
+                result = (
+                    read_output(catalog, self.path)
+                    if raw is None
+                    else post_output(catalog, self.path, parse_body(raw))
+                )
+                catalog.require_active()
+            except SiteOutputError as exc:
+                self._reply(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
+            except (OSError, ValueError, RecursionError):
+                self._reply(HTTPStatus.CONFLICT, {"error": "output_unavailable"})
+                return
+            if session.output_catalog is not catalog:
+                self._reply(HTTPStatus.FORBIDDEN, {"error": "output_folder_not_shared"})
+            elif isinstance(result, tuple):
+                content_type, payload = result
+                self._send(HTTPStatus.OK, payload, content_type)
+            else:
+                self._reply(HTTPStatus.OK, result)
+
         def do_POST(self) -> None:
             if not self._authorized():
                 return
-            if self.path not in {_SUBMIT, _PREPARE}:
+            media_route = output_post(self.path)
+            if self.path not in {_SUBMIT, _PREPARE} and not media_route:
                 self._reply(HTTPStatus.NOT_FOUND, {"error": "unknown_route"})
                 return
             lengths = self.headers.get_all("Content-Length") or []
             length = (
                 int(lengths[0])
-                if len(lengths) == 1 and re.fullmatch(r"[0-9]{1,4}", lengths[0])
+                if len(lengths) == 1 and re.fullmatch(r"[0-9]{1,5}", lengths[0])
                 else 0
             )
             if (
                 self.headers.get_all("Content-Type") != ["application/json"]
                 or self.headers.get("Transfer-Encoding") is not None
-                or not 0 < length <= (4096 if self.path == _PREPARE else MAX_BODY)
+                or not 0
+                < length
+                <= (65536 if media_route else 4096 if self.path == _PREPARE else MAX_BODY)
             ):
                 self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
                 return
             try:
                 raw = self.rfile.read(length)
+                if len(raw) != length:
+                    raise ValueError("incomplete body")
+                if media_route:
+                    self._media_workspace(raw)
+                    return
                 if self.path == _PREPARE:
                     self._prepare_promptpack(raw)
                     return

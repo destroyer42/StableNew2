@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -10,6 +11,7 @@ import pytest
 from src.app.site_output_catalog import SiteOutputCatalog, SiteOutputError
 from src.app.site_queue_bridge import SiteSession
 from src.gui import site_connection_dialog
+from src.video.video_eval_ratings_store import RATING_COLUMNS, load_ratings, render_csv
 from src.video.video_eval_run import RUN_SCHEMA
 from tests.controller.test_site_queue_bridge import request
 
@@ -111,6 +113,83 @@ def test_report_must_match_manifest_and_current_folder_grant(report):
     assert request(session, "GET", route, **options)[2] == {"error": "output_folder_not_shared"}
     session.revoke()
     assert request(session, "GET", route, **options)[0] == 401
+
+
+def test_paired_review_saves_one_exact_row_and_conflicts_on_stale_bytes(report):
+    output, directory, _metrics = report
+    csv_path = directory / "ratings.csv"
+    header = (*RATING_COLUMNS, "operator_extra")
+    rows = [
+        {"case_id": "case-one", "arm_id": "baseline", "job_id": "first", "operator_extra": "Keep"},
+        {"case_id": "case-two", "arm_id": "baseline", "job_id": "second", "notes": "Other clip"},
+        {"notes": "Keyless observation"},
+    ]
+    csv_path.write_bytes(render_csv(header, rows).encode())
+    session = SiteSession()
+    session.set_output_folder(output)
+    auth = {"token": session.code}
+    route = f"/v1/output/review/{RUN_ID}"
+    status, _, loaded = request(session, "GET", route, **auth)
+    assert status == 200
+    assert str(output) not in json.dumps(loaded)
+    clip = loaded["clips"][0]
+    assert clip["rating"]["notes"] == ""
+    body = {
+        "case_id": clip["case"],
+        "arm_id": clip["arm_id"],
+        "job_id": clip["job_id"],
+        "scope": loaded["scope"],
+        "revision": loaded["revision"],
+        "artifact_sha256": clip["artifact_sha256"],
+        "source_sha256": clip["source_sha256"],
+        "rebind": False,
+        "judgments": {"requested_action": "achieved", "notes": "Café\nSecond line"},
+    }
+
+    def save(payload):
+        return request(
+            session, "POST", route + "/rating", body=json.dumps(payload).encode(), **auth
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(
+            workers.map(
+                save,
+                [
+                    body,
+                    {
+                        **body,
+                        "judgments": {
+                            "requested_action": "partially_achieved",
+                            "notes": "Alternative",
+                        },
+                    },
+                ],
+            )
+        )
+    assert sorted(result[0] for result in results) == [200, 409]
+    receipt = next(result[2] for result in results if result[0] == 200)
+    assert receipt["saved"]
+    assert receipt["revision"] == hashlib.sha256(csv_path.read_bytes()).hexdigest()
+    saved = load_ratings(csv_path)
+    assert saved.rows[0]["operator_extra"] == "Keep"
+    assert saved.rows[0]["artifact_sha256"] == clip["artifact_sha256"]
+    assert saved.rows[1]["notes"] == "Other clip"
+    assert saved.keyless[0]["notes"] == "Keyless observation"
+    winner = (
+        body
+        if results[0][0] == 200
+        else {
+            **body,
+            "judgments": {"requested_action": "partially_achieved", "notes": "Alternative"},
+        }
+    )
+    assert save(winner)[2] == receipt  # acknowledgement lost and retried
+    (output / "source.png").write_bytes(b"source changed after opening")
+    assert save({**body, "revision": receipt["revision"]})[2] == {"error": "media_changed"}
+    assert load_ratings(csv_path) == saved
+    session.set_output_folder(None)
+    assert save(body)[0] == 403
 
 
 def test_operator_site_registers_a_visible_toolbar_button_without_opening_connection(monkeypatch):

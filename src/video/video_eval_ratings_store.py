@@ -22,11 +22,13 @@ from __future__ import annotations
 import csv
 import io
 import os
-from collections.abc import Iterable, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from src.assets.cache_lock import registry_cache_lock
 from src.utils.atomic_io import atomic_write_bytes
 from src.video.video_eval_rubric import (
     ACTION_COLUMN,
@@ -107,16 +109,18 @@ def _parse(raw: bytes, path: Path) -> tuple[tuple[str, ...], list[dict[str, str]
     return header, rows
 
 
-def load_ratings(path: str | Path) -> LoadedRatings:
+def load_ratings(
+    path: str | Path, *, reader: Callable[[Path], bytes | None] | None = None
+) -> LoadedRatings:
     """Read the existing file, or return an empty result when there is none. Raises ``RatingsFileError``."""
 
     target = Path(path)
     try:
-        if not target.exists():
+        raw = reader(target) if reader is not None else _read_file(target)
+        if raw is None:
             return LoadedRatings(path=target)
-        if target.stat().st_size > MAX_RATINGS_BYTES:
+        if len(raw) > MAX_RATINGS_BYTES:
             raise RatingsFileError(f"{target.name} is larger than {MAX_RATINGS_BYTES // 1024} KiB")
-        raw = target.read_bytes()
     except OSError as exc:
         raise RatingsFileError(f"{target.name} cannot be read: {exc}") from exc
     header, rows = _parse(raw, target)
@@ -138,6 +142,14 @@ def load_ratings(path: str | Path) -> LoadedRatings:
     return LoadedRatings(
         path=target, raw=raw, header=header, rows=tuple(keyed), keyless=tuple(keyless)
     )
+
+
+def _read_file(path: Path) -> bytes | None:
+    try:
+        with path.open("rb") as stream:
+            return stream.read(MAX_RATINGS_BYTES + 1)
+    except FileNotFoundError:
+        return None
 
 
 def output_header(loaded: LoadedRatings) -> tuple[str, ...]:
@@ -214,7 +226,12 @@ def _shape(rows: Iterable[Mapping[str, str]], header: Sequence[str]) -> list[dic
 
 
 def write_ratings(
-    loaded: LoadedRatings, header: Sequence[str], rows: Sequence[Mapping[str, str]]
+    loaded: LoadedRatings,
+    header: Sequence[str],
+    rows: Sequence[Mapping[str, str]],
+    *,
+    before_replace: Callable[[], None] | None = None,
+    reader: Callable[[Path], bytes | None] | None = None,
 ) -> Path | None:
     """Publish ``rows``; returns the recovery copy's path when an older layout was converted.
 
@@ -222,18 +239,25 @@ def write_ratings(
     the recovery copy cannot be made, or the written file does not read back as intended.
     """
 
+    deadline = time.monotonic() + 1.5
+    try:
+        with registry_cache_lock(loaded.path, cancelled=lambda: time.monotonic() >= deadline):
+            return _write_ratings(loaded, header, rows, before_replace, reader or _read_file)
+    except OSError as exc:
+        raise RatingsFileError(f"{loaded.path.name} is locked or could not be accessed") from exc
+
+
+def _write_ratings(
+    loaded: LoadedRatings,
+    header: Sequence[str],
+    rows: Sequence[Mapping[str, str]],
+    before_replace: Callable[[], None] | None,
+    reader: Callable[[Path], bytes | None],
+) -> Path | None:
     path = loaded.path
     expected = _shape(rows, header)
-    if (
-        tuple(loaded.header) == tuple(header)
-        and _shape((*loaded.rows, *loaded.keyless), header) == expected
-    ):
-        return None  # nothing to change; leave the operator's file alone
-    backup = (
-        _backup_legacy(loaded) if loaded.exists and tuple(loaded.header) != tuple(header) else None
-    )
     try:
-        on_disk = path.read_bytes() if path.exists() else None
+        on_disk = reader(path)
     except OSError as exc:
         raise RatingsFileError(f"{path.name} cannot be re-read before writing: {exc}") from exc
     if on_disk != loaded.raw:
@@ -241,12 +265,22 @@ def write_ratings(
             f"{path.name} changed while the report was being built; nothing was overwritten. "
             "Build the report again."
         )
+    if (
+        tuple(loaded.header) == tuple(header)
+        and _shape((*loaded.rows, *loaded.keyless), header) == expected
+    ):
+        return None
+    if before_replace is not None:
+        before_replace()
+    backup = (
+        _backup_legacy(loaded) if loaded.exists and tuple(loaded.header) != tuple(header) else None
+    )
     try:
         # Bytes, not text: text mode would turn a newline inside a note into CRLF on Windows.
         atomic_write_bytes(path, render_csv(header, expected).encode("utf-8"))
     except OSError as exc:
         raise RatingsFileError(f"{path.name} could not be written: {exc}") from exc
-    written = load_ratings(path)
+    written = load_ratings(path, reader=reader)
     if (
         tuple(written.header) != tuple(header)
         or _shape((*written.rows, *written.keyless), header) != expected

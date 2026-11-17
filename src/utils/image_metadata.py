@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, BinaryIO, NamedTuple
 
 from PIL import Image, PngImagePlugin
 
@@ -264,7 +264,7 @@ def write_jpg_metadata(path: Path, kv: dict[str, str]) -> bool:
         return False
 
 
-def read_jpg_metadata(path: Path | io.BytesIO) -> dict[str, str]:
+def read_jpg_metadata(path: Path | BinaryIO) -> dict[str, str]:
     try:
         with Image.open(path) as img:
             exif = img.getexif()

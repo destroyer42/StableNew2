@@ -18,6 +18,7 @@ from src.app.site_queue_bridge import (
     SiteSession,
     SubmissionReceipt,
 )
+from src.config.app_config import output_dir_default
 from src.contracts import PackJobEntry
 from src.controller.app_controller_services.pack_draft_service import SitePackDraft
 from src.controller.app_controller_services.run_submission_service import (
@@ -25,6 +26,7 @@ from src.controller.app_controller_services.run_submission_service import (
     same_preview,
 )
 from src.pipeline.job_models_v2 import UnifiedJobSummary, WorkloadKind
+from src.state.output_routing import get_output_root
 
 log = logging.getLogger(__name__)
 _MAX_PREVIEW_JOBS = 250
@@ -310,13 +312,6 @@ class SiteConnectionDialog:
             text="Paste this code into Connect StableNew on the Site. This connection expires in 15 minutes.",
             wraplength=370,
         ).pack(anchor="w", pady=(5, 12))
-        code = ttk.Entry(frame, width=48)
-        code.insert(0, session.code)
-        code.configure(state="readonly")
-        code.pack(fill="x")
-        ttk.Button(frame, text="Copy pairing code", command=lambda: self._copy(session.code)).pack(
-            anchor="w", pady=6
-        )
         ttk.Label(
             frame,
             text="The paired Site can read visible PromptPacks, build Previews and submit its own Preview to the queue. Keep this window open. Close it to revoke access.",
@@ -324,18 +319,65 @@ class SiteConnectionDialog:
         ).pack(anchor="w", pady=(4, 8))
         output_status = ttk.Label(frame, text="Output folder is private.", wraplength=370)
         output_status.pack(anchor="w")
+        config = getattr(self.app, "_config_manager", None)
+        settings = config.load_settings() if config is not None else {}
+        configured = settings.get("output_dir") if isinstance(settings, dict) else None
+        if not isinstance(configured, str):
+            configured = None
+        output_root = (
+            get_output_root(
+                configured or getattr(self.app, "output_dir", None) or output_dir_default(),
+                create=False,
+            )
+            .expanduser()
+            .absolute()
+        )
+        share_configured = tk.BooleanVar(master=dialog, value=True)
+
+        def share_default() -> None:
+            if share_configured.get():
+                if not self._grant_output(session, output_root, output_status):
+                    share_configured.set(False)
+            else:
+                self._stop_sharing_output(session, output_status)
+
+        def stop_output() -> None:
+            share_configured.set(False)
+            self._stop_sharing_output(session, output_status)
+
+        ttk.Checkbutton(
+            frame,
+            text="Share configured Output with this pairing",
+            variable=share_configured,
+            command=share_default,
+        ).pack(anchor="w")
+        ttk.Label(
+            frame,
+            text="Allows the private Site to view output media and metadata and save ratings and albums on this PC.",
+            wraplength=370,
+        ).pack(anchor="w")
+        share_default()
         output_controls = ttk.Frame(frame)
         output_controls.pack(anchor="w", pady=(3, 10))
         ttk.Button(
             output_controls,
-            text="Share eval output…",
-            command=lambda: self._share_output(session, dialog, output_status),
+            text="Change output folder…",
+            command=lambda: self._share_output(
+                session, dialog, output_status, share_configured, output_root
+            ),
         ).pack(side="left")
         ttk.Button(
             output_controls,
             text="Stop sharing output",
-            command=lambda: self._stop_sharing_output(session, output_status),
+            command=stop_output,
         ).pack(side="left", padx=(6, 0))
+        code = ttk.Entry(frame, width=48)
+        code.insert(0, session.code)
+        code.configure(state="readonly")
+        code.pack(fill="x")
+        ttk.Button(frame, text="Copy pairing code", command=lambda: self._copy(session.code)).pack(
+            anchor="w", pady=6
+        )
         pack_status = ttk.Label(frame, text="PromptPack selection is private.", wraplength=370)
         pack_status.pack(anchor="w")
         ttk.Button(
@@ -383,23 +425,35 @@ class SiteConnectionDialog:
             default=messagebox.NO,
         )
 
-    def _share_output(self, session: SiteSession, dialog: tk.Toplevel, status: ttk.Label) -> None:
+    def _share_output(
+        self,
+        session: SiteSession,
+        dialog: tk.Toplevel,
+        status: ttk.Label,
+        share_configured: tk.BooleanVar,
+        output_root: Path,
+    ) -> None:
         folder = filedialog.askdirectory(
             parent=dialog,
             title="Choose the StableNew output folder to share for this session",
-            initialdir=str(getattr(self.app, "output_dir", None) or "output"),
+            initialdir=str(output_root),
             mustexist=True,
         )
         if not folder or session.expired or dialog is not self.dialog:
             return
+        if self._grant_output(session, Path(folder), status):
+            share_configured.set(Path(folder).absolute() == output_root)
+
+    @staticmethod
+    def _grant_output(session: SiteSession, folder: Path, status: ttk.Label) -> bool:
         try:
-            session.set_output_folder(Path(folder))
+            folder = folder.resolve(strict=True)
+            session.set_output_folder(folder)
         except (OSError, ValueError):
             status.configure(text="The selected output folder could not be opened.")
-            return
-        status.configure(
-            text="Eval reports and matching media are shared read-only for this session."
-        )
+            return False
+        status.configure(text=f"Shared for this session\n{folder}")
+        return True
 
     @staticmethod
     def _stop_sharing_output(session: SiteSession, status: ttk.Label) -> None:
