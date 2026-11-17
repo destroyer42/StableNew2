@@ -2342,7 +2342,17 @@ class ReviewTabFrame(ttk.Frame):
         """Discard's file move; runs on the Review worker with the context bound on the Tk thread."""
 
         root, queue = self._archive_context
-        active = (lambda: active_input_paths(queue)) if queue is not None else None
+
+        def unreadable() -> set[str]:
+            raise RuntimeError("the job queue is not reachable")
+
+        # With a controller but no reachable queue the move is refused (fail closed); with no controller at all
+        # (a bare tab) there is no queue that could be using the file.
+        active = (
+            (lambda: active_input_paths(queue))
+            if queue is not None
+            else (unreadable if self.app_controller is not None else None)
+        )
         return archive_file(path, output_root=root, active_inputs=active)
 
     def _restore_on_worker(self, path: Path, digest: str, use_alternative: bool) -> ArchiveOutcome:

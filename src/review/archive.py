@@ -282,7 +282,10 @@ def job_queue_of(controller: Any) -> Any:
         job_service = getattr(source, "job_service", None)
         getter = getattr(source, "get_job_service", None)
         if job_service is None and callable(getter):
-            job_service = getter()
+            try:
+                job_service = getter()
+            except Exception:  # noqa: BLE001 - "no queue found" is handled by the caller (it refuses the move)
+                job_service = None
         queue = getattr(job_service, "job_queue", None)
         if queue is not None:
             return queue

@@ -162,6 +162,23 @@ def test_an_image_used_by_a_queued_job_stays_discarded_in_place_with_the_reason_
 
 
 @pytest.mark.gui
+def test_a_controller_without_a_reachable_queue_refuses_the_move(tk_root, tmp_path):
+    from types import SimpleNamespace
+
+    tab = ReviewTabFrame(tk_root, app_controller=SimpleNamespace())  # no job service at all
+    try:
+        paths = _outputs(tmp_path)
+        _attach_writer(tab, tmp_path)
+        tab._set_selected_images(paths)
+        tab._on_decision_key("discard")
+        assert paths[0].exists()
+        assert "queue could not be read" in tab._feedback_status_var.get()
+        assert tab._session.state_of(item_key(paths[0])) is ItemState.ARCHIVED
+    finally:
+        tab.destroy()
+
+
+@pytest.mark.gui
 def test_restore_offers_a_new_name_when_a_different_file_took_the_original_path(tk_root, tmp_path):
     tab = ReviewTabFrame(tk_root)
     try:
