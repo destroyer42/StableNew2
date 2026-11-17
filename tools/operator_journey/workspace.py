@@ -24,14 +24,18 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Directories whose contents belong to the operator, never to a journey.
 _PROTECTED_DIRS = ("state", "data", "presets", "config", "packs")
-# Immutable, checked-in manifests that Offline AI Assist reads to report its installation status, and the Forge runtime
-# manifest the Forge image backend reads when the isolated workspace selects the Forge identity (exact repo-relative
-# paths, read-only).  Nothing else under a protected directory is exempt, and a write to either is still a violation.
+# Immutable, checked-in manifests that production code reads from the repository during a journey (exact repo-relative
+# paths, read-only): the two Offline AI Assist manifests that report its installation status, the Forge runtime manifest
+# the Forge image backend reads when the isolated workspace selects the Forge identity, and the managed ComfyUI runtime
+# manifest that video launch-flag preflight and ``ComfyWorkflowBackend`` read through ``workflow_launch_requirements``
+# whenever a Comfy launch command is configured.  Each holds installation identity and launch policy only, never operator
+# data.  Nothing else under a protected directory is exempt, and a write to any of them is still a violation.
 _COMMITTED_READ_ONLY = frozenset(
     {
         "config/managed_ai_runtime.json",
         "config/ai_model_registry.json",
         "config/managed_forge_runtime.json",
+        "config/managed_comfy_runtime.json",
     }
 )
 _ENV_KEYS = (
