@@ -73,5 +73,7 @@ def test_startup_shares_configured_output_and_visible_packs_without_opening_a_di
     session = listener.call_args.args[0]
     assert session.output_catalog is not None
     assert session.pack_catalog is not None
-    dialog.close()
+    dialog._timer = "pending"
+    dialog.shutdown()
+    dialog.root.after_cancel.assert_not_called()
     listener.return_value.close.assert_called_once()

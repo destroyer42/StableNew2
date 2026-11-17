@@ -545,11 +545,12 @@ class SiteConnectionDialog:
         if event.widget is self.dialog:
             self.dialog = None
 
-    def _disconnect(self) -> None:
+    def _disconnect(self, *, cancel_timer: bool = True) -> None:
         self.dialog = None
         self.connection = None
         if self._timer is not None:
-            self.root.after_cancel(self._timer)
+            if cancel_timer:
+                self.root.after_cancel(self._timer)
             self._timer = None
         if self.listener is not None:
             self.listener.close()
@@ -561,6 +562,10 @@ class SiteConnectionDialog:
         if dialog is not None:
             dialog.destroy()
 
+    def shutdown(self) -> None:
+        """Revoke the session after the main loop exits, even if Tk is gone."""
+        self._disconnect(cancel_timer=False)
+
 
 def install_site_connection_control(
     root: tk.Tk, app: Any, header: ttk.Frame
@@ -571,4 +576,5 @@ def install_site_connection_control(
         header, text="Operator Site", style="Secondary.TButton", command=connection.open
     )
     button.grid(row=0, column=header.grid_size()[0], padx=4, pady=4)
+    root.after(0, connection.start_default)
     return connection
