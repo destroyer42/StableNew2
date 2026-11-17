@@ -115,8 +115,8 @@ sessions also using the machine.
   the standard handles point at pytest's capture files. The relaunch therefore runs from `pytest_configure`
   (`tryfirst`), where the real handles are back, still before collection and before any Tk interpreter exists
   (`tkinter` itself may already be imported by `tests/conftest.py`; importing it creates no window).
-- **Efficiency-core affinity is off by default (deviation from Goal 2, needs owner acceptance).** With below-normal
-  priority *and* efficiency-core affinity, `tests/gui_v2` + `tests/tools` took 95 min instead of 49 min visible, and
+- **Efficiency-core affinity is off by default (deviation from Goal 2, accepted by the owner on 2026-11-17:
+  "Accept opt-in").** With below-normal priority *and* efficiency-core affinity, `tests/gui_v2` + `tests/tools` took 95 min instead of 49 min visible, and
   two layout tests in `tests/gui_v2/test_focused_operator_workspace_110.py` (fixed 160 ms main-loop settle) failed
   that pass visibly. Controlled reruns of that file, 3 runs each: hidden desktop at normal priority on all cores 27/27;
   below-normal on all cores 27/27; normal priority on efficiency cores 27/27; below-normal on efficiency cores
