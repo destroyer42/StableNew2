@@ -162,7 +162,7 @@ def test_unexpected_scan_failure_clears_scanning_and_allows_retry(tmp_path, monk
     registry = get_thread_registry()
     spawn = registry.spawn
 
-    def record_spawn(*, target, **options):
+    def record_spawn(_registry, *, target, **options):
         def run():
             try:
                 target()
@@ -174,7 +174,7 @@ def test_unexpected_scan_failure_clears_scanning_and_allows_retry(tmp_path, monk
     def broken(_cancel):
         raise ValueError("Unreadable metadata fixture")
 
-    monkeypatch.setattr(registry, "spawn", record_spawn)
+    monkeypatch.setattr(type(registry), "spawn", record_spawn)
     monkeypatch.setattr(library, "_scan", broken)
     library.start()
     assert completed.wait(3)
@@ -196,10 +196,10 @@ def test_unexpected_scan_failure_clears_scanning_and_allows_retry(tmp_path, monk
 def test_spawn_failure_clears_scanning(tmp_path, monkeypatch):
     from src.utils.thread_registry import get_thread_registry
 
-    def unavailable(**_options):
+    def unavailable(_registry, **_options):
         raise RuntimeError("Thread startup fixture")
 
-    monkeypatch.setattr(get_thread_registry(), "spawn", unavailable)
+    monkeypatch.setattr(type(get_thread_registry()), "spawn", unavailable)
     library = SiteOutputCatalog(tmp_path).library
     library.start()
     assert not library.index.scanning
@@ -217,7 +217,7 @@ def test_completed_worker_does_not_clear_a_new_refresh(tmp_path, monkeypatch):
     registry = get_thread_registry()
     spawn = registry.spawn
 
-    def record_spawn(*, target, **options):
+    def record_spawn(_registry, *, target, **options):
         def run():
             target()
             if len(workers) == 2:
@@ -237,7 +237,7 @@ def test_completed_worker_does_not_clear_a_new_refresh(tmp_path, monkeypatch):
             assert release_second.wait(3)
             library._publish({}, scanning=False, limited=False, error=False)
 
-    monkeypatch.setattr(registry, "spawn", record_spawn)
+    monkeypatch.setattr(type(registry), "spawn", record_spawn)
     monkeypatch.setattr(library, "_scan", controlled_scan)
     try:
         library.start()
