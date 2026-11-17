@@ -34,7 +34,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Protocol
 
 DESKTOP_NAME = "StableNewTests"
@@ -312,7 +312,7 @@ def relaunch_pytest_session(
 def _is_pytest_cli(argv: Sequence[str], orig: Sequence[str]) -> bool:
     if not argv or len(orig) < len(argv):
         return False
-    entry = Path(argv[0])
+    entry = PureWindowsPath(argv[0])  # splits on "/" and "\\" on every host OS
     by_module = entry.name == "__main__.py" and entry.parent.name == "pytest"
     by_script = entry.stem.lower() in {"pytest", "py.test"}
     if not (by_module or by_script):
