@@ -98,3 +98,44 @@ nested pytest runs. Skipped when `CI` is set, off Windows, or when `STABLENEW_TE
    latency during a 2-worker census, before and after. If stutter persists, look next at shared files and disk
    I/O between the test tree and the live checkout, and report rather than widen scope.
 5. Unit tests for `quiet_run` with a fake Win32; `python tools/ci/run_pr_gate.py`; `tests/tools` (ratchets).
+
+## Outcome (builder findings, 2026-11-17)
+
+Measured on the owner's i9-13900K (Windows 11, 32 logical CPUs) at the implementation branch, with other agent
+sessions also using the machine.
+
+- **Spike passed.** On the private desktop Tk reports `winfo_viewable() == 1`, the requested geometry, `focus_get`
+  following `focus_force` (root, entry and a `Toplevel`), and `event_generate` key and click events firing, all
+  identical to the interactive desktop. `GetForegroundWindow` returns no window there.
+- **Screen capture does not work on the private desktop** (`ImageGrab.grab` raises `screen grab failed`). Only the
+  opt-in physical lane (`STABLENEW_DESKTOP_LANE=1`, `WindowsDesktopDriver.screenshot`) captures screenshots, and it
+  already stays on the real desktop; the simulated golden-path suite run by pytest takes none. So that lane keeps the
+  visible path and nothing else needed to change.
+- **Relaunch point.** pytest starts file-descriptor capture before importing conftests, so at conftest import time
+  the standard handles point at pytest's capture files. The relaunch therefore runs from `pytest_configure`
+  (`tryfirst`), where the real handles are back, still before collection and before any Tk interpreter exists
+  (`tkinter` itself may already be imported by `tests/conftest.py`; importing it creates no window).
+- **Efficiency-core affinity is off by default (deviation from Goal 2, needs owner acceptance).** With below-normal
+  priority *and* efficiency-core affinity, `tests/gui_v2` + `tests/tools` took 95 min instead of 49 min visible, and
+  two layout tests in `tests/gui_v2/test_focused_operator_workspace_110.py` (fixed 160 ms main-loop settle) failed
+  that pass visibly. Controlled reruns of that file, 3 runs each: hidden desktop at normal priority on all cores 27/27;
+  below-normal on all cores 27/27; normal priority on efficiency cores 27/27; below-normal on efficiency cores
+  (hidden or visible) 1 failure every run. The hidden desktop is not the cause; the combination is. Goal 4 and the
+  stated failure condition win, so the default is below-normal priority on all cores and
+  `STABLENEW_TESTS_CORES=efficiency` restores the affinity.
+- **Outcome sets.** Hidden with the default: 6382 passed, 7 failed, 13 skipped (48 min). Visible
+  (`STABLENEW_TESTS_VISIBLE=1`): 6377 passed, 7 failed, 13 skipped (49 min). No test changed status. The pass-count
+  difference is the new `tests/tools/test_quiet_run.py` cases added between the runs. The same 7 tests fail both ways
+  for environmental reasons: worktree config isolation in five golden-path journeys, a "duplicate StableNew/WebUI
+  process" admission refusal with the owner's app running, and `test_gui_seam_743` in full-suite order.
+  One `ai115b` parametrized test builds its IDs from an unordered set, so its IDs differ between runs.
+- **Isolation.** During hidden runs (5,640 and 2,861 one-second samples, 503 and 384 processes: python, git, ruff,
+  ffmpeg, ffprobe, powershell, cmd, conhost, nvidia-smi, typeperf) `EnumWindows` on the interactive desktop found no
+  window owned by the test tree, and every process ran below normal priority (CPUs 16-31 with efficiency
+  affinity, all 32 by default), except the relaunching pytest parent, which only waits.
+- **Responsiveness.** A withdrawn Tk probe at normal priority on the interactive desktop measured `after(10)`
+  lateness: idle p50 5.5 / p99 6.6 / max 14.2 ms; 2-worker census visible 5.5 / 11.5 / 15.7; quiet with efficiency
+  cores 5.5 / 6.8 / 28.1; quiet on all cores 5.4 / 12.7 / 21.2; idle again 5.5 / 11.4 / 15.4; no callback over 50 ms
+  in any case. A 2-worker census does not saturate this CPU, so scheduling latency is not where the stutter comes
+  from. The likely cause is test windows taking focus and appearing over the live app, which the private desktop
+  removes. A withdrawn probe cannot measure that; shared files and disk I/O were not measured.

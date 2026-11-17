@@ -166,7 +166,7 @@ def test_pass_through_runs_the_command_unchanged(monkeypatch) -> None:
 # -- the quiet launch -------------------------------------------------------------------------------------------------
 
 
-def test_quiet_launch_uses_hidden_desktop_low_priority_job_and_efficiency_cores(
+def test_quiet_launch_uses_hidden_desktop_and_low_priority_job_on_all_cores_by_default(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(qr.os, "cpu_count", lambda: 32)
@@ -180,7 +180,7 @@ def test_quiet_launch_uses_hidden_desktop_low_priority_job_and_efficiency_cores(
     assert started["environment"]["STABLENEW_QUIET_RUN"] == "1"
     assert started["cwd"] == "C:\\work"
     assert started["command_line"].endswith("-c \"print('a b')\"")
-    assert ("create_job", qr.BELOW_NORMAL_PRIORITY_CLASS, 0xFFFF0000) in fake.calls
+    assert ("create_job", qr.BELOW_NORMAL_PRIORITY_CLASS, None) in fake.calls
     # created suspended, put in the job, then resumed: no instant outside the job's limits
     order = [call[0] for call in fake.calls]
     assert order.index("assign") < order.index("resume") < order.index("wait")
@@ -190,7 +190,13 @@ def test_quiet_launch_uses_hidden_desktop_low_priority_job_and_efficiency_cores(
 
 @pytest.mark.parametrize(
     ("value", "affinity"),
-    [("all", None), ("ALL ", None), ("efficiency", 0xFFFF0000), ("bogus", 0xFFFF0000)],
+    [
+        ("all", None),
+        ("ALL ", None),
+        ("efficiency", 0xFFFF0000),
+        (" Efficiency", 0xFFFF0000),
+        ("bogus", None),
+    ],
 )
 def test_cores_setting_chooses_efficiency_affinity_or_priority_only(
     monkeypatch, value, affinity
@@ -199,8 +205,6 @@ def test_cores_setting_chooses_efficiency_affinity_or_priority_only(
     fake = FakeWin32(cores=HYBRID)
     assert _run(fake, env={**LOCAL, "STABLENEW_TESTS_CORES": value})[0] == 0
     assert ("create_job", qr.BELOW_NORMAL_PRIORITY_CLASS, affinity) in fake.calls
-    if value.strip() != "efficiency" and value != "bogus":
-        assert qr.cores_setting({"STABLENEW_TESTS_CORES": value}) == "all"
 
 
 def test_missing_desktop_warns_once_and_runs_visibly_at_low_priority() -> None:
@@ -222,7 +226,7 @@ def test_desktop_start_failure_falls_back_to_a_visible_start() -> None:
 def test_without_a_job_the_child_still_gets_priority_and_affinity(monkeypatch) -> None:
     monkeypatch.setattr(qr.os, "cpu_count", lambda: 32)
     fake = FakeWin32(cores=HYBRID, assign_ok=False)
-    assert _run(fake)[0] == 0
+    assert _run(fake, env={**LOCAL, "STABLENEW_TESTS_CORES": "efficiency"})[0] == 0
     assert ("set_affinity", 100, 0xFFFF0000) in fake.calls
     assert fake.started[0]["priority_class"] == qr.BELOW_NORMAL_PRIORITY_CLASS
 

@@ -3,11 +3,16 @@
     python tools/ci/quiet_run.py -- python -m pytest tests/gui_v2
 
 On a local Windows machine the command runs on a private desktop (``StableNewTests``) that has no input or display,
-inside a job object at below-normal priority and, on a hybrid CPU, only on the efficiency cores. Tk windows there are
+inside a job object at below-normal priority. Tk windows there are
 real and viewable (layout, focus and ``event_generate`` behave as on the interactive desktop), but nothing reaches the
 operator's screen or takes focus from the live application. Children inherit the desktop, the job and its limits;
 ``KILL_ON_JOB_CLOSE`` ends the whole tree when this process ends, so a cancelled or killed run leaves no hidden
 orphans. Standard streams are the caller's own handles, and the exit code is the child's.
+
+``STABLENEW_TESTS_CORES=efficiency`` also limits the job to the efficiency cores of a hybrid CPU. It is off by default:
+measured on the owner's i9-13900K, below-normal priority plus efficiency cores roughly doubled the gui_v2/tools wall time and
+made two timing-sensitive layout tests fail that pass visibly, with no measurable gain in a normal-priority Tk loop's
+latency over priority alone (``docs/superpowers/specs/2026-11-16-unobtrusive-local-tests-design.md``, Outcome).
 
 Pass-through (the command runs exactly as before) when hosted CI is detected (``CI`` set), off Windows, when the
 operator opts out with ``STABLENEW_TESTS_VISIBLE=1``, for the opt-in physical-input lane (``STABLENEW_DESKTOP_LANE=1``,
@@ -39,7 +44,7 @@ DESKTOP_LANE_ENV = "STABLENEW_DESKTOP_LANE"
 CORES_ENV = "STABLENEW_TESTS_CORES"
 CORES_EFFICIENCY = "efficiency"
 CORES_ALL = "all"
-DEFAULT_CORES = CORES_EFFICIENCY
+DEFAULT_CORES = CORES_ALL
 
 
 def cores_setting(environ: Mapping[str, str]) -> str:
