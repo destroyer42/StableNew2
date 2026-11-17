@@ -27,6 +27,7 @@ from src.review.review_metadata_service import (
     ReviewMetadataService,
     ReviewMetadataStampResult,
 )
+from src.utils.image_metadata import extract_embedded_metadata, resolve_model_vae_fields
 
 RATING_KIND = "review_tab_feedback"
 RATING_SOURCE = "review_tab"
@@ -36,6 +37,9 @@ DISPOSITION_SOURCE = "review_tab_disposition"
 DISPOSITIONS = ("retain", "discard", "rework")
 #: Written by Undo: the latest row for the bytes then says "no decision", so the image is to be reviewed again.
 DISPOSITION_CLEARED = "cleared"
+#: Soft ``user_rating`` a decision contributes as observational Learning evidence (owner decision, 2026-11-17).
+#: Re-work is not scored: it says the image needs more work, not whether its settings were good.
+DISPOSITION_SOFT_SCORES: dict[str, float] = {"retain": 4.0, "discard": 2.0}
 
 INSPECTION_KIND = "review_inspection"
 #: Distinct from ``RATING_SOURCE`` and ``DISPOSITION_SOURCE``: rating listing, disposition lookup and "Undo Last Save"
@@ -193,6 +197,55 @@ def build_review_rating_record(
     )
 
 
+def _section(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _first(*values: Any) -> Any:
+    return next((value for value in values if value not in (None, "")), None)
+
+
+def _generation_settings(path: str, digest: str, *, bytes_verified: bool) -> dict[str, Any]:
+    """Model, sampler, scheduler, steps, CFG and stage read from the image's embedded metadata (``{}`` if unreadable).
+
+    The settings describe the bytes, so they are read only from a file whose bytes are the reviewed ones: another file
+    that now occupies the path (or no file at all) yields nothing rather than someone else's settings.
+    """
+
+    if not bytes_verified and file_sha256(path) != digest:
+        return {}
+    result = extract_embedded_metadata(Path(path))
+    if result.status != "ok" or not isinstance(result.payload, dict):
+        return {}
+    payload = result.payload
+    manifest = _section(payload.get("stage_manifest"))
+    config = _section(manifest.get("config"))
+    generation = _section(payload.get("generation"))
+    model, _vae = resolve_model_vae_fields(payload)
+    found = {
+        "model": str(model or ""),
+        "sampler": str(
+            _first(
+                config.get("sampler_name"),
+                config.get("sampler"),
+                manifest.get("sampler_name"),
+                generation.get("sampler_name"),
+            )
+            or ""
+        ),
+        "scheduler": str(
+            _first(config.get("scheduler"), manifest.get("scheduler"), generation.get("scheduler"))
+            or ""
+        ),
+        "steps": _first(config.get("steps"), manifest.get("steps"), generation.get("steps")),
+        "cfg_scale": _first(
+            config.get("cfg_scale"), manifest.get("cfg_scale"), generation.get("cfg_scale")
+        ),
+        "stage": str(_first(manifest.get("stage"), payload.get("stage")) or ""),
+    }
+    return {key: value for key, value in found.items() if value not in (None, "")}
+
+
 def build_disposition_record(
     *,
     image_path: str | os.PathLike[str],
@@ -200,8 +253,15 @@ def build_disposition_record(
     artifact_sha256: str | None = None,
     source_job_id: str = "",
     notes: str = "",
+    known_settings: Mapping[str, Any] | None = None,
 ) -> LearningRecord:
-    """Build a Retain / Discard / Re-work record bound to the image bytes (nothing is written or moved)."""
+    """Build a Retain / Discard / Re-work record bound to the image bytes (nothing is written or moved).
+
+    A Retain or Discard also carries the generation settings read from those bytes and a soft ``user_rating``
+    (``DISPOSITION_SOFT_SCORES``), which makes it observational Learning evidence. Re-work and the clearing row carry
+    neither. ``known_settings`` are the settings already recorded for the same bytes; they are used only when the file
+    cannot supply them, so a decision never depends on the file still being at ``image_path``.
+    """
 
     value = str(disposition or "").strip().lower()
     if value not in (*DISPOSITIONS, DISPOSITION_CLEARED):
@@ -209,7 +269,8 @@ def build_disposition_record(
     path_text = str(image_path or "").strip()
     if not path_text:
         raise ValueError("image_path is required")
-    digest = normalize_digest(artifact_sha256) or (file_sha256(path_text) or "")
+    supplied = normalize_digest(artifact_sha256)
+    digest = supplied or (file_sha256(path_text) or "")
     if not digest:
         raise ValueError("The image could not be read, so its identity cannot be recorded.")
     metadata: dict[str, Any] = {
@@ -225,19 +286,84 @@ def build_disposition_record(
     }
     if str(source_job_id or "").strip():
         metadata["source_job_id"] = str(source_job_id).strip()
+    settings: dict[str, Any] = {}
+    if value in DISPOSITION_SOFT_SCORES:
+        settings = _generation_settings(path_text, digest, bytes_verified=not supplied) or {
+            key: item for key, item in dict(known_settings or {}).items() if item not in (None, "")
+        }
+        metadata["user_rating"] = DISPOSITION_SOFT_SCORES[value]
+        metadata["user_rating_source"] = "review_disposition_soft_score"
+        if settings.get("stage"):
+            metadata["stage"] = str(settings["stage"])
+
+    def extract_primary(_cfg: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "model": settings.get("model", ""),
+            "sampler": settings.get("sampler", ""),
+            "scheduler": settings.get("scheduler", ""),
+            "steps": settings.get("steps"),
+            "cfg_scale": settings.get("cfg_scale"),
+        }
+
     return LearningRecord.from_pipeline_context(
         base_config={},
         variant_configs=[],
         randomizer_mode="review_disposition",
         randomizer_plan_size=1,
+        extract_primary=extract_primary if settings else None,
         metadata=metadata,
     )
 
 
+def _has_settings(record: LearningRecord) -> bool:
+    return bool(
+        record.primary_sampler
+        or record.primary_scheduler
+        or record.primary_steps
+        or record.primary_cfg_scale
+    )
+
+
+def _recorded_settings(records_path: Path, digest: str) -> dict[str, Any]:
+    """The settings of the latest Retain / Discard already recorded for these bytes (``{}`` when there is none)."""
+
+    found: dict[str, Any] = {}
+    for payload in _iter_rows(records_path):
+        metadata = payload["metadata"]
+        if (
+            metadata.get("source") != DISPOSITION_SOURCE
+            or normalize_digest(metadata.get("artifact_sha256")) != digest
+            or metadata.get("review_disposition") not in DISPOSITION_SOFT_SCORES
+        ):
+            continue
+        settings = {
+            "model": payload.get("primary_model"),
+            "sampler": payload.get("primary_sampler"),
+            "scheduler": payload.get("primary_scheduler"),
+            "steps": payload.get("primary_steps") or None,
+            "cfg_scale": payload.get("primary_cfg_scale") or None,
+            "stage": metadata.get("stage"),
+        }
+        settings = {key: item for key, item in settings.items() if item not in (None, "")}
+        if settings:
+            found = settings
+    return found
+
+
 def save_disposition(writer: LearningRecordWriter, **kwargs: Any) -> LearningRecord:
-    """Append a disposition through the one writer; raises ``OSError`` when it was not confirmed saved."""
+    """Append a disposition through the one writer; raises ``OSError`` when it was not confirmed saved.
+
+    The settings come from the image bytes. When the file cannot supply them (it was moved to the archive, or the path
+    now holds another file), the settings already recorded for the same bytes are carried over.
+    """
 
     record = build_disposition_record(**kwargs)
+    if record.metadata.get("review_disposition") in DISPOSITION_SOFT_SCORES and not _has_settings(
+        record
+    ):
+        known = _recorded_settings(writer.records_path, str(record.metadata["artifact_sha256"]))
+        if known:
+            record = build_disposition_record(**kwargs, known_settings=known)
     if writer.append_record(record) is False:
         raise OSError("The review decision was not confirmed saved; see the log before retrying.")
     return record
@@ -880,6 +1006,7 @@ __all__ = [
     "DISPOSITIONS",
     "DISPOSITION_CLEARED",
     "DISPOSITION_KIND",
+    "DISPOSITION_SOFT_SCORES",
     "DISPOSITION_SOURCE",
     "DispositionLookup",
     "EvidenceIndex",

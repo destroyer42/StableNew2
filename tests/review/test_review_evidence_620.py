@@ -357,7 +357,7 @@ def test_disposition_validation_and_failed_append(tmp_path):
         evidence.save_disposition(writer, image_path=path, disposition="discard")
 
 
-def test_dispositions_are_not_ratings_for_listing_undo_or_the_recommendation_engine(tmp_path):
+def test_dispositions_are_not_ratings_for_listing_undo_and_rework_is_not_engine_evidence(tmp_path):
     controller = _controller(tmp_path)
     writer = controller._learning_record_writer
     path = _image(tmp_path / "a.png", "PNG")
@@ -373,9 +373,13 @@ def test_dispositions_are_not_ratings_for_listing_undo_or_the_recommendation_eng
     rows = [json.loads(line) for line in writer.records_path.read_text().splitlines()]
     assert [row["run_id"] for row in rows] == [disposition.run_id]
 
-    # Even a disposition that carries rating-shaped fields is not evidence for the engine (kind allow-list).
+    # PR-REVIEW-LEARN-622: Retain / Discard are observational evidence now (tests/review/
+    # test_review_disposition_evidence_622.py), but only as themselves: a Re-work that carries rating-shaped fields is
+    # still not evidence, and a decision is never read as a rating.
     poisoned = json.loads(json.dumps(rows[0]))
-    poisoned["metadata"].update(user_rating=5, user_rating_raw=5, subscores={"anatomy": 5})
+    poisoned["metadata"].update(
+        review_disposition="rework", user_rating=5, user_rating_raw=5, subscores={"anatomy": 5}
+    )
     poisoned["primary_model"], poisoned["primary_steps"], poisoned["primary_cfg_scale"] = (
         "m",
         20,
