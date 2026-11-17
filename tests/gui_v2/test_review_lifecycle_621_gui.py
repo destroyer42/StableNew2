@@ -161,7 +161,9 @@ def test_archive_leaves_the_default_view_appears_under_archived_and_restore_retu
         tab._on_decision_key("discard")
         assert paths[0].name not in _visible_names(tab)
         archived = arc.mirror_target(paths[0], tmp_path / "output")
-        assert archived.exists() and not paths[0].exists()  # PR-REVIEW-ARCHIVE-623: the file really moved
+        assert (
+            archived.exists() and not paths[0].exists()
+        )  # PR-REVIEW-ARCHIVE-623: the file really moved
 
         tab.filter_var.set(FILTER_LABELS[ViewFilter.ARCHIVED])
         tab._on_filter_changed()
@@ -180,7 +182,9 @@ def test_archive_leaves_the_default_view_appears_under_archived_and_restore_retu
         tab._on_filter_changed()
         assert paths[0].name in _visible_names(tab)
         assert tab._session.state_of(item_key(paths[0])) is ItemState.TO_REVIEW
-        assert _fingerprint(paths) == before  # moved to the archive and back: identical bytes, size and mtime
+        assert (
+            _fingerprint(paths) == before
+        )  # moved to the archive and back: identical bytes, size and mtime
     finally:
         tab.destroy()
 
