@@ -53,6 +53,8 @@ def _read(path: str) -> bytes:
 def _refusal_for(message: str) -> str:
     # The artifact projection can contain a file name: translate it so every visibility mode stays safe.
     lowered = message.lower()
+    if "archived by review" in lowered:
+        return "The recorded still image was archived by Review; Restore to use it."
     if "missing" in lowered:
         return "The recorded still image is missing."
     if "thumbnail" in lowered:

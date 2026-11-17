@@ -27,6 +27,7 @@ from src.gui.view_contracts.review_workspace_contract import (
 )
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.learning.learning_record import LearningRecordWriter
+from src.review import archive as arc
 from src.utils.image_metadata import build_contract_kv, write_image_metadata
 from tests.gui_v2.edit_work_helpers import use_manual_registry
 from tests.gui_v2.test_review_batch_200 import images, workflow
@@ -43,6 +44,8 @@ def _fingerprint(paths):
 def _attach_writer(tab: ReviewTabFrame, tmp_path: Path) -> LearningRecordWriter:
     writer = LearningRecordWriter(tmp_path / "evidence.jsonl")
     tab._resolve_evidence_writer = lambda: writer  # type: ignore[method-assign]
+    # PR-REVIEW-ARCHIVE-623: Discard moves files, so the archive root is always a temporary one, never the repository's.
+    tab._output_root = lambda: tmp_path / "output"  # type: ignore[method-assign]
     return writer
 
 
@@ -113,10 +116,14 @@ def test_twelve_outputs_are_decided_by_keyboard_with_counts_filters_and_untouche
         assert sum("[Retained]" in row for row in tab._row_texts) == 5
         assert sum("[Re-work marked]" in row for row in tab._row_texts) == 3
         assert len(_evidence_rows(writer)) == 12
-        assert _fingerprint(paths) == before  # no file changed size, mtime or content
-        assert {p.name for p in tmp_path.glob("*.png")} == {
-            p.name for p in paths
-        }  # and none moved or deleted
+        # PR-REVIEW-ARCHIVE-623: Retain and Re-work never touch a file; Discard moves it, byte for byte, into the archive.
+        discarded = paths[5:9]
+        kept = [p for p in paths if p not in discarded]
+        assert _fingerprint(kept) == {p: before[p] for p in kept}
+        assert {p.name for p in tmp_path.glob("*.png")} == {p.name for p in kept}
+        for path in discarded:
+            archived = arc.mirror_target(path, tmp_path / "output")
+            assert not path.exists() and _sha(archived) == before[path][2]
 
         tab.filter_var.set(FILTER_LABELS[ViewFilter.RETAINED])
         tab._on_filter_changed()
@@ -153,10 +160,15 @@ def test_archive_leaves_the_default_view_appears_under_archived_and_restore_retu
         tab._set_selected_images(paths)
         tab._on_decision_key("discard")
         assert paths[0].name not in _visible_names(tab)
+        archived = arc.mirror_target(paths[0], tmp_path / "output")
+        assert (
+            archived.exists() and not paths[0].exists()
+        )  # PR-REVIEW-ARCHIVE-623: the file really moved
 
         tab.filter_var.set(FILTER_LABELS[ViewFilter.ARCHIVED])
         tab._on_filter_changed()
         assert _visible_names(tab) == [paths[0].name]
+        assert "(in archive)" in tab._row_texts[0]
         assert tab._select_key(item_key(paths[0]))
         assert str(tab.restore_button.cget("state")) == "normal"
         tab.update_idletasks()
@@ -164,12 +176,15 @@ def test_archive_leaves_the_default_view_appears_under_archived_and_restore_retu
             tab._decision_bar.rows(), []
         )  # Restore appears only for an archived image
         assert tab._restore_current()
+        assert paths[0].exists() and not archived.exists()
 
         tab.filter_var.set(FILTER_LABELS[ViewFilter.ACTIVE])
         tab._on_filter_changed()
         assert paths[0].name in _visible_names(tab)
         assert tab._session.state_of(item_key(paths[0])) is ItemState.TO_REVIEW
-        assert _fingerprint(paths) == before
+        assert (
+            _fingerprint(paths) == before
+        )  # moved to the archive and back: identical bytes, size and mtime
     finally:
         tab.destroy()
 
