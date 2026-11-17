@@ -1,8 +1,9 @@
 """Offline AI Assist inside an operator journey: its data is disposable, only the committed manifests are readable.
 
 The journey's ``AccessSpy`` treats ``config/`` as operator-owned. Offline AI Assist's readiness record reads two immutable,
-checked-in manifests, so exactly those two files are readable (never writable); every other read, write and listing under a
-protected directory stays a violation.
+checked-in manifests and video launch-flag preflight reads the managed ComfyUI runtime manifest (the Forge backend reads
+its own), so exactly those files are readable (never writable); every other read, write and listing under a protected
+directory stays a violation.
 """
 
 from __future__ import annotations
@@ -19,14 +20,16 @@ sys.path.insert(0, str(ROOT))
 from tools.operator_journey.workspace import AccessSpy, OperatorWorkspace  # noqa: E402
 
 MANIFESTS = ("managed_ai_runtime.json", "ai_model_registry.json")
+# Runtime identity manifests read by production code (Comfy launch-flag preflight, the Forge image backend).
+RUNTIME_MANIFESTS = ("managed_comfy_runtime.json", "managed_forge_runtime.json")
+READABLE_MANIFESTS = (*MANIFESTS, *RUNTIME_MANIFESTS)
 
 
 def _fake_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     (repo / "config").mkdir(parents=True)
     for name in (
-        *MANIFESTS,
-        "managed_comfy_runtime.json",
+        *READABLE_MANIFESTS,
         "forge_klein_assets.json",
         "secret_local.json",
     ):
@@ -37,8 +40,8 @@ def _fake_repo(tmp_path: Path) -> Path:
     return repo
 
 
-@pytest.mark.parametrize("name", MANIFESTS)
-def test_the_two_committed_manifests_may_be_read(tmp_path: Path, name: str) -> None:
+@pytest.mark.parametrize("name", READABLE_MANIFESTS)
+def test_the_committed_manifests_may_be_read(tmp_path: Path, name: str) -> None:
     repo = _fake_repo(tmp_path)
     with AccessSpy(repo_root=repo) as spy:
         (repo / "config" / name).read_text(encoding="utf-8")
@@ -47,9 +50,7 @@ def test_the_two_committed_manifests_may_be_read(tmp_path: Path, name: str) -> N
     assert spy.read_protected == [] and spy.written == []
 
 
-@pytest.mark.parametrize(
-    "name", ["managed_comfy_runtime.json", "forge_klein_assets.json", "secret_local.json"]
-)
+@pytest.mark.parametrize("name", ["forge_klein_assets.json", "secret_local.json"])
 def test_every_other_config_file_stays_guarded_for_reading(tmp_path: Path, name: str) -> None:
     repo = _fake_repo(tmp_path)
     with AccessSpy(repo_root=repo) as spy:
@@ -70,7 +71,7 @@ def test_lookalike_paths_are_not_exempt(tmp_path: Path) -> None:
     assert len(spy.read_protected) == 3
 
 
-@pytest.mark.parametrize("name", MANIFESTS)
+@pytest.mark.parametrize("name", READABLE_MANIFESTS)
 @pytest.mark.parametrize("mode", ["w", "a", "r+", "x"])
 def test_the_manifests_are_never_writable(tmp_path: Path, name: str, mode: str) -> None:
     repo = _fake_repo(tmp_path)
