@@ -56,7 +56,11 @@ def resolve_job_outputs(
                 continue  # a thumbnail is a Review candidate only for a video job's explicit hand-off
             path = Path(ref.path)
             if not path.is_file():
-                unavailable.append((job_id, ref.path, "missing or moved"))
+                from src.review.archive import archived_reason
+
+                unavailable.append(
+                    (job_id, ref.path, archived_reason(ref.path) or "missing or moved")
+                )
                 continue
             folder = str(path.parent)
             if folder not in folders:
