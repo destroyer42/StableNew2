@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-753 of 908 modules have a docstring.
+754 of 909 modules have a docstring.
 
 ## src/
 
@@ -831,6 +831,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Review metadata services and contracts
 - `adetailer_outcome.py`: Operator before/after review of an ADetailer output (PR-REFINE-160), carried by the existing Review feedback…
+- `archive.py`: Reversible archive for Review's Discard (PR-REVIEW-ARCHIVE-623)
 - `artifact_metadata_inspector.py`: Read-only artifact metadata inspection payload builder
 - `correction_advice.py`: Project guided Review eligibility through the existing model and operation contracts
 - `effective_prompt.py`: Per-stage prompt provenance of a Review image (PR-REVIEW-LIFECYCLE-621)

@@ -25,6 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import census_shards  # noqa: E402
+import quiet_run  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_WORKERS = 2
@@ -109,7 +110,9 @@ def main(argv: list[str] | None = None) -> int:
         repo = checkouts[index] if checkouts else ROOT
         log = (out_dir / f"worker-{index}.log").open("w", encoding="utf-8")
         logs.append(log)
-        processes.append(subprocess.Popen(worker_command(args.workers, index, out_dir, repo=repo), cwd=repo, stdout=log, stderr=subprocess.STDOUT))
+        # Each worker runs quietly on a local Windows machine (hidden desktop, below-normal priority, efficiency cores).
+        command = quiet_run.wrap(worker_command(args.workers, index, out_dir, repo=repo))
+        processes.append(subprocess.Popen(command, cwd=repo, stdout=log, stderr=subprocess.STDOUT))
     exit_codes = [process.wait() for process in processes]
     wall = time.monotonic() - started
     for log in logs:

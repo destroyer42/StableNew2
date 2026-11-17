@@ -8,6 +8,9 @@
 the hosted census, one isolated checkout per worker (a Windows/Tk suite shares ports, files and process-global state,
 so workers must not share a tree; this is why it is not pytest-xdist). It is slow by nature; use it before opening a
 PR that changes executable code, and let hosted CI remain the authority.
+
+On a local Windows machine every step runs through ``tools/ci/quiet_run.py`` (hidden desktop, below-normal priority,
+efficiency cores); set ``STABLENEW_TESTS_VISIBLE=1`` to run the steps as before.
 """
 
 from __future__ import annotations
@@ -19,6 +22,10 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import quiet_run  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE_STEPS = (
@@ -125,7 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"==> {label}", flush=True)
         try:
             completed = subprocess.run(
-                command,
+                quiet_run.wrap(command),
                 cwd=ROOT,
                 check=False,
             )

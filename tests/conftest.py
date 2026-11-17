@@ -1,11 +1,42 @@
 import gc
+import importlib.util
 import os
+import sys
 import threading
 import time
 import tkinter as tk
 from pathlib import Path
 
 import pytest
+
+
+# --- Quiet local runs (PR-DEVEX-QUIET-LOCAL-TESTS) ----------------------------------------
+# A command-line pytest session on a local Windows machine re-runs itself through
+# ``tools/ci/quiet_run.py``: a private desktop, a below-normal-priority job and, on a hybrid
+# CPU, the efficiency cores, so test windows never reach the operator's screen or focus.
+# It happens in ``pytest_configure`` (pytest's capture has restored the real standard
+# streams there) and before collection or any Tk interpreter exists. Skipped in hosted CI,
+# off Windows, inside a quiet run, with ``STABLENEW_TESTS_VISIBLE=1`` and for the physical
+# desktop lane; in-process ``pytest.main()`` calls are never relaunched. Loaded by path so
+# the worktree's copy is used whatever ``sys.path`` holds.
+def _load_quiet_run():
+    path = Path(__file__).resolve().parents[1] / "tools" / "ci" / "quiet_run.py"
+    spec = importlib.util.spec_from_file_location("_stablenew_quiet_run", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolve their module through sys.modules
+    spec.loader.exec_module(module)
+    return module
+
+
+_QUIET_RUN = _load_quiet_run()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config):
+    if _QUIET_RUN is not None:
+        _QUIET_RUN.relaunch_pytest_session()
 
 # --- Garbage collection only on the main thread ---------------------------------------
 # GUI tests leave Tk interpreters/variables behind. If the cyclic collector (automatic,

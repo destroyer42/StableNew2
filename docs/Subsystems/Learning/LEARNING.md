@@ -138,7 +138,7 @@ scroll owner so the result is visible without displacing the initial laptop layo
 
 ### 3.4 Discovered Outputs
 
-`LearningController.trigger_background_scan` runs `OutputScanner.scan_incremental` over the output root in a thread spawned through `get_thread_registry().spawn`, groups artifacts (`GroupingEngine`), and writes groups with `apply_scan` into `DiscoveredReviewStore`. Artifacts that carry a `learning_context.experiment_id` are skipped (they have their own Experiment Review). The completion callback is marshalled to the Tk thread through `app_controller._run_in_gui_thread` (audit B6 is fixed here [V]). Items are rated in the table (`save_discovered_item_rating`); groups can be closed, ignored, reopened, pruned or reset.
+`LearningController.trigger_background_scan` runs `OutputScanner.scan_incremental` over the output root in a thread spawned through `get_thread_registry().spawn`, groups artifacts (`GroupingEngine`), and writes groups with `apply_scan` into `DiscoveredReviewStore`. Artifacts that carry a `learning_context.experiment_id` are skipped (they have their own Experiment Review). The scan also skips Photo Optimize's workspace and Review's archive (`<output root>/_archive`, where Review's Discard moves images; `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.7.1), so an archived image is not rediscovered. The completion callback is marshalled to the Tk thread through `app_controller._run_in_gui_thread` (audit B6 is fixed here [V]). Items are rated in the table (`save_discovered_item_rating`); groups can be closed, ignored, reopened, pruned or reset.
 
 ### 3.5 Staged Curation
 

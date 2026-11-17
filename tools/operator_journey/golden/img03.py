@@ -409,7 +409,7 @@ def run_img03(
     run.check(
         "refuse",
         "edit_mask_without_an_image_refuses_with_a_reason",
-        any("Select exactly one" in r for r in refusal)
+        any("Select an image first" in r for r in refusal)
         and _toplevel(run.root, MaskEditorDialog) is None,
         f"{refusal}",
     )
