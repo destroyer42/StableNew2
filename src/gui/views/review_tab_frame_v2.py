@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tkinter as tk
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -35,6 +36,7 @@ from src.gui.view_contracts.review_selection_contract import (
 )
 from src.gui.view_contracts.review_workspace_contract import (
     FILTER_LABELS,
+    LOC_ARCHIVED,
     STATE_LABELS,
     ItemState,
     ReviewWorkspaceSession,
@@ -56,6 +58,15 @@ from src.review.adetailer_outcome import (
     AdetailerPair,
     build_review_context,
     resolve_adetailer_pair,
+)
+from src.review.archive import (
+    ArchiveOutcome,
+    active_input_paths,
+    archive_file,
+    archive_root,
+    configured_output_root,
+    job_queue_of,
+    restore_file,
 )
 from src.review.effective_prompt import (
     EffectivePromptView,
@@ -185,6 +196,11 @@ class ReviewTabFrame(ttk.Frame):
         self._pending_overlay: tuple[ReviewWorkspaceHandoff, Path] | None = None
         self._edited_since_selection = False
         self._confirm_replace_hook: Any = None
+        #: Replaced by tests: a real modal would hang the run (PR-REVIEW-ARCHIVE-623).
+        self._confirm_discard_hook: Any = None
+        self._confirm_alternative_hook: Any = None
+        self._archive_context: tuple[Path, Any] = (Path("output"), None)
+        self._offer_after: str | None = None
         # PR-REVIEW-LIFECYCLE-621: the logical workspace. Only decisions and ratings are stored (Learning evidence);
         # job states are derived from the job repository every time they are read.
         self._session = ReviewWorkspaceSession(
@@ -193,6 +209,9 @@ class ReviewTabFrame(ttk.Frame):
             repository=self._review_repository,
             write_disposition=self._write_disposition,
             on_change=self._on_session_changed,
+            output_root=lambda: self._output_root(),
+            archive=lambda path, digest: self._archive_on_worker(path, digest),
+            restore=lambda path, digest, alt: self._restore_on_worker(path, digest, alt),
         )
         self._row_texts: list[str] = []
         self._undo_order: list[str] = []
@@ -1096,11 +1115,12 @@ class ReviewTabFrame(ttk.Frame):
         root = Path(folder)
         token = self._revisions.begin_folder_scan()
         revisions = self._revisions
+        skip = (archive_root(self._output_root()),)
         self.selection_label.config(text=f"Scanning {root.name or root} for images...")
         self._work.submit(
             "review:folder-scan",
             lambda: scan_image_folder(
-                root, is_cancelled=lambda: not revisions.is_current_folder_scan(token)
+                root, is_cancelled=lambda: not revisions.is_current_folder_scan(token), skip=skip
             ),
             on_result=lambda scan: self._publish_folder_scan(token, scan),
             on_error=lambda exc: self._folder_scan_failed(token, root, exc),
@@ -1139,7 +1159,7 @@ class ReviewTabFrame(ttk.Frame):
                 )
             )
             return
-        self._set_selected_images(list(scan.paths))
+        self._set_selected_images(list(scan.paths), folder=scan.root)
         if skipped:
             self.workflow_hint_label.config(text=f"Loaded {len(scan.paths)} image(s).{skipped}")
 
@@ -1321,13 +1341,13 @@ class ReviewTabFrame(ttk.Frame):
             self.workflow_hint_label.config(text=status_message)
         return len(self.selected_images)
 
-    def _set_selected_images(self, paths: list[Path]) -> None:
+    def _set_selected_images(self, paths: list[Path], *, folder: Path | None = None) -> None:
         """Accept ``paths`` as a new manual selection (its own context: no earlier handoff claim applies)."""
 
         self._begin_selection_context(None)
-        self._apply_selection(paths)
+        self._apply_selection(paths, folder=folder)
 
-    def _apply_selection(self, paths: list[Path]) -> None:
+    def _apply_selection(self, paths: list[Path], *, folder: Path | None = None) -> None:
         deduped: list[Path] = []
         seen: set[str] = set()
         for path in paths:
@@ -1338,7 +1358,7 @@ class ReviewTabFrame(ttk.Frame):
             deduped.append(path)
 
         self._undo_order = []
-        self._session.set_items(deduped)
+        self._session.set_items(deduped, folder=folder)
         self.selected_images = self._session.paths()
         self.selection_label.config(text=f"{len(self.selected_images)} image(s) selected")
         first = self._session.visible_items()
@@ -1521,6 +1541,8 @@ class ReviewTabFrame(ttk.Frame):
         overlay = self._pending_overlay
         if overlay is not None and overlay[1] != path:
             self._pending_overlay = None
+        if self._show_archived_image(path):
+            return
         self._selected_image_path = path
         self._selected_image_sha256 = ""
         self._reset_rating_controls()
@@ -1553,6 +1575,37 @@ class ReviewTabFrame(ttk.Frame):
             name="review-image-context",
             purpose="Read embedded metadata and prior review for the selected Review image",
         )
+
+    def _show_archived_image(self, path: Path) -> bool:
+        """An archived image has no file at its path: say where it is instead of trying to load it."""
+
+        key = item_key(path)
+        facts = self._session.facts_of(key)
+        if (
+            os.path.lexists(path)
+            or facts.location != LOC_ARCHIVED
+            or self._session.state_of(key) is not ItemState.ARCHIVED
+        ):
+            return False
+        self._selected_image_path = path
+        self._selected_image_sha256 = facts.digest
+        self._reset_rating_controls()
+        self._image_ready = False
+        self._edited_since_selection = False
+        self._adetailer_pair = None
+        self._set_adetailer_controls(False)
+        self.preview.clear()
+        self.meta_label.config(text="Metadata: n/a (archived)")
+        self._prior_review_summary_var.set("Prior Review Summary: restore this image to review it")
+        self._selected_base_prompt = ""
+        self._selected_base_negative_prompt = ""
+        self._provenance_view = None
+        self._baseline_note_var.set("")
+        self._reset_mode_edits_for_current_image()
+        self._apply_content_visibility_mode()
+        self._refresh_decision_controls()
+        self._feedback_status_var.set(self._session.archive_line(key))
+        return True
 
     def _publish_image_context(self, token: SelectionToken, context: ImageContext) -> None:
         if not self._revisions.is_current_image(token) or self._selected_image_path != context.path:
@@ -2276,10 +2329,27 @@ class ReviewTabFrame(ttk.Frame):
         return repository_of(self.app_controller)
 
     def _bind_writer(self) -> Any | None:
-        """Resolve the writer on the Tk thread; the session's worker writes through it."""
+        """Resolve the writer (and the archive's output root and job queue) on the Tk thread for the worker."""
 
         self._writer = self._resolve_evidence_writer()
+        self._archive_context = (self._output_root(), job_queue_of(self.app_controller))
         return self._writer
+
+    def _output_root(self) -> Path:
+        return configured_output_root(getattr(self.app_controller, "_config_manager", None))
+
+    def _archive_on_worker(self, path: Path, _digest: str) -> ArchiveOutcome:
+        """Discard's file move; runs on the Review worker with the context bound on the Tk thread."""
+
+        root, queue = self._archive_context
+        active = (lambda: active_input_paths(queue)) if queue is not None else None
+        return archive_file(path, output_root=root, active_inputs=active)
+
+    def _restore_on_worker(self, path: Path, digest: str, use_alternative: bool) -> ArchiveOutcome:
+        root, _queue = self._archive_context
+        return restore_file(
+            path, output_root=root, digest=digest or None, use_alternative=use_alternative
+        )
 
     def _write_disposition(self, path: Path, digest: str, job_id: str, disposition: str) -> Any:
         writer = self._writer
@@ -2295,6 +2365,30 @@ class ReviewTabFrame(ttk.Frame):
 
     def _on_session_changed(self) -> None:
         self._refresh_workspace_view()
+        if self._session.restore_offer is not None and self._offer_after is None:
+            self._offer_after = self.after(0, self._offer_restore_alternative)
+
+    def _offer_restore_alternative(self) -> None:
+        """The original location is taken by a different file: ask once whether to restore under a new name."""
+
+        self._offer_after = None
+        offer = self._session.take_restore_offer()
+        if offer is None or not self.winfo_exists():
+            return
+        hook = self._confirm_alternative_hook
+        name = offer.alternative.name
+        accepted = (
+            bool(hook(name))
+            if callable(hook)
+            else messagebox.askyesno(
+                "Restore under a new name?",
+                f"A different file now exists at the original location. Restore the archived image as {name}?",
+                parent=self,
+            )
+        )
+        if accepted:
+            self._bind_writer()
+            self._session.restore(offer.key, use_alternative=True)
 
     def _current_key(self) -> str | None:
         return (
@@ -2512,13 +2606,41 @@ class ReviewTabFrame(ttk.Frame):
         if key is None:
             return False
         self._bind_writer()
+        targets = self._discard_targets(key) if disposition == "discard" else [key]
+        if len(targets) > 1 and not self._confirm_discard(len(targets)):
+            return False
         if self._rating_touched and self._selected_image_path is not None:
             self._save_feedback()  # a rating set before the decision is saved with it
-        if not self._session.decide(key, disposition):
-            return False
-        self._undo_order.append("decision")
+        if len(targets) > 1:
+            began = self._session.decide_many(targets, disposition)
+            if not began:
+                return False
+            self._undo_order.extend(["decision"] * began)
+        else:
+            if not self._session.decide(key, disposition):
+                return False
+            self._undo_order.append("decision")
         self._advance_after_decision(key)
         return True
+
+    def _discard_targets(self, key: str) -> list[str]:
+        """The shown image, or every highlighted image when the shown one is among several highlighted."""
+
+        highlighted = [item_key(path) for path in self._highlighted_image_paths()]
+        return highlighted if len(highlighted) > 1 and key in highlighted else [key]
+
+    def _confirm_discard(self, count: int) -> bool:
+        hook = self._confirm_discard_hook
+        if callable(hook):
+            return bool(hook(count))
+        return bool(
+            messagebox.askyesno(
+                "Discard images?",
+                f"Move {count} images to the archive folder? Each can be restored (Undo or Restore); "
+                "nothing is deleted.",
+                parent=self,
+            )
+        )
 
     def _restore_current(self) -> bool:
         key = self._current_key()

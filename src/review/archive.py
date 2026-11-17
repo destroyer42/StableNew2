@@ -275,6 +275,20 @@ def _job_record(job: Any) -> Any:
     return None
 
 
+def job_queue_of(controller: Any) -> Any:
+    """The controller's job queue (the authority that knows queued and running jobs), or ``None`` when absent."""
+
+    for source in (controller, getattr(controller, "pipeline_controller", None)):
+        job_service = getattr(source, "job_service", None)
+        getter = getattr(source, "get_job_service", None)
+        if job_service is None and callable(getter):
+            job_service = getter()
+        queue = getattr(job_service, "job_queue", None)
+        if queue is not None:
+            return queue
+    return None
+
+
 def active_input_paths(job_queue: Any) -> set[str]:
     """Normalized paths of every file a queued or running job froze as an input (raises when it cannot tell)."""
 
@@ -744,6 +758,7 @@ __all__ = [
     "configured_output_root",
     "free_name",
     "is_under_archive",
+    "job_queue_of",
     "mirror_target",
     "original_of",
     "plan_archive",
