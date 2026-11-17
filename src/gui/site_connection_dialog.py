@@ -6,9 +6,11 @@ import logging
 import secrets
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
-from typing import Any, cast
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+from typing import Any
 
+from src.app.site_pack_catalog import PreparePack, SitePackCatalog, pack_digest
 from src.app.site_queue_bridge import (
     PreviewJob,
     PreviewView,
@@ -16,11 +18,12 @@ from src.app.site_queue_bridge import (
     SiteSession,
     SubmissionReceipt,
 )
+from src.controller.app_controller_services.pack_draft_service import SitePackDraft
 from src.controller.app_controller_services.run_submission_service import (
     PreviewWitness,
     same_preview,
 )
-from src.pipeline.job_models_v2 import WorkloadKind
+from src.pipeline.job_models_v2 import UnifiedJobSummary, WorkloadKind
 
 log = logging.getLogger(__name__)
 _MAX_PREVIEW_JOBS = 250
@@ -30,14 +33,78 @@ _RECEIPT_SECONDS = 20
 class PreviewQueueConnection:
     """All methods run on the existing UI thread. The listener never touches the GUI or queue."""
 
-    def __init__(self, app: Any, session: SiteSession, confirm: Any) -> None:
+    def __init__(
+        self, app: Any, session: SiteSession, confirm: Any, confirm_prepare: Any = None
+    ) -> None:
         self.app = app
         self.session = session
         self.confirm = confirm
+        self.confirm_prepare = confirm_prepare
         self.witness: PreviewWitness | None = None
         self.preview_id: str | None = None
         self.pending: tuple[SubmissionReceipt, tuple[str, ...], float] | None = None
         self.uncertain: PreviewWitness | None = None
+        self.prepared: PreparePack | None = None
+
+    def _draft_pack_matches(self, record: Any) -> bool:
+        return self.prepared is None or (
+            record.prompt_pack_id == self.prepared.pack.name
+            and record.prompt_pack_row_index in self.prepared.slots
+        )
+
+    def _preview_job(self, record: Any) -> PreviewJob:
+        settings = None
+        if self.prepared is not None:
+            summary = UnifiedJobSummary.from_normalized_record(record)
+            settings = {
+                "pack": summary.prompt_pack_name,
+                "slot": summary.prompt_pack_row_index + 1,
+                "model": summary.base_model,
+                "sampler": summary.sampler_name,
+                "width": summary.width,
+                "height": summary.height,
+                "steps": summary.steps,
+                "cfg": summary.cfg_scale,
+                "seed": record.seed,
+            }
+        return PreviewJob(record.job_id, tuple(record.stage_chain_labels), settings)
+
+    def _pack_current(self, command: PreparePack) -> bool:
+        if self.session.expired or self.app._is_shutting_down:
+            return False
+        try:
+            return pack_digest(command.pack.path) == command.digest
+        except (OSError, ValueError):
+            return False
+
+    def _prepare_draft(self, command: PreparePack) -> None:
+        app_state = self.app.app_state
+        revision, accepted = app_state.snapshot_accepted_preview()
+        draft = app_state.job_draft
+        if accepted or draft.packs or draft.parts or draft.history_variation is not None:
+            self.session.finish_preparation(command, "desktop_draft_open")
+            return
+        if not any(
+            pack.name == command.pack.name and pack.path.resolve() == command.pack.path
+            for pack in self.app.packs
+        ) or not self._pack_current(command):
+            self.session.finish_preparation(command, "refused")
+            return
+        if self.confirm_prepare is None or not self.confirm_prepare(command):
+            self.session.finish_preparation(command, "declined")
+            return
+
+        def complete(state: str) -> None:
+            if state == "draft_added":
+                self.prepared = command
+            self.session.finish_preparation(command, state)
+
+        self.app.on_pipeline_add_packs_to_job(
+            [command.pack.name],
+            selection=SitePackDraft(
+                command.slots, revision, lambda: self._pack_current(command), complete
+            ),
+        )
 
     def _publish_current(self) -> None:
         current = self.app.app_state.snapshot_accepted_preview()
@@ -48,6 +115,11 @@ class PreviewQueueConnection:
             self.session.publish(None, "preview_too_large")
         elif any(record.workload_kind != WorkloadKind.IMAGE for record in records):
             self.session.publish(None, "image_preview_required")
+        elif self.prepared is not None and (
+            not all(self._draft_pack_matches(record) for record in records)
+            or {record.prompt_pack_row_index for record in records} != set(self.prepared.slots)
+        ):
+            self.session.publish(None, "preview_changed")
         elif self.uncertain is not None and same_preview(self.uncertain, current):
             self.session.publish(None, "check_native_queue")
         else:
@@ -58,10 +130,7 @@ class PreviewQueueConnection:
             self.session.publish(
                 PreviewView(
                     self.preview_id,
-                    tuple(
-                        PreviewJob(record.job_id, tuple(record.stage_chain_labels))
-                        for record in records
-                    ),
+                    tuple(self._preview_job(record) for record in records),
                 )
             )
             return
@@ -93,6 +162,7 @@ class PreviewQueueConnection:
             return
         if committed == job_ids:
             self._finish(receipt, "queued", committed)
+            self.prepared = None
         elif time.monotonic() >= timeout or not self.app._queue_submit_in_progress:
             self.uncertain = self.witness
             self._finish(receipt, "check_native_queue")
@@ -110,6 +180,9 @@ class PreviewQueueConnection:
             self._finish(receipt, "connection_closed")
             return
         if not same_preview(witness, self.app.app_state.snapshot_accepted_preview()):
+            self._finish(receipt, "preview_changed")
+            return
+        if self.prepared is not None and not self._pack_current(self.prepared):
             self._finish(receipt, "preview_changed")
             return
         try:
@@ -134,6 +207,10 @@ class PreviewQueueConnection:
         self._check_receipt()
         if self.pending is not None:
             return
+        preparation = self.session.take_preparation()
+        if preparation is not None:
+            self._prepare_draft(preparation)
+            return
         self._publish_current()
         receipt = self.session.take_request()
         if receipt is not None:
@@ -155,7 +232,7 @@ class SiteConnectionDialog:
             return
         if self.app._is_shutting_down:
             return
-        session = SiteSession()
+        session = SiteSession(self.app.job_service.history_store.get_job)
         try:
             self.listener = SiteListener(session)
         except OSError:
@@ -193,13 +270,81 @@ class SiteConnectionDialog:
             text="Keep this window open. Queue requests ask for confirmation in StableNew.",
             wraplength=370,
         ).pack(anchor="w", pady=(4, 8))
+        output_status = ttk.Label(frame, text="Output folder is private.", wraplength=370)
+        output_status.pack(anchor="w")
+        output_controls = ttk.Frame(frame)
+        output_controls.pack(anchor="w", pady=(3, 10))
+        ttk.Button(
+            output_controls,
+            text="Share eval output…",
+            command=lambda: self._share_output(session, dialog, output_status),
+        ).pack(side="left")
+        ttk.Button(
+            output_controls,
+            text="Stop sharing output",
+            command=lambda: self._stop_sharing_output(session, output_status),
+        ).pack(side="left", padx=(6, 0))
+        pack_status = ttk.Label(frame, text="PromptPack selection is private.", wraplength=370)
+        pack_status.pack(anchor="w")
+        ttk.Button(
+            frame,
+            text="Share visible PromptPacks",
+            command=lambda: self._share_packs(session, pack_status),
+        ).pack(anchor="w", pady=(3, 10))
         ttk.Button(frame, text="Disconnect", command=self.close).pack(anchor="e")
-        self.connection = PreviewQueueConnection(self.app, session, self._confirm)
+        self.connection = PreviewQueueConnection(
+            self.app, session, self._confirm, self._confirm_prepare
+        )
         self._tick()
 
     def _copy(self, code: str) -> None:
         self.root.clipboard_clear()
         self.root.clipboard_append(code)
+
+    def _share_packs(self, session: SiteSession, status: ttk.Label) -> None:
+        if session.expired:
+            return
+        try:
+            session.share_packs(SitePackCatalog(self.app._packs_dir, list(self.app.packs)))
+        except (OSError, ValueError):
+            status.configure(text="The visible PromptPacks could not be shared.")
+            return
+        status.configure(text="Visible PromptPacks and slot prompts are shared for this session.")
+
+    def _confirm_prepare(self, command: PreparePack) -> bool:
+        dialog = self.dialog
+        if dialog is None:
+            return False
+        return messagebox.askyesno(
+            "Prepare PromptPack from the Operator Site?",
+            f"Use the current StableNew pipeline settings to preview {len(command.slots)} selected slot(s) "
+            f"from {command.pack.name}? This will fill the empty desktop draft and build a Preview.",
+            parent=dialog,
+            default=messagebox.NO,
+        )
+
+    def _share_output(self, session: SiteSession, dialog: tk.Toplevel, status: ttk.Label) -> None:
+        folder = filedialog.askdirectory(
+            parent=dialog,
+            title="Choose the StableNew output folder to share for this session",
+            initialdir=str(getattr(self.app, "output_dir", None) or "output"),
+            mustexist=True,
+        )
+        if not folder or session.expired or dialog is not self.dialog:
+            return
+        try:
+            session.set_output_folder(Path(folder))
+        except (OSError, ValueError):
+            status.configure(text="The selected output folder could not be opened.")
+            return
+        status.configure(
+            text="Eval reports and matching media are shared read-only for this session."
+        )
+
+    @staticmethod
+    def _stop_sharing_output(session: SiteSession, status: ttk.Label) -> None:
+        session.set_output_folder(None)
+        status.configure(text="Output folder is private.")
 
     def _confirm(self, count: int) -> bool:
         dialog = self.dialog
@@ -246,13 +391,10 @@ class SiteConnectionDialog:
             dialog.destroy()
 
 
-def install_site_connection_menu(root: tk.Tk, app: Any) -> None:
-    """Add the local opt-in entry at desktop composition. No socket is opened here."""
+def install_site_connection_control(root: tk.Tk, app: Any, header: ttk.Frame) -> None:
+    """Add the connection to the visible desktop toolbar without opening a listener."""
     connection = SiteConnectionDialog(root, app)
-    menu_path = root.cget("menu")
-    menu = cast(tk.Menu, root.nametowidget(menu_path)) if menu_path else tk.Menu(root)
-    if not menu_path:
-        root.configure(menu=menu)
-    site = tk.Menu(menu, tearoff=False)
-    site.add_command(label="Connect Operator Site", command=connection.open)
-    menu.add_cascade(label="Operator Site", menu=site)
+    button = ttk.Button(
+        header, text="Operator Site", style="Secondary.TButton", command=connection.open
+    )
+    button.grid(row=0, column=header.grid_size()[0], padx=4, pady=4)

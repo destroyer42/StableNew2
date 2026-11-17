@@ -649,9 +649,9 @@ def main() -> None:
     )
 
     if sys.platform == "win32":
-        from src.gui.site_connection_dialog import install_site_connection_menu
+        from src.gui.site_connection_dialog import install_site_connection_control
 
-        install_site_connection_menu(root, app_controller)
+        install_site_connection_control(root, app_controller, window.header_zone)
 
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(

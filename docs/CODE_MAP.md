@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-745 of 900 modules have a docstring.
+748 of 903 modules have a docstring.
 
 ## src/
 
@@ -57,6 +57,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `bootstrap.py`: (no docstring)
 - `optional_dependency_probes.py`: (no docstring)
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
+- `site_output_catalog.py`: Read-only projection of eval reports and exact media from an operator-approved output root
+- `site_pack_catalog.py`: Session-scoped selection of visible, local PromptPacks
 - `site_queue_bridge.py`: Loopback transport for the operator Site
 
 ## src/assets/
@@ -174,6 +176,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `dispatch_hold_status.py`: Operator-facing reason a non-empty queue is not dispatching
 - `gui_config_service.py`: (no docstring)
 - `learning_completion_router.py`: learning_completion_router — routes job-completion events to the learning controller without hard-wiring AppC…
+- `pack_draft_service.py`: Build selected PromptPack entries through the existing Add to Job lifecycle
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
 - `run_submission_service.py`: (no docstring)
 - `runtime_projection_coordinator.py`: (no docstring)

@@ -1,46 +1,60 @@
-# Operator Site image queue connection
+# StableNew Operator Site
 
-Use the private [StableNew Operator Site](https://stablenew-b11960-review.stillbeacon3.chatgpt.site/#connect) from the
-same Windows computer as StableNew. The first supported scope is the accepted image Preview in the native app.
+The private [Operator Site](https://stablenew-b11960-review.stillbeacon3.chatgpt.site/#connect) uses your
+Windows StableNew installation for preview, queue admission, and local output. On the updated Windows build, **Operator
+Site** is in the top toolbar beside **Readiness**.
 
-1. Open the image draft in StableNew and review its Preview. Use the native Preview for prompts, models, and settings.
-2. Select **Operator Site → Connect Operator Site** in StableNew. Keep the pairing window open.
-3. In the Site's **Connect StableNew** view, paste the pairing code and connect. A browser that prompts for loopback
-   access needs that permission before it can read the Preview.
-4. Compare the job list in the Site with the accepted Preview, then select **Request queue submission**.
-5. Confirm the request in the StableNew window. The Site shows the receipt with the job IDs after the normal queue
-   records the batch. Manage the jobs from the native queue. The existing queue's dispatch policy applies.
-6. Close the StableNew pairing window to revoke access. Codes are operation-session credentials and expire after
-   15 minutes. Use a new connection if the code expired.
+## Pair on the StableNew PC
 
-If the Preview changes, the request refuses instead of recompiling. Refresh and review the latest Preview.
-If a submission cannot be verified, inspect the native queue before making another request. The Site does not resend a
-submission automatically.
+1. Click **Operator Site** and keep the pairing window open. On the same PC, open **Connect StableNew**, paste
+   the Windows pairing code and allow browser access to the local listener if prompted.
+2. In StableNew, choose **Share eval output…** and select your output folder for read-only eval and result browsing.
+   Choose **Share visible PromptPacks** when you want to share pack names and slot prompts for this session.
+3. To work from another device, click **Start remote session** in the paired PC browser. Keep that tab, the StableNew
+   window and the PC online. Sign in to the same private Site on the other device and enter the separate remote code.
+   Hosted requests are handled by the paired browser on the PC. The local StableNew pairing code stays on the PC.
+4. Stop the relay in the PC browser or close the StableNew pairing window when finished. A pairing lasts up to 15
+   minutes. A host without a heartbeat for 80 seconds stops accepting new remote requests.
 
-## Ownership and scope
+## Browse evals and submit PromptPacks
 
-The listener opens only from the native menu. It binds IPv4 loopback port 49381, accepts the exact private Site origin,
-and uses a short-lived bearer code held in memory. Preview projection contains only job IDs and stage labels. The sole
-write request carries an opaque Preview identifier. The browser has no input for prompts, asset paths, raw NJRs,
-backend selection, or queue management on this route.
+- Select **Find shared runs**, choose a report, then browse its clips and source images. Build the eval report in
+  StableNew first if the run is missing. The separate **Video review** screen takes local ratings.
+- Select **Find shared PromptPacks**, choose a pack and its slots, and request a Preview. StableNew asks before filling
+  an empty desktop draft. The existing draft action applies saved pack settings and the active desktop pipeline
+  configuration. The browser shows effective model, seed, dimensions, sampler, steps and stage chain when Preview
+  compilation finishes. Desktop settings remain the way to edit those controls in this version.
+- Select **Request queue submission** after reviewing the frozen Preview. Confirm in StableNew. Once the normal queue
+  records the batch, use its receipt to refresh job status and load available results from the shared folder. A Site
+  submission uses the existing queue dispatch policy.
+- If the Preview changes or an admission cannot be verified, inspect the Windows draft or queue. A timed-out remote
+  request is never resubmitted automatically.
 
-StableNew binds an accepted Preview revision to its exact immutable records, checks again after native confirmation,
-and uses the existing Add-to-Queue worker and admission. The bridge tracks only the current command and receipt in
-memory. The existing queue and repository own execution, status and persistence.
+## Ownership and access
+
+The native listener binds only IPv4 loopback port 49381 and requires the precise Site origin and an in-memory bearer.
+The owner-private hosted relay binds its short-lived remote code to the signed-in owner. It claims each relay request
+once and forwards a closed list of operations. Response data passes through private hosted storage and is removed after
+retrieval or by cleanup on subsequent relay activity. Responses expire for retrieval after 75 seconds. The relay allows
+32 MiB per transferred file. Output folder grants are read-only. Eval media must resolve under the granted folder and
+match the saved SHA-256. Job results are limited to jobs recorded in this session and to media in the granted folder.
+
+PromptPack requests resolve an opaque selection, require the selected pack to retain its saved digest and bind the selected
+slots to an empty native draft revision. Both clients use the same Add to Job, immutable Preview, and normal queue
+admission. The paired session stores only preparation and delivery state. The existing queue and repository own execution
+and persistence.
 
 ## Execution profile and validation
 
-Architectural, bounded Windows integration. Claude Code Opus 5.5 High or Codex GPT-6 Astra High for the cross-origin,
-UI lifecycle, and exact-Preview review. Either host on Local Windows. Expected implementation and review usage is
-about 10M cache-read and 80k output tokens. The security and concurrency boundary makes a single broader review less
-costly than repeated lower-effort repair.
+Architectural Windows and hosted Site integration. Claude Code Opus 5.5 High or Codex GPT-6 Astra High. Prefer local
+Windows for the host adapter and mock queue, with the current session for Sites publication. Expected usage is about
+10M–30M cache-read and 100k output tokens. Routing the package through a single higher-tier session reduces retries
+across request identity, disk scope, and the asynchronous native draft lifecycle.
 
-Controller Surface Assessment. Extract the existing Add-to-Queue launch coordination into the existing submission
-service. The smaller AppController delegates both cases to that service and lowers its recorded ceiling. Neither bridge
-module owns a compiler, queue, runner, SQLite write or backend.
+Controller Surface Assessment. Move the existing Add to Job implementation into its own service and delegate from
+AppController. The controller ceiling decreases. The relay has no second compiler, queue, runner or history store.
 
-Token-Efficient Validation Plan. Run the Site bridge, Add-to-Queue and controller-surface tests on Python 3.14 first.
-These use fake work and exercise exact Preview reference, permission failures, repeat requests, stale drafts, receipts
-and native admission. Then run the local PR gate once and verify `required`, `full-suite` and `windows` at the published
-head when publication is authorized. Use simulated jobs for integration verification. Actual generation requires a
-separate owner decision.
+Token-Efficient Validation Plan. Run the focused startup, bridge, PromptPack draft and queue tests on Python 3.14.
+Use synthetic media and an isolated queue. Exercise the hosted relay with an in-memory SQLite database and temporary
+media storage. Run the local PR gate once near closeout. At authorized publication verify `required`, `full-suite`
+and `windows` at the PR head. Live generation is outside deterministic validation.

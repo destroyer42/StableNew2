@@ -62,7 +62,7 @@ from src.config.app_config import (
     set_webui_health_total_timeout_seconds,
     set_webui_workdir,
 )
-from src.contracts import PackJobEntry, PreviewRequest
+from src.contracts import PreviewRequest
 from src.controller.app_controller_services import shutdown_coordinator
 from src.controller.app_controller_services.ai_assist_integration import AiAssistIntegration
 from src.controller.app_controller_services.application_runtime_coordinator import (
@@ -86,6 +86,10 @@ from src.controller.app_controller_services.gui_config_service import (
 )
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
+)
+from src.controller.app_controller_services.pack_draft_service import (
+    SitePackDraft,
+    prepare_pack_draft,
 )
 from src.controller.app_controller_services.pack_settings_apply_service import (
     PackApplyReport,
@@ -4560,100 +4564,10 @@ class AppController:
             stage_overrides=stage_overrides,
         )
 
-    def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
-        """Capture working settings on the GUI thread, then load pack rows off-thread."""
-        if not pack_ids:
-            return
-
-        action = f"on_pipeline_add_packs_to_job({pack_ids})"
-        self.current_operation_label = f"Adding {len(pack_ids)} pack(s) to job"
-        self.last_ui_action = action
-
-        def report_failure(message: str) -> None:
-            self._append_log(f"[controller] {message}")
-            self._update_status(message)
-            self._clear_active_operation(action)
-
-        try:
-            stage_flags = self._build_stage_flags()
-            randomizer_metadata = self._build_randomizer_metadata()
-            draft_config = self._capture_pack_draft_config()
-        except Exception as exc:  # noqa: BLE001 - refuse the entire Add to Job action
-            report_failure(f"Could not add PromptPacks. {exc}")
-            return
-
-        def worker() -> None:
-            entries: list[PackJobEntry] = []
-            messages: list[str] = []
-            try:
-                for pack_id in pack_ids:
-                    pack = self._find_pack_by_id(pack_id)
-                    if pack is None:
-                        messages.append(f"Pack not found: {pack_id}")
-                        continue
-
-                    try:
-                        pack_config = self._config_manager.load_pack_config(pack_id)
-                    except Exception as exc:  # noqa: BLE001 - preserve the saved-settings path for legacy packs
-                        if draft_config.stage_overrides is not None:
-                            raise
-                        messages.append(f"Failed to read pack config for '{pack_id}': {exc}")
-                        pack_config = None
-
-                    try:
-                        config_snapshot = draft_config.merge(pack_config or {})
-                    except (TypeError, ValueError, AttributeError) as exc:
-                        raise ValueError(f"Could not merge settings for '{pack_id}'. {exc}") from exc
-
-                    pipeline_section = config_snapshot["pipeline"]
-                    for stage in ("adetailer", "upscale", "txt2img", "img2img"):
-                        pipeline_section[f"{stage}_enabled"] = stage_flags.get(stage, stage == "txt2img")
-                    config_snapshot.setdefault("randomization_enabled", randomizer_metadata["enabled"])
-
-                    try:
-                        prompts = read_prompt_pack(pack.path)
-                    except Exception as exc:  # noqa: BLE001 - report the unreadable pack and continue with others
-                        messages.append(f"Failed to read pack '{pack_id}': {exc}")
-                        continue
-                    if not prompts:
-                        messages.append(f"Pack '{pack_id}' has no prompts")
-
-                    for row_index, row in enumerate(prompts):
-                        entries.append(PackJobEntry(
-                            pack_id=pack_id,
-                            pack_name=pack.name,
-                            config_snapshot=config_snapshot,
-                            prompt_text=row.get("positive", "").strip(),
-                            negative_prompt_text=row.get("negative", "").strip(),
-                            stage_flags=stage_flags,
-                            randomizer_metadata=randomizer_metadata,
-                            pack_row_index=row_index,
-                        ))
-            except Exception as exc:  # noqa: BLE001 - report worker failure on the GUI thread
-                logger.exception("Failed to build the PromptPack draft")
-                message = f"Could not add PromptPacks. {exc}"
-                self._ui_dispatch(lambda: report_failure(message))
-                return
-
-            def publish() -> None:
-                for message in messages:
-                    self._append_log(f"[controller] {message}")
-                if entries and self.app_state:
-                    if self.app_state.add_packs_to_job_draft(entries) is not False:
-                        self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft")
-                        self.generation_profiles.note_draft_built()
-                    else:
-                        self._append_log("[controller] Packs not added: discard the open History variation first")
-                    self._mark_ui_dirty(preview=True)
-                self._clear_active_operation(action)
-
-            self._ui_dispatch(publish)
-
-        can_dispatch = callable(getattr(getattr(self, "main_window", None), "run_in_main_thread", None))
-        if self.threaded and can_dispatch:
-            self._spawn_tracked_thread(target=worker, name=f"PackAdd-{len(pack_ids)}", purpose=action)
-        else:
-            worker()
+    def on_pipeline_add_packs_to_job(
+        self, pack_ids: list[str], *, selection: SitePackDraft | None = None
+    ) -> None:
+        prepare_pack_draft(self, pack_ids, read_prompt_pack, selection)
 
     def add_single_prompt_to_draft(self) -> None:
         """Capture the current prompt/negative pair in the pipeline draft summary."""
