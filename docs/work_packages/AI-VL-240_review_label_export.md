@@ -130,18 +130,26 @@ measures, 1-5 ratings and path-only records are never exported.
 
 ## 3. Gaps and the smallest change that would close each
 
-None of these is added to `src/` by this package. Each needs its own authorization (a Review behavior change that stores a
+None of these was added to `src/` by this package. Each needs its own authorization (a Review behavior change that stores a
 new kind of operator evidence). One change, "Save inspection", closes the first four together.
 
-| Gap | Smallest change | What evaluation can do without it |
-| --- | --- | --- |
-| No confirmed-clean mark | An "Inspected, no defect seen" control in Inspect & Improve that saves, through the existing `_save_feedback` / `save_review_feedback` path and the same proof-at-the-writer rule used for pair judgments, a record `guided_inspection_review {schema, source: operator_review, image_sha256, image_size, verdict: no_defect_seen}`. Hash-bound, never stamps the file. | Score defect recall on confirmed regions and before/after usefulness. Report clean-image false positives, hallucination and refusal on clean input as NOT MEASURED. Do not use unmarked images as clean. |
-| Confirmed findings are not saved unless a correction is queued | The same record carries `findings[]` (category, region, certainty, confirmation; **no observation text**) when the operator saves the inspection. | Findings for corrected images only (exported now). |
-| No severity | An optional two-value severity (`minor`, `major`, matching the VL-220 contract) on `Finding` and in the record. | Score category and region without severity; skip the severity check. |
-| No subject count | An optional "Subjects in image" integer in the same record. | Multi-subject consistency NOT MEASURED. |
-| No per-element prompt adherence | Larger than the others. Smallest: operator-authored element rows (label, present / partly / absent) in the same record. The labels are prompt-derived text, so they need an explicit owner decision on whether private prompt-derived labels may be exported. | Adherence NOT MEASURED. The 1-5 subscore is neither hash-bound nor per-element and is not a label. |
-| `adetailer_outcome_review` has no digest | Add the two SHA-256 digests to `reviewed_pair` and stop stamping in that path. | Superseded by the guided pair judgment, which is exported. |
-| Model family not frozen | Record the policy family in the job's provenance at admission. | Stratify by nothing; the checkpoint name is withheld on purpose. |
+**Status (2026-11-17): the first four rows are closed by AI-VL-243** (`docs/work_packages/AI-VL-243_save_inspection.md`, owner
+decision D25). The record that was implemented differs from the sketch below: it is a Review evidence kind `review_inspection`
+(source `review_tab_inspection`, `src/review/review_evidence.py`) written through the same `LearningRecordWriter` by Inspect &
+Improve's **Save inspection** / **No defect seen**, with `verdict`, `findings[]` of category, region, certainty and optional
+severity (no observation text), and an optional `subject_count` of 1 to 12. The exporter reads it (`clean_confirmed`, findings,
+severity, `subject_count`) and `describe` reports it. The last three rows remain open. The sections above describe the exporter
+and the audit **as of AI-VL-240** (`clean_confirmed` always false, `subject_count` always null); sections 1 and 2 are history.
+
+| Gap | Smallest change | What evaluation can do without it | Status |
+| --- | --- | --- | --- |
+| No confirmed-clean mark | An "Inspected, no defect seen" control in Inspect & Improve that saves, through the existing `_save_feedback` / `save_review_feedback` path and the same proof-at-the-writer rule used for pair judgments, a record `guided_inspection_review {schema, source: operator_review, image_sha256, image_size, verdict: no_defect_seen}`. Hash-bound, never stamps the file. | Score defect recall on confirmed regions and before/after usefulness. Report clean-image false positives, hallucination and refusal on clean input as NOT MEASURED. Do not use unmarked images as clean. | Closed by AI-VL-243: `verdict: no_defect_seen`. |
+| Confirmed findings are not saved unless a correction is queued | The same record carries `findings[]` (category, region, certainty, confirmation; **no observation text**) when the operator saves the inspection. | Findings for corrected images only (exported now). | Closed by AI-VL-243: `verdict: defects_confirmed` with `findings[]`. |
+| No severity | An optional two-value severity (`minor`, `major`, matching the VL-220 contract) on `Finding` and in the record. | Score category and region without severity; skip the severity check. | Closed by AI-VL-243: optional `Finding.severity` and `findings[].severity`. |
+| No subject count | An optional "Subjects in image" integer in the same record. | Multi-subject consistency NOT MEASURED. | Closed by AI-VL-243: optional `subject_count` (1 to 12). |
+| No per-element prompt adherence | Larger than the others. Smallest: operator-authored element rows (label, present / partly / absent) in the same record. The labels are prompt-derived text, so they need an explicit owner decision on whether private prompt-derived labels may be exported. | Adherence NOT MEASURED. The 1-5 subscore is neither hash-bound nor per-element and is not a label. | Open: needs an owner privacy decision on prompt-derived labels. |
+| `adetailer_outcome_review` has no digest | Add the two SHA-256 digests to `reviewed_pair` and stop stamping in that path. | Superseded by the guided pair judgment, which is exported. | Open. |
+| Model family not frozen | Record the policy family in the job's provenance at admission. | Stratify by nothing; the checkpoint name is withheld on purpose. | Open. |
 
 ## Acceptance and evidence reuse
 

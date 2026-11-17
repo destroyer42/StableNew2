@@ -35,6 +35,7 @@ from src.gui.view_contracts.review_selection_contract import (
 )
 from src.gui.view_contracts.review_workspace_contract import (
     FILTER_LABELS,
+    INSPECTION_LABELS,
     STATE_LABELS,
     ItemState,
     ReviewWorkspaceSession,
@@ -64,7 +65,12 @@ from src.review.effective_prompt import (
     redact_view,
 )
 from src.review.improvement_evidence import ImprovementPair
-from src.review.review_evidence import save_disposition
+from src.review.review_evidence import (
+    InspectionDraft,
+    clear_inspection,
+    save_disposition,
+    save_inspection,
+)
 from src.review.review_lineage import repository_of, resolve_result_images
 from src.review.workflow_adapter import (
     ReviewWorkflowAdapter,
@@ -144,6 +150,8 @@ class ReviewTabFrame(ttk.Frame):
         self._effective_settings_var = tk.StringVar(value="Effective settings: select an image")
         self._prior_review_summary_var = tk.StringVar(value="Prior Review Summary: none")
         self._feedback_undo_stack: list[list[dict[str, str]]] = []
+        #: ``(image path, SHA-256)`` of each inspection saved from Inspect & Improve, for Undo (a clearing row).
+        self._inspection_undo: list[tuple[str, str]] = []
         self._feedback_status_var = tk.StringVar(value="")
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
@@ -669,7 +677,8 @@ class ReviewTabFrame(ttk.Frame):
         self.undo_button.grid(row=0, column=0, sticky="ew", padx=(0, 3))
         attach_tooltip(
             self.undo_button,
-            "Undo the last decision (a new row restores the earlier one; nothing is deleted) or the last saved rating.",
+            "Undo the last decision (a new row restores the earlier one; nothing is deleted), the last saved "
+            "inspection (a clearing row is recorded) or the last saved rating.",
         )
         self.write_rating_button = ttk.Button(
             undo_row,
@@ -1167,6 +1176,7 @@ class ReviewTabFrame(ttk.Frame):
         self._image_index_by_row = []
         self._row_texts = []
         self._undo_order = []
+        self._inspection_undo = []
         self.images_list.delete(0, tk.END)
         self.selection_label.config(text="No images selected")
         self.meta_label.config(text="Metadata: n/a")
@@ -1338,6 +1348,7 @@ class ReviewTabFrame(ttk.Frame):
             deduped.append(path)
 
         self._undo_order = []
+        self._inspection_undo = []
         self._session.set_items(deduped)
         self.selected_images = self._session.paths()
         self.selection_label.config(text=f"{len(self.selected_images)} image(s) selected")
@@ -2142,6 +2153,8 @@ class ReviewTabFrame(ttk.Frame):
             revision=(token.selection, token.image),
             current=current,
             save=self._save_feedback,
+            save_inspection=self._write_inspection if self._bind_writer() is not None else None,
+            inspection_saved=self._inspection_saved,
         )
 
     def _open_mask_editor(self) -> None:
@@ -2291,6 +2304,76 @@ class ReviewTabFrame(ttk.Frame):
             disposition=disposition,
             artifact_sha256=digest or None,
             source_job_id=job_id,
+        )
+
+    def _write_inspection(self, draft: InspectionDraft) -> Any:
+        """Blocking (runs on the dialog's worker): append one inspection through the one evidence writer."""
+
+        writer = self._writer
+        if writer is None:
+            raise OSError(
+                "Learning evidence is not connected, so the inspection cannot be recorded."
+            )
+        return save_inspection(
+            writer,
+            image_path=draft.image_path,
+            verdict=draft.verdict,
+            findings=draft.findings,
+            subject_count=draft.subject_count,
+            artifact_sha256=draft.artifact_sha256,
+            image_size=draft.image_size,
+        )
+
+    def _inspection_saved(self, draft: InspectionDraft) -> None:
+        """Tk thread, after the write was confirmed: show the verdict on the image's row and make it undoable."""
+
+        self._inspection_undo.append((draft.image_path, draft.artifact_sha256))
+        self._undo_order.append("inspection")
+        self._session.note_inspection(item_key(draft.image_path), draft.verdict)
+        self._feedback_status_var.set(
+            f"Saved inspection ({INSPECTION_LABELS[draft.verdict]}) for {Path(draft.image_path).name}. "
+            "The image file was not changed and no job was queued."
+        )
+
+    def _undo_last_inspection(self) -> None:
+        """Record a clearing row for the last saved inspection; the earlier rows stay (nothing is deleted)."""
+
+        if not self._inspection_undo:
+            self._feedback_status_var.set("Nothing to undo.")
+            return
+        writer = self._bind_writer()
+        if writer is None:
+            self._feedback_status_var.set(
+                "Learning evidence is not connected, so Undo cannot be recorded."
+            )
+            return
+        entry = self._inspection_undo.pop()
+        self._discard_undo_marker("inspection")
+        path, digest = entry
+
+        def work() -> None:
+            clear_inspection(writer, image_path=path, artifact_sha256=digest)
+
+        def done(_unused: None) -> None:
+            if self.winfo_exists():
+                self._session.note_inspection(item_key(path), "")
+                self._feedback_status_var.set(
+                    "Undid the saved inspection (a clearing row was recorded; nothing was deleted)."
+                )
+
+        def failed(error: Exception) -> None:
+            self._inspection_undo.append(entry)
+            self._undo_order.append("inspection")
+            if self.winfo_exists():
+                self._feedback_status_var.set(f"The inspection was not undone: {error}")
+
+        self._work.submit(
+            "review:undo-inspection",
+            work,
+            on_result=done,
+            on_error=failed,
+            name="review-undo-inspection",
+            purpose="Record a clearing row for the last saved Review inspection",
         )
 
     def _on_session_changed(self) -> None:
@@ -2544,6 +2627,9 @@ class ReviewTabFrame(ttk.Frame):
 
     def _undo_last_action(self) -> None:
         last = self._undo_order[-1] if self._undo_order else ""
+        if last == "inspection":
+            self._undo_last_inspection()
+            return
         if last == "rating":
             self._undo_last_feedback_save()
             return

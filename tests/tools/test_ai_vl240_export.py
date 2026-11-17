@@ -595,7 +595,9 @@ def test_describe_counts_progress_and_no_ids(populated: World) -> None:
         "met": False,
         "recordable_in_review": True,
     }
-    assert progress["clean_confirmed_images"]["recordable_in_review"] is False
+    assert (
+        progress["clean_confirmed_images"]["recordable_in_review"] is True
+    )  # Save inspection (AI-VL-243)
     assert progress["judged_pairs"]["target"] == 12
     assert (
         export.describe(collect(populated), targets="pilot")["progress"]["judged_pairs"]["target"]
@@ -766,3 +768,348 @@ def test_default_paths_are_the_checkouts_stores_and_create_nothing(tmp_path: Pat
     assert records == (tmp_path / "data" / "learning" / "learning_records.jsonl").resolve()
     assert repository.name == "jobs.sqlite3" and tmp_path.resolve() in repository.parents
     assert not any(tmp_path.iterdir())
+
+
+# ------------------------------------------------------------------------------- Save inspection (AI-VL-243)
+
+
+def _save_inspection(
+    world: World,
+    path: Path,
+    verdict: str,
+    findings: tuple[tuple[str, Any, Any], ...] = (),
+    *,
+    subject_count: int | None = None,
+) -> None:
+    """Write one inspection the way Review does: through ``review_evidence`` and ``LearningRecordWriter``."""
+
+    from src.learning.learning_record import LearningRecordWriter
+    from src.review import review_evidence
+    from src.review.assist.contracts import SourceIdentity
+    from src.review.findings import (
+        Category,
+        Certainty,
+        Confirmation,
+        Finding,
+        FindingSource,
+        Origin,
+        Region,
+        Severity,
+    )
+
+    identity = SourceIdentity(_sha(path), path.stat().st_size, 16, 12, 1, "PNG")
+    source = FindingSource(path, identity, (1, 1))
+    built = [
+        Finding(
+            source,
+            Region(*box) if box else None,
+            Category(category),
+            Origin.OPERATOR,
+            NOTE_SENTINEL,
+            Certainty.CLEAR,
+            Confirmation.CONFIRMED,
+            severity=Severity(severity) if severity else None,
+        )
+        for category, box, severity in findings
+    ]
+    review_evidence.save_inspection(
+        LearningRecordWriter(world.records),
+        image_path=path,
+        verdict=verdict,
+        findings=built,
+        subject_count=subject_count,
+        image_size=(16, 12),
+    )
+
+
+def _images_by_sha(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {item["sha256"]: item for item in document["images"]}
+
+
+def test_a_saved_clean_inspection_is_the_only_source_of_clean_confirmed(populated: World) -> None:
+    clean, digest = populated.image("clean_one", 60)
+    _save_inspection(populated, clean, "no_defect_seen", subject_count=1)
+    document = export.build_document(collect(populated))
+    images = _images_by_sha(document)
+    assert images[digest]["clean_confirmed"] is True
+    assert images[digest]["findings"] == [] and images[digest]["subject_count"] == 1
+    assert [item["clean_confirmed"] for item in document["images"]].count(True) == 1
+    report = export.describe(collect(populated), targets="full")
+    assert report["progress"]["clean_confirmed_images"] == {
+        "have": 1,
+        "target": 20,
+        "remaining": 19,
+        "met": False,
+        "recordable_in_review": True,
+    }
+    assert report["counts"]["clean_confirmed_images"] == 1
+    assert report["counts"]["inspections_by_verdict"]["no_defect_seen"] == 1
+    assert (
+        document["provenance"]["availability"]["clean_confirmed"]
+        == "saved_inspection_no_defect_seen_only"
+    )
+
+
+def test_a_saved_defect_inspection_exports_findings_severity_and_subject_count(
+    world: World,
+) -> None:
+    image, digest = world.image("d1", 61)
+    _save_inspection(
+        world,
+        image,
+        "defects_confirmed",
+        (
+            ("Hands", (0, 0, 8, 8), "major"),
+            ("Face", None, None),
+            ("Prompt adherence", None, "minor"),
+        ),
+        subject_count=4,
+    )
+    entry = _images_by_sha(export.build_document(collect(world)))[digest]
+    assert [(f["category"], f["region"], f["severity"]) for f in entry["findings"]] == [
+        ("Face", None, None),
+        ("Hands", [0, 0, 8, 8], "major"),
+        ("Prompt adherence", None, "minor"),
+    ]
+    assert entry["subject_count"] == 4 and entry["clean_confirmed"] is False
+    assert all(set(f) == {"category", "region", "severity", "record_id"} for f in entry["findings"])
+
+
+def test_an_inspection_merges_with_the_guided_correction_for_the_same_bytes(world: World) -> None:
+    image, digest = world.image("m1", 62)
+    world.job(
+        "job-m",
+        parent_artifact_id=f"sha256:{digest}",
+        correction=correction("Hands", "ADetailer hand pass", (0, 0, 8, 8)),
+        request_paths=(image,),
+    )
+    _save_inspection(
+        world,
+        image,
+        "defects_confirmed",
+        (("Hands", (0, 0, 8, 8), "minor"), ("Anatomy", None, None)),
+    )
+    entry = _images_by_sha(export.build_document(collect(world)))[digest]
+    assert [(f["category"], f["region"], f["severity"]) for f in entry["findings"]] == [
+        ("Anatomy", None, None),
+        ("Hands", [0, 0, 8, 8], "minor"),
+    ]  # one Hands finding, not two: the severity the operator saved fills the correction's
+
+
+def test_clean_and_confirmed_finding_for_the_same_bytes_is_a_reported_contradiction(
+    world: World,
+) -> None:
+    image, digest = world.image("c1", 63)
+    _save_inspection(world, image, "no_defect_seen")
+    world.job(
+        "job-c1",
+        parent_artifact_id=f"sha256:{digest}",
+        correction=correction(),
+        request_paths=(image,),
+    )
+    paired, pd = world.image("c2", 64)
+    after, ad = world.image("c2_after", 65)
+    world.job(
+        "job-c2",
+        parent_artifact_id=f"sha256:{pd}",
+        correction=correction("Face", "Edit mask", None),
+        result_paths=(after,),
+        request_paths=(paired,),
+    )
+    world.judgment("rec-c2", "job-c2", pd, ad, [row("Face", "improved", None)])
+    _save_inspection(world, paired, "no_defect_seen")
+    collected = collect(world)
+    codes = sorted(item.code for item in collected.refused)
+    assert codes == ["clean_contradicts_confirmed_finding"] * 2
+    document = export.build_document(collected)
+    images = _images_by_sha(document)
+    assert digest not in images  # no pair needs it, and neither label can be trusted
+    kept = images[pd]  # part of a judged pair: kept, with no label from either side
+    assert kept["clean_confirmed"] is False and kept["findings"] == []
+    assert len(document["pairs"]) == 1
+    assert export.describe(collected)["counts"]["refused_by_reason"] == {
+        "clean_contradicts_confirmed_finding": 2
+    }
+
+
+def test_changed_bytes_exclude_the_inspection_and_are_counted(world: World) -> None:
+    changed, digest = world.image("x1", 66)
+    kept, kept_digest = world.image("x2", 67)
+    _save_inspection(world, changed, "no_defect_seen", subject_count=2)
+    _save_inspection(world, kept, "no_defect_seen")
+    changed.write_bytes(
+        changed.read_bytes() + b"\0"
+    )  # the file changed after the operator inspected it
+    gone, gone_digest = world.image("x3", 68)
+    _save_inspection(world, gone, "no_defect_seen")
+    gone.unlink()
+    collected = collect(world)
+    assert set(collected.images) == {kept_digest}
+    assert sorted(item.code for item in collected.refused) == [
+        "inspection_image_changed_since_review",
+        "inspection_image_unavailable",
+    ]
+    counts = export.describe(collected)["counts"]
+    assert counts["refused_by_reason"]["inspection_image_changed_since_review"] == 1
+    assert counts["clean_confirmed_images"] == 1
+
+
+def test_latest_inspection_per_image_wins_and_a_cleared_row_exports_nothing(world: World) -> None:
+    image, digest = world.image("l1", 69)
+    _save_inspection(world, image, "no_defect_seen")
+    _save_inspection(world, image, "defects_confirmed", (("Hands", None, None),), subject_count=2)
+    entry = _images_by_sha(export.build_document(collect(world)))[digest]
+    assert entry["clean_confirmed"] is False and entry["subject_count"] == 2
+    assert [f["category"] for f in entry["findings"]] == ["Hands"]
+    from src.learning.learning_record import LearningRecordWriter
+    from src.review import review_evidence
+
+    review_evidence.clear_inspection(
+        LearningRecordWriter(world.records), image_path=image, artifact_sha256=digest
+    )
+    collected = collect(world)
+    assert collected.images == {} and collected.refused == []
+    assert export.describe(collected)["counts"]["inspections_by_verdict"]["cleared"] == 1
+
+
+def test_a_malformed_or_unbound_inspection_row_is_refused_with_a_code(world: World) -> None:
+    image, digest = world.image("b1", 70)
+    _save_inspection(world, image, "defects_confirmed", (("Hands", None, None),))
+    row = json.loads(world.records.read_text("utf-8").splitlines()[0])
+    bad = json.loads(json.dumps(row))
+    bad["run_id"] = "bad-1"
+    bad["metadata"]["findings"][0]["observation"] = NOTE_SENTINEL  # free text is never accepted
+    bad["metadata"]["artifact_sha256"] = "1" * 64
+    unbound = json.loads(json.dumps(row))
+    unbound["run_id"] = "bad-2"
+    unbound["metadata"]["artifact_sha256"] = "nope"
+    with world.records.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(bad) + "\n")
+        handle.write(json.dumps(unbound) + "\n")
+    collected = collect(world)
+    assert [(item.record_id, item.code) for item in collected.refused] == [
+        ("bad-1", "malformed_inspection")
+    ]
+    assert digest in collected.images  # the valid row for the real image is still used
+
+
+def test_visibility_applies_to_inspected_images(world: World) -> None:
+    hidden, digest = world.image("n1", 71, rating="nsfw")
+    _save_inspection(world, hidden, "no_defect_seen")
+    sfw = export.collect(world.records, world.repository, visibility_mode="sfw")
+    assert sfw.images == {} and sfw.withheld["inspection_image"] == 1
+    nsfw = export.collect(world.records, world.repository, visibility_mode="nsfw")
+    assert nsfw.images[digest].clean is True
+
+
+def test_describe_reports_clean_images_and_subject_counts_against_the_targets(
+    world: World,
+) -> None:
+    for index, count in enumerate((1, 2, 2, 5, 9, None)):
+        image, _ = world.image(f"s{index}", 80 + index)
+        _save_inspection(world, image, "no_defect_seen", subject_count=count)
+    report = export.describe(collect(world), targets="pilot")
+    assert report["counts"]["clean_confirmed_images"] == 6
+    assert report["counts"]["images_with_subject_count"] == 5
+    assert report["counts"]["subject_counts"] == {
+        "1": 1,
+        "2": 2,
+        "3": 0,
+        "4": 0,
+        "5_or_more": 2,
+    }
+    assert report["progress"]["clean_confirmed_images"] == {
+        "have": 6,
+        "target": 10,
+        "remaining": 4,
+        "met": False,
+        "recordable_in_review": True,
+    }
+    assert report["progress"]["multi_subject_images"] == {
+        "have": 4,
+        "target": 5,
+        "remaining": 1,
+        "met": False,
+        "recordable_in_review": True,
+    }
+    text = json.dumps(report)
+    assert not any(
+        len(token) == 64 and set(token) <= set("0123456789abcdef")
+        for token in text.replace('"', " ").split()
+    )
+
+
+def test_inspection_content_never_reaches_stdout_the_export_or_errors(
+    world: World, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    image, _ = world.image("p1", 90)
+    _save_inspection(world, image, "defects_confirmed", (("Face", (1, 1, 5, 5), "major"),))
+    clean, _ = world.image("p2", 91)
+    _save_inspection(world, clean, "no_defect_seen", subject_count=2)
+    out = tmp_path.parent / f"{tmp_path.name}_insp"
+    argv = ["--learning-records", str(world.records), "--job-repository", str(world.repository)]
+    assert cli.main(["export", *argv, "--out", str(out)]) == 0
+    assert cli.main(["describe", *argv]) == 0
+    printed = capsys.readouterr().out
+    exported = b"".join(p.read_bytes() for p in out.rglob("*.json"))
+    haystack = printed.encode() + exported
+    # the record file holds a path locator (as every Review record does) but never the operator's text
+    assert NOTE_SENTINEL.encode() not in world.records.read_bytes()
+    for sentinel in (PROMPT_SENTINEL, NOTE_SENTINEL, NAME_SENTINEL):
+        assert sentinel.encode() not in haystack
+    assert not [p for p in out.rglob("*") if NAME_SENTINEL in p.name]
+    for code in (
+        "clean_contradicts_confirmed_finding",
+        "inspection_image_changed_since_review",
+        "inspection_image_unavailable",
+        "malformed_inspection",
+    ):
+        assert str(Refused(code, "rec-1")) == code
+        assert NAME_SENTINEL not in repr(Refused(code))
+
+
+def test_inspections_cause_zero_writes_to_the_stores_the_exporter_reads(
+    populated: World, tmp_path: Path
+) -> None:
+    image, _ = populated.image("z1", 95)
+    _save_inspection(
+        populated, image, "defects_confirmed", (("Hands", None, None),), subject_count=3
+    )
+    folders = (populated.records.parent, populated.repository.parent, populated.images)
+    for path in (populated.records, populated.repository):
+        os.chmod(path, 0o444)
+    before = snapshot_of(*folders)
+    listing = {folder: sorted(p.name for p in folder.iterdir()) for folder in folders}
+    export.describe(collect(populated))
+    export.write_export(collect(populated), tmp_path.parent / f"{tmp_path.name}_insp_ro")
+    assert snapshot_of(*folders) == before
+    assert {folder: sorted(p.name for p in folder.iterdir()) for folder in folders} == listing
+
+
+def test_inspection_vocabulary_is_pinned_to_review() -> None:
+    from src.review import review_evidence
+    from src.review.findings import Severity
+
+    assert contract.INSPECTION_SOURCE == review_evidence.INSPECTION_SOURCE
+    assert contract.SEVERITIES == tuple(item.value for item in Severity)
+    assert review_evidence.SUBJECT_COUNT_MAX == 12
+
+
+def test_vl242_converter_accepts_the_new_fields_as_they_arrive(world: World) -> None:
+    from tools.qualification.vl220 import review_export
+
+    clean, _ = world.image("k1", 100)
+    _save_inspection(world, clean, "no_defect_seen", subject_count=2)
+    defect, _ = world.image("k2", 101)
+    _save_inspection(
+        world,
+        defect,
+        "defects_confirmed",
+        (("Hands", (0, 0, 8, 8), "major"), ("Prompt adherence", None, None)),
+        subject_count=1,
+    )
+    document = export.build_document(collect(world))
+    summary = review_export.convert(document).summary
+    assert (summary["clean"], summary["defective"]) == (1, 1)
+    assert summary["subject_count_recorded"] == 2 and summary["multi_subject"] == 1
+    assert summary["prompt_findings_dropped"] == 1 and summary["image_cases"] == 2
