@@ -267,6 +267,62 @@ def test_the_archived_filter_lists_archived_images_after_a_restart_and_does_not_
 
 
 @pytest.mark.gui
+def test_opening_a_recent_job_after_a_discard_and_restart_lists_the_archived_output(
+    tk_root, tmp_path
+):
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from src.queue.job_history_store import JobHistoryEntry
+    from src.queue.job_model import JobStatus
+
+    paths = _outputs(tmp_path, 2)
+    first = ReviewTabFrame(tk_root)
+    try:
+        _attach_writer(first, tmp_path)
+        first._set_selected_images(paths)
+        first._on_decision_key("discard")  # paths[0] moves into the archive
+        assert not paths[0].exists()
+    finally:
+        first.destroy()
+
+    entry = JobHistoryEntry(
+        job_id="history-arc",
+        created_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+        result={
+            "success": True,
+            "artifact": {
+                "artifact_type": "image",
+                "primary_path": str(paths[0]),
+                "output_paths": [str(path) for path in paths],
+            },
+            "variants": [],
+            "metadata": {},
+        },
+    )
+    second = ReviewTabFrame(tk_root, app_state=SimpleNamespace(history_items=[entry]))
+    try:
+        _attach_writer(second, tmp_path)
+        second._on_open_recent_job()
+        picker = second._set_picker
+        picker.tree.selection_set("history-arc")
+        picker._open()
+        second.update()
+
+        assert paths[1] in second.selected_images and paths[0] in second.selected_images
+        _show_archived_filter(second)
+        assert _visible_names(second) == [paths[0].name]
+        assert "(in archive)" in second._row_texts[0]
+        assert second._select_key(item_key(paths[0]))
+        assert str(second.restore_button.cget("state")) == "normal"
+        assert second._restore_current()
+        assert paths[0].exists() and not _where(tmp_path, paths[0]).exists()
+    finally:
+        second.destroy()
+
+
+@pytest.mark.gui
 def test_the_decision_tooltips_say_what_discard_does(tk_root, tmp_path):
     tab = ReviewTabFrame(tk_root)
     try:

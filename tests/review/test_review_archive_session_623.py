@@ -133,6 +133,53 @@ def test_a_saved_rating_still_resolves_by_digest_while_the_file_is_archived(lab)
     assert image.exists() and session.facts_of(lab.key(0)).rating == 4
 
 
+def test_restore_returns_the_last_discarded_file_after_a_new_file_took_the_same_path(lab):
+    image, key = lab.images[0], lab.key(0)
+    first_bytes = image.read_bytes()
+    lab.session.set_items(lab.images)
+    assert lab.session.decide(key, "discard")  # discard A
+    second_bytes = image_file(image, 90).read_bytes()  # a new file B at the same path
+    assert second_bytes != first_bytes
+    second_digest = _sha(image)
+    fresh = lab.new_session(_inline())
+    fresh.set_items(lab.images)
+    assert fresh.decide(key, "discard")  # discard B (A already holds the plain archive name)
+    assert not image.exists()
+
+    restarted = lab.new_session(
+        _inline()
+    )  # a new session: nothing is remembered but the evidence rows
+    restarted.set_items(lab.images)
+    facts = restarted.facts_of(key)
+    assert restarted.state_of(key) is ItemState.ARCHIVED
+    assert facts.location == LOC_ARCHIVED and facts.digest == second_digest
+    assert facts.other_archived == 1  # A is still in the archive, and the operator is told
+    assert "earlier file" in restarted.archive_line(key)
+
+    assert restarted.restore(key)
+    assert image.read_bytes() == second_bytes  # B comes back, byte for byte
+    # A is still kept: it is reported as present and is not lost.
+    assert [path.read_bytes() for path in arc.archived_variants(image, output_root=lab.output)] == [
+        first_bytes
+    ]
+    after = restarted.facts_of(key)
+    assert after.location == LOC_IN_PLACE and after.other_archived == 1
+
+
+def test_a_free_path_with_a_newer_discard_is_not_reported_missing(lab):
+    image, key = lab.images[0], lab.key(0)
+    lab.session.set_items(lab.images)
+    lab.session.decide(key, "discard")
+    image_file(image, 91)
+    fresh = lab.new_session(_inline())
+    fresh.set_items(lab.images)
+    fresh.decide(key, "discard")
+    restarted = lab.new_session(_inline())
+    restarted.set_items(lab.images)
+    assert restarted.facts_of(key).location == LOC_ARCHIVED
+    assert "in the archive folder" in restarted.archive_line(key)
+
+
 def test_undo_and_restore_return_the_file_with_identical_bytes(lab):
     session = lab.session
     digests = [_sha(path) for path in lab.images]

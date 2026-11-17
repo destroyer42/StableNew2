@@ -32,6 +32,7 @@ from src.review.archive import (
     OCCUPIED,
     ArchiveOutcome,
     archived_location,
+    archived_variants,
 )
 from src.review.review_evidence import (
     DISPOSITION_CLEARED,
@@ -142,6 +143,8 @@ class ItemFacts:
     #: Where the file is now: ``in_place`` (at its original path), ``archived`` (only at its archive location) or
     #: ``missing`` (neither); empty until it was read.
     location: str = ""
+    #: Archive copies kept for this path besides the one in use (an older file discarded from the same path).
+    other_archived: int = 0
 
 
 LOC_IN_PLACE = "in_place"
@@ -261,10 +264,16 @@ class FileFactsCache:
         with self._lock:
             self._entries.clear()
 
-    def read_full(self, path: Path, output_root: Path | None = None) -> FileRead:
+    def read_full(
+        self, path: Path, output_root: Path | None = None, discarded_digest: str = ""
+    ) -> FileRead:
+        """``discarded_digest`` (from the latest Discard record for this path) picks the archive copy to read."""
+
         effective, location = path, LOC_IN_PLACE
         if not os.path.lexists(path):
-            archived = archived_location(path, output_root=output_root)
+            archived = archived_location(
+                path, output_root=output_root, digest=discarded_digest or None
+            )
             effective, location = (archived, LOC_ARCHIVED) if archived else (path, LOC_MISSING)
         try:
             stat = effective.stat()
@@ -303,7 +312,7 @@ def _facts_for(
     loaded: bool = True,
     output_root: Path | None = None,
 ) -> tuple[ItemFacts, str]:
-    read = (cache or FileFactsCache()).read_full(path, output_root)
+    read = (cache or FileFactsCache()).read_full(path, output_root, index.discard_digest(path))
     digest, job_id = read.digest, read.job_id
     decision = index.disposition(path, digest or None)
     rating = index.rating(path, digest or None)
@@ -324,6 +333,7 @@ def _facts_for(
             loaded=loaded,
             decided_at=_parse_stamp(decision.decided_at, decision.timestamp),
             location=read.location,
+            other_archived=_other_archived(path, read, output_root),
         ),
         digest,
     )
@@ -353,6 +363,15 @@ def _archived_from_records(
             have.add(key)
             found.append(original)
     return sorted(found)
+
+
+def _other_archived(path: Path, read: FileRead, output_root: Path | None) -> int:
+    """How many archive copies of this path exist besides the one this item stands for (names only, no reads)."""
+
+    if output_root is None:
+        return 0
+    copies = len(archived_variants(path, output_root=output_root))
+    return max(0, copies - (1 if read.location == LOC_ARCHIVED else 0))
 
 
 def collect_facts(
@@ -634,17 +653,30 @@ class ReviewWorkspaceSession:
         return f"[{label}] {item.name}{place}{rating}"
 
     def archive_line(self, key: str | None) -> str:
-        """What to tell the operator about one archived image: where the file is and, if not moved, why."""
+        """What to tell the operator about one image's archive: where the file is, why not moved, other copies."""
 
-        if key is None or self.state_of(key) is not ItemState.ARCHIVED or self._archive is None:
+        if key is None or self._archive is None:
             return ""
         facts = self.facts_of(key)
+        extra = (
+            " An earlier file discarded from this path is also in the archive folder."
+            if facts.other_archived
+            else ""
+        )
+        if self.state_of(key) is not ItemState.ARCHIVED:
+            return extra.strip()
         if facts.location == LOC_ARCHIVED:
-            return "Archived: the file is in the archive folder. Restore (or Undo) puts it back."
+            return (
+                "Archived: the file is in the archive folder. Restore (or Undo) puts it back."
+                + extra
+            )
         note = self.archive_notes.get(key, "")
         if facts.location == LOC_IN_PLACE:
-            return f"Discarded but not moved{': ' + note if note else '.'} Discard again to retry."
-        return "Discarded, but the file is neither at its original path nor in the archive."
+            return (
+                f"Discarded but not moved{': ' + note if note else '.'} Discard again to retry."
+                + extra
+            )
+        return "Discarded, but the file is neither at its original path nor in the archive." + extra
 
     def next_undecided(self, after: str | None) -> str | None:
         """The next visible image after ``after`` that still needs a decision (``None`` when there is none)."""

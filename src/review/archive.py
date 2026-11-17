@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import json
 import os
+import re
 import stat
 import time
 from collections.abc import Callable, Collection, Iterator
@@ -80,6 +82,10 @@ _REASONS = {
     NOT_ARCHIVED: "This file is not in the archive.",
 }
 
+_CHANGED_STRANDED_TEXT = (
+    "The file changed while it was being moved and could not be moved back; "
+    "it is in the archive folder."
+)
 _RETRY_WINERRORS = frozenset({5, 32, 33})
 _EXDEV_WINERROR = 17
 _HASH_CHUNK = 1024 * 1024
@@ -117,8 +123,24 @@ def archive_root(output_root: str | os.PathLike[str]) -> Path:
     return _abs(output_root) / ARCHIVE_DIR_NAME
 
 
+def _output_dir_setting() -> str | None:
+    """``output_dir`` from ``presets/settings.json`` (where ``ConfigManager`` keeps it), read-only and side-effect free."""
+
+    try:
+        with open(Path("presets") / "settings.json", encoding="utf-8") as stream:
+            data = json.load(stream)
+    except (OSError, ValueError):
+        return None
+    value = data.get("output_dir") if isinstance(data, dict) else None
+    return str(value) if isinstance(value, str) and value.strip() else None
+
+
 def configured_output_root(config_manager: Any = None) -> Path:
-    """The output root as the rest of the application resolves it (``output_dir`` setting, route folders stripped)."""
+    """The output root as the rest of the application resolves it (``output_dir`` setting, route folders stripped).
+
+    With a ``config_manager`` its setting is used; without one the same setting file is read directly (no
+    ``ConfigManager`` is built, so nothing is created), defaulting to ``output``.
+    """
 
     configured = None
     getter = getattr(config_manager, "get_setting", None)
@@ -127,6 +149,8 @@ def configured_output_root(config_manager: Any = None) -> Path:
             configured = getter("output_dir", None)
         except Exception:  # noqa: BLE001 - an unreadable setting only means the default root is used
             configured = None
+    elif config_manager is None:
+        configured = _output_dir_setting()
     return _abs(get_output_root(configured or "output", create=False))
 
 
@@ -421,6 +445,22 @@ def plan_archive(
     return ArchivePlan(path, digest, target, renamed=renamed, base=base)
 
 
+def _candidate_roots(path: Path, output_root: str | os.PathLike[str] | None) -> list[Path]:
+    """The output roots whose archive may hold ``path``: the given one, else those found from the path and the setting.
+
+    A reader that knows only a recorded path tries every ancestor that has an ``_archive`` folder (a file under the
+    output root) and then the configured output root (which is where an external file's copy lives).
+    """
+
+    if output_root is not None:
+        return [_abs(output_root)]
+    roots = [parent for parent in path.parents if (parent / ARCHIVE_DIR_NAME).is_dir()]
+    configured = configured_output_root()
+    if _norm(configured) not in {_norm(root) for root in roots}:
+        roots.append(configured)
+    return roots
+
+
 def archived_location(
     original: str | os.PathLike[str],
     *,
@@ -429,17 +469,14 @@ def archived_location(
 ) -> Path | None:
     """The archived copy of ``original`` when one exists, else ``None`` (read-only; never reads the file's bytes).
 
-    With ``output_root`` the archive is that root's. Without it every ancestor of ``original`` that has an
-    ``_archive`` folder is tried, so a reader that only knows a recorded path still finds its archive. With a
-    ``digest`` the digest-suffixed name (used when two different files share a path) is looked for too.
+    With ``output_root`` the archive is that root's. Without it the roots of ``_candidate_roots`` are tried, so a
+    reader that only knows a recorded path (inside or outside the output root) still finds its archive. With a
+    ``digest`` the copy holding those bytes is returned: the plain name when it matches, else the digest-suffixed name
+    (used when two different files shared a path); the plain name is hashed only then.
     """
 
     path = _abs(original)
-    if output_root is not None:
-        roots = [_abs(output_root)]
-    else:
-        roots = [parent for parent in path.parents if (parent / ARCHIVE_DIR_NAME).is_dir()]
-    for root in roots:
+    for root in _candidate_roots(path, output_root):
         target = mirror_target(path, root)
         if _is_file(target) and (not digest or _sha256(target) == digest):
             return target
@@ -448,6 +485,31 @@ def archived_location(
             if _is_file(alternate):
                 return alternate
     return None
+
+
+def archived_variants(
+    original: str | os.PathLike[str], *, output_root: str | os.PathLike[str] | None = None
+) -> list[Path]:
+    """Every archived copy kept for ``original``: the plain name and any digest-suffixed ones (names only, no reads)."""
+
+    path = _abs(original)
+    found: list[Path] = []
+    for root in _candidate_roots(path, output_root):
+        target = mirror_target(path, root)
+        folder = target.parent
+        pattern = re.compile(
+            rf"^{re.escape(target.stem)}\.[0-9a-f]{{8}}{re.escape(target.suffix)}$", re.IGNORECASE
+        )
+        try:
+            with os.scandir(io_path(folder)) as entries:
+                names = [entry.name for entry in entries]
+        except OSError:
+            continue
+        for name in sorted(names):
+            candidate = folder / name
+            if (_norm(name) == _norm(target.name) or pattern.match(name)) and _is_file(candidate):
+                found.append(candidate)
+    return found
 
 
 def archived_reason(original: str | os.PathLike[str] | None) -> str | None:
@@ -464,6 +526,14 @@ def archived_reason(original: str | os.PathLike[str] | None) -> str | None:
 
 
 # -- applying ------------------------------------------------------------------------------------------------------
+
+
+def _failure_text(code: str, origin: Path | None) -> str:
+    """The reason for a failed move; a changed file whose rollback failed says it is stranded in the archive."""
+
+    if code == CHANGED and origin is not None and not _exists(origin):
+        return _CHANGED_STRANDED_TEXT
+    return reason_text(code)
 
 
 def _is_exdev(error: OSError) -> bool:
@@ -586,7 +656,7 @@ def apply_archive(
     )
     if status != "moved":
         return ArchiveOutcome(
-            status, plan.source, plan.target, plan.digest, code, reason_text(code)
+            status, plan.source, plan.target, plan.digest, code, _failure_text(code, plan.source)
         )
     carried = _move_sidecar(plan.source, plan.target, rename, sleep)
     return ArchiveOutcome("moved", plan.source, plan.target, plan.digest, sidecar_moved=carried)
@@ -708,7 +778,12 @@ def apply_restore(
         code = OCCUPIED
     if status != "moved":
         return ArchiveOutcome(
-            status, plan.original, plan.archived, plan.digest, code, reason_text(code)
+            status,
+            plan.original,
+            plan.archived,
+            plan.digest,
+            code,
+            _failure_text(code, plan.archived),
         )
     carried = _move_sidecar(plan.archived, target, rename, sleep)
     return ArchiveOutcome("moved", plan.original, target, plan.digest, sidecar_moved=carried)
@@ -757,6 +832,7 @@ __all__ = [
     "archive_file",
     "archive_root",
     "archived_location",
+    "archived_variants",
     "archived_reason",
     "configured_output_root",
     "free_name",

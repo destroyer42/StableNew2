@@ -60,6 +60,7 @@ from src.review.adetailer_outcome import (
     resolve_adetailer_pair,
 )
 from src.review.archive import (
+    ARCHIVED_MESSAGE,
     ArchiveOutcome,
     active_input_paths,
     archive_file,
@@ -1365,7 +1366,8 @@ class ReviewTabFrame(ttk.Frame):
         if first:
             self.images_list.selection_clear(0, tk.END)
             self.images_list.selection_set(0)
-            self._show_image(first[0].path)
+            if os.path.lexists(first[0].path):
+                self._show_image(first[0].path)
 
     def _on_image_select(self, _event: tk.Event) -> None:
         idxs = self.images_list.curselection()
@@ -2886,14 +2888,24 @@ class ReviewTabFrame(ttk.Frame):
     def _load_resolved_outputs(self, resolution: Any, label: str) -> None:
         picker = self._set_picker
         images = [Path(path) for path in resolution.images]
+        # Outputs Review archived are part of the set (listed under Archived, restorable there); nothing reads them.
+        archived = [
+            Path(path)
+            for _job, path, reason in resolution.unavailable
+            if reason == ARCHIVED_MESSAGE
+        ]
         problems = " ".join(resolution.messages)
-        if not images:
+        if not images and not archived:
             if picker is not None and picker.winfo_exists():
                 picker.set_status(f"No usable image outputs for {label}. {problems}".strip())
             return
+        note = f" {len(archived)} archived by Review: see the Archived filter." if archived else ""
         count = self.load_selected_images(
-            images, status_message=f"Opened {len(images)} image(s) from {label}. {problems}".strip()
+            [*images, *archived],
+            status_message=f"Opened {len(images)} image(s) from {label}.{note} {problems}".strip(),
         )
+        if count and not images:
+            self._session.set_filter(ViewFilter.ARCHIVED)
         if count and picker is not None and picker.winfo_exists():
             picker.destroy()
 

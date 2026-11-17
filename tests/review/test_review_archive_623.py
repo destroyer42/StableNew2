@@ -286,6 +286,7 @@ def test_a_failed_rollback_still_loses_nothing_and_names_where_the_file_is(outpu
     assert outcome.status == "failed" and outcome.code == arc.CHANGED
     assert plan.target.exists() and not image.exists()  # one copy, in the archive, and reported
     assert outcome.target == plan.target
+    assert "could not be moved back" in outcome.message and "undone" not in outcome.message
 
 
 def test_the_app_stopping_between_record_and_move_leaves_the_file_in_place(output):

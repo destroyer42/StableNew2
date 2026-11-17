@@ -388,6 +388,17 @@ class EvidenceIndex:
     def disposition(self, image_path: Any, artifact_sha256: str | None) -> DispositionLookup:
         return _disposition_of(self._find(DISPOSITION_SOURCE, image_path, artifact_sha256))
 
+    def discard_digest(self, image_path: Any) -> str:
+        """The digest of the bytes the latest decision for this path discarded ("" when it is not a Discard)."""
+
+        payload = self._by_path[DISPOSITION_SOURCE].get(_path_key(image_path))
+        if payload is None:
+            return ""
+        metadata = payload["metadata"]
+        if str(metadata.get("review_disposition") or "") != "discard":
+            return ""
+        return normalize_digest(metadata.get("artifact_sha256"))
+
     def discarded(self) -> list[tuple[str, str]]:
         """``(image path, digest)`` of every image whose latest decision (by path) is Discard.
 

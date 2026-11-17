@@ -165,6 +165,90 @@ def test_batch_retry_preflight_reports_an_archived_source_then_passes_after_rest
         stack.repository.close()
 
 
+def test_an_archived_external_input_is_reported_by_replay_verification_and_never_read(
+    tmp_path, monkeypatch
+):
+    # The archive of a file outside the output root is found through the configured output root (default "output").
+    monkeypatch.chdir(tmp_path)
+    output = tmp_path / "output"
+    output.mkdir()
+    image = image_file(tmp_path / "elsewhere" / "ext.png", 5)
+    digest = _sha(image)
+    archived = _archive(image, output)
+    assert "_external" in archived.parts
+    hashed: list[str] = []
+
+    issues = verify_inputs(
+        [InputCheck("source image", str(image), digest)],
+        hash_file=lambda path: hashed.append(path) or digest,
+    )
+
+    assert len(issues) == 1 and not hashed
+    assert "archived by Review; Restore to use it" in issues[0].describe()
+    assert arc.archived_reason(image) == ARCHIVED_MESSAGE
+
+    restore_file(image, output_root=output)
+    assert verify_inputs([InputCheck("source image", str(image), digest)]) == []
+    assert arc.archived_reason(image) is None
+
+
+def test_an_external_input_that_was_never_archived_still_reports_missing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "output").mkdir()
+    gone = tmp_path / "elsewhere" / "gone.png"
+    issues = verify_inputs([InputCheck("source image", str(gone))])
+    assert issues[0].reason == "is missing or was moved"
+    assert arc.archived_reason(gone) is None
+
+
+def test_batch_retry_preflight_reports_an_archived_external_source(tmp_path, monkeypatch):
+    stack = make_stack(tmp_path)
+    try:
+        monkeypatch.chdir(tmp_path)
+        output = tmp_path / "output"
+        output.mkdir(exist_ok=True)
+        source = image_file(tmp_path / "elsewhere" / "ext.png", 7)
+        digest = _sha(source)
+        admit(
+            stack,
+            [review_njr("rev-0", "rev", source=source, source_count=1, artifact_sha256=digest)],
+        )
+        failure = {
+            "success": False,
+            "error": "no route",
+            "metadata": {
+                "failure_evidence": {
+                    "contract": "webui_failure_evidence/1",
+                    "error_code": "connection_error",
+                    "webui_unavailable": True,
+                    "stage": "img2img",
+                }
+            },
+        }
+        settle_fifo(stack, {0: "failed"}, result=failure)
+        assert stack.operations.preflight_retry(REVIEW, ["rev-0"]).submittable
+
+        _archive(source, output)
+        plan = stack.operations.preflight_retry(REVIEW, ["rev-0"])
+        assert not plan.submittable
+        assert "archived by Review; Restore to use it" in plan.items[0].reasons[0]
+
+        restore_file(source, output_root=output)
+        assert stack.operations.preflight_retry(REVIEW, ["rev-0"]).submittable
+    finally:
+        stack.repository.close()
+
+
+def test_archived_variants_lists_every_copy_kept_for_a_path(output):
+    image = image_file(output / "Pipeline" / "run" / "a.png", 1)
+    first = _archive(image, output)
+    image_file(image, 2)  # a different file at the same path
+    second = _archive(image, output)
+    assert second != first and second.name.startswith("a.") and second.name != "a.png"
+    assert sorted(arc.archived_variants(image, output_root=output)) == sorted([first, second])
+    assert arc.archived_variants(output / "Pipeline" / "run" / "none.png", output_root=output) == []
+
+
 def test_batch_output_resolution_says_archived_and_lists_no_image(tmp_path):
     stack = make_stack(tmp_path)
     try:
