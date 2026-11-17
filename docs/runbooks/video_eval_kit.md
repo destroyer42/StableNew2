@@ -161,6 +161,31 @@ owner-reviewed physical run (named workflow versions, cases and sources, baselin
 expected VRAM/RAM, runtime state, device monitoring, stop conditions for device loss, and what result would justify a change).
 This tooling makes no generation and starts no runtime.
 
+### Review in the paired Operator Site
+
+Open **Operator Site** in the StableNew header. Review the displayed Output folder and pair the private Site. Output
+sharing is selected by default. Use **Change output folder…** to grant a different folder or **Stop sharing output**
+to revoke the grant. Keep the Windows pairing window open. A remote device also needs the hosted relay session
+from the Windows browser.
+
+Open **Video Review** on the Site. It selects the newest usable report and opens the first clip that still needs
+review. The run dropdown opens earlier reports. **Save & next** writes the judgment into the run’s existing
+\`ratings.csv\` after verifying both the clip and the source. Rebuild the report in StableNew to refresh its readiness
+and comparison metrics. If the CSV changed or is open in an editor, the Site keeps the current draft visible until
+the operator resolves the conflict. Without pairing, use **Open StableNew output folder** or import
+\`run.json\`, \`metrics.json\` and \`ratings.csv\` together. Download and apply the CSV explicitly in file-import mode.
+
+**Output Library** uses the same grant. Switch between images and videos, or search by filename, metadata tag,
+recorded positive prompt, or seed. Select two images to compare them, or save the selection as an album. Album
+references and image scores are stored under \`<Output>/.stablenew-library\`. Image scores are gallery observations.
+Opening, editing, or rating an album leaves the original media intact. Moved or replaced files show as unavailable
+until the operator updates the album.
+
+Image previews support PNG, JPEG and WebP up to 32 MiB. Browser-compatible MP4 and WebM video can use the paired
+playback path up to 512 MiB, with hosted responses delivered in ranges. Other recognized video formats remain
+visible in the library for local playback. The Site reports when the host is unavailable, the media changed, or a
+preview exceeds its limit.
+
 ## 5. Deciding
 
 * An arm is promotion-worthy when its ratings beat the baseline on the cases that matter and it carries no flag
