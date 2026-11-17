@@ -456,3 +456,89 @@ def test_a_discard_moved_to_the_archive_keeps_its_settings_and_undo_removes_the_
         == "cleared"
     )
     assert _scored(writer) == []
+
+
+# --- repair cycle: pinned scores, analytics, inspection rows -----------------------------------------
+
+
+def test_the_score_comes_from_the_decision_not_from_a_number_stored_in_the_row(tmp_path):
+    writer = _writer(tmp_path)
+    kept = _png(tmp_path / "kept.png", color=(1, 0, 0), sampler="DPM++ 2M")
+    dropped = _png(tmp_path / "dropped.png", color=(0, 1, 0), sampler="Euler a")
+    _decide(writer, kept, "retain")
+    _decide(writer, dropped, "discard")
+    rows = [json.loads(line) for line in writer.records_path.read_text().splitlines()]
+    rows[0]["metadata"]["user_rating"] = 5.0  # hand-edited
+    rows[1]["metadata"]["user_rating"] = 5.0
+    rows[1]["metadata"].pop("user_rating_source")
+    writer.records_path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+    assert [row["rating"] for row in _scored(writer)] == [4.0, 2.0]
+    assert _by_name(_recommend(writer))["sampler"].mean_rating == 4.0
+
+
+def test_the_engine_and_the_writer_share_one_score_table():
+    from src.learning import learning_record
+
+    assert evidence.DISPOSITION_SOFT_SCORES is learning_record.DISPOSITION_SOFT_SCORES
+    assert learning_record.DISPOSITION_SOFT_SCORES == {"retain": 4.0, "discard": 2.0}
+
+
+def test_decisions_never_change_the_analytics_totals(tmp_path):
+    from src.learning.learning_analytics import LearningAnalytics
+    from src.learning.learning_record import LearningRecord
+
+    writer = _writer(tmp_path)
+    for rating in (3, 4, 5):
+        writer.append_record(
+            LearningRecord.from_pipeline_context(
+                base_config={"prompt": "p"},
+                variant_configs=[{"cfg": 7.0}],
+                randomizer_mode="learning_experiment",
+                randomizer_plan_size=1,
+                metadata={"experiment_name": "exp", "user_rating": rating},
+            )
+        )
+    analytics = LearningAnalytics(writer)
+    before = analytics.get_overall_summary()
+    assert (before.total_ratings, before.avg_rating) == (3, 4.0)
+
+    first = _png(tmp_path / "a.png", color=(1, 0, 0))
+    second = _png(tmp_path / "b.png", color=(0, 1, 0))
+    _decide(writer, first, "retain")
+    _decide(writer, second, "discard")
+    _decide(writer, second, "cleared")  # Undo
+    _decide(writer, second, "retain")  # re-decided
+    _decide(writer, first, "rework")
+
+    after = analytics.get_overall_summary()
+    assert (after.total_ratings, after.avg_rating, after.total_experiments) == (3, 4.0, 1)
+    assert after.experiments == before.experiments
+    assert after.evidence_class_counts == before.evidence_class_counts
+
+
+def test_inspection_rows_are_never_evidence_and_never_disturb_a_decision(tmp_path):
+    writer = _writer(tmp_path)
+    inspected = _png(tmp_path / "a.png", color=(1, 0, 0), sampler="DPM++ 2M")
+    plain = _png(tmp_path / "b.png", color=(0, 1, 0))
+    clean = evidence.save_inspection(writer, image_path=inspected, verdict="no_defect_seen")
+    assert clean.metadata["source"] == evidence.INSPECTION_SOURCE
+    # The decision on the same bytes is still counted, once, after the inspection.
+    _decide(writer, inspected, "retain")
+    evidence.save_inspection(writer, image_path=inspected, verdict="no_defect_seen")
+    # An inspection row forged to look like a rated, settled record is still not evidence.
+    forged = json.loads(writer.records_path.read_text().splitlines()[0])
+    forged["primary_sampler"], forged["primary_steps"], forged["primary_cfg_scale"] = (
+        "Heun",
+        30,
+        9.0,
+    )
+    forged["metadata"].update(user_rating=5.0, review_disposition="retain", stage="txt2img")
+    forged["metadata"]["artifact_sha256"] = _sha(plain)
+    with open(writer.records_path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(forged) + "\n")
+
+    scored = _scored(writer)
+
+    assert [(row["record_kind"], row["rating"]) for row in scored] == [("review_disposition", 4.0)]
+    assert _by_name(_recommend(writer))["sampler"].recommended_value == "DPM++ 2M"

@@ -54,6 +54,11 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+#: Soft ``user_rating`` a Review Retain / Discard contributes as observational Learning evidence (owner decision,
+#: 2026-11-17). The writer stores it and the recommendation engine applies it from this table, ignoring a stored number.
+#: Re-work and the clearing row are not scored.
+DISPOSITION_SOFT_SCORES: dict[str, float] = {"retain": 4.0, "discard": 2.0}
+
 # Rating kinds where a later row for the same sample replaces the earlier one (an operator revising a
 # rating). Curation events are separate observations and are never collapsed.
 REVISABLE_RATING_KINDS = frozenset({"learning_experiment_rating", "review_tab_feedback"})

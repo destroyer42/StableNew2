@@ -19,7 +19,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from src.learning.learning_record import LearningRecord, LearningRecordWriter
+from src.learning.learning_record import (
+    DISPOSITION_SOFT_SCORES,
+    LearningRecord,
+    LearningRecordWriter,
+)
 from src.review.findings import Category, Certainty, Confirmation, Finding, Severity
 from src.review.review_metadata_service import (
     INTERNAL_REVIEW_SUMMARY_SCHEMA,
@@ -37,9 +41,9 @@ DISPOSITION_SOURCE = "review_tab_disposition"
 DISPOSITIONS = ("retain", "discard", "rework")
 #: Written by Undo: the latest row for the bytes then says "no decision", so the image is to be reviewed again.
 DISPOSITION_CLEARED = "cleared"
-#: Soft ``user_rating`` a decision contributes as observational Learning evidence (owner decision, 2026-11-17).
-#: Re-work is not scored: it says the image needs more work, not whether its settings were good.
-DISPOSITION_SOFT_SCORES: dict[str, float] = {"retain": 4.0, "discard": 2.0}
+# ``DISPOSITION_SOFT_SCORES`` (retain 4.0, discard 2.0; owner decision 2026-11-17) lives in ``learning_record`` so the
+# recommendation engine applies the same table. Re-work is not scored: it says the image needs more work, not whether
+# its settings were good.
 
 INSPECTION_KIND = "review_inspection"
 #: Distinct from ``RATING_SOURCE`` and ``DISPOSITION_SOURCE``: rating listing, disposition lookup and "Undo Last Save"

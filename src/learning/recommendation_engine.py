@@ -20,15 +20,15 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from src.learning.evidence_revision import evidence_revision
-from src.learning.learning_record import current_rating_revisions
+from src.learning.learning_record import DISPOSITION_SOFT_SCORES, current_rating_revisions
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
 
 logger = logging.getLogger(__name__)
 
 # PR-REVIEW-LEARN-622: a Review Retain / Discard is observational evidence (never controlled), scored softly by
-# the writer (``src.review.review_evidence.DISPOSITION_SOFT_SCORES``); Re-work and the clearing row are not scored.
+# by ``DISPOSITION_SOFT_SCORES``, which the engine applies itself; Re-work and the clearing row are not scored.
 REVIEW_DISPOSITION_KIND = "review_disposition"
-REVIEW_DISPOSITION_SCORED = frozenset({"retain", "discard"})
+REVIEW_DISPOSITION_SCORED = frozenset(DISPOSITION_SOFT_SCORES)
 
 # PR-046: keywords used to infer people-presence from a prompt text
 _PEOPLE_KEYWORDS: frozenset[str] = frozenset(
@@ -481,6 +481,9 @@ class RecommendationEngine:
 
             # Only consider records with user ratings
             user_rating = metadata.get("user_rating")
+            if record_kind == REVIEW_DISPOSITION_KIND:
+                # The decision decides the score, never a number stored in the row.
+                user_rating = DISPOSITION_SOFT_SCORES[str(metadata.get("review_disposition"))]
             if user_rating is None:
                 continue
 
