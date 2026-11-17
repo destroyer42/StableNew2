@@ -20,8 +20,11 @@ automatically. The operator rebinds on purpose by typing ``rebind`` in that cell
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import os
+import stat
+import tempfile
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -225,6 +228,22 @@ def _shape(rows: Iterable[Mapping[str, str]], header: Sequence[str]) -> list[dic
     return [row for row in shaped if row["job_id"]] + [row for row in shaped if not row["job_id"]]
 
 
+def _ratings_lock_target(path: Path) -> Path:
+    """Use a stable per-user lock outside the portable report folder."""
+    user_suffix = f"-{os.getuid()}" if os.name != "nt" else ""
+    directory = Path(tempfile.gettempdir()) / f"stablenew-eval-locks{user_suffix}"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    entry = directory.lstat()
+    if not stat.S_ISDIR(entry.st_mode) or (
+        getattr(entry, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    ):
+        raise OSError("Invalid ratings lock directory")
+    if os.name != "nt" and (entry.st_uid != os.getuid() or entry.st_mode & 0o077):
+        raise OSError("Ratings lock directory is not private")
+    identity = os.path.normcase(str(path.resolve()))
+    return directory / hashlib.sha256(os.fsencode(identity)).hexdigest()
+
+
 def write_ratings(
     loaded: LoadedRatings,
     header: Sequence[str],
@@ -241,7 +260,8 @@ def write_ratings(
 
     deadline = time.monotonic() + 1.5
     try:
-        with registry_cache_lock(loaded.path, cancelled=lambda: time.monotonic() >= deadline):
+        lock_target = _ratings_lock_target(loaded.path)
+        with registry_cache_lock(lock_target, cancelled=lambda: time.monotonic() >= deadline):
             return _write_ratings(loaded, header, rows, before_replace, reader or _read_file)
     except OSError as exc:
         raise RatingsFileError(f"{loaded.path.name} is locked or could not be accessed") from exc

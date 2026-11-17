@@ -271,9 +271,6 @@ class SiteOutputCatalog:
         try:
             directory = self._report_paths(run_id)[0].parent
             path = self._inside(directory / "ratings.csv")
-            lock_path = path.with_suffix(".csv.lock")
-            if lock_path.exists() or lock_path.is_symlink():
-                self._inside(lock_path)
             return load_ratings(path, reader=self._read_ratings_file)
         except (OSError, RatingsFileError) as exc:
             raise SiteOutputError("ratings_unavailable") from exc
