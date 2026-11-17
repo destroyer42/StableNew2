@@ -26,6 +26,9 @@ KNOWN_OUTPUT_ROUTE_DIRS = (
     OUTPUT_ROUTE_TESTING,
     OUTPUT_ROUTE_MOVIE_CLIPS,
 )
+#: Review's central archive folder (PR-REVIEW-ARCHIVE-623). It is deliberately not a route: nothing is generated
+#: into it, and every enumerator of generated output skips it.
+ARCHIVE_DIR_NAME = "_archive"
 _KNOWN_OUTPUT_ROUTE_DIRS_LOWER = {item.lower() for item in KNOWN_OUTPUT_ROUTE_DIRS}
 
 
@@ -81,6 +84,14 @@ def get_output_route_root(
     return route_root
 
 
+def _is_archived_path(path: Path, output_root: Path) -> bool:
+    """Whether ``path`` is inside ``<output root>/_archive`` (compared case-insensitively, links not followed)."""
+
+    root = [os.path.normcase(part) for part in (output_root / ARCHIVE_DIR_NAME).absolute().parts]
+    parts = [os.path.normcase(part) for part in Path(os.path.abspath(path)).parts]
+    return parts[: len(root)] == root
+
+
 def resolve_output_artifact_path(
     raw_path: str | Path,
     *,
@@ -97,13 +108,13 @@ def resolve_output_artifact_path(
         return raw
 
     candidate = Path(raw).expanduser()
-    if candidate.exists():
+    output_root = get_output_root(base_output_dir, create=False)
+    if candidate.exists() and not _is_archived_path(candidate, output_root):
         try:
             return str(candidate.resolve())
         except Exception:
             return str(candidate)
 
-    output_root = get_output_root(base_output_dir, create=False)
     if not output_root.exists():
         return raw
 
@@ -162,8 +173,8 @@ def resolve_output_artifact_path(
         if key in seen_paths:
             continue
         seen_paths.add(key)
-        if not path_obj.exists():
-            continue
+        if not path_obj.exists() or _is_archived_path(path_obj, output_root):
+            continue  # an archived copy is never "the" artifact: Review's Restore is the only way back
         try:
             return str(path_obj.resolve())
         except Exception:
@@ -184,7 +195,7 @@ def iter_output_run_dirs(base_output_dir: str | Path = "output") -> list[Path]:
         return []
     run_dirs: list[Path] = []
     for child in root.iterdir():
-        if not child.is_dir():
+        if not child.is_dir() or child.name == ARCHIVE_DIR_NAME:
             continue
         if child.name in KNOWN_OUTPUT_ROUTE_DIRS:
             run_dirs.extend(grandchild for grandchild in child.iterdir()

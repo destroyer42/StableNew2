@@ -114,6 +114,17 @@ def _has_frames(bundle: Mapping[str, Any]) -> bool:
     return False
 
 
+def _missing_image_message(path: str) -> str:
+    """The refusal for an absent image: says so when Review archived it (the archived copy is never read here)."""
+
+    from src.review.archive import archived_reason
+
+    archived = archived_reason(path)
+    if archived:
+        return f"Recorded image file was {archived}."
+    return f"Recorded image file is missing: {Path(path).name}"
+
+
 def resolve_recorded_artifact(
     result: Mapping[str, Any] | None,
     *,
@@ -162,9 +173,7 @@ def resolve_recorded_artifact(
                     return RecordedArtifact("image", first)
             except (OSError, ValueError):
                 pass
-            return RecordedArtifact(
-                "image", message=f"Recorded image file is missing: {Path(first).name}"
-            )
+            return RecordedArtifact("image", message=_missing_image_message(first))
     return RecordedArtifact("none", message="No recorded artifact for this job.")
 
 

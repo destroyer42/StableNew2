@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -50,18 +50,33 @@ def scan_image_folder(
     *,
     limit: int = MAX_FOLDER_IMAGES,
     is_cancelled: Callable[[], bool] = lambda: False,
+    skip: Sequence[Path] | None = None,
 ) -> FolderScan:
-    """Recursively list supported images under ``root`` in sorted path order (the previous picker's ordering)."""
+    """Recursively list supported images under ``root`` in sorted path order (the previous picker's ordering).
+
+    Review's archive (``<output root>/_archive``) is never listed: ``skip`` names the folders to leave out and
+    defaults to the configured output root's archive. Opening the archive folder itself still lists it.
+    """
+
+    from src.review.archive import archive_root, configured_output_root
 
     found: list[Path] = []
     unreadable: list[str] = []
+    if skip is None:
+        skip = (archive_root(configured_output_root()),)
+    skipped = {os.path.normcase(os.path.abspath(item)) for item in skip}
 
     def remember(error: OSError) -> None:
         unreadable.append(str(getattr(error, "filename", "") or error))
 
-    for directory, _subdirs, names in os.walk(root, onerror=remember):
+    for directory, subdirs, names in os.walk(root, onerror=remember):
         if is_cancelled():
             return FolderScan(root=root, cancelled=True)
+        subdirs[:] = [
+            name
+            for name in subdirs
+            if os.path.normcase(os.path.abspath(os.path.join(directory, name))) not in skipped
+        ]
         for name in names:
             if Path(name).suffix.lower() not in IMAGE_EXTENSIONS:
                 continue

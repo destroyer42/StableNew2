@@ -153,7 +153,16 @@ def verify_inputs(
     for check in checks:
         path = Path(check.path)
         if not path.is_file():
-            issues.append(InputIssue(check.label, check.path, "is missing or was moved"))
+            from src.review.archive import archived_reason
+
+            archived = archived_reason(check.path)
+            issues.append(
+                InputIssue(
+                    check.label,
+                    check.path,
+                    f"was {archived}" if archived else "is missing or was moved",
+                )
+            )
             continue
         if check.expected_sha256 is None:
             continue
