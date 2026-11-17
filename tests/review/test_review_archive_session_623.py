@@ -26,7 +26,11 @@ from src.gui.view_contracts.review_workspace_contract import (
 )
 from src.learning.learning_record import LearningRecordWriter
 from src.review import archive as arc
-from src.review.review_evidence import lookup_disposition, save_disposition
+from src.review.review_evidence import (
+    build_review_rating_record,
+    lookup_disposition,
+    save_disposition,
+)
 from tests.gui_v2.edit_work_helpers import ManualRegistry, manual_runner
 from tests.helpers.batch_ops_201 import image_file
 
@@ -108,6 +112,25 @@ def test_discard_moves_the_file_and_the_decision_still_resolves_by_digest(lab):
     assert facts.digest == digest and facts.location == LOC_ARCHIVED and facts.identity == "digest"
     assert session.state_of(lab.key(0)) is ItemState.ARCHIVED
     assert session.row_text(session.items[0]).startswith("[Archived] img_0.png (in archive)")
+
+
+def test_a_saved_rating_still_resolves_by_digest_while_the_file_is_archived(lab):
+    session, image = lab.session, lab.images[0]
+    digest = _sha(image)
+    lab.writer.append_record(
+        build_review_rating_record({"image_path": str(image), "rating": 4}, artifact_sha256=digest)
+    )
+    session.set_items(lab.images)
+    assert session.facts_of(lab.key(0)).rating == 4
+
+    session.decide(lab.key(0), "discard")
+    assert not image.exists()
+    session.refresh()
+
+    facts = session.facts_of(lab.key(0))
+    assert facts.rating == 4 and facts.digest == digest
+    assert session.restore(lab.key(0))
+    assert image.exists() and session.facts_of(lab.key(0)).rating == 4
 
 
 def test_undo_and_restore_return_the_file_with_identical_bytes(lab):
