@@ -62,7 +62,13 @@ def parse_body(raw: bytes) -> dict[str, Any]:
 
 def read(catalog: SiteOutputCatalog, path: str) -> dict[str, Any] | tuple[str, bytes]:
     if path == OUTPUT_STATUS:
-        return {"scope": catalog.scope, "review": True, "library": True, "range": True}
+        return {
+            "scope": catalog.scope,
+            "review": True,
+            "library": True,
+            "range": True,
+            "library_sources": True,
+        }
     if run := OUTPUT_REVIEW.fullmatch(path):
         return catalog.get_run(run[1], review=True)
     if match := _OUTPUT_IMAGE.fullmatch(path):
@@ -95,7 +101,8 @@ def post(
         raise SiteOutputError("unknown_route")
     action = body.get("action")
     fields = _LIBRARY_FIELDS.get(action) if isinstance(action, str) else None
-    if fields is None or set(body) != fields | {"action", "scope"}:
+    optional = {"source"} if action == "search" else set()
+    if fields is None or set(body) - optional != fields | {"action", "scope"}:
         raise SiteOutputError("invalid_library_request")
     if body["scope"] != catalog.scope:
         raise SiteOutputError("output_folder_changed")

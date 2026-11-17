@@ -190,6 +190,16 @@ references and image scores are stored under \`<Output>/.stablenew-library\`. Im
 Opening, editing, or rating an album leaves the original media intact. Moved or replaced files show as unavailable
 until the operator updates the album.
 
+The library shows files progressively while it indexes metadata. Images from **Pipeline** appear first. Videos
+from **movie_clips** and **SVD** appear first in the Videos view. Use **Source folder** to select Pipeline, Learning,
+Reprocess, movie_clips, SVD, video_eval, or other Output folders. Nested folders are included. **Video Review** uses
+the reports in video_eval for clip evaluation and CSV ratings.
+
+Indexing is bounded to 100,000 media files and 250,000 filesystem entries. Prompt, tag, and seed indexing has a
+separate 128 MiB metadata budget. A visible limit or scan error preserves available results. **Refresh Output**
+restarts a completed or failed scan. Filename browsing and image previews are available while metadata is indexed.
+The paired Site resumes scan refreshes when the operator returns to the library. Original media stays in Output.
+
 Image previews support PNG, JPEG and WebP up to 32 MiB. Browser-compatible MP4 and WebM video can use the paired
 playback path up to 512 MiB, with hosted responses delivered in ranges. Other recognized video formats remain
 visible in the library for local playback. The Site reports when the host is unavailable, the media changed, or a
