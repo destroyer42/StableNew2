@@ -18,6 +18,8 @@ class _LoopRoot:
 
 
 class _FakeWindow:
+    header_zone = object()
+
     def set_graceful_exit_handler(self, _handler) -> None:
         return None
 
@@ -50,7 +52,9 @@ def test_main_starts_the_gpu_session_recorder_before_the_loop_and_stops_it_after
     monkeypatch.setattr(main_module, "_async_bootstrap_webui", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(main_module, "graceful_exit", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        site_connection_dialog, "install_site_connection_menu", lambda _root, _controller: None
+        site_connection_dialog,
+        "install_site_connection_control",
+        lambda _root, _controller, _header: None,
     )
     monkeypatch.setattr(
         main_module, "build_v2_app", lambda **_kwargs: (root, object(), object(), _FakeWindow())

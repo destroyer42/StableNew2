@@ -22,6 +22,7 @@ class _FakeRoot:
 class _FakeWindow:
     def __init__(self) -> None:
         self.exit_handler = None
+        self.header_zone = object()
 
     def set_graceful_exit_handler(self, handler) -> None:
         self.exit_handler = handler
@@ -51,7 +52,7 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     fake_controller = object()
     captured: dict[str, object] = {}
     emergency_callbacks = []
-    install_site_menu = Mock()
+    install_site_control = Mock()
 
     monkeypatch.setattr(main_module, "tk", SimpleNamespace(Tk=lambda: fake_root))
     monkeypatch.setattr(main_module, "messagebox", None)
@@ -61,7 +62,9 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "_async_bootstrap_webui", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(main_module, "graceful_exit", lambda *args, **kwargs: None)
     monkeypatch.setattr(main_module.atexit, "register", emergency_callbacks.append)
-    monkeypatch.setattr(site_connection_dialog, "install_site_connection_menu", install_site_menu)
+    monkeypatch.setattr(
+        site_connection_dialog, "install_site_connection_control", install_site_control
+    )
 
     def _fake_build_v2_app(**kwargs):
         captured.update(kwargs)
@@ -76,6 +79,8 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     assert captured["root"] is fake_root
     assert emergency_callbacks == [main_module._emergency_comfy_cleanup]
     if sys.platform == "win32":
-        install_site_menu.assert_called_once_with(fake_root, fake_controller)
+        install_site_control.assert_called_once_with(
+            fake_root, fake_controller, fake_window.header_zone
+        )
     else:
-        install_site_menu.assert_not_called()
+        install_site_control.assert_not_called()
