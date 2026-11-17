@@ -236,9 +236,18 @@ class LearningAnalytics:
                         continue
                     try:
                         record = json.loads(line)
-                        records.append(record)
                     except json.JSONDecodeError:
                         continue
+                    metadata = record.get("metadata") if isinstance(record, dict) else None
+                    if (
+                        isinstance(metadata, dict)
+                        and metadata.get("record_kind") == "review_disposition"
+                    ):
+                        # PR-REVIEW-LEARN-622: a Review Retain / Discard carries a soft score for the recommendation
+                        # engine, which counts each image once. It is not a rating, and a superseded or undone
+                        # decision would otherwise still be summed here.
+                        continue
+                    records.append(record)
         except Exception:
             pass
 

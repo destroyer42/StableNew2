@@ -20,10 +20,15 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from src.learning.evidence_revision import evidence_revision
-from src.learning.learning_record import current_rating_revisions
+from src.learning.learning_record import DISPOSITION_SOFT_SCORES, current_rating_revisions
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
 
 logger = logging.getLogger(__name__)
+
+# PR-REVIEW-LEARN-622: a Review Retain / Discard is observational evidence (never controlled), scored softly by
+# by ``DISPOSITION_SOFT_SCORES``, which the engine applies itself; Re-work and the clearing row are not scored.
+REVIEW_DISPOSITION_KIND = "review_disposition"
+REVIEW_DISPOSITION_SCORED = frozenset(DISPOSITION_SOFT_SCORES)
 
 # PR-046: keywords used to infer people-presence from a prompt text
 _PEOPLE_KEYWORDS: frozenset[str] = frozenset(
@@ -339,6 +344,75 @@ class RecommendationEngine:
 
         return records
 
+    @staticmethod
+    def _image_digest(metadata: dict[str, Any]) -> str:
+        text = str(metadata.get("artifact_sha256") or "").strip().lower().removeprefix("sha256:")
+        return text if len(text) == 64 and all(char in "0123456789abcdef" for char in text) else ""
+
+    @staticmethod
+    def _image_path_key(metadata: dict[str, Any]) -> str:
+        text = str(metadata.get("image_path") or "").strip()
+        return os.path.normcase(str(Path(text))) if text else ""
+
+    @classmethod
+    def _current_dispositions(cls, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep only the Review decisions that may count, once per image (by its bytes), after the rating rule.
+
+        An image counts once: by its current Review rating when it has one (matched by digest, or by path for an old
+        rating that has no digest), otherwise by its latest decision. A later decision replaces an earlier one even
+        when the later one is Re-work or a clearing row, which then contribute nothing. Nothing on disk is rewritten.
+        """
+
+        rated_digests: set[str] = set()
+        rated_paths: set[str] = set()
+        last: dict[str, int] = {}
+        for index, row in enumerate(rows):
+            metadata = row.get("metadata") if isinstance(row, dict) else None
+            if not isinstance(metadata, dict):
+                continue
+            kind = str(metadata.get("record_kind") or "").strip()
+            if kind == "review_tab_feedback":
+                digest = cls._image_digest(metadata)
+                if digest:
+                    rated_digests.add(digest)
+                elif cls._image_path_key(metadata):
+                    rated_paths.add(cls._image_path_key(metadata))
+            elif kind == REVIEW_DISPOSITION_KIND:
+                digest = cls._image_digest(metadata)
+                if digest:
+                    last[digest] = index
+        kept: list[dict[str, Any]] = []
+        for index, row in enumerate(rows):
+            metadata = row.get("metadata") if isinstance(row, dict) else None
+            if (
+                isinstance(metadata, dict)
+                and str(metadata.get("record_kind") or "").strip() == REVIEW_DISPOSITION_KIND
+            ):
+                digest = cls._image_digest(metadata)
+                if (
+                    not digest
+                    or last.get(digest) != index
+                    or digest in rated_digests
+                    or cls._image_path_key(metadata) in rated_paths
+                ):
+                    continue
+            kept.append(row)
+        return kept
+
+    @staticmethod
+    def _disposition_is_evidence(record: dict[str, Any]) -> bool:
+        """A Retain or Discard whose settings were readable; Re-work, a clearing row and a bare record are not."""
+
+        metadata = record.get("metadata") or {}
+        if str(metadata.get("review_disposition") or "") not in REVIEW_DISPOSITION_SCORED:
+            return False
+        return bool(
+            str(record.get("primary_sampler") or "").strip()
+            or str(record.get("primary_scheduler") or "").strip()
+            or (record.get("primary_steps") or 0) > 0
+            or (record.get("primary_cfg_scale") or 0) > 0
+        )
+
     def _score_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Filter and score records that have user ratings.
 
@@ -347,7 +421,7 @@ class RecommendationEngine:
         """
         scored_records = []
 
-        for record in current_rating_revisions(records):
+        for record in self._current_dispositions(current_rating_revisions(records)):
             metadata = record.get("metadata", {})
             excluded_studies = (
                 "model_comparison",
@@ -365,8 +439,11 @@ class RecommendationEngine:
             if record_kind and record_kind not in {
                 "learning_experiment_rating",
                 "review_tab_feedback",
+                REVIEW_DISPOSITION_KIND,
                 "staged_curation_event",
             }:
+                continue
+            if record_kind == REVIEW_DISPOSITION_KIND and not self._disposition_is_evidence(record):
                 continue
 
             frozen = metadata.get("frozen_experiment")
@@ -404,6 +481,9 @@ class RecommendationEngine:
 
             # Only consider records with user ratings
             user_rating = metadata.get("user_rating")
+            if record_kind == REVIEW_DISPOSITION_KIND:
+                # The decision decides the score, never a number stored in the row.
+                user_rating = DISPOSITION_SOFT_SCORES[str(metadata.get("review_disposition"))]
             if user_rating is None:
                 continue
 
@@ -727,6 +807,8 @@ class RecommendationEngine:
                     ("steps", record["primary_steps"]),
                     ("cfg_scale", record["primary_cfg_scale"]),
                 ):
+                    if record["record_kind"] == REVIEW_DISPOSITION_KIND and not value:
+                        continue  # a decision supports only the settings it recorded
                     track(parameter, value, rating, float(record["rating"]), rationale, weight)
 
             # If this record is from a variable test, also track that parameter
@@ -913,6 +995,7 @@ class RecommendationEngine:
             if str(record.get("record_kind", ""))
             in {
                 "review_tab_feedback",
+                REVIEW_DISPOSITION_KIND,
                 "staged_curation_event",
                 "legacy",
             }
