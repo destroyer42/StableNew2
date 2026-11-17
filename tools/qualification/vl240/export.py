@@ -18,6 +18,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from src.review.review_evidence import (
+    INSPECTION_CLEARED,
+    VERDICT_DEFECTS,
+    VERDICT_NO_DEFECT,
+    EvidenceIndex,
+    InspectionRecord,
+    InspectionRecordError,
+    parse_inspection_row,
+)
 from tools.qualification.vl240 import contract
 from tools.qualification.vl240.contract import Refused
 from tools.qualification.vl240.sources import (
@@ -43,6 +52,7 @@ class Finding:
     category: str
     region: Region | None
     record_id: str
+    severity: str | None = None
 
 
 @dataclass(slots=True)
@@ -53,6 +63,11 @@ class ImageEntry:
     findings: list[Finding] = field(default_factory=list)
     roles: set[str] = field(default_factory=set)
     records: set[str] = field(default_factory=set)
+    #: True only from a saved ``no_defect_seen`` inspection of exactly these bytes.
+    clean: bool = False
+    subject_count: int | None = None
+    #: Set when a clean mark and a confirmed finding exist for the same bytes: neither label is exported.
+    conflict: bool = False
 
 
 @dataclass(slots=True)
@@ -77,6 +92,8 @@ class Collected:
     unparseable_lines: int = 0
     judgment_records: int = 0
     correction_jobs: int = 0
+    #: Latest inspection row per image digest, by verdict (``cleared`` counts rows Undo wrote).
+    inspections: Counter[str] = field(default_factory=Counter)
 
 
 def _visible(facts: ImageFacts, mode: str) -> bool:
@@ -130,6 +147,8 @@ def collect(learning_records: Path, job_repository: Path, *, visibility_mode: st
         _findings_from_corrections(collected, connection, binder)
         _pairs_from_judgments(collected, connection, binder, latest_per_job(records))
         collected.judgment_records = len(records)
+        _from_inspections(collected, EvidenceIndex.read(learning_records), binder)
+        _flag_conflicts(collected)
     return collected
 
 
@@ -153,8 +172,104 @@ def _findings_from_corrections(collected: Collected, connection: Any, binder: Im
             continue
         entry = _add_image(collected, digest, path, facts)
         entry.records.add(job.job_id)
-        if not any(f.category == category and f.region == region for f in entry.findings):
-            entry.findings.append(Finding(category, region, job.job_id))
+        _add_finding(entry, category, region, job.job_id, None)
+
+
+def _add_finding(
+    entry: ImageEntry, category: str, region: Region | None, record_id: str, severity: str | None
+) -> None:
+    """One finding per category and region; a severity the operator saved fills in one a correction did not carry."""
+
+    for existing in entry.findings:
+        if existing.category == category and existing.region == region:
+            if existing.severity is None:
+                existing.severity = severity
+            return
+    entry.findings.append(Finding(category, region, record_id, severity))
+
+
+def _from_inspections(collected: Collected, index: EvidenceIndex, binder: ImageBinder) -> None:
+    """The operator's saved inspections (the latest per digest): the only source of a clean mark, severity and count.
+
+    A cleared row means "no inspection". A row whose bytes changed (or whose file is gone) is excluded and counted
+    under its own code. Nothing here reads a prompt, a note or an observation: the record does not hold one.
+    """
+
+    for digest, payload in index.inspection_rows():
+        record_id = str(payload.get("run_id") or "")[:80]
+        try:
+            record = parse_inspection_row(payload)
+        except InspectionRecordError:
+            collected.refused.append(Refused("malformed_inspection", record_id))
+            continue
+        if record.verdict == INSPECTION_CLEARED:
+            collected.inspections[INSPECTION_CLEARED] += 1
+            continue
+        try:
+            entry = collected.images.get(digest)
+            if entry is None:
+                path, facts = binder.bind(digest, [record.image_path])
+            else:
+                path, facts = entry.path, entry.facts
+            findings = [
+                (
+                    item.category,
+                    parse_region(
+                        list(item.region) if item.region else None, (facts.width, facts.height)
+                    ),
+                    item.severity,
+                )
+                for item in record.findings
+            ]
+        except Refused as exc:
+            code = {
+                "image_changed_since_review": "inspection_image_changed_since_review",
+                "image_unavailable": "inspection_image_unavailable",
+            }.get(exc.code, "malformed_inspection")
+            collected.refused.append(Refused(code, record_id))
+            continue
+        if not _visible(facts, collected.visibility_mode):
+            collected.withheld["inspection_image"] += 1
+            continue
+        collected.inspections[record.verdict] += 1
+        _apply_inspection(collected, digest, path, facts, record, findings)
+
+
+def _apply_inspection(
+    collected: Collected,
+    digest: str,
+    path: Path,
+    facts: ImageFacts,
+    record: InspectionRecord,
+    findings: list[tuple[str, Region | None, str | None]],
+) -> None:
+    entry = _add_image(collected, digest, path, facts)
+    entry.records.add(record.run_id)
+    if record.verdict == VERDICT_NO_DEFECT:
+        entry.clean = True
+    elif record.verdict == VERDICT_DEFECTS:
+        for category, region, severity in findings:
+            _add_finding(entry, category, region, record.run_id, severity)
+    if record.subject_count is not None:
+        entry.subject_count = record.subject_count
+
+
+def _flag_conflicts(collected: Collected) -> None:
+    """A clean mark with a confirmed finding on the same bytes is a contradiction: reported, never resolved.
+
+    The image keeps no label from either side. When it belongs to no judged pair there is nothing left to say
+    about it, so it leaves the export.
+    """
+
+    for digest in sorted(collected.images):
+        entry = collected.images[digest]
+        if entry.clean and entry.findings:
+            entry.conflict = True
+            collected.refused.append(
+                Refused("clean_contradicts_confirmed_finding", sorted(entry.records)[0])
+            )
+            if not entry.roles:
+                del collected.images[digest]
 
 
 def _pairs_from_judgments(
@@ -239,19 +354,21 @@ def build_document(collected: Collected, *, exported_at: datetime | None = None)
                 "width": entry.facts.width,
                 "height": entry.facts.height,
                 "model_family": None,
-                "clean_confirmed": False,
-                "findings": [
+                "clean_confirmed": entry.clean and not entry.conflict,
+                "findings": []
+                if entry.conflict
+                else [
                     {
                         "category": finding.category,
                         "region": _region(finding.region),
-                        "severity": None,
+                        "severity": finding.severity,
                         "record_id": finding.record_id,
                     }
                     for finding in sorted(
                         entry.findings, key=lambda f: (f.category, f.region.box if f.region else ())
                     )
                 ],
-                "subject_count": None,
+                "subject_count": entry.subject_count,
                 "roles": sorted(entry.roles),
                 "record_ids": sorted(entry.records),
             }
@@ -328,12 +445,29 @@ def describe(collected: Collected, *, targets: str = "full") -> dict[str, Any]:
             "met": have[name] >= target,
             "recordable_in_review": bool(spec["recordable"]),
         }
+    buckets = Counter(
+        "5_or_more" if item["subject_count"] >= 5 else str(item["subject_count"])
+        for item in images
+        if item["subject_count"] is not None
+    )
     return {
         "schema": contract.SCHEMA,
         "targets": targets,
         "content_visibility_mode": collected.visibility_mode,
         "counts": {
             "images": len(images),
+            "clean_confirmed_images": have["clean_confirmed_images"],
+            "inspections_by_verdict": {
+                verdict: collected.inspections.get(verdict, 0)
+                for verdict in (VERDICT_NO_DEFECT, VERDICT_DEFECTS, INSPECTION_CLEARED)
+            },
+            "images_with_subject_count": sum(buckets.values()),
+            "subject_counts": {
+                name: buckets.get(name, 0) for name in contract.SUBJECT_COUNT_BUCKETS
+            },
+            "findings_with_severity": sum(
+                1 for item in images for finding in item["findings"] if finding["severity"]
+            ),
             "pairs": len(document["pairs"]),
             "mixed_pairs": len(document["mixed_pairs"]),
             "defect_images_by_category": {c: by_category.get(c, 0) for c in contract.CATEGORIES},

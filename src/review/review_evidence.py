@@ -1,6 +1,6 @@
 """Non-mutating, digest-bound Review evidence (PR-REVIEW-EVIDENCE-620).
 
-Saving a Review rating or disposition appends one record through ``LearningRecordWriter`` and never touches the image
+Saving a Review rating, disposition or inspection appends one record through ``LearningRecordWriter`` and never touches the image
 file. The record names the image by the SHA-256 of its bytes (``artifact_sha256``); the path is only a locator. A file
 whose bytes changed since it was reviewed is reported as changed rather than silently matched to the older rating.
 
@@ -13,13 +13,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
+from src.review.findings import Category, Certainty, Confirmation, Finding, Severity
 from src.review.review_metadata_service import (
     INTERNAL_REVIEW_SUMMARY_SCHEMA,
     PortableReviewSummary,
@@ -35,6 +36,22 @@ DISPOSITION_SOURCE = "review_tab_disposition"
 DISPOSITIONS = ("retain", "discard", "rework")
 #: Written by Undo: the latest row for the bytes then says "no decision", so the image is to be reviewed again.
 DISPOSITION_CLEARED = "cleared"
+
+INSPECTION_KIND = "review_inspection"
+#: Distinct from ``RATING_SOURCE`` and ``DISPOSITION_SOURCE``: rating listing, disposition lookup and "Undo Last Save"
+#: never see an inspection.
+INSPECTION_SOURCE = "review_tab_inspection"
+INSPECTION_SCHEMA = "stablenew.review-inspection"
+INSPECTION_SCHEMA_VERSION = 1
+VERDICT_NO_DEFECT = "no_defect_seen"
+VERDICT_DEFECTS = "defects_confirmed"
+INSPECTION_VERDICTS = (VERDICT_NO_DEFECT, VERDICT_DEFECTS)
+#: Written by Undo: the latest row for the bytes then says "no inspection", so nothing is exported for them.
+INSPECTION_CLEARED = "cleared"
+SUBJECT_COUNT_MIN = 1
+SUBJECT_COUNT_MAX = 12
+MAX_INSPECTION_FINDINGS = 24
+_FINDING_KEYS = frozenset({"category", "region", "certainty", "severity"})
 
 #: The record names the bytes that were reviewed and the file currently has those bytes.
 IDENTITY_DIGEST = "digest"
@@ -226,6 +243,352 @@ def save_disposition(writer: LearningRecordWriter, **kwargs: Any) -> LearningRec
     return record
 
 
+# -- inspection (AI-VL-243) ---------------------------------------------------------------------------------------
+
+
+class InspectionRecordError(ValueError):
+    """A stored or requested inspection that is not valid; ``code`` is a stable, content-free reason."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class InspectionFinding:
+    """One operator-confirmed finding as stored: closed vocabulary only, never the observation text."""
+
+    category: str
+    region: tuple[int, int, int, int] | None
+    certainty: str
+    severity: str | None = None
+
+
+@dataclass(frozen=True)
+class InspectionRecord:
+    """A validated inspection row. ``findings`` is empty unless ``verdict`` is ``defects_confirmed``."""
+
+    digest: str
+    verdict: str
+    findings: tuple[InspectionFinding, ...] = ()
+    subject_count: int | None = None
+    reviewed_at: str = ""
+    run_id: str = ""
+    timestamp: str = ""
+    #: A locator only; the digest is the identity.
+    image_path: str = ""
+
+
+@dataclass(frozen=True)
+class InspectionDraft:
+    """What the Inspect & Improve dialog asks Review to save: the image's identity, the verdict and the findings.
+
+    The findings are the dialog's own ``Finding`` objects (observation text included); the builder keeps only the
+    closed vocabulary.
+    """
+
+    image_path: str
+    artifact_sha256: str
+    image_size: tuple[int, int]
+    verdict: str
+    findings: tuple[Finding, ...] = ()
+    subject_count: int | None = None
+
+
+_CATEGORY_VALUES = frozenset(item.value for item in Category)
+_CERTAINTY_VALUES = frozenset(item.value for item in Certainty)
+_SEVERITY_VALUES = frozenset(item.value for item in Severity)
+
+_REFUSAL_TEXT = {
+    "finding_not_confirmed": "Only findings you confirmed can be saved in an inspection.",
+    "clean_verdict_with_findings": "A no-defect inspection cannot carry findings.",
+    "defects_verdict_without_findings": "Confirm at least one finding before saving defects.",
+    "too_many_findings": f"Use at most {MAX_INSPECTION_FINDINGS} findings per inspection.",
+    "malformed_subject_count": (
+        f"Subjects in image must be a whole number from {SUBJECT_COUNT_MIN} to {SUBJECT_COUNT_MAX}."
+    ),
+}
+
+
+def _region_of(value: Any) -> tuple[int, int, int, int] | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, (list, tuple))
+        or len(value) != 4
+        or any(type(edge) is not int for edge in value)
+    ):
+        raise InspectionRecordError("malformed_region")
+    left, top, right, bottom = value
+    if not (0 <= left < right and 0 <= top < bottom):
+        raise InspectionRecordError("malformed_region")
+    return left, top, right, bottom
+
+
+def _subject_count_of(value: Any) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int or not SUBJECT_COUNT_MIN <= value <= SUBJECT_COUNT_MAX:
+        raise InspectionRecordError("malformed_subject_count")
+    return value
+
+
+def _stored_finding(finding: Finding, image_size: tuple[int, int] | None) -> InspectionFinding:
+    """Only a finding the operator confirmed is stored; an unconfirmed suggestion never reaches a record."""
+
+    if finding.confirmation is not Confirmation.CONFIRMED:
+        raise InspectionRecordError("finding_not_confirmed")
+    region = finding.region
+    if region is not None and image_size is not None:
+        region.validate(image_size)
+    return InspectionFinding(
+        category=Category(finding.category).value,
+        region=region.box if region is not None else None,
+        certainty=Certainty(finding.certainty).value,
+        severity=Severity(finding.severity).value if finding.severity is not None else None,
+    )
+
+
+def _inspection_record(
+    *,
+    image_path: str,
+    digest: str,
+    verdict: str,
+    findings: list[dict[str, Any]],
+    subject_count: int | None,
+    source_job_id: str,
+) -> LearningRecord:
+    metadata: dict[str, Any] = {
+        "source": INSPECTION_SOURCE,
+        "record_kind": INSPECTION_KIND,
+        "image_path": image_path,
+        "artifact_sha256": digest,
+        "inspection_schema": INSPECTION_SCHEMA,
+        "inspection_schema_version": INSPECTION_SCHEMA_VERSION,
+        "verdict": verdict,
+        "findings": findings,
+        "subject_count": subject_count,
+        # Sub-second UTC time: the record's own timestamp has one-second resolution and cannot order two saves.
+        "reviewed_at": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds"),
+    }
+    if str(source_job_id or "").strip():
+        metadata["source_job_id"] = str(source_job_id).strip()
+    return LearningRecord.from_pipeline_context(
+        base_config={},
+        variant_configs=[],
+        randomizer_mode="review_inspection",
+        randomizer_plan_size=1,
+        metadata=metadata,
+    )
+
+
+def _inspection_target(
+    image_path: str | os.PathLike[str], artifact_sha256: str | None
+) -> tuple[str, str]:
+    path_text = str(image_path or "").strip()
+    if not path_text:
+        raise ValueError("image_path is required")
+    digest = normalize_digest(artifact_sha256) or (file_sha256(path_text) or "")
+    if not digest:
+        raise ValueError("The image could not be read, so its identity cannot be recorded.")
+    return path_text, digest
+
+
+def build_inspection_record(
+    *,
+    image_path: str | os.PathLike[str],
+    verdict: str,
+    findings: Sequence[Finding] = (),
+    subject_count: int | None = None,
+    artifact_sha256: str | None = None,
+    image_size: tuple[int, int] | None = None,
+    source_job_id: str = "",
+) -> LearningRecord:
+    """Build a ``review_inspection`` record bound to the image bytes (nothing is written or changed).
+
+    ``no_defect_seen`` takes no findings; ``defects_confirmed`` needs at least one finding the operator confirmed.
+    Only category, region, certainty and optional severity of each finding are stored: the observation text, the
+    origin and any suggestion label stay in the dialog. ``subject_count`` is 1-12 or ``None`` ("not recorded").
+    Two findings with the same category and region are stored once.
+    """
+
+    value = str(verdict or "").strip().lower()
+    if value not in INSPECTION_VERDICTS:
+        raise ValueError(f"verdict must be one of {', '.join(INSPECTION_VERDICTS)}")
+    path_text, digest = _inspection_target(image_path, artifact_sha256)
+    try:
+        stored: list[InspectionFinding] = []
+        for finding in findings:
+            item = _stored_finding(finding, image_size)
+            if not any(
+                (old.category, old.region) == (item.category, item.region) for old in stored
+            ):
+                stored.append(item)
+        if len(stored) > MAX_INSPECTION_FINDINGS:
+            raise InspectionRecordError("too_many_findings")
+        if value == VERDICT_NO_DEFECT and stored:
+            raise InspectionRecordError("clean_verdict_with_findings")
+        if value == VERDICT_DEFECTS and not stored:
+            raise InspectionRecordError("defects_verdict_without_findings")
+        count = _subject_count_of(subject_count)
+    except InspectionRecordError as exc:
+        raise ValueError(_REFUSAL_TEXT.get(exc.code, "The inspection is not valid.")) from exc
+    return _inspection_record(
+        image_path=path_text,
+        digest=digest,
+        verdict=value,
+        findings=[
+            {
+                "category": item.category,
+                "region": list(item.region) if item.region is not None else None,
+                "certainty": item.certainty,
+                "severity": item.severity,
+            }
+            for item in stored
+        ],
+        subject_count=count,
+        source_job_id=source_job_id,
+    )
+
+
+def build_inspection_cleared_record(
+    *,
+    image_path: str | os.PathLike[str],
+    artifact_sha256: str | None = None,
+    source_job_id: str = "",
+) -> LearningRecord:
+    """The row Undo writes: the latest inspection for these bytes then says "none" (nothing is deleted)."""
+
+    path_text, digest = _inspection_target(image_path, artifact_sha256)
+    return _inspection_record(
+        image_path=path_text,
+        digest=digest,
+        verdict=INSPECTION_CLEARED,
+        findings=[],
+        subject_count=None,
+        source_job_id=source_job_id,
+    )
+
+
+def save_inspection(writer: LearningRecordWriter, **kwargs: Any) -> LearningRecord:
+    """Append an inspection through the one writer; raises ``OSError`` when it was not confirmed saved."""
+
+    record = build_inspection_record(**kwargs)
+    if writer.append_record(record) is False:
+        raise OSError("The inspection was not confirmed saved; see the log before retrying.")
+    return record
+
+
+def clear_inspection(writer: LearningRecordWriter, **kwargs: Any) -> LearningRecord:
+    """Append the clearing row (Undo of a saved inspection); raises ``OSError`` when it was not confirmed saved."""
+
+    record = build_inspection_cleared_record(**kwargs)
+    if writer.append_record(record) is False:
+        raise OSError("The inspection was not confirmed cleared; see the log before retrying.")
+    return record
+
+
+def parse_inspection_row(row: Mapping[str, Any]) -> InspectionRecord:
+    """Validate a stored ``review_inspection`` row; raises :class:`InspectionRecordError` with a stable code.
+
+    Closed vocabulary only: a finding with any key besides category, region, certainty and severity (an observation,
+    for example) is refused, so free text can never be read back as a label.
+    """
+
+    metadata = row.get("metadata")
+    if not isinstance(metadata, Mapping) or metadata.get("record_kind") != INSPECTION_KIND:
+        raise InspectionRecordError("not_an_inspection")
+    if (
+        metadata.get("inspection_schema") != INSPECTION_SCHEMA
+        or metadata.get("inspection_schema_version") != INSPECTION_SCHEMA_VERSION
+    ):
+        raise InspectionRecordError("unknown_inspection_schema")
+    digest = normalize_digest(metadata.get("artifact_sha256"))
+    if not digest:
+        raise InspectionRecordError("malformed_digest")
+    verdict = metadata.get("verdict")
+    if verdict not in (*INSPECTION_VERDICTS, INSPECTION_CLEARED):
+        raise InspectionRecordError("malformed_verdict")
+    raw = metadata.get("findings")
+    if not isinstance(raw, list) or len(raw) > MAX_INSPECTION_FINDINGS:
+        raise InspectionRecordError("malformed_findings")
+    stored: list[InspectionFinding] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping) or set(entry) != _FINDING_KEYS:
+            raise InspectionRecordError("malformed_findings")
+        severity = entry["severity"]
+        if (
+            entry["category"] not in _CATEGORY_VALUES
+            or entry["certainty"] not in _CERTAINTY_VALUES
+            or (severity is not None and severity not in _SEVERITY_VALUES)
+        ):
+            raise InspectionRecordError("malformed_findings")
+        stored.append(
+            InspectionFinding(
+                entry["category"], _region_of(entry["region"]), entry["certainty"], severity
+            )
+        )
+    if (verdict == VERDICT_DEFECTS) != bool(stored):
+        raise InspectionRecordError("verdict_does_not_match_findings")
+    count = _subject_count_of(metadata.get("subject_count"))
+    if verdict == INSPECTION_CLEARED and count is not None:
+        raise InspectionRecordError("malformed_subject_count")
+    return InspectionRecord(
+        digest=digest,
+        verdict=str(verdict),
+        findings=tuple(stored),
+        subject_count=count,
+        reviewed_at=str(metadata.get("reviewed_at") or ""),
+        run_id=str(row.get("run_id") or ""),
+        timestamp=str(row.get("timestamp") or ""),
+        image_path=str(metadata.get("image_path") or ""),
+    )
+
+
+@dataclass(frozen=True)
+class InspectionLookup:
+    """The latest inspection for an image.
+
+    ``record`` is ``None`` when none is saved, it was cleared, its bytes changed, or the row is malformed.
+    ``malformed`` says the latest row for these bytes could not be read as an inspection (an earlier row never
+    replaces it). ``identity`` is ``digest``, ``path`` or ``changed``; a ``changed`` row is reported, never applied.
+    """
+
+    record: InspectionRecord | None = None
+    identity: str = ""
+    malformed: bool = False
+
+    @property
+    def verdict(self) -> str:
+        return self.record.verdict if self.record is not None else ""
+
+
+def _inspection_of(found: EvidenceLookup) -> InspectionLookup:
+    if found.row is None:
+        return InspectionLookup()
+    if found.identity == IDENTITY_CHANGED:
+        return InspectionLookup(identity=IDENTITY_CHANGED)
+    try:
+        record = parse_inspection_row(found.row)
+    except InspectionRecordError:
+        return InspectionLookup(identity=found.identity, malformed=True)
+    if record.verdict == INSPECTION_CLEARED:
+        return InspectionLookup(identity=found.identity)
+    return InspectionLookup(record=record, identity=found.identity)
+
+
+def lookup_inspection(
+    records_path: str | os.PathLike[str],
+    image_path: str | os.PathLike[str],
+    artifact_sha256: str | None,
+) -> InspectionLookup:
+    """Latest inspection for the bytes (digest first, then path); the latest row wins, a cleared row means none."""
+
+    return _inspection_of(
+        _lookup(Path(records_path), INSPECTION_SOURCE, str(image_path), artifact_sha256)
+    )
+
+
 def _iter_rows(records_path: Path) -> Iterator[dict[str, Any]]:
     try:
         with open(records_path, encoding="utf-8") as handle:
@@ -350,11 +713,15 @@ class EvidenceIndex:
         self._by_digest: dict[str, dict[str, dict[str, Any]]] = {
             RATING_SOURCE: {},
             DISPOSITION_SOURCE: {},
+            INSPECTION_SOURCE: {},
         }
         self._by_path: dict[str, dict[str, dict[str, Any]]] = {
             RATING_SOURCE: {},
             DISPOSITION_SOURCE: {},
+            INSPECTION_SOURCE: {},
         }
+        #: Inspection rows that name no readable digest: they cannot be bound to any bytes.
+        self.unbound_inspections = 0
 
     @classmethod
     def read(cls, records_path: str | os.PathLike[str] | None) -> EvidenceIndex:
@@ -367,6 +734,8 @@ class EvidenceIndex:
             if source not in index._by_digest:
                 continue
             recorded = normalize_digest(metadata.get("artifact_sha256"))
+            if source == INSPECTION_SOURCE and not recorded:
+                index.unbound_inspections += 1
             if recorded:
                 index._by_digest[source][recorded] = payload
             key = _path_key(metadata.get("image_path"))
@@ -387,6 +756,17 @@ class EvidenceIndex:
 
     def disposition(self, image_path: Any, artifact_sha256: str | None) -> DispositionLookup:
         return _disposition_of(self._find(DISPOSITION_SOURCE, image_path, artifact_sha256))
+
+    def inspection(self, image_path: Any, artifact_sha256: str | None) -> InspectionLookup:
+        return _inspection_of(self._find(INSPECTION_SOURCE, image_path, artifact_sha256))
+
+    def inspection_rows(self) -> Iterator[tuple[str, dict[str, Any]]]:
+        """``(digest, latest stored row)`` for every digest that has an inspection row, in digest order.
+
+        The row is the raw payload: pass it to :func:`parse_inspection_row`, which says why a row is not usable.
+        """
+
+        yield from sorted(self._by_digest[INSPECTION_SOURCE].items())
 
     def discard_digest(self, image_path: Any) -> str:
         """The digest of the bytes the latest decision for this path discarded ("" when it is not a Discard)."""
@@ -507,16 +887,38 @@ __all__ = [
     "IDENTITY_CHANGED",
     "IDENTITY_DIGEST",
     "IDENTITY_PATH",
+    "INSPECTION_CLEARED",
+    "INSPECTION_KIND",
+    "INSPECTION_SCHEMA",
+    "INSPECTION_SCHEMA_VERSION",
+    "INSPECTION_SOURCE",
+    "INSPECTION_VERDICTS",
+    "InspectionDraft",
+    "InspectionFinding",
+    "InspectionLookup",
+    "InspectionRecord",
+    "InspectionRecordError",
+    "MAX_INSPECTION_FINDINGS",
     "RATING_KIND",
     "RATING_SOURCE",
+    "SUBJECT_COUNT_MAX",
+    "SUBJECT_COUNT_MIN",
+    "VERDICT_DEFECTS",
+    "VERDICT_NO_DEFECT",
     "build_disposition_record",
+    "build_inspection_cleared_record",
+    "build_inspection_record",
     "build_review_rating_record",
+    "clear_inspection",
     "file_sha256",
     "lookup_disposition",
+    "lookup_inspection",
     "lookup_rating",
     "normalize_digest",
+    "parse_inspection_row",
     "resolve_prior_review_summary",
     "save_disposition",
+    "save_inspection",
     "summary_from_row",
     "write_rating_into_file",
 ]

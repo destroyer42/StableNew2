@@ -44,6 +44,13 @@ class Confirmation(StrEnum):
     UNCERTAIN = "Uncertain"
 
 
+class Severity(StrEnum):
+    """Optional operator-stated seriousness of a confirmed finding; absent means "not recorded"."""
+
+    MINOR = "minor"
+    MAJOR = "major"
+
+
 class Action(StrEnum):
     MASK = "Edit mask"
     FACE = "ADetailer face pass"
@@ -99,6 +106,7 @@ class Finding:
     advice: tuple[Advisory, ...] = ()
     suggestion_label: str = ""
     effectiveness_job_id: str | None = None
+    severity: Severity | None = None
 
     def __post_init__(self) -> None:
         for value, kind in (
@@ -111,6 +119,8 @@ class Finding:
                 raise ValueError(
                     "Choose a supported finding category, origin, certainty and confirmation."
                 )
+        if self.severity is not None and not isinstance(self.severity, Severity):
+            raise ValueError("Choose a supported finding severity.")
         if self.region is not None:
             self.region.validate(self.source.identity.size)
         object.__setattr__(self, "observation", bounded_text(self.observation, MAX_OBSERVATION))

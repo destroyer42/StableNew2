@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 import tkinter as tk
 from collections.abc import Callable
@@ -22,7 +23,7 @@ from src.gui.view_contracts.media_image_decode import InspectionImage, decode_in
 from src.gui.widgets.media_inspector import MediaInspector
 from src.image_backends.image_backend_types import configured_image_backend_id
 from src.pipeline.adetailer_effectiveness import VISUAL_OUTCOMES
-from src.review.assist.contracts import CaptionProposal, SegmentProposal
+from src.review.assist.contracts import AssistError, CaptionProposal, SegmentProposal
 from src.review.assist.identity import reverify_source
 from src.review.correction_advice import (
     CorrectionTarget,
@@ -43,6 +44,7 @@ from src.review.findings import (
     Finding,
     Origin,
     Region,
+    Severity,
 )
 from src.review.improvement_evidence import (
     OVERALL_PREFERENCES,
@@ -51,6 +53,18 @@ from src.review.improvement_evidence import (
     resolve_improvement,
 )
 from src.review.inspection import GuidedSource, import_suggestion, inspect_source
+from src.review.review_evidence import (
+    SUBJECT_COUNT_MAX,
+    SUBJECT_COUNT_MIN,
+    VERDICT_DEFECTS,
+    VERDICT_NO_DEFECT,
+    InspectionDraft,
+)
+
+_STILL_FORMATS = frozenset({"PNG", "JPEG", "WEBP"})
+#: The severity choice that stores no severity (``Finding.severity`` stays ``None``).
+SEVERITY_NOT_RECORDED = "Not recorded"
+SEVERITY_CHOICES = (SEVERITY_NOT_RECORDED, *(item.value for item in Severity))
 
 
 class GuidedReviewDialog(tk.Toplevel):
@@ -62,6 +76,8 @@ class GuidedReviewDialog(tk.Toplevel):
         revision: tuple[int, int],
         current: Callable[[], bool],
         save: Callable[..., None],
+        save_inspection: Callable[[InspectionDraft], Any] | None = None,
+        inspection_saved: Callable[[InspectionDraft], None] | None = None,
     ) -> None:
         super().__init__(parent)
         apply_toplevel_theme(self)
@@ -72,6 +88,9 @@ class GuidedReviewDialog(tk.Toplevel):
         self._review = parent
         self._controller = parent.app_controller
         self._path, self._current, self._save_feedback = path, current, save
+        #: Blocking write of one inspection through Review's evidence writer (runs on a worker); ``None`` when
+        #: Learning evidence is not connected. ``_inspection_saved`` is told on the Tk thread after it succeeded.
+        self._write_inspection, self._inspection_saved = save_inspection, inspection_saved
         self._work = build_edit_work_runner(self)
         self._loaded: GuidedSource | None = None
         self._targets: dict[str, CorrectionTarget] = {}
@@ -91,6 +110,9 @@ class GuidedReviewDialog(tk.Toplevel):
         self._category = tk.StringVar(master=self, value=Category.GENERAL)
         self._certainty = tk.StringVar(master=self, value=Certainty.UNKNOWN)
         self._confirmation = tk.StringVar(master=self, value=Confirmation.CONFIRMED)
+        self._severity = tk.StringVar(master=self, value=SEVERITY_NOT_RECORDED)
+        self._subjects = tk.StringVar(master=self)
+        self._inspection_note = tk.StringVar(master=self)
         self._action = tk.StringVar(master=self)
         self._outcome = tk.StringVar(master=self, value="unreviewed")
         self._preference = tk.StringVar(master=self, value="unreviewed")
@@ -164,6 +186,10 @@ class GuidedReviewDialog(tk.Toplevel):
             ttk.Combobox(panel, values=choices, textvariable=variable, state="readonly").pack(
                 fill="x"
             )
+        ttk.Label(panel, text="Severity (optional)").pack(anchor="w")
+        ttk.Combobox(
+            panel, values=SEVERITY_CHOICES, textvariable=self._severity, state="readonly"
+        ).pack(fill="x")
         self._origin = ttk.Label(panel, text=Origin.OPERATOR, wraplength=340)
         self._origin.pack(anchor="w", pady=(4, 0))
         ttk.Label(panel, text="Visible issue").pack(anchor="w")
@@ -180,6 +206,25 @@ class GuidedReviewDialog(tk.Toplevel):
         )
         self._draft_button.pack(anchor="w", pady=4)
         self._draft_button.state(["disabled"])
+        ttk.Separator(panel).pack(fill="x", pady=4)
+        ttk.Label(panel, text="Inspection for this exact image (no job is queued)").pack(anchor="w")
+        row = ttk.Frame(panel)
+        row.pack(fill="x")
+        ttk.Label(row, text="Subjects in image (optional)").pack(side="left")
+        ttk.Entry(row, textvariable=self._subjects, width=4).pack(side="left", padx=4)
+        row = ttk.Frame(panel)
+        row.pack(fill="x", pady=2)
+        self._inspection_button = ttk.Button(
+            row, text="Save inspection", command=lambda: self._save_inspection(VERDICT_DEFECTS)
+        )
+        self._inspection_button.pack(side="left")
+        self._clean_button = ttk.Button(
+            row, text="No defect seen", command=lambda: self._save_inspection(VERDICT_NO_DEFECT)
+        )
+        self._clean_button.pack(side="left", padx=4)
+        ttk.Label(panel, textvariable=self._inspection_note, wraplength=340, justify="left").pack(
+            anchor="w"
+        )
         ttk.Separator(panel).pack(fill="x", pady=4)
         ttk.Button(panel, text="Compare completed result", command=self._compare).pack(anchor="w")
         ttk.Label(panel, textvariable=self._evidence, wraplength=340, justify="left").pack(
@@ -208,6 +253,7 @@ class GuidedReviewDialog(tk.Toplevel):
         ttk.Label(body, textvariable=self._status, wraplength=850).grid(
             row=1, column=0, columnspan=2, sticky="w"
         )
+        self._refresh_inspection_controls()
 
     def _destroyed(self, event: tk.Event) -> None:
         if event.widget is self:
@@ -237,6 +283,7 @@ class GuidedReviewDialog(tk.Toplevel):
             return
         self.after_view.set_image_reference(str(self._path), subject=loaded.subject)
         self._status.set("Draw a region or choose Whole image. Record only visible issues.")
+        self._refresh_inspection_controls()
         self._refresh_targets()
 
     def _resources(self) -> ReviewResources:
@@ -363,6 +410,7 @@ class GuidedReviewDialog(tk.Toplevel):
         self._category.set(Category.GENERAL)
         self._certainty.set(Certainty.UNKNOWN)
         self._confirmation.set(Confirmation.CONFIRMED)
+        self._severity.set(SEVERITY_NOT_RECORDED)
         self._origin.configure(text=Origin.OPERATOR)
         self._observation.delete("1.0", "end")
         self._select_region(None)
@@ -412,6 +460,9 @@ class GuidedReviewDialog(tk.Toplevel):
                 effectiveness_job_id=self._pair.job_id
                 if self._pair and self._pair.verified
                 else None,
+                severity=None
+                if self._severity.get() == SEVERITY_NOT_RECORDED
+                else Severity(self._severity.get()),
             )
             self._store_finding(
                 finding, mask if original and original.region == finding.region else None
@@ -436,6 +487,7 @@ class GuidedReviewDialog(tk.Toplevel):
         self._rows.selection_set(self._selected)
         self._status.set("Finding recorded for this inspection.")
         self._show_finding()
+        self._refresh_inspection_controls()
 
     def _show_finding(self, _event: Any = None) -> None:
         selected = self._rows.curselection()  # type: ignore[no-untyped-call]
@@ -446,6 +498,7 @@ class GuidedReviewDialog(tk.Toplevel):
         self._category.set(finding.category)
         self._certainty.set(finding.certainty)
         self._confirmation.set(finding.confirmation)
+        self._severity.set(finding.severity or SEVERITY_NOT_RECORDED)
         self._origin.configure(
             text=f"{finding.origin} · {finding.suggestion_label}"
             if finding.suggestion_label
@@ -621,6 +674,140 @@ class GuidedReviewDialog(tk.Toplevel):
             lambda: reverify_source(self._path, finding.source.identity),
             on_result=ready,
             on_error=failed,
+        )
+
+    # -- Save inspection (AI-VL-243) ------------------------------------------------------------------------
+
+    def _confirmed(self) -> list[Finding]:
+        return [item for item, _ in self._findings if item.confirmation is Confirmation.CONFIRMED]
+
+    def _refresh_inspection_controls(self) -> None:
+        """Save inspection needs a confirmed finding; No defect seen is the explicit choice when there is none."""
+
+        confirmed = len(self._confirmed())
+        ready = self._loaded is not None and self._write_inspection is not None
+        self._inspection_button.state(["!disabled"] if ready and confirmed else ["disabled"])
+        self._clean_button.state(["!disabled"] if ready and not confirmed else ["disabled"])
+        if self._write_inspection is None:
+            self._inspection_note.set(
+                "Learning evidence is not connected, so an inspection cannot be saved."
+            )
+        elif confirmed:
+            self._inspection_note.set(
+                f"Saves the {confirmed} confirmed finding(s) (category, region, certainty, severity) and the "
+                "subject count. Your written descriptions stay in this dialog."
+            )
+        else:
+            self._inspection_note.set(
+                "No confirmed finding. If you looked at the whole image and saw no defect, choose No defect seen."
+            )
+
+    def _subject_count(self) -> int | None:
+        text = self._subjects.get().strip()
+        if not text:
+            return None
+        if re.fullmatch(r"[0-9]{1,2}", text) is None or not (
+            SUBJECT_COUNT_MIN <= int(text) <= SUBJECT_COUNT_MAX
+        ):
+            raise ValueError(
+                f"Subjects in image must be a whole number from {SUBJECT_COUNT_MIN} to "
+                f"{SUBJECT_COUNT_MAX}, or empty when you do not want to record it."
+            )
+        return int(text)
+
+    def _save_inspection(self, verdict: str) -> None:
+        loaded = self._loaded
+        if self._busy:
+            return
+        if loaded is None:
+            self._status.set("The inspection was not saved: the image has not been read yet.")
+            return
+        if not self._review._visibility_resolver().is_visible(loaded.subject):
+            self._status.set(
+                "The inspection was not saved: this image is hidden by content visibility."
+            )
+            return
+        if not self._current() or not self.after_view.model.renderable:
+            self._status.set("The inspection was not saved: the selected image is no longer shown.")
+            return
+        if loaded.source.identity.image_format not in _STILL_FORMATS:
+            self._status.set(
+                "The inspection was not saved: only PNG, JPEG and WebP still images are supported."
+            )
+            return
+        write = self._write_inspection
+        if write is None:
+            self._status.set("The inspection was not saved: Learning evidence is not connected.")
+            return
+        confirmed = self._confirmed()
+        if verdict == VERDICT_DEFECTS and not confirmed:
+            self._status.set("Confirm at least one finding first, or choose No defect seen.")
+            return
+        if verdict == VERDICT_NO_DEFECT and confirmed:
+            self._status.set(
+                "This image has a confirmed finding, so it cannot be saved as no defect seen."
+            )
+            return
+        if verdict == VERDICT_NO_DEFECT and any(
+            item.confirmation is Confirmation.UNCERTAIN for item, _ in self._findings
+        ):
+            self._status.set(
+                "A finding is marked Uncertain. Set it to Confirmed or Rejected before saying no defect "
+                "was seen."
+            )
+            return
+        try:
+            subjects = self._subject_count()
+        except ValueError as exc:
+            self._status.set(str(exc))
+            return
+        identity = loaded.source.identity
+        draft = InspectionDraft(
+            image_path=str(self._path),
+            artifact_sha256=identity.file_sha256,
+            image_size=identity.size,
+            verdict=verdict,
+            findings=tuple(confirmed) if verdict == VERDICT_DEFECTS else (),
+            subject_count=subjects,
+        )
+        self._busy = True
+        self._status.set("Saving the inspection…")
+
+        def work() -> bool:
+            try:
+                reverify_source(self._path, identity)
+            except AssistError:
+                return False
+            write(draft)
+            return True
+
+        def done(saved: bool) -> None:
+            self._busy = False
+            if not self.winfo_exists():
+                return
+            if not saved:
+                self._status.set(
+                    "The inspection was not saved: the image changed since Inspect & Improve opened. "
+                    "Reopen it."
+                )
+                return
+            self._status.set(
+                "Inspection saved for this exact image. The file was not changed and no job was queued."
+            )
+            if self._inspection_saved is not None:
+                self._inspection_saved(draft)
+
+        def failed(exc: Exception) -> None:
+            self._busy = False
+            if self.winfo_exists():
+                self._status.set(f"The inspection was not saved: {exc}")
+
+        self._work.submit(
+            "inspection",
+            work,
+            on_result=done,
+            on_error=failed,
+            name="guided-review-inspection",
         )
 
     def _compare(self) -> None:
