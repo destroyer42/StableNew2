@@ -11,6 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.app.site_pack_catalog import PreparePack, SitePackCatalog, pack_digest
+from src.app.site_pairing_protocol import PairingTickets, register_protocol
 from src.app.site_queue_bridge import (
     PreviewJob,
     PreviewView,
@@ -277,30 +278,80 @@ class SiteConnectionDialog:
         self.listener: SiteListener | None = None
         self.connection: PreviewQueueConnection | None = None
         self._timer: str | None = None
+        self._checkout = Path(__file__).resolve().parents[2]
+        self._tickets = PairingTickets(self._checkout)
+        self._shared_output: Path | None = None
+        self._omit_output = False
+        self._startup_error = ""
+
+    def start_default(self) -> None:
+        """Enable pairing when the Windows app starts, with the existing output and pack scopes."""
+        try:
+            register_protocol(self._checkout)
+        except OSError:
+            log.warning("Could not register the StableNew Operator link")
+        self._start()
+
+    def _output_root(self) -> Path:
+        config = getattr(self.app, "_config_manager", None)
+        settings = config.load_settings() if config is not None else {}
+        configured = settings.get("output_dir") if isinstance(settings, dict) else None
+        if not isinstance(configured, str):
+            configured = None
+        return (
+            get_output_root(
+                configured or getattr(self.app, "output_dir", None) or output_dir_default(),
+                create=False,
+            )
+            .expanduser()
+            .absolute()
+        )
+
+    def _start(self) -> None:
+        if self.connection is not None or self.app._is_shutting_down:
+            return
+        session = SiteSession(
+            self.app.job_service.history_store.get_job,
+            allow_promptpack_queue=True,
+            claim_ticket=self._tickets.consume,
+        )
+        if not self._omit_output:
+            try:
+                session.set_output_folder(self._shared_output or self._output_root())
+            except (OSError, ValueError):
+                log.warning("The configured Output folder is unavailable for the Operator Site")
+        self._share_packs(session)
+        try:
+            self.listener = SiteListener(session)
+        except OSError:
+            session.revoke()
+            self._startup_error = "StableNew could not open its local Site port. Close another connection using the port and try again."
+            log.warning(self._startup_error)
+            return
+        self._startup_error = ""
+        self.connection = PreviewQueueConnection(
+            self.app, session, self._confirm, self._confirm_prepare
+        )
+        self._tick()
 
     def open(self) -> None:
         if self.dialog is not None:
             self.dialog.lift()
             return
-        if self.app._is_shutting_down:
-            return
-        session = SiteSession(
-            self.app.job_service.history_store.get_job, allow_promptpack_queue=True
-        )
-        try:
-            self.listener = SiteListener(session)
-        except OSError:
+        self._start()
+        if self.connection is None:
             messagebox.showerror(
                 "StableNew Site connection",
-                "The local connection could not open. Close another Site connection using this port and try again.",
+                self._startup_error or "StableNew is shutting down.",
                 parent=self.root,
             )
             return
+        session = self.connection.session
 
         self.dialog = dialog = tk.Toplevel(self.root)
         dialog.title("StableNew Site connection")
         dialog.transient(self.root)
-        dialog.protocol("WM_DELETE_WINDOW", self.close)
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
         dialog.bind("<Destroy>", self._destroyed, add="+")
         frame = ttk.Frame(dialog, padding=16)
         frame.pack(fill="both", expand=True)
@@ -309,35 +360,33 @@ class SiteConnectionDialog:
         ).pack(anchor="w")
         ttk.Label(
             frame,
-            text="Paste this code into Connect StableNew on the Site. This connection expires in 15 minutes.",
+            text="Choose Connect on the private Site, or enter this code manually. Codes rotate every 15 minutes.",
             wraplength=370,
         ).pack(anchor="w", pady=(5, 12))
         ttk.Label(
             frame,
-            text="The paired Site can read visible PromptPacks, build Previews and submit its own Preview to the queue. Keep this window open. Close it to revoke access.",
+            text="The paired Site can read visible PromptPacks, build Previews and submit its own Preview to the queue. Choose Disconnect to stop sharing.",
             wraplength=370,
         ).pack(anchor="w", pady=(4, 8))
-        output_status = ttk.Label(frame, text="Output folder is private.", wraplength=370)
-        output_status.pack(anchor="w")
-        config = getattr(self.app, "_config_manager", None)
-        settings = config.load_settings() if config is not None else {}
-        configured = settings.get("output_dir") if isinstance(settings, dict) else None
-        if not isinstance(configured, str):
-            configured = None
-        output_root = (
-            get_output_root(
-                configured or getattr(self.app, "output_dir", None) or output_dir_default(),
-                create=False,
-            )
-            .expanduser()
-            .absolute()
+        output_root = self._output_root()
+        output_text = (
+            f"Shared for this session\n{self._shared_output or output_root}"
+            if session.output_catalog
+            else "Output folder is private or unavailable."
         )
-        share_configured = tk.BooleanVar(master=dialog, value=True)
+        output_status = ttk.Label(frame, text=output_text, wraplength=370)
+        output_status.pack(anchor="w")
+        share_configured = tk.BooleanVar(
+            master=dialog, value=session.output_catalog is not None and self._shared_output is None
+        )
 
         def share_default() -> None:
             if share_configured.get():
                 if not self._grant_output(session, output_root, output_status):
                     share_configured.set(False)
+                else:
+                    self._shared_output = None
+                    self._omit_output = False
             else:
                 self._stop_sharing_output(session, output_status)
 
@@ -356,7 +405,6 @@ class SiteConnectionDialog:
             text="Allows the private Site to view output media and metadata and save ratings and albums on this PC.",
             wraplength=370,
         ).pack(anchor="w")
-        share_default()
         output_controls = ttk.Frame(frame)
         output_controls.pack(anchor="w", pady=(3, 10))
         ttk.Button(
@@ -378,25 +426,25 @@ class SiteConnectionDialog:
         ttk.Button(frame, text="Copy pairing code", command=lambda: self._copy(session.code)).pack(
             anchor="w", pady=6
         )
-        pack_status = ttk.Label(frame, text="PromptPack selection is private.", wraplength=370)
+        pack_text = (
+            "Visible PromptPacks are shared."
+            if session.pack_catalog is not None
+            else "PromptPacks are unavailable."
+        )
+        pack_status = ttk.Label(frame, text=pack_text, wraplength=370)
         pack_status.pack(anchor="w")
         ttk.Button(
             frame,
             text="Refresh shared PromptPacks",
             command=lambda: self._share_packs(session, pack_status),
         ).pack(anchor="w", pady=(3, 10))
-        self._share_packs(session, pack_status)
         ttk.Button(frame, text="Disconnect", command=self.close).pack(anchor="e")
-        self.connection = PreviewQueueConnection(
-            self.app, session, self._confirm, self._confirm_prepare
-        )
-        self._tick()
 
     def _copy(self, code: str) -> None:
         self.root.clipboard_clear()
         self.root.clipboard_append(code)
 
-    def _share_packs(self, session: SiteSession, status: ttk.Label) -> None:
+    def _share_packs(self, session: SiteSession, status: ttk.Label | None = None) -> None:
         if session.expired:
             return
         try:
@@ -409,9 +457,13 @@ class SiteConnectionDialog:
                 )
             )
         except (OSError, ValueError):
-            status.configure(text="The visible PromptPacks could not be shared.")
+            if status is not None:
+                status.configure(text="The visible PromptPacks could not be shared.")
             return
-        status.configure(text="Visible PromptPacks and slot prompts are shared for this session.")
+        if status is not None:
+            status.configure(
+                text="Visible PromptPacks and slot prompts are shared for this session."
+            )
 
     def _confirm_prepare(self, command: PreparePack) -> bool:
         dialog = self.dialog
@@ -442,7 +494,10 @@ class SiteConnectionDialog:
         if not folder or session.expired or dialog is not self.dialog:
             return
         if self._grant_output(session, Path(folder), status):
-            share_configured.set(Path(folder).absolute() == output_root)
+            selected = Path(folder).absolute()
+            self._shared_output = selected if selected != output_root else None
+            self._omit_output = False
+            share_configured.set(self._shared_output is None)
 
     @staticmethod
     def _grant_output(session: SiteSession, folder: Path, status: ttk.Label) -> bool:
@@ -455,15 +510,13 @@ class SiteConnectionDialog:
         status.configure(text=f"Shared for this session\n{folder}")
         return True
 
-    @staticmethod
-    def _stop_sharing_output(session: SiteSession, status: ttk.Label) -> None:
+    def _stop_sharing_output(self, session: SiteSession, status: ttk.Label) -> None:
+        self._omit_output = True
         session.set_output_folder(None)
         status.configure(text="Output folder is private.")
 
     def _confirm(self, count: int) -> bool:
-        dialog = self.dialog
-        if dialog is None:
-            return False
+        dialog = self.dialog or self.root
         return messagebox.askyesno(
             "Queue image Preview from the StableNew Site?",
             f"Add the {count} currently previewed image job(s) to the existing StableNew queue? "
@@ -477,16 +530,20 @@ class SiteConnectionDialog:
         connection = self.connection
         if connection is None:
             return
-        if connection.session.expired or self.app._is_shutting_down:
+        if self.app._is_shutting_down:
             self.close()
             return
+        if connection.session.expired:
+            self.close()
+            self._timer = self.root.after(1500, self._start)
+            return
         connection.tick()
-        if self.dialog is not None and connection is self.connection:
+        if connection is self.connection:
             self._timer = self.root.after(150, self._tick)
 
     def _destroyed(self, event: tk.Event[Any]) -> None:
         if event.widget is self.dialog:
-            self._disconnect()
+            self.dialog = None
 
     def _disconnect(self) -> None:
         self.dialog = None
@@ -505,10 +562,13 @@ class SiteConnectionDialog:
             dialog.destroy()
 
 
-def install_site_connection_control(root: tk.Tk, app: Any, header: ttk.Frame) -> None:
-    """Add the connection to the visible desktop toolbar without opening a listener."""
+def install_site_connection_control(
+    root: tk.Tk, app: Any, header: ttk.Frame
+) -> SiteConnectionDialog:
+    """Add the toolbar controls and return their lifecycle owner."""
     connection = SiteConnectionDialog(root, app)
     button = ttk.Button(
         header, text="Operator Site", style="Secondary.TButton", command=connection.open
     )
     button.grid(row=0, column=header.grid_size()[0], padx=4, pady=4)
+    return connection

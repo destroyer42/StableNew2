@@ -163,10 +163,19 @@ This tooling makes no generation and starts no runtime.
 
 ### Review in the paired Operator Site
 
-Open **Operator Site** in the StableNew header. Review the displayed Output folder and pair the private Site. Output
-sharing is selected by default. Use **Change output folder…** to grant a different folder or **Stop sharing output**
-to revoke the grant. Keep the Windows pairing window open. A remote device also needs the hosted relay session
-from the Windows browser.
+StableNew enables Operator Site pairing at Windows startup and shares the configured Output folder and visible
+PromptPacks with its paired private Site. Open **Operator Site** in the header to see the selected folder.
+Use **Change output folder…** to grant a different folder, **Stop sharing output** to revoke that grant, or
+**Disconnect** to revoke pairing for this app session. You can close the pairing dialog and keep StableNew running.
+
+On the PC, start StableNew once using its normal launcher to register the Windows Operator link for your account.
+Then select **Connect StableNew** on the private Site. Accept the browser prompt to open StableNew and allow local
+network access if prompted. The link checks for an existing StableNew instance, starts it with the normal launcher
+if it is stopped, and pairs automatically. Use **Pair manually** if your browser blocks the link.
+
+For a phone, leave the connected Site tab open on Windows, and choose **Connect StableNew** on the phone while
+signed in to the same Site account. If the Site reports no active Windows relay, reconnect from the PC. A remote
+device can find an active relay and a Windows browser on the PC starts the desktop application.
 
 Open **Video Review** on the Site. It selects the newest usable report and opens the first clip that still needs
 review. The run dropdown opens earlier reports. **Save & next** writes the judgment into the run’s existing

@@ -651,7 +651,14 @@ def main() -> None:
     if sys.platform == "win32":
         from src.gui.site_connection_dialog import install_site_connection_control
 
-        install_site_connection_control(root, app_controller, window.header_zone)
+        site_connection = install_site_connection_control(root, app_controller, window.header_zone)
+        root.after_idle(site_connection.start_default)
+
+        def close_site_connection(event: tk.Event[tk.Misc]) -> None:
+            if event.widget is root:
+                site_connection.close()
+
+        root.bind("<Destroy>", close_site_connection, add="+")
 
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(
