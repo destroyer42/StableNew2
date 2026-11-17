@@ -93,7 +93,7 @@ def reason_text(code: str) -> str:
 
 
 def _abs(path: str | os.PathLike[str]) -> Path:
-    return Path(os.path.normpath(str(canonical_path(path))))
+    return Path(os.path.normpath(str(canonical_path(Path(path)))))
 
 
 def _norm(path: Path | str) -> str:
