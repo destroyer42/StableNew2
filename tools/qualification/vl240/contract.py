@@ -8,7 +8,7 @@ from __future__ import annotations
 
 SCHEMA = "stablenew.vl240.review_export/1"
 MANIFEST_SCHEMA = "stablenew.vl240.image_manifest/1"
-EXPORTER_VERSION = 1
+EXPORTER_VERSION = 2
 DOCUMENT_NAME = "review_export.json"
 MANIFEST_NAME = "manifest.json"
 IMAGE_DIR = "images"
@@ -53,6 +53,11 @@ PREFERENCE_TO_VALUE: dict[str, str | None] = {
     "uncertain": "inconclusive",
 }
 
+# The Review inspection record (``src.review.review_evidence``); a test pins these to Review.
+INSPECTION_SOURCE = "review_tab_inspection"
+SEVERITIES: tuple[str, ...] = ("minor", "major")
+SUBJECT_COUNT_BUCKETS: tuple[str, ...] = ("1", "2", "3", "4", "5_or_more")
+
 MODE_SFW = "sfw"
 MODE_NSFW = "nsfw"
 VISIBILITY_MODES: tuple[str, ...] = (MODE_SFW, MODE_NSFW)
@@ -64,12 +69,13 @@ MAX_IMAGE_PIXELS = 64_000_000
 MAX_CANDIDATES_PER_JOB = 48
 MAX_REFUSALS_LISTED = 500
 
-# What Review does not record today. Each entry is exported verbatim so a consumer never has to infer an absence.
+# Where each label comes from, and what Review still cannot record. Each entry is exported verbatim so a consumer never has
+# to infer an absence. ``review_inspection`` rows are the operator's "Save inspection" in Inspect & Improve (AI-VL-243).
 AVAILABILITY: dict[str, str] = {
-    "findings": "only_findings_behind_a_queued_guided_correction",
-    "clean_confirmed": "not_recorded_by_review",
-    "severity": "not_recorded_by_review",
-    "subject_count": "not_recorded_by_review",
+    "findings": "queued_guided_correction_or_saved_inspection",
+    "clean_confirmed": "saved_inspection_no_defect_seen_only",
+    "severity": "optional_in_saved_inspection",
+    "subject_count": "optional_in_saved_inspection",
     "model_family": "not_recorded_in_review_evidence",
     "prompt_adherence_elements": "not_recorded_by_review",
     "pair_judgment": "recorded_with_both_file_digests",
@@ -78,21 +84,21 @@ AVAILABILITY: dict[str, str] = {
 # Target counts for the first useful set and the pilot. ``recordable`` is whether Review can produce the label at all.
 TARGETS: dict[str, dict[str, dict[str, int | bool]]] = {
     "full": {
-        "clean_confirmed_images": {"target": 20, "recordable": False},
+        "clean_confirmed_images": {"target": 20, "recordable": True},
         "defect_images": {"target": 30, "recordable": True},
         "defect_images_hands": {"target": 8, "recordable": True},
         "defect_images_anatomy": {"target": 8, "recordable": True},
         "defect_images_face": {"target": 8, "recordable": True},
-        "multi_subject_images": {"target": 10, "recordable": False},
+        "multi_subject_images": {"target": 10, "recordable": True},
         "judged_pairs": {"target": 12, "recordable": True},
     },
     "pilot": {
-        "clean_confirmed_images": {"target": 10, "recordable": False},
+        "clean_confirmed_images": {"target": 10, "recordable": True},
         "defect_images": {"target": 15, "recordable": True},
         "defect_images_hands": {"target": 4, "recordable": True},
         "defect_images_anatomy": {"target": 4, "recordable": True},
         "defect_images_face": {"target": 4, "recordable": True},
-        "multi_subject_images": {"target": 5, "recordable": False},
+        "multi_subject_images": {"target": 5, "recordable": True},
         "judged_pairs": {"target": 6, "recordable": True},
     },
 }

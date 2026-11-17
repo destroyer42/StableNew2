@@ -37,6 +37,8 @@ from src.review.archive import (
 from src.review.review_evidence import (
     DISPOSITION_CLEARED,
     IDENTITY_CHANGED,
+    VERDICT_DEFECTS,
+    VERDICT_NO_DEFECT,
     EvidenceIndex,
     file_sha256,
 )
@@ -96,6 +98,12 @@ FILTER_LABELS: dict[ViewFilter, str] = {
     ViewFilter.ALL: "All",
 }
 
+#: The one-line mark a saved inspection adds to an image's row (the verdict only; never findings or text).
+INSPECTION_LABELS: dict[str, str] = {
+    VERDICT_NO_DEFECT: "inspected: no defect",
+    VERDICT_DEFECTS: "inspected: defects",
+}
+
 _DISPOSITION_STATE = {
     "retain": ItemState.RETAINED,
     "discard": ItemState.ARCHIVED,
@@ -140,6 +148,9 @@ class ItemFacts:
     loaded: bool = False
     #: When the decision was recorded (UTC, naive), so a re-work finished *before* a newer mark is not counted for it.
     decided_at: datetime | None = None
+    #: The saved inspection's verdict (``no_defect_seen`` or ``defects_confirmed``); empty when none is saved for
+    #: these bytes. It does not change the image's state: an inspection is not a decision.
+    inspection: str = ""
     #: Where the file is now: ``in_place`` (at its original path), ``archived`` (only at its archive location) or
     #: ``missing`` (neither); empty until it was read.
     location: str = ""
@@ -316,6 +327,7 @@ def _facts_for(
     digest, job_id = read.digest, read.job_id
     decision = index.disposition(path, digest or None)
     rating = index.rating(path, digest or None)
+    inspection = index.inspection(path, digest or None)
     value: int | None = None
     if rating.row is not None and rating.identity != IDENTITY_CHANGED:
         raw = rating.row["metadata"].get("user_rating_raw")
@@ -332,6 +344,7 @@ def _facts_for(
             rating=value,
             loaded=loaded,
             decided_at=_parse_stamp(decision.decided_at, decision.timestamp),
+            inspection=inspection.verdict,
             location=read.location,
             other_archived=_other_archived(path, read, output_root),
         ),
@@ -475,6 +488,7 @@ class ReviewWorkspaceSession:
         self._ordinal = 0
         self._decided: dict[str, int] = {}
         self._rated: dict[str, int] = {}
+        self._inspected: dict[str, int] = {}
         self._pending: dict[str, str] = {}
         self._undo: list[UndoEntry] = []
         self._closed = False
@@ -511,7 +525,7 @@ class ReviewWorkspaceSession:
         self._folder = Path(folder) if folder is not None else None
         self.archive_notes, self.restore_offer = {}, None
         self._pending, self._undo, self.message = {}, [], ""
-        self._decided, self._rated = {}, {}
+        self._decided, self._rated, self._inspected = {}, {}, {}
         self._cache.clear()
         self.lineage_truncated = False
         self._add(paths)
@@ -650,7 +664,12 @@ class ReviewWorkspaceSession:
             place = {LOC_ARCHIVED: " (in archive)", LOC_IN_PLACE: " (not moved)"}.get(
                 facts.location, " (file missing)"
             )
-        return f"[{label}] {item.name}{place}{rating}"
+        inspected = (
+            f"  ({INSPECTION_LABELS[facts.inspection]})"
+            if facts.inspection in INSPECTION_LABELS
+            else ""
+        )
+        return f"[{label}] {item.name}{place}{rating}{inspected}"
 
     def archive_line(self, key: str | None) -> str:
         """What to tell the operator about one image's archive: where the file is, why not moved, other copies."""
@@ -825,6 +844,8 @@ class ReviewWorkspaceSession:
                     )
                 if self._rated.get(key, 0) > began:
                     value = replace(value, rating=local.rating)
+                if self._inspected.get(key, 0) > began:
+                    value = replace(value, inspection=local.inspection)
             merged[key] = value
         return merged
 
@@ -1047,6 +1068,15 @@ class ReviewWorkspaceSession:
             self._rated[key] = self._ordinal
             self._changed()
 
+    def note_inspection(self, key: str, verdict: str) -> None:
+        """A saved (or undone: empty ``verdict``) inspection for an image in the set; shows on its row."""
+
+        if self.item(key) is not None:
+            self.facts[key] = replace(self.facts.get(key, ItemFacts()), inspection=verdict)
+            self._ordinal += 1
+            self._inspected[key] = self._ordinal
+            self._changed()
+
     # -- re-work scope and tool gating -------------------------------------------------------------------
 
     def rework_scope(self) -> list[ReviewItem]:
@@ -1103,6 +1133,7 @@ class ReviewWorkspaceSession:
 __all__ = [
     "ActionState",
     "FILTER_LABELS",
+    "INSPECTION_LABELS",
     "FileRead",
     "ItemFacts",
     "ItemState",
