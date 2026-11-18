@@ -28,6 +28,7 @@ from src.gui.theme_v2 import (
 )
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts import config_source_contract as source_contract
+from src.gui.view_contracts import stale_pack_contract as stale_contract
 from src.gui.view_contracts.pipeline_composer_contract import (
     COMPOSER_INTRO,
     GENERATE_STAGE,
@@ -231,6 +232,7 @@ class SidebarPanelV2(ttk.Frame):
         self._prompt_summaries: list[PromptPackSummary] = []
         self._manual_pack_names: list[str] | None = None
         self._current_pack_names: list[str] = []
+        self._stale_pack_ids: list[str] = []
         self._preview_cache: dict[Path, str] = {}
         self._hidden_prompt_pack_count = 0
         self._pack_list_fell_back = False
@@ -485,6 +487,31 @@ class SidebarPanelV2(ttk.Frame):
         )
         self.pack_action_label.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
         bind_wraplength(self.pack_action_label, maximum=420)
+        # Inline, non-modal: shown by Add to Job when the Prompt tab holds unsaved edits to the selected pack.
+        self.stale_pack_notice = ttk.Frame(btn_frame)
+        self.stale_pack_notice.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        self.stale_pack_label = ttk.Label(
+            self.stale_pack_notice, text="", style=MUTED_LABEL_STYLE, wraplength=360, justify="left"
+        )
+        self.stale_pack_label.pack(fill="x")
+        bind_wraplength(self.stale_pack_label, maximum=420)
+        stale_actions = ttk.Frame(self.stale_pack_notice)
+        stale_actions.pack(fill="x", pady=(2, 0))
+        self.save_and_add_button = ttk.Button(
+            stale_actions,
+            text=stale_contract.SAVE_AND_ADD_LABEL,
+            command=lambda: self._resolve_stale_pack(save_first=True),
+            style="Dark.TButton",
+        )
+        self.save_and_add_button.pack(side="left", padx=(0, 4))
+        self.add_saved_button = ttk.Button(
+            stale_actions,
+            text=stale_contract.ADD_SAVED_LABEL,
+            command=lambda: self._resolve_stale_pack(save_first=False),
+            style="Dark.TButton",
+        )
+        self.add_saved_button.pack(side="left")
+        self.stale_pack_notice.grid_remove()
         self.preview_toggle_button = ttk.Button(
             btn_frame,
             text="Show Preview",
@@ -839,6 +866,41 @@ class SidebarPanelV2(ttk.Frame):
             self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
         ]
         logger.debug(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
+        unsaved = stale_contract.unsaved_prompt_tab_pack(
+            getattr(self.app_state, "prompt_workspace_state", None),
+            self._prompt_summaries,
+            pack_ids,
+        )
+        if unsaved is not None:
+            self._stale_pack_ids = list(pack_ids)
+            self.stale_pack_label.config(text=stale_contract.notice_text(unsaved))
+            self.stale_pack_notice.grid()
+            return
+        self._add_packs_to_job(pack_ids)
+
+    def _hide_stale_pack_notice(self) -> None:
+        self._stale_pack_ids = []
+        self.stale_pack_notice.grid_remove()
+
+    def _resolve_stale_pack(self, *, save_first: bool) -> None:
+        """Finish an Add to Job that the notice held back, for the packs captured when it was shown."""
+        pack_ids = list(self._stale_pack_ids)
+        if not pack_ids:
+            self._hide_stale_pack_notice()
+            return
+        workspace = getattr(self.app_state, "prompt_workspace_state", None)
+        if save_first and workspace is not None and workspace.dirty:
+            try:
+                workspace.save_current_pack()
+            except Exception as exc:  # noqa: BLE001 - nothing is added when the save fails; the notice stays up
+                name = getattr(getattr(workspace, "current_pack", None), "name", "") or "the pack"
+                self._say_action(CHANNEL_PACK, stale_contract.save_failed_text(name, exc))
+                return
+        self._hide_stale_pack_notice()
+        self._add_packs_to_job(pack_ids)
+
+    def _add_packs_to_job(self, pack_ids: list[str]) -> None:
+        controller = self.controller
         if controller and hasattr(controller, "on_pipeline_add_packs_to_job"):
             logger.debug(
                 f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})"
@@ -964,6 +1026,12 @@ class SidebarPanelV2(ttk.Frame):
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
         single = len(selection) == 1
         has_selection = len(selection) > 0
+        # A different selection must not inherit the notice raised for the previous one.
+        selected_ids = [
+            self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
+        ]
+        if self._stale_pack_ids and selected_ids != self._stale_pack_ids:
+            self._hide_stale_pack_notice()
         if self.load_config_button:
             self.load_config_button.config(state=tk.NORMAL if single else tk.DISABLED)
         if self.apply_config_button:
