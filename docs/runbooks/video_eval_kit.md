@@ -172,6 +172,9 @@ On the PC, start StableNew once using its normal launcher to register the Window
 Then select **Connect StableNew** on the private Site. Accept the browser prompt to open StableNew and allow local
 network access if prompted. The link checks for an existing StableNew instance, starts it with the normal launcher
 if it is stopped, and pairs automatically. Use **Pair manually** if your browser blocks the link.
+Active use or video playback in the Windows Site tab renews its pairing. The library retries brief connection
+interruptions while that pairing is valid. After a StableNew restart or an expired pairing, choose
+**Reconnect StableNew** and approve the Windows link if prompted.
 
 For a phone, leave the connected Site tab open on Windows, and choose **Connect StableNew** on the phone while
 signed in to the same Site account. If the Site reports no active Windows relay, reconnect from the PC. A remote

@@ -360,7 +360,7 @@ class SiteConnectionDialog:
         ).pack(anchor="w")
         ttk.Label(
             frame,
-            text="Choose Connect on the private Site, or enter this code manually. Codes rotate every 15 minutes.",
+            text="Choose Connect on the private Site, or enter this code manually. An active desktop Site keeps its pairing. Idle pairings expire.",
             wraplength=370,
         ).pack(anchor="w", pady=(5, 12))
         ttk.Label(
