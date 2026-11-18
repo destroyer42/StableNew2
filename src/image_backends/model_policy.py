@@ -21,6 +21,7 @@ older concept (learning/style priors) and is deliberately not merged with this o
 
 from __future__ import annotations
 
+import copy
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -36,14 +37,22 @@ from src.image_backends.forge_klein_profile import (
     latest_klein_profile,
 )
 from src.image_backends.forge_zimage_profile import (
+    FIXED_CLIP_SKIP,
     ZIMAGE_PROFILE_V1,
     ZImageProfile,
+    ZImageProfileError,
     apply_zimage_compile_policy,
     is_zimage_transformer_name,
     project_shared_baseline,
+    validate_zimage_config,
     zimage_selected,
 )
-from src.image_backends.image_backend_types import A1111_IMAGE_BACKEND_ID, FORGE_IMAGE_BACKEND_ID
+from src.image_backends.image_backend_types import (
+    A1111_IMAGE_BACKEND_ID,
+    FORGE_IMAGE_BACKEND_ID,
+    normalize_image_backend_options,
+    resolve_image_backend_id,
+)
 
 # -- broad model families (concept B) ---------------------------------------------------------------------------
 FAMILY_SDXL = "sdxl"
@@ -514,6 +523,138 @@ def apply_model_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+# -- one policy result, two configuration shapes (P4-2G) --------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class ModelPolicyResult:
+    """The one model compile-policy evaluation of a prepared configuration, and its two projections.
+
+    The PromptPack route needs the exact profile's values in two shapes: on the nested resolved configuration (stage
+    chain, ADetailer, randomizer and batch inputs, and the exact-profile refusals that precede the Klein review) and on
+    the flat payload a record freezes (``workload.config``), whose flattening drops the profile's ``backend_options``,
+    its ``txt2img`` section and some keys. ``compile_model_policy`` evaluates the policy once (the nested application,
+    unchanged); the flat shape is a projection of that result onto the payload, not a second application. A result
+    exists only after the evaluation passed, so a projection can never run before the refusals the evaluation raises.
+
+    ``project_flat`` follows the payload's own checkpoint selection, exactly as the application it replaces did, and the
+    profile values it writes come from the exact profile itself (``ZIMAGE_PROFILE_V1``, ``latest_klein_profile()``).
+    A future model family adds its evaluation to ``apply_model_compile_policy`` and its projection here, in this module.
+    """
+
+    config: dict[str, Any]
+
+    def project_nested(self) -> dict[str, Any]:
+        """The evaluated nested configuration (the mapping ``compile_model_policy`` was given, updated in place)."""
+
+        return self.config
+
+    def project_flat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Write the exact profile's values onto a flat PromptPack payload (in place; returns it).
+
+        A no-op for every payload that selects no exact profile. For Z-Image it re-checks the payload against the
+        profile (the flattening adds the rendered prompt and the per-record seed) before filling it; Klein rewrites the
+        mirrored flat keys. Reproduces what applying the policy to the same payload wrote, which the legacy
+        ``apply_*_compile_policy`` functions pin in tests.
+        """
+
+        if zimage_selected(payload):
+            return _project_zimage_flat(payload)
+        if isinstance(resolve_model_profile(payload.get("backend_options")), ZImageProfile):
+            raise ValueError("The frozen Z-Image profile requires its exact selected checkpoint")
+        if klein_selected(payload):
+            return _project_klein_flat(payload)
+        return payload
+
+
+def compile_model_policy(config: dict[str, Any]) -> ModelPolicyResult:
+    """Evaluate the model compile policy once on a nested configuration (in place) and return its projections.
+
+    ``apply_model_compile_policy`` is the evaluation; this wraps it so that the nested and the flat shape of one prepared
+    configuration are two projections of one result.
+    """
+
+    return ModelPolicyResult(apply_model_compile_policy(config))
+
+
+def _project_zimage_flat(payload: dict[str, Any]) -> dict[str, Any]:
+    validate_zimage_config(payload)
+    p = ZIMAGE_PROFILE_V1
+    options = normalize_image_backend_options(payload.get("backend_options"), model_name=p.transformer.filename)
+    if resolve_image_backend_id(options) != p.backend_id or resolve_model_profile(options) is not p:
+        raise ZImageProfileError("Z-Image requires Forge and its exact v1 profile; no backend switch or profile upgrade")
+    payload["backend_options"] = options
+    stage = payload.setdefault("txt2img", {})
+    defaults: dict[str, Any] = {
+        "model": p.transformer.filename, "sampler": p.sampler, "sampler_name": p.sampler,
+        "scheduler": p.scheduler, "steps": p.steps, "cfg_scale": p.cfg_scale,
+        "width": p.geometries[0][0], "height": p.geometries[0][1], "distilled_cfg_scale": p.distilled_cfg_scale,
+        "negative_prompt": "", "prompt_optimizer": {"enabled": False}, "clip_skip": FIXED_CLIP_SKIP,
+    }
+    for target in (payload, stage):
+        for key, value in defaults.items():
+            if target.get(key) is None:
+                target[key] = copy.deepcopy(value)
+    payload.setdefault("prompt_optimizer", {"enabled": False})
+    payload["global_prompt_policy_source"] = "frozen_njr"
+    payload.setdefault("global_positive_prompt", "")
+    payload.setdefault("global_negative_prompt", "")
+    pipeline = dict(payload.get("pipeline") or {})
+    pipeline.update(apply_global_positive_txt2img=False, apply_global_negative_txt2img=False)
+    payload["pipeline"] = pipeline
+    return payload
+
+
+def _project_klein_flat(payload: dict[str, Any]) -> dict[str, Any]:
+    profile = latest_klein_profile()
+    txt2img = payload.setdefault("txt2img", {})
+    if not isinstance(txt2img, dict):
+        txt2img = {}
+        payload["txt2img"] = txt2img
+    txt2img.update(
+        vae="",
+        sampler_name=profile.sampler,
+        scheduler=profile.scheduler,
+        steps=profile.steps,
+        cfg_scale=profile.cfg_scale,
+        negative_prompt="",
+        prompt_optimizer={"enabled": False},
+        global_positive_prompt="",
+        global_negative_prompt="",
+        global_prompt_policy_source="frozen_njr",
+    )
+    for flat, value in (
+        ("sampler_name", profile.sampler),
+        ("sampler", profile.sampler),
+        ("scheduler", profile.scheduler),
+        ("steps", profile.steps),
+        ("cfg_scale", profile.cfg_scale),
+        ("negative_prompt", ""),
+        ("vae", ""),
+    ):
+        if flat in payload:
+            payload[flat] = value
+    optimizer = payload.get("prompt_optimizer")
+    payload["prompt_optimizer"] = {**(optimizer if isinstance(optimizer, Mapping) else {}), "enabled": False}
+    pipeline = dict(payload.get("pipeline") or {})
+    pipeline["apply_global_positive_txt2img"] = False
+    for key in (
+        "apply_global_negative_txt2img",
+        "apply_global_negative_img2img",
+        "apply_global_negative_adetailer",
+        "apply_global_negative_upscale",
+    ):
+        pipeline[key] = False
+    payload["pipeline"] = pipeline
+    payload["global_positive_prompt"] = ""
+    payload["global_negative_prompt"] = ""
+    payload["global_prompt_policy_source"] = "frozen_njr"
+    backend_options = dict(payload.get("backend_options") or {})
+    image = dict(backend_options.get("image") or {})
+    image["model_profile"] = profile.reference()
+    backend_options["image"] = image
+    payload["backend_options"] = backend_options
+    return payload
+
+
 __all__ = [
     "CONTROL_CFG",
     "CONTROL_GEOMETRY",
@@ -534,10 +675,12 @@ __all__ = [
     "FEATURES",
     "FeaturePolicy",
     "ModelPolicy",
+    "ModelPolicyResult",
     "RegistryFamilyLookup",
     "Support",
     "VALUE_CONTROLS",
     "apply_model_compile_policy",
+    "compile_model_policy",
     "normalize_profile_owned_values",
     "policy_for_model_profile_reference",
     "policy_for_profile",

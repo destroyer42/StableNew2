@@ -4,11 +4,11 @@ The generic route builds ``RAW`` drafts: the core runs every shared step once pe
 its own values and hands the core ``EFFECTIVE`` drafts: one construction, one exact-profile check and one backend-option
 normalization per record, one ADetailer compile per prepared prompt, one intent canonicalization per record.
 
-The model compile policy deliberately runs twice for PromptPack work, once per configuration *shape*: on the nested
-resolved configuration in ``_prepare_entry`` (once per prepared prompt: it feeds the stage chain and refuses before the
-Klein review) and on the flat payload the record carries (once per record, through ``njr_compiler.prepare_image_config``:
-it is what ``workload.config`` freezes). Neither can be removed without changing the record, which the characterization
-tests below pin (``docs/work_packages/P4-2_unified_njr_compiler_migration.md``, P4-2E status).
+The model compile policy runs once per prepared prompt for PromptPack work (P4-2G, owner option 2): ``_prepare_entry``
+evaluates it on the nested resolved configuration (the stage chain, the exact-profile refusals before the Klein review),
+and each record's flat payload is a projection of that one result (``ModelPolicyResult.project_flat``), not a second
+application. A prepared prompt's randomizer variants and batch runs share the evaluation, so the policy never runs more
+than once per record (``docs/work_packages/P4-2_unified_njr_compiler_migration.md``, P4-2G).
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 
 import src.pipeline.prompt_pack_job_builder as pack_module
+from src.image_backends import model_policy
 from src.pipeline import njr_compiler
 from src.pipeline.config_variant_plan_v2 import ConfigVariant, ConfigVariantPlanV2
 from src.pipeline.job_builder_v2 import JobBuilderV2
@@ -43,7 +44,7 @@ CORE_STEPS = (
     "canonicalize_intent_config",
 )
 PACK_STEPS = (
-    "apply_model_compile_policy",
+    "compile_model_policy",
     "normalize_profile_owned_values",
     "compile_adetailer",
     "normalize_image_backend_options",
@@ -71,6 +72,9 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
     for name in PACK_STEPS:
         count(pack_module, name, f"pack.{name}")
     count(njr_compiler, "NormalizedJobRecord", "construct")
+    # The evaluation itself (``compile_model_policy`` calls it through this module) and the flat projection per record.
+    count(model_policy, "apply_model_compile_policy", "policy.evaluate")
+    count(model_policy.ModelPolicyResult, "project_flat", "policy.project_flat")
     check = njr_compiler._CHECKS[CompileCheck.PROFILE_NJR]
 
     def profile_check(record: Any) -> None:
@@ -171,15 +175,22 @@ def test_a_prompt_pack_record_is_constructed_checked_and_normalized_once(
 
 
 @pytest.mark.parametrize("loop_count", [1, 3])
-def test_the_prompt_pack_compile_policy_runs_once_per_configuration_shape(
+def test_the_prompt_pack_compile_policy_runs_once_per_prepared_prompt(
     tmp_path: Path, calls: Counter[str], loop_count: int
 ) -> None:
     records = _pack_records(tmp_path, loop_count=loop_count)
 
     assert len(records) == loop_count
-    assert calls["pack.apply_model_compile_policy"] == 1  # nested shape: once per prepared prompt
-    assert calls["core.apply_model_compile_policy"] == loop_count  # flat payload: once per record
+    assert (
+        calls["pack.compile_model_policy"] == 1
+    )  # one evaluation, shared by the prompt's batch runs
+    assert calls["policy.evaluate"] == 1
+    assert calls["core.apply_model_compile_policy"] == 0  # no per-record application any more
+    assert (
+        calls["policy.project_flat"] == loop_count
+    )  # each record's flat payload is a projection of the one result
     assert calls["core.prepare_effective_config"] == loop_count
+    assert calls["policy.evaluate"] <= len(records)
 
 
 def test_each_matrix_variant_is_one_prepared_prompt(tmp_path: Path, calls: Counter[str]) -> None:
@@ -192,9 +203,10 @@ def test_each_matrix_variant_is_one_prepared_prompt(tmp_path: Path, calls: Count
     records = _pack_records(tmp_path, loop_count=2, matrix=matrix)
 
     assert len(records) == 6
-    assert calls["pack.apply_model_compile_policy"] == 3
+    assert (calls["pack.compile_model_policy"], calls["policy.evaluate"]) == (3, 3)
     assert calls["pack.compile_adetailer"] == 3
-    assert calls["core.apply_model_compile_policy"] == 6
+    assert calls["core.apply_model_compile_policy"] == 0
+    assert calls["policy.project_flat"] == 6
     assert (
         calls["construct"],
         calls["check.profile_njr"],
@@ -202,11 +214,11 @@ def test_each_matrix_variant_is_one_prepared_prompt(tmp_path: Path, calls: Count
     ) == (6, 6, 6)
 
 
-# --------------------------------------------- characterization: what each of the two PromptPack applications produces
+# ------------------------------------------------------------ what each projection of the one result produces
 
 
-def test_the_nested_application_produces_the_stage_chain_profile_values(tmp_path: Path) -> None:
-    """Klein: the stage chain is built from the nested configuration after its policy application (user values replaced)."""
+def test_the_nested_projection_produces_the_stage_chain_profile_values(tmp_path: Path) -> None:
+    """Klein: the stage chain is built from the nested projection of the policy result (user values replaced)."""
 
     record = _pack_job(tmp_path, KLEIN)
     txt2img = record.stage_chain[0]
@@ -219,10 +231,10 @@ def test_the_nested_application_produces_the_stage_chain_profile_values(tmp_path
     )
 
 
-def test_the_flat_application_produces_the_records_profile_config(
+def test_the_flat_projection_produces_the_records_profile_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Z-Image: ``workload.config`` holds what the policy adds to the flat payload: the flattening drops these keys."""
+    """Z-Image: ``workload.config`` holds what the flat projection adds: the flattening drops these keys."""
 
     builder, entry, _path, _original = zimage_pack(tmp_path, monkeypatch)
     config = builder.build_jobs([entry])[0].config
@@ -239,36 +251,3 @@ def test_the_flat_application_produces_the_records_profile_config(
     assert (
         config["vae"] == ""
     )  # effective-config preparation of the flat payload; the flattening copied None
-
-
-def test_removing_the_nested_application_would_change_the_record(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    for name in ("a", "b"):
-        (tmp_path / name).mkdir()
-    expected = _pack_job(tmp_path / "a", KLEIN).to_dict()["stages"]
-    monkeypatch.setattr(pack_module, "apply_model_compile_policy", lambda config: config)
-
-    stages = _pack_job(tmp_path / "b", KLEIN).to_dict()["stages"]
-    assert (stages[0]["scheduler"], stages[0]["steps"]) == (
-        "DDIM",
-        24,
-    )  # the user's values would reach the stage
-    assert (expected[0]["scheduler"], expected[0]["steps"]) == ("Beta", 4)
-
-
-def test_removing_the_flat_application_would_change_the_record(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    for name in ("a", "b"):
-        (tmp_path / name).mkdir()
-    builder, entry, _path, _original = zimage_pack(tmp_path / "a", monkeypatch)
-    expected = builder.build_jobs([entry])[0].config
-    monkeypatch.setattr(njr_compiler, "apply_model_compile_policy", lambda config: config)
-    builder, entry, _path, _original = zimage_pack(tmp_path / "b", monkeypatch)
-    config = builder.build_jobs([entry])[0].config
-
-    added = ("txt2img", "backend_options", "distilled_cfg_scale", "sampler_name")
-    assert all(key in expected for key in added)
-    assert [key for key in added if key in config] == []
-    assert config["global_prompt_policy_source"] == "legacy_runtime_fallback"
