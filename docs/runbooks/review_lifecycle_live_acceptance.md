@@ -44,19 +44,22 @@ record what you saw. Any step that would need a source change to be testable is 
    - New jobs are added to the live `state\jobs.sqlite3`, so History shows them.
 3. **Do not touch the main checkout's files except as stated.** Reading is fine; the only edit is the single setting in
    section 3.2, made through the app's own dialog, and put back in section 13.
-4. **Read-only checks only.** Every command below reads. `Get-FileHash`, `Get-ChildItem`, `Get-Content` and a Python
-   one-liner opening SQLite with `mode=ro` write nothing. Do not run anything else against the live folders.
+4. **Setup writes, checks read.** The setup commands in sections 3.1, 3.3 and 3.4 write only to `$Copy` and `%TEMP%`
+   (the copied files, a baseline CSV and a backup of the records file). Every **Check** command reads only:
+   `Get-FileHash`, `Get-ChildItem`, `Get-Content` and a Python one-liner opening SQLite with `mode=ro` write nothing.
+   Do not run anything else against the live folders.
 5. **Forge steps** (the only ones needing a running backend and a generation) are marked **[FORGE]**. All other steps
    work with Forge stopped. Use one stated model, low steps (about 8-12), small size (for example 512x512), batch 1,
    record them in section 12.
 
-Paths used below (adjust to your machine):
+Paths used below (adjust to your machine). `D:` is only an example: any drive works, provided the whole copy is on one
+drive. AR5 needs a second drive; if there is none, skip AR5 and mark it `not run`.
 
 ```powershell
 $Main  = 'C:\Users\rob\projects\StableNew-main'
 $Py    = "$Main\.venv\Scripts\python.exe"
 $Live  = "$Main\output"                       # your real output root (check Engine Settings first)
-$Copy  = 'D:\accept624\output'                # the copy; MUST be on the same drive as itself (see 3.3)
+$Copy  = 'D:\accept624\output'                # the copy; D: is only an example, see the note below
 $Records = "$Main\data\learning\learning_records.jsonl"
 $Jobs  = "$Main\state\jobs.sqlite3"
 ```
@@ -282,15 +285,18 @@ Check: `Test-Path` both paths; hash; helper shows a new clearing/decision row.
 Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 
 **AR4 Refusal: queued job input.** [FORGE-adjacent, no generation needed] Precondition: `B` is an image whose path is the
-input of a job that is **queued or running**. Do: with Forge stopped, from Review mark `B` **Re-work (W)**, **Preview and queue...**,
-confirm **Add N jobs to Queue** (jobs stay queued because Forge is not running, so nothing is generated), then select `B`
-and press **Discard (D)**.
+input of a job that is **queued or running**. Stopping Forge does not guarantee a job stays queued (WebUI can auto-start
+and the queue can auto-run), so hold the queue: record the current **Auto-run queue** value in section 12, then in the
+Queue panel untick **Auto-run queue** and press **Pause Queue**. Do: from Review mark `B` **Re-work (W)**,
+**Preview and queue...**, confirm **Add N jobs to Queue**; confirm the job shows queued in the Queue panel (if it is
+running or has failed instead, the refusal is not exercised: record it and stop this step); then select `B` in Review and
+press **Discard (D)**.
 Expected: `B` is discarded (hidden, listed under **Archived**) but **stays where it is**; the status line says
 "A queued or running job uses this file as an input; it was not moved."; the row shows `(not moved)`. Pressing Discard
 again after the job leaves the queue retries.
 Check: `Test-Path "$Copy\<rel B>"` is True and no `_archive` copy exists.
-Cleanup: clear/cancel that queued job from the Queue panel (label not verified here; record what the control is called)
-before any [FORGE] step so it does not run.
+Cleanup: in the Queue panel select that job and press **Remove** (never **Clear All**), then press **Resume Queue** and
+put **Auto-run queue** back to the value recorded in section 12, before any [FORGE] step so the job does not run.
 Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 
 **AR5 Refusal: another drive.** Precondition: an image `C` on a **different drive** than `$Copy` (copy one file there; it is
@@ -389,11 +395,13 @@ Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 
 ### J7 [FORGE]: failed or cancelled child; restart (621)
 
-**J7.1** Precondition: one re-work child **queued**. Do: cancel it from the Queue panel before it runs (control label not
-verified here; record it), or stop Forge so it fails.
-Expected: the source row shows **Re-work failed**; **Returned** shows the failure reason ("a short, typed reason" for a
-failed job; an exact string for a cancelled job: not established); **Open Batches (retry)** points at Pipeline > Batches. It is
-never retried automatically.
+**J7.1** Precondition: one re-work child **queued**. Hold the queue as in AR4 (record **Auto-run queue**, untick it, **Pause Queue**), add the re-work
+child, confirm it shows queued, select it and press **Remove** (never **Clear All**), then **Resume Queue** and restore **Auto-run queue**.
+Expected: the Review state of the source after Remove (**Re-work failed**, cancelled, or the job vanishing so the source
+returns to **Re-work marked**) is **not established** by the code: record exactly what the row and **Returned** show. Whatever
+shows as failed offers **Open Batches (retry)**, which points at Pipeline > Batches; a failed child is never retried
+automatically. If a child genuinely fails by itself during another step, note it here as a note-only observation (do not
+force a failure by stopping Forge).
 Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 
 **J7.2** Do: close and restart the app, open the same folder under `$Copy`.
@@ -471,8 +479,8 @@ Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 - Whether the app needs a restart after changing `output_dir` (3.2): not established.
 - "One `submit_njrs` call" and batch-id placement in the stored row (J4): proven by the 621 tests, only indirectly
   visible here.
-- Exact UI text for a cancelled child, and the labels for Queue cancel/remove, the SFW toggle and the exact History
-  archived wording: not read for this runbook; record what you see.
+- Exact UI text for a removed or cancelled child (J7.1), the SFW toggle's label and History's exact archived wording:
+  not read for this runbook; record what you see.
 - Legacy path-keyed rating (J10b) cannot be reproduced on a copy; it needs a view-only open of one live file.
 - Retain and Discard write into the live Learning record file, and Re-work children into the live job repository; the
   copy isolates the output folder only (section 1).
@@ -487,6 +495,7 @@ Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 | Copy folder | |
 | Forge model, steps, size, batch (S1 / J4 / J5.3 / J6.2) | |
 | Learning rows before / after (3.4) | |
+| Original **Auto-run queue** value (AR4, J7.1) | |
 | Authorization for the generation run (your words) | |
 
 | Journey / step | pass / fail / note | Screenshot or record excerpt | Failure detail for 625 |
@@ -513,7 +522,8 @@ Every failure: step id, what you did, what you saw, the record row or `Get-FileH
 1. Engine Settings -> **Default output folder:** back to the `Original output_dir` recorded in section 12 -> **Save & Close**;
    verify with the `ConvertFrom-Json` one-liner in section 2.
 2. Restore any renamed file (J9.2): `Rename-Item "$Copy\<src>.hold" "<src>"`.
-3. Cancel any leftover queued job (AR4) in the Queue panel.
+3. Queue panel: select any leftover queued job from AR4 or J7.1 and press **Remove** (never **Clear All**), press **Resume Queue**,
+   and set **Auto-run queue** back to the original value recorded in section 12.
 4. Keep or delete `$Copy` as you wish (this runbook deletes nothing); the `_archive` folder inside it is yours to empty.
 5. Decide about the Learning backup (3.4): the acceptance rows are real evidence; keep them, or restore
    `learning_records.before624.jsonl` yourself. Not an automated step.
