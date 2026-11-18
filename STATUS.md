@@ -26,7 +26,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
   boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
 - Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,403 errors in
-  174 files), unformatted files (378), blind/silent excepts in `src` (BLE001 1,213, S110 479, S112 35), thread and layering
+  174 files), unformatted files (378), blind/silent excepts in `src` (BLE001 1,190, S110 467, S112 34), thread and layering
   rules (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
@@ -137,7 +137,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 
 ## Known debt
 
-- The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 5,024 lines (ceiling in `tools/ci/controller_surface_baseline.json`) and the executor,
+- The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 5,010 lines (ceiling in `tools/ci/controller_surface_baseline.json`) and the executor,
   model-family branches in generic code, untyped stage configuration).
 - Unreachable-module count unmeasured since P3-1 deleted 30 modules (the 2026-10-16 audit's 64 predates it); the retained qualification harnesses
   (inventory in `tools/qualification/README.md`) remain the bulk of `tools/`.

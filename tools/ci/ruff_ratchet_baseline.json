@@ -387,9 +387,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1213,
-      "S110": 479,
-      "S112": 35
+      "BLE001": 1190,
+      "S110": 467,
+      "S112": 34
     },
     "counts": {
       "src/api/client.py": {
@@ -491,11 +491,6 @@
       "src/controller/webui_outage_coordinator.py": {
         "BLE001": 8
       },
-      "src/gui/advanced_prompt_editor.py": {
-        "BLE001": 20,
-        "S110": 9,
-        "S112": 1
-      },
       "src/gui/api_status_panel.py": {
         "BLE001": 4
       },
@@ -545,8 +540,8 @@
         "S110": 2
       },
       "src/gui/main_window_v2.py": {
-        "BLE001": 101,
-        "S110": 69,
+        "BLE001": 98,
+        "S110": 66,
         "S112": 1
       },
       "src/gui/model_comparison_readiness.py": {

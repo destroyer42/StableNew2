@@ -165,7 +165,7 @@ def test_effective_view_is_derived_from_the_compiled_jobs_and_states_its_limits(
     assert view.value_of("Stages") == "txt2img"
     assert view.value_of("Images").startswith("2 per prompt")
     assert view.value_of("Output folder") == "D:/pack_out"
-    assert view.value_of("Output format") == "webp"
+    assert "Output format" not in [row.label for row in view.rows]  # no backend reads image_format
     assert view.value_of("LoRAs") == "armor @ 0.7"
     text = view.as_text()
     assert "not proof of where a value came from" in text

@@ -32,7 +32,6 @@ def bind_controller_commands(window: Any, controller: Any) -> None:
     for button, command in (
         ("run_button", "run_txt2img_once"),
         ("stop_button", "on_stop_clicked"),
-        ("preview_button", "on_preview_clicked"),
         ("settings_button", "on_open_settings"),
         ("help_button", "on_help_clicked"),
     ):

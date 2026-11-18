@@ -19,8 +19,6 @@ _core_cfg_scale: float | None = None
 _core_resolution_preset: str | None = None
 _negative_prompt_default: str | None = None
 _output_dir: str | None = None
-_filename_pattern: str | None = None
-_image_format: str | None = None
 _batch_size: int | None = None
 _n_iter: int | None = None
 _seed_mode: str | None = None
@@ -411,34 +409,6 @@ def output_dir_default() -> str:
 def set_output_dir(value: str) -> None:
     global _output_dir
     _output_dir = value or "output"
-
-
-def filename_pattern_default() -> str:
-    """Default filename pattern for outputs."""
-
-    global _filename_pattern
-    if _filename_pattern is None:
-        _filename_pattern = os.environ.get("STABLENEW_FILENAME_PATTERN", "{timestamp}_{index}")
-    return _filename_pattern
-
-
-def set_filename_pattern(value: str) -> None:
-    global _filename_pattern
-    _filename_pattern = value or "{timestamp}_{index}"
-
-
-def image_format_default() -> str:
-    """Default image format."""
-
-    global _image_format
-    if _image_format is None:
-        _image_format = os.environ.get("STABLENEW_IMAGE_FORMAT", "png")
-    return _image_format
-
-
-def set_image_format(value: str) -> None:
-    global _image_format
-    _image_format = value or "png"
 
 
 def batch_size_default() -> int:

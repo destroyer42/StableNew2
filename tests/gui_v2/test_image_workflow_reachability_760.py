@@ -203,7 +203,7 @@ def test_output_settings_row_wraps_so_every_option_is_reachable(tk_root: tk.Tk) 
     _flush(panel.controls_row, tk_root)
 
     controls = _descendants(panel.controls_row, ("TCombobox", "TSpinbox"))
-    assert len(controls) == 4
+    assert len(controls) == 3  # Batch Size, Seed Mode, Route
     assert len(panel.controls_row.rows()) > 1
     assert all(_inside(control, host) for control in controls)
     panel.output_route_var.set(OUTPUT_ROUTE_TESTING)

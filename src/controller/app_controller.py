@@ -3425,16 +3425,6 @@ class AppController:
         # In threaded mode, lifecycle will transition to IDLE in _run_pipeline_thread
         # once the worker exits.
 
-    def on_preview_clicked(self) -> None:
-        """
-        Called when the user presses Preview Payload.
-
-        In real code, this would run randomizer/matrix to generate a preview
-        payload without calling WebUI. For now, we just log a stub message.
-        """
-        self._append_log("[controller] Preview clicked (stub).")
-        # TODO: gather config, pack, randomization, matrix → build preview payload.
-
     # ------------------------------------------------------------------
     # Settings / Help
     # ------------------------------------------------------------------
@@ -4427,8 +4417,6 @@ class AppController:
                 "n_iter": pipeline_section.get("n_iter", 1),
                 "output_dir": pipeline_section.get("output_dir")
                 or self._config_manager.get_setting("output_dir", "output"),
-                "filename_pattern": pipeline_section.get("filename_pattern", "{seed}"),
-                "image_format": pipeline_section.get("image_format", "png"),
                 "seed_mode": pipeline_section.get("seed_mode", "fixed"),
                 "output_route": pipeline_section.get("output_route", "Auto"),
             }
@@ -4465,8 +4453,6 @@ class AppController:
                 pipeline["images_per_prompt"] = output.get("batch_size", 1)
                 pipeline["n_iter"] = output.get("n_iter", 1)
                 pipeline["output_dir"] = output.get("output_dir", "output")
-                pipeline["filename_pattern"] = output.get("filename_pattern", "{seed}")
-                pipeline["image_format"] = output.get("image_format", "png")
                 pipeline["seed_mode"] = output.get("seed_mode", "fixed")
                 pipeline["output_route"] = output.get("output_route", "Auto")
             except Exception as e:
