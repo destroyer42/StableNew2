@@ -16,6 +16,8 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_json
+
 # Module-level registry for StructuredLogger lifecycle management
 _structured_logger_registry: weakref.WeakSet[Any] = weakref.WeakSet()
 
@@ -535,8 +537,7 @@ class StructuredLogger:
 
         manifest_path = manifest_dir / f"{image_name}.json"
         try:
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            atomic_write_json(manifest_path, metadata, indent=2, ensure_ascii=False)
             self.logger.info(f"Saved manifest: {manifest_path.name}")
             return True
         except Exception as e:
@@ -558,8 +559,7 @@ class StructuredLogger:
             manifest_dir = pack_dir / "manifests"
             manifest_dir.mkdir(exist_ok=True, parents=True)
             manifest_path = manifest_dir / f"{image_name}.json"
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            atomic_write_json(manifest_path, metadata, indent=2, ensure_ascii=False)
             self.logger.info(f"Saved pack manifest: {manifest_path}")
             return True
         except Exception as e:
@@ -720,8 +720,7 @@ class StructuredLogger:
             }
 
             rollup_file = run_dir / "rollup_manifest.json"
-            with open(rollup_file, "w", encoding="utf-8") as f:
-                json.dump(rollup_data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(rollup_file, rollup_data, indent=2, ensure_ascii=False)
 
             # Create CSV summary
             self.create_csv_summary(run_dir, all_images)
@@ -752,8 +751,7 @@ class StructuredLogger:
             if reason:
                 payload["reason"] = reason
             status_path = run_dir / "run_status.json"
-            with open(status_path, "w", encoding="utf-8") as f:
-                json.dump(payload, f, indent=2, ensure_ascii=False)
+            atomic_write_json(status_path, payload, indent=2, ensure_ascii=False)
             self.logger.info(f"Recorded run status '{status}' at {status_path}")
             return True
         except Exception as exc:  # noqa: BLE001 - log and continue

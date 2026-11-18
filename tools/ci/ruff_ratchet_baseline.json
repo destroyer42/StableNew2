@@ -387,7 +387,7 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1190,
+      "BLE001": 1187,
       "S110": 467,
       "S112": 34
     },
@@ -963,9 +963,6 @@
       "src/utils/lora_keyword_detector.py": {
         "BLE001": 4,
         "S110": 4
-      },
-      "src/utils/preferences.py": {
-        "BLE001": 3
       },
       "src/utils/process_container_v2.py": {
         "BLE001": 2

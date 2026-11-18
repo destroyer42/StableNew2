@@ -22,7 +22,6 @@ __all__ = [
     "get_structured_logger_registry_count",
     "install_async_logging",  # PR-HARDEN-002
     "get_async_queue_handler",  # PR-HARDEN-002
-    "PreferencesManager",
     "save_image_from_base64",
     "load_image_to_base64",
     "read_text_file",
@@ -40,7 +39,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "build_sampler_scheduler_payload": ("src.utils.config", "build_sampler_scheduler_payload"),
     "StructuredLogger": ("src.utils.logger", "StructuredLogger"),
     "setup_logging": ("src.utils.logger", "setup_logging"),
-    "PreferencesManager": ("src.utils.preferences", "PreferencesManager"),
     "save_image_from_base64": ("src.utils.file_io", "save_image_from_base64"),
     "load_image_to_base64": ("src.utils.file_io", "load_image_to_base64"),
     "read_text_file": ("src.utils.file_io", "read_text_file"),

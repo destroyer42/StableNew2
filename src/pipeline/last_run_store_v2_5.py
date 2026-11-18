@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.contracts import CurrentConfig
 from src.state.workspace_paths import workspace_paths
+from src.utils.atomic_io import atomic_write_json
 
 LAST_RUN_PATH = workspace_paths.last_run_v2_5()
 
@@ -107,8 +108,7 @@ class LastRunStoreV2_5:
     def save(self, cfg: LastRunConfigV2_5) -> None:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("w", encoding="utf-8") as f:
-                json.dump(asdict(cfg), f, indent=2)
+            atomic_write_json(self.path, asdict(cfg), indent=2)
             logging.info(
                 f"Saved last-run config: model={cfg.model}, sampler={cfg.sampler_name}, steps={cfg.steps}, size={cfg.width}x{cfg.height}"
             )

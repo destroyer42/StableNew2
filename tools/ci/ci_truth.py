@@ -113,6 +113,7 @@ def status_ratchet_problems(root: Path, text: str) -> list[str]:
             "raw threads": (r"raw threads ([\d,]+)", arch_totals["raw_threads"]),
             "utils importing upward": (r"utils importing upward ([\d,]+)", arch_totals["utils_upward_imports"]),
             "controller importing the GUI": (r"controller importing the GUI ([\d,]+)", arch_totals["controller_gui_imports"]),
+            "non-atomic writes": (r"non-atomic file writes ([\d,]+)", arch_totals["non_atomic_writes"]),
         }
     except (KeyError, TypeError):
         return [f"{STATUS} ratchet line cannot be checked: a baseline under tools/ci/ has an unexpected shape"]
