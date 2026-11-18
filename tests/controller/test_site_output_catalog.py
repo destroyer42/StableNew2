@@ -93,6 +93,66 @@ def test_site_reports_and_reads_only_hash_matched_media_from_approved_folder(rep
         catalog.read_media(one["clip"])
 
 
+def test_durable_video_edits_merge_fields_and_replay_without_reapplying(report):
+    output, directory, _metrics = report
+    path = directory / "ratings.csv"
+    first = {"case_id": "case-one", "arm_id": "baseline", "job_id": "first"}
+    second = {"case_id": "case-two", "arm_id": "baseline", "job_id": "second"}
+    path.write_bytes(render_csv(RATING_COLUMNS, [first, second]).encode())
+    catalog = SiteOutputCatalog(output)
+    view = catalog.get_run(RUN_ID, review=True)
+    clip = view["clips"][0]
+    body = {
+        **first,
+        "scope": catalog.scope,
+        "revision": view["revision"],
+        "source_sha256": clip["source_sha256"],
+        "artifact_sha256": clip["artifact_sha256"],
+        "rebind": False,
+        "judgments": {"notes": "Phone note"},
+        "sync": {
+            "root": view["rating_root"],
+            "base": {"notes": ""},
+            "base_artifact_sha256": "",
+            "operation": "a" * 32,
+            "actor_time": "2026-11-18T19:07:00.123Z",
+        },
+    }
+    assert catalog.save_rating(RUN_ID, body)["saved"]
+    catalog.revoke()
+    new = SiteOutputCatalog(output)
+    second_patch = {
+        **body,
+        "scope": new.scope,
+        "judgments": {"requested_action": "achieved"},
+        "sync": {**body["sync"], "base": {"requested_action": ""}, "operation": "b" * 32},
+    }
+    assert new.save_rating(RUN_ID, second_patch)["saved"]
+    row = load_ratings(path).keyed()[("case-one", "baseline", "first")]
+    assert row["notes"] == "Phone note"
+    assert row["requested_action"] == "achieved"
+    assert body["sync"]["actor_time"] in row["site_rating_receipts"]
+    intervening = {
+        **body,
+        "scope": new.scope,
+        "judgments": {"notes": "Changed on PC"},
+        "sync": {**body["sync"], "base": {"notes": "Phone note"}, "operation": "c" * 32},
+    }
+    assert new.save_rating(RUN_ID, intervening)["saved"]
+    on_disk = path.read_bytes()
+    assert new.save_rating(RUN_ID, {**body, "scope": new.scope})["saved"]
+    assert path.read_bytes() == on_disk
+    conflict = {**body, "scope": new.scope, "sync": {**body["sync"], "operation": "d" * 32}}
+    assert new.save_rating(RUN_ID, conflict)["conflict"] == {"notes": "Changed on PC"}
+    assert path.read_bytes() == on_disk
+    with pytest.raises(SiteOutputError, match="output_folder_changed"):
+        new.save_rating(RUN_ID, {**conflict, "sync": {**conflict["sync"], "root": "0" * 64}})
+    (output / "source.png").write_bytes(b"changed")
+    with pytest.raises(SiteOutputError, match="media_changed"):
+        new.save_rating(RUN_ID, conflict)
+    assert path.read_bytes() == on_disk
+
+
 def test_report_must_match_manifest_and_current_folder_grant(report):
     output, directory, metrics = report
     session = SiteSession()

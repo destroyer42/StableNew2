@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,17 @@ from PIL.PngImagePlugin import PngInfo
 
 from src.app.site_media_files import SiteOutputError, inside
 from src.app.site_output_catalog import SiteOutputCatalog
-from src.app.site_output_routes import OUTPUT_CHUNK, OUTPUT_LIBRARY, OUTPUT_PLAY, post
+from src.app.site_output_routes import (
+    OUTPUT_CHUNK,
+    OUTPUT_LIBRARY,
+    OUTPUT_PLAY,
+    OUTPUT_STATUS,
+    post,
+    read,
+)
+from src.app.site_phone_connector import _desktop_call
+from src.review.review_lineage import verified_review_outputs
+from tests.helpers.batch_ops_201 import admit, make_stack, review_njr, settle_fifo
 
 
 def _png(path: Path, *, metadata: bool = False) -> None:
@@ -43,6 +54,114 @@ def _search(catalog: SiteOutputCatalog, field="all", query="", kind="image", **o
         options["refresh"] = False
         time.sleep(0.01)
     pytest.fail("Output scan did not finish")
+
+
+def test_gallery_sync_rebinds_and_keeps_a_lost_receipt_after_later_edits(tmp_path):
+    root = tmp_path / "output"
+    root.mkdir()
+    path = root / "first.png"
+    _png(path)
+    catalog = SiteOutputCatalog(root)
+    identifier = _search(catalog)["items"][0]["id"]
+    proof = _library(catalog, "inspect", id=identifier)
+    edit = {
+        "target": proof["rating_target"],
+        "root": read(catalog, OUTPUT_STATUS)["rating_root"],
+        "digest": proof["digest"],
+        "revision": 0,
+        "operation": "a" * 32,
+        "actor_time": "2026-11-18T19:05:00.123Z",
+        "base": {"score": None},
+        "changes": {"score": 3},
+    }
+    body = {"action": "rating_sync", "scope": catalog.scope, **edit}
+    assert _desktop_call(catalog, "POST", OUTPUT_LIBRARY, body, False).status == 403
+    assert not (root / ".stablenew-library").exists()
+    assert _desktop_call(catalog, "POST", OUTPUT_LIBRARY, body, True).status == 200
+    catalog.revoke()
+    assert _desktop_call(catalog, "POST", OUTPUT_LIBRARY, body, True).status == 409
+
+    rebound = SiteOutputCatalog(root)
+    new_id = _search(rebound)["items"][0]["id"]
+    assert new_id != identifier
+    notes = {**edit, "operation": "b" * 32, "base": {"notes": ""}, "changes": {"notes": "later"}}
+    merged = _library(rebound, "rating_sync", **notes)
+    assert (merged["score"], merged["notes"], merged["revision"]) == (3, "later", 2)
+
+    updated = _library(
+        rebound,
+        "rate",
+        id=new_id,
+        digest=edit["digest"],
+        score=5,
+        notes="later",
+        revision=2,
+        operation="c" * 32,
+    )
+    assert _library(rebound, "rating_sync", **edit) == updated
+    assert _library(rebound, "rating_sync", **{**edit, "operation": "d" * 32}) == {
+        "conflict": {"score": 5},
+        "revision": 3,
+    }
+    with pytest.raises(SiteOutputError, match="rating_operation_reused"):
+        _library(rebound, "rating_sync", **{**edit, "changes": {"score": 1}})
+    with pytest.raises(SiteOutputError, match="output_folder_changed"):
+        _library(SiteOutputCatalog(tmp_path), "rating_sync", **edit)
+    records = list((root / ".stablenew-library" / "ratings").glob("*.rating.json"))
+    assert len(records) == 1
+    assert edit["actor_time"] in records[0].read_text()
+    assert list(root.glob("*.png")) == [path]
+    Image.new("RGB", (40, 30), "orange").save(path)
+    _search(rebound, refresh=True)
+    with pytest.raises(SiteOutputError, match="media_changed"):
+        _library(rebound, "rating_sync", **edit)
+    rebound.revoke()
+
+
+def test_phone_can_compare_verified_review_children_inside_shared_output(tmp_path):
+    root = tmp_path / "output"
+    root.mkdir()
+    source = root / "source.png"
+    child = root / "child.png"
+    private = tmp_path / "private.png"
+    _png(source)
+    Image.new("RGB", (40, 30), "orange").save(child)
+    Image.new("RGB", (40, 30), "red").save(private)
+    stack = make_stack(tmp_path)
+    catalog = SiteOutputCatalog(
+        root, review_outputs=partial(verified_review_outputs, stack.repository)
+    )
+    items = {item["name"]: item for item in _search(catalog)["items"]}
+    proof = _library(catalog, "inspect", id=items[source.name]["id"])
+    for i, path in enumerate((child, private)):
+        record = review_njr(
+            f"child-{i}", "batch", source=source, artifact_sha256=proof["digest"], source_count=1
+        )
+        admit(stack, [record])
+        settle_fifo(
+            stack,
+            result={
+                "success": True,
+                "artifact": {
+                    "stage": "img2img",
+                    "artifact_type": "image",
+                    "primary_path": str(path),
+                    "output_paths": [str(path)],
+                },
+            },
+        )
+    payload = {
+        "action": "review_results",
+        "scope": catalog.scope,
+        "id": items[source.name]["id"],
+        "digest": proof["digest"],
+    }
+    assert _desktop_call(catalog, "POST", OUTPUT_LIBRARY, payload, False).status == 200
+    (match,) = post(catalog, OUTPUT_LIBRARY, payload)["results"]
+    assert match["item"]["id"] == items[child.name]["id"]
+    with pytest.raises(SiteOutputError, match="media_changed"):
+        post(catalog, OUTPUT_LIBRARY, {**payload, "digest": "0" * 64})
+    catalog.revoke()
 
 
 def test_gallery_search_album_order_and_rating_survive_a_new_pairing(tmp_path):

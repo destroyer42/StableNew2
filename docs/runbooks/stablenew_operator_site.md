@@ -43,8 +43,8 @@ Wi-Fi or cellular while the PC's browser is closed.
 4. Choose **Revoke phone** in StableNew to stop new native work for this device
    immediately. StableNew saves the revocation locally and confirms it with
    the Site when reachable. On a disconnect, the hosted presence and result
-   access expire within 30 seconds. A prior native rating may already have
-   committed, so check the item before retrying. A browser that lost its
+   access expire within 30 seconds. Pending phone ratings can check their
+   native receipt when an authorized pairing is available again. A browser that lost its
    device cookie or a replacement PC must pair again after revoking the old
    grant on the original phone or PC.
 
@@ -54,6 +54,20 @@ replaces the Site service credential. The credential belongs to the whole
 Site. Keep it in the Windows control and provision it only after the guarded
 Worker is live. During rollout, the separate **Connect via PC browser tab**
 flow remains available.
+
+## Save ratings from a phone
+
+With the matching Site and desktop builds, **Save & next** saves a gallery score or video judgment to
+phone storage before moving on. An image or verified clip already open can be rated through a connection
+loss. Opening another item requires a connection. **Review** shows **Saved on phone**, **Synced**, and
+**Needs review**. The Site syncs when the phone reconnects or returns to the foreground. Use **Sync now**
+to retry, or **Export unsynced ratings** to save the pending judgments to a JSON file.
+
+StableNew resolves each pending rating under the current grant and checks the original media digest
+and, for video, the source digest. If the same field changed on the PC, Review shows both values.
+Independent changes can sync together. Gallery ratings belong to Output Library. To compare a
+source with its finished Review results, open the source from the phone Library and select
+**Find returned results**. Only verified results inside shared Output appear.
 
 ## Browse evals and submit PromptPacks
 
