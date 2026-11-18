@@ -1,11 +1,10 @@
 # StableNew current state
 
-Updated: 2026-11-05
+Updated: 2026-11-17
 
 This file is **current state only**: baseline, supported capabilities, what is active and next, open owner
 decisions, holds and known debt. It is capped at 150 lines and checked by `tools/ci/ci_truth.py`. It does not narrate
-pull requests. PR narrative lives in the PR body and `git log`; per-feature detail lives in `docs/Subsystems/`.
-The previous log-style file (about 1,700 lines of PR narrative) is preserved in Git: `git show aebfdd2a:STATUS.md`.
+pull requests. PR narrative lives in the PR body and `git log`; per-feature detail lives in `docs/Subsystems/`. The previous log-style file (about 1,700 lines of PR narrative) is preserved in Git: `git show aebfdd2a:STATUS.md`.
 
 ## Baseline
 
@@ -26,9 +25,9 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below), the controller Tk import
   boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
-- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,457 errors in
-  175 files), unformatted files (384), blind/silent excepts in `src` (BLE001 1,334, S110 526, S112 37), thread and layering
-  rules (daemon threads 14, raw threads 9, utils importing upward 18, controller importing the GUI 6), and the four
+- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,403 errors in
+  174 files), unformatted files (378), blind/silent excepts in `src` (BLE001 1,213, S110 479, S112 35), thread and layering
+  rules (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
   Flaky tests are repaired or quarantined with an owner and expiry (`tests/quarantine/README.md`).
@@ -58,6 +57,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   no schema change). Text search covers only the first 64 prompt characters and the model; full-text search is not built. Iterate from History (completed single-still-image txt2img jobs only): Edit Image in Review, or an editable Regenerate with Changes draft in Pipeline; both go through the normal Preview/Add to Queue path with parent lineage and refuse unsupported jobs with a reason (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.5). Compare with Parent (compact History and Browse All) shows a completed still-image job beside its directly recorded parent with a typed frozen-settings diff, SHA-256 parent-artifact verification when recorded (otherwise labeled not independently verified) and content-visibility protection; it is read-only and covers direct pairs only, not arbitrary images, video or recursive lineage (section 3.6). Physical-generation acceptance is not done.
 - Batch operations: whole-selection Review preflight, multi-source Video Workflow batch, unified batch triage and retry
   (`docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md`).
+- Operator Site (`docs/runbooks/stablenew_operator_site.md`): on Windows it starts at launch and shares the configured Output folder and the visible PromptPacks; remote intent enters only through the frozen Preview to queue path (`AppController.submit_frozen_site_preview` to `run_submission_service.launch_preview_queue_submission`), and a paired Site can write ratings and albums under `<output>/.stablenew-library`.
 
 **Video**
 
@@ -137,9 +137,9 @@ of the roadmap; where they conflict with this file, this file and the repository
 
 ## Known debt
 
-- The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 6,592 lines and the executor,
+- The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 5,024 lines (ceiling in `tools/ci/controller_surface_baseline.json`) and the executor,
   model-family branches in generic code, untyped stage configuration).
-- 64 modules unreachable from any entry point (~8.7k lines) await a verified deletion pass; the retained qualification harnesses
+- Unreachable-module count unmeasured since P3-1 deleted 30 modules (the 2026-10-16 audit's 64 predates it); the retained qualification harnesses
   (inventory in `tools/qualification/README.md`) remain the bulk of `tools/`.
 - Two Tcl callback-noise messages appear after an otherwise clean shutdown; no thread error or leak was observed.
 
