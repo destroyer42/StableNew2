@@ -867,8 +867,8 @@ class SidebarPanelV2(ttk.Frame):
         ]
         logger.debug(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
         unsaved = stale_contract.unsaved_prompt_tab_pack(
-            getattr(self.app_state, "prompt_workspace_state", None),
-            self._prompt_summaries,
+            getattr(getattr(self, "app_state", None), "prompt_workspace_state", None),
+            getattr(self, "_prompt_summaries", ()),
             pack_ids,
         )
         if unsaved is not None:
@@ -888,7 +888,7 @@ class SidebarPanelV2(ttk.Frame):
         if not pack_ids:
             self._hide_stale_pack_notice()
             return
-        workspace = getattr(self.app_state, "prompt_workspace_state", None)
+        workspace = getattr(getattr(self, "app_state", None), "prompt_workspace_state", None)
         if save_first and workspace is not None and workspace.dirty:
             try:
                 workspace.save_current_pack()
@@ -1030,7 +1030,7 @@ class SidebarPanelV2(ttk.Frame):
         selected_ids = [
             self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
         ]
-        if self._stale_pack_ids and selected_ids != self._stale_pack_ids:
+        if getattr(self, "_stale_pack_ids", None) and selected_ids != self._stale_pack_ids:
             self._hide_stale_pack_notice()
         if self.load_config_button:
             self.load_config_button.config(state=tk.NORMAL if single else tk.DISABLED)
