@@ -12,6 +12,7 @@ from typing import Any
 
 from src.app.site_pack_catalog import PreparePack, SitePackCatalog, pack_digest
 from src.app.site_pairing_protocol import PairingTickets, register_protocol
+from src.app.site_phone_connector import SitePhoneConnector
 from src.app.site_queue_bridge import (
     PreviewJob,
     PreviewView,
@@ -26,6 +27,7 @@ from src.controller.app_controller_services.run_submission_service import (
     PreviewWitness,
     same_preview,
 )
+from src.gui.site_phone_dialog import PhoneReviewDialog
 from src.pipeline.job_models_v2 import UnifiedJobSummary, WorkloadKind
 from src.state.output_routing import get_output_root
 
@@ -283,9 +285,12 @@ class SiteConnectionDialog:
         self._shared_output: Path | None = None
         self._omit_output = False
         self._startup_error = ""
+        self._phone = SitePhoneConnector()
+        self._phone_dialog = PhoneReviewDialog(root, self._phone)
 
     def start_default(self) -> None:
         """Enable pairing when the Windows app starts, with the existing output and pack scopes."""
+        self._phone.start()
         try:
             register_protocol(self._checkout)
         except OSError:
@@ -345,6 +350,8 @@ class SiteConnectionDialog:
                 self._startup_error or "StableNew is shutting down.",
                 parent=self.root,
             )
+            if not self.app._is_shutting_down:
+                self._phone_dialog.open()
             return
         session = self.connection.session
 
@@ -439,6 +446,7 @@ class SiteConnectionDialog:
             command=lambda: self._share_packs(session, pack_status),
         ).pack(anchor="w", pady=(3, 10))
         ttk.Button(frame, text="Disconnect", command=self.close).pack(anchor="e")
+        ttk.Button(frame, text="Phone review…", command=self._phone_dialog.open).pack(anchor="w")
 
     def _copy(self, code: str) -> None:
         self.root.clipboard_clear()
@@ -564,6 +572,7 @@ class SiteConnectionDialog:
 
     def shutdown(self) -> None:
         """Revoke the session after the main loop exits, even if Tk is gone."""
+        self._phone.close()
         self._disconnect(cancel_timer=False)
 
 

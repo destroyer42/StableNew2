@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-756 of 911 modules have a docstring.
+759 of 914 modules have a docstring.
 
 ## src/
 
@@ -63,6 +63,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `site_output_routes.py`: Typed media operations behind the existing native Site authentication
 - `site_pack_catalog.py`: Session-scoped selection of visible, local PromptPacks
 - `site_pairing_protocol.py`: One-use Windows protocol handoff for the private Site's loopback connection
+- `site_phone_connector.py`: App-owned outbound transport for a locally enrolled phone browser
+- `site_phone_credentials.py`: Windows-local persistence for a single Operator Site phone grant
 - `site_queue_bridge.py`: Loopback transport for the operator Site
 - `site_video_playback.py`: Bounded video snapshots for range playback over the existing Site relay
 
@@ -283,6 +285,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply actions (PR-GUI-UX-520)
 - `sidebar_panel_v2.py`: (no docstring)
 - `site_connection_dialog.py`: Native consent and frozen Preview attachment for the StableNew operator Site
+- `site_phone_dialog.py`: Local consent and connection status for the optional phone connector
 - `smart_review_dialog.py`: Review's opt-in Smart Review panel: point/box object selection and caption suggestions (PR-IMG-REVIEW-320)
 - `status_bar_v2.py`: Status bar scaffold for GUI v2
 - `theme.py`: Legacy theming shim
