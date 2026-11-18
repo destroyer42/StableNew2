@@ -29,6 +29,7 @@ from src.controller.app_controller_services.run_submission_service import (
     same_preview,
 )
 from src.gui.site_phone_dialog import PhoneReviewDialog
+from src.learning.learning_paths import get_learning_records_path
 from src.pipeline.job_models_v2 import UnifiedJobSummary, WorkloadKind
 from src.review.review_lineage import repository_of, verified_review_outputs
 from src.state.output_routing import get_output_root
@@ -289,7 +290,10 @@ class SiteConnectionDialog:
         self._startup_error = ""
         repository = repository_of(app)
         self._review_outputs = partial(verified_review_outputs, repository) if repository else None
-        self._phone = SitePhoneConnector(review_outputs=self._review_outputs)
+        self._phone = SitePhoneConnector(
+            review_outputs=self._review_outputs,
+            review_records=get_learning_records_path(create_parent=False),
+        )
         self._phone_dialog = PhoneReviewDialog(root, self._phone)
 
     def start_default(self) -> None:

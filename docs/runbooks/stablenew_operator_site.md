@@ -33,8 +33,11 @@ Wi-Fi or cellular while the PC's browser is closed.
    credential and the phone code. Check the displayed phone name, choose the
    exact Output folder, and approve browse access. Choose **Also allow saving
    ratings** to grant writes to the native video ratings CSV and gallery
-   rating records. Create, queue submission and album edits use the existing
-   browser workflow.
+   rating records. **Allow writing native Review evidence** is selected for a new enrollment.
+   The final Windows confirmation lists each selected permission. Clear the checkbox to grant
+   browse access without native Review writes. An existing phone can receive this scope by
+   revoking its current grant and approving a new pairing on Windows. Create, queue submission
+   and album edits use the browser workflow.
 3. Use **Output Library** or **Video Review** on the phone. After a lock or
    network switch, the Site resumes the paired browser. A 15-minute browser
    lease renews while the same pairing and Sites sign-in are valid. Pair
@@ -68,6 +71,11 @@ and, for video, the source digest. If the same field changed on the PC, Review s
 Independent changes can sync together. Gallery ratings belong to Output Library. To compare a
 source with its finished Review results, open the source from the phone Library and select
 **Find returned results**. Only verified results inside shared Output appear.
+
+With the native Review permission, an open image also has a **Native Review** panel. Its rating
+and **Retain** action write Review evidence that Learning can use. **Mark for rework** records
+the decision for later follow-up. The same phone storage and sync controls cover these judgments.
+Use the native Windows Review workspace to archive or restore images.
 
 ## Browse evals and submit PromptPacks
 

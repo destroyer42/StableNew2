@@ -15,6 +15,7 @@ from typing import Any
 
 from src.app.site_media_files import MEDIA_TYPES, checked_digest, inside, open_scoped
 from src.app.site_media_files import SiteOutputError as SiteOutputError
+from src.app.site_native_review import NativeImageReview
 from src.app.site_output_library import OutputLibrary
 from src.app.site_rating_sync import edit_stamp, field_conflicts, root_identity, was_applied
 from src.app.site_video_playback import VideoPlayback
@@ -94,6 +95,7 @@ class SiteOutputCatalog:
         *,
         active: Callable[[], bool] = lambda: True,
         review_outputs: Callable[[str], Sequence[str]] | None = None,
+        review_records: Path | None = None,
     ) -> None:
         self._root = output_root.resolve(strict=True)
         if not self._root.is_dir():
@@ -104,6 +106,9 @@ class SiteOutputCatalog:
         self.scope = secrets.token_hex(16)
         self.library = OutputLibrary(self._root, self.scope, self.require_active)
         self.review_outputs = review_outputs
+        self.native_review = (
+            NativeImageReview(self.library, review_records) if review_records is not None else None
+        )
         self.playback = VideoPlayback(self._root, self.require_active)
         self._media: dict[str, _Asset] = {}
         self._results: dict[str, _Asset] = {}

@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -20,6 +22,7 @@ from src.utils.atomic_io import atomic_write_text
 
 _EVIDENCE_LOCKS: dict[str, threading.RLock] = {}
 _EVIDENCE_LOCKS_GUARD = threading.Lock()
+SITE_REVIEW_RECEIPT = "site_review_receipt"
 
 
 def evidence_file_lock(path: str | os.PathLike[str]) -> threading.RLock:
@@ -310,10 +313,40 @@ class LearningRecordWriter:
 
         self.append_record(record)
 
+    def append_record_atomic(
+        self, record: LearningRecord, *, before_replace: Callable[[], None]
+    ) -> None:
+        """Publish the receipt and judgment together, allowing a retry after process interruption."""
+        line = (record.to_json() + "\n").encode("utf-8")
+        path = self.records_path
+        with evidence_file_lock(path):
+            descriptor, temporary = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=path.parent)
+            try:
+                with os.fdopen(descriptor, "wb") as dest:
+                    try:
+                        source = path.open("rb")
+                    except FileNotFoundError:
+                        source = None
+                    if source is not None:
+                        with source:
+                            shutil.copyfileobj(source, dest)
+                            if source.tell():
+                                source.seek(-1, os.SEEK_END)
+                                if source.read(1) != b"\n":
+                                    dest.write(b"\n")
+                    dest.write(line)
+                    dest.flush()
+                    os.fsync(dest.fileno())
+                before_replace()
+                os.replace(temporary, path)
+            finally:
+                Path(temporary).unlink(missing_ok=True)
+
     def remove_latest_review_feedback(self, *, run_id: str | None = None, image_path: str | None = None) -> bool:
         """Remove the latest review-tab record matching the optional ``run_id`` and ``image_path`` filters.
 
-        This is the only operation that rewrites the store. It holds the store's evidence lock across the
+        A phone rating retains only its operation receipt so a late retry cannot restore the undone rating.
+        The store holds its evidence lock across the
         read-select-replace sequence, so a concurrent ``append_record`` can neither interleave nor be lost, and it
         replaces the file atomically, so readers see the old or the new content and a failed write leaves the
         original untouched. Returns ``False`` when there is no match, the file is missing or empty, or the file
@@ -330,7 +363,16 @@ class LearningRecordWriter:
                 index = _latest_review_feedback_index(lines, target_run, target_image)
                 if index < 0:
                     return False
-                del lines[index]
+                selected = json.loads(lines[index])
+                receipt = selected["metadata"].get(SITE_REVIEW_RECEIPT)
+                if isinstance(receipt, dict):
+                    lines[index] = json.dumps({
+                        "run_id": selected["run_id"],
+                        "timestamp": selected["timestamp"],
+                        "metadata": {"source": SITE_REVIEW_RECEIPT, SITE_REVIEW_RECEIPT: receipt},
+                    })
+                else:
+                    del lines[index]
                 text = "\n".join(lines)
                 if text:
                     text += "\n"

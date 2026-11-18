@@ -20,7 +20,13 @@ from urllib.parse import urlsplit
 
 from src.app.site_media_files import SiteOutputError
 from src.app.site_output_catalog import SiteOutputCatalog
-from src.app.site_output_routes import OUTPUT_CHUNK, OUTPUT_LIBRARY, OUTPUT_PLAY, OUTPUT_RATING
+from src.app.site_output_routes import (
+    NATIVE_REVIEW_ACTIONS,
+    OUTPUT_CHUNK,
+    OUTPUT_LIBRARY,
+    OUTPUT_PLAY,
+    OUTPUT_RATING,
+)
 from src.app.site_output_routes import post as post_output
 from src.app.site_output_routes import read as read_output
 from src.app.site_phone_credentials import (
@@ -157,7 +163,13 @@ def _desktop_call(
             allowed_library = (
                 path == OUTPUT_LIBRARY
                 and isinstance(action, str)
-                and (action in _LIBRARY_READS or rating and action in {"rate", "rating_sync"})
+                and (
+                    action in _LIBRARY_READS
+                    or rating
+                    and action in {"rate", "rating_sync"}
+                    or catalog.native_review is not None
+                    and action in NATIVE_REVIEW_ACTIONS
+                )
             )
             if not (
                 allowed_library
@@ -199,10 +211,12 @@ class SitePhoneConnector:
         http: PhoneHttp | None = None,
         *,
         review_outputs: Callable[[str], Sequence[str]] | None = None,
+        review_records: Path | None = None,
     ) -> None:
         self._store = store if store is not None else PhoneGrantStore()
         self._http = http if http is not None else PhoneHttp()
         self._review_outputs = review_outputs
+        self._review_records = review_records
         self._commands: Queue[Callable[[], None]] = Queue()
         self._stopping = Event()
         self._revoke_requested = Event()
@@ -261,7 +275,14 @@ class SitePhoneConnector:
         self._commands.put(command)
         return future
 
-    def enroll(self, enrollment: PhoneEnrollment, folder: Path, rating: bool) -> Future[None]:
+    def enroll(
+        self,
+        enrollment: PhoneEnrollment,
+        folder: Path,
+        rating: bool,
+        *,
+        native_review: bool = False,
+    ) -> Future[None]:
         future: Future[None] = Future()
 
         def command() -> None:
@@ -276,6 +297,7 @@ class SitePhoneConnector:
                     PhoneFolder.approve(folder),
                     rating,
                     pending=enrollment.challenge,
+                    native_review=native_review,
                 )
                 self._store.save(grant)
                 self._grant = grant
@@ -406,6 +428,7 @@ class SitePhoneConnector:
                     body={
                         "host": hashlib.sha256(grant.host_secret.encode()).hexdigest(),
                         "rating": grant.rating,
+                        **({"native_review": True} if grant.native_review else {}),
                     },
                 )
                 if approved.get("id") != grant.id:
@@ -468,6 +491,7 @@ class SitePhoneConnector:
                 Path(grant.folder.path),
                 active=lambda: self._live(session, grant.folder),
                 review_outputs=self._review_outputs,
+                review_records=self._review_records if grant.native_review else None,
             )
         self._presence = session, started + ttl / 1000
         if not self._live(session, grant.folder):

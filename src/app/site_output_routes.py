@@ -16,6 +16,7 @@ OUTPUT_PLAY = "/v1/output/play"
 OUTPUT_CHUNK = "/v1/output/chunk"
 OUTPUT_REVIEW = re.compile(r"/v1/output/review/(\d{8}_\d{6}_[A-Za-z0-9_-]{1,150})")
 OUTPUT_RATING = re.compile(OUTPUT_REVIEW.pattern + "/rating")
+NATIVE_REVIEW_ACTIONS = frozenset({"native_review", "native_review_sync"})
 _OUTPUT_IMAGE = re.compile(r"/v1/output/image/([a-f0-9]{32})")
 _ID = re.compile(r"[a-f0-9]{32}")
 
@@ -24,6 +25,18 @@ _LIBRARY_FIELDS = {
     "thumbnails": {"ids"},
     "inspect": {"id"},
     "review_results": {"id", "digest"},
+    "native_review": {"id", "digest"},
+    "native_review_sync": {
+        "target",
+        "root",
+        "digest",
+        "section",
+        "base",
+        "changes",
+        "revision",
+        "operation",
+        "actor_time",
+    },
     "albums": set(),
     "album": {"id"},
     "save_album": {"id", "name", "items", "revision", "operation"},
@@ -82,6 +95,7 @@ def read(catalog: SiteOutputCatalog, path: str) -> dict[str, Any] | tuple[str, b
             "library_sources": True,
             "rating_root": root_identity(catalog.library.root),
             "review_results": catalog.review_outputs is not None,
+            "native_review": catalog.native_review is not None,
         }
     if run := OUTPUT_REVIEW.fullmatch(path):
         return catalog.get_run(run[1], review=True)
@@ -127,6 +141,12 @@ def post(
         return {"thumbnails": library.thumbnails(body["ids"])}
     if action == "inspect":
         return library.inspect(body["id"])
+    if action in NATIVE_REVIEW_ACTIONS:
+        if catalog.native_review is None:
+            raise SiteOutputError("phone_scope_refused")
+        if action == "native_review":
+            return catalog.native_review.inspect(body["id"], body["digest"])
+        return catalog.native_review.sync(body)
     if action == "review_results":
         if catalog.review_outputs is None:
             raise SiteOutputError("unknown_route")
