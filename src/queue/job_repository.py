@@ -41,6 +41,10 @@ from src.utils.error_envelope_v2 import (
     deserialize_envelope,
     serialize_envelope,
 )
+from src.utils.experiment_snapshot_ref import (
+    snapshot_references,
+    verify_snapshot_body,
+)
 from src.utils.njr_identity import (
     fingerprint_of_serialized,
     snapshot_envelope,
@@ -265,6 +269,8 @@ class _PreparedSubmission:
     parent_job_id: str | None
     parent_artifact_id: str | None
     payload_summary: str
+    #: Experiment snapshot hashes this job's NJR refers to by reference (LEARN-SNAPSHOT-914).
+    snapshot_refs: frozenset[str] = frozenset()
 
 
 class JobRepository(JobHistoryStore):
@@ -357,6 +363,17 @@ class JobRepository(JobHistoryStore):
                     FOREIGN KEY(job_id) REFERENCES jobs(job_id)
                 )
                 """,
+                # LEARN-SNAPSHOT-914: one row per frozen Learning experiment, referenced by hash from job NJRs.
+                # Additive and idempotent (no schema_version change, existing rows untouched); rows are only ever
+                # inserted, in the admitting transaction. ``DROP TABLE experiment_snapshots`` undoes it only while no
+                # job refers to a snapshot by hash.
+                """
+                CREATE TABLE IF NOT EXISTS experiment_snapshots (
+                    sha256 TEXT PRIMARY KEY,
+                    snapshot_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """,
             )
             for statement in statements:
                 connection.execute(statement)
@@ -445,6 +462,7 @@ class JobRepository(JobHistoryStore):
         snapshot, record = _canonical_snapshot(job)
         serialized_snapshot = snapshot_json(snapshot)
         parent_job_id, parent_artifact_id = _lineage(snapshot)
+        workload = getattr(record, "workload", None)
         return _PreparedSubmission(
             job=job,
             serialized_snapshot=serialized_snapshot,
@@ -452,6 +470,11 @@ class JobRepository(JobHistoryStore):
             parent_job_id=parent_job_id,
             parent_artifact_id=parent_artifact_id,
             payload_summary=f"{record.positive_prompt[:64]} | {record.base_model}",
+            snapshot_refs=frozenset(
+                snapshot_references(
+                    (getattr(workload, "metadata", None), getattr(record.provenance, "metadata", None))
+                )
+            ),
         )
 
     def _insert_job_submission(
@@ -518,18 +541,44 @@ class JobRepository(JobHistoryStore):
             ),
         )
 
-    def record_job_submissions(self, jobs: Sequence[Job]) -> None:
+    def record_job_submissions(
+        self,
+        jobs: Sequence[Job],
+        *,
+        experiment_snapshots: Mapping[str, str] | None = None,
+    ) -> None:
         """Durably admit a whole batch in ONE SQLite transaction (all or none).
 
         Any failure (a conflict with an existing or earlier-in-batch identity, a write error)
         rolls back every row of this call and leaves pre-existing rows untouched.  Callbacks run
         only after the commit, so nothing is announced for a failed batch.
+
+        ``experiment_snapshots`` maps a frozen experiment's SHA-256 to its canonical JSON. Each body is verified and
+        inserted once (insert-or-ignore) in the same transaction; a job whose NJR refers to a snapshot hash that is
+        neither supplied nor already stored is refused, so no admitted job points at a missing body.
         """
 
         batch = [self._prepare_submission(job) for job in jobs]
         if not batch:
             return
+        bodies = dict(experiment_snapshots or {})
+        for digest, body in bodies.items():
+            verify_snapshot_body(digest, body)
         with self.transaction() as connection:
+            created = datetime.utcnow().isoformat()
+            for digest, body in bodies.items():
+                connection.execute(
+                    "INSERT OR IGNORE INTO experiment_snapshots(sha256, snapshot_json, created_at) VALUES (?, ?, ?)",
+                    (digest, body, created),
+                )
+            for digest in sorted(set().union(*(prepared.snapshot_refs for prepared in batch))):
+                stored = connection.execute(
+                    "SELECT 1 FROM experiment_snapshots WHERE sha256 = ?", (digest,)
+                ).fetchone()
+                if stored is None:
+                    raise JobRepositoryError(
+                        f"Job refers to experiment snapshot {digest[:12]} that is not stored; nothing was admitted"
+                    )
             next_order = connection.execute(
                 "SELECT COALESCE(MAX(queue_order), 0) + 1 AS value FROM jobs"
             ).fetchone()["value"]
@@ -540,6 +589,23 @@ class JobRepository(JobHistoryStore):
 
     def record_job_submission(self, job: Job) -> None:
         self.record_job_submissions([job])
+
+    def get_experiment_snapshot(self, sha256: str) -> str | None:
+        """The stored canonical JSON of one frozen experiment, or ``None``.
+
+        Returned as stored; ``experiment_snapshot_ref.resolve_experiment_snapshot`` verifies the hash on every read.
+        """
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT snapshot_json FROM experiment_snapshots WHERE sha256 = ?", (str(sha256),)
+            ).fetchone()
+        return None if row is None else str(row["snapshot_json"])
+
+    def count_experiment_snapshots(self) -> int:
+        with self._lock:
+            row = self._connection.execute("SELECT COUNT(*) AS value FROM experiment_snapshots").fetchone()
+        return int(row["value"])
 
     def transition_job(
         self,

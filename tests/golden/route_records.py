@@ -139,10 +139,21 @@ def _sequence_resume(env: RouteEnv) -> NormalizedJobRecord:
     )
 
 
+#: Frozen experiment bodies a route's record refers to by hash, keyed by job ID (LEARN-SNAPSHOT-914). Learning
+#: admission supplies them through ``experiment_snapshot_bodies`` exactly as ``LearningExecutionController`` does.
+ROUTE_SNAPSHOTS: dict[str, dict[str, str]] = {}
+
+
 def _learning(env: RouteEnv) -> NormalizedJobRecord:
+    from src.learning.execution_controller import experiment_snapshot_bodies
+
     bench = Bench(env.tmp_path)
     experiment = bench.preview()
-    return bench.controller._build_variant_njr(bench.controller.learning_state.plan[0], experiment)
+    record = bench.controller._build_variant_njr(
+        bench.controller.learning_state.plan[0], experiment
+    )
+    ROUTE_SNAPSHOTS[record.job_id] = experiment_snapshot_bodies([record], experiment)
+    return record
 
 
 ROUTES: dict[str, Callable[[RouteEnv], NormalizedJobRecord]] = {
@@ -185,4 +196,11 @@ def real_job_service(root: Path) -> Iterator[JobService]:
 
 
 def admit(service: JobService, record: NormalizedJobRecord) -> dict[str, str]:
+    snapshots = ROUTE_SNAPSHOTS.get(record.job_id)
+    if snapshots:
+        return observe(
+            lambda: service.submit_njrs(
+                [record], SubmissionPolicy(), experiment_snapshots=snapshots
+            )
+        )
     return observe(lambda: service.submit_njrs([record], SubmissionPolicy()))

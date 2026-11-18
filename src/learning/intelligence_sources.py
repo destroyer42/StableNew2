@@ -18,6 +18,7 @@ from src.learning.experiment_store import LearningExperimentStore
 from src.learning.intelligence_contracts import digest
 from src.learning.learning_record import evidence_file_lock
 from src.learning.model_capabilities import variable_name
+from src.utils.experiment_snapshot_ref import SnapshotLookup, resolve_rows
 
 RATING_KIND = "learning_experiment_rating"
 MAX_LOG_BYTES = 256 * 1024 * 1024
@@ -55,8 +56,12 @@ def valid_rating(value: Any) -> float | None:
     return number if number == number and 1.0 <= number <= 5.0 else None
 
 
-def read_rating_log(path: Path | None) -> RatingLog:
-    """Latest saved controlled-experiment rating per image. Other record kinds are not this projection's."""
+def read_rating_log(path: Path | None, snapshot_lookup: SnapshotLookup | None = None) -> RatingLog:
+    """Latest saved controlled-experiment rating per image. Other record kinds are not this projection's.
+
+    Ratings that carry their frozen experiment by hash are resolved through ``snapshot_lookup`` (LEARN-SNAPSHOT-914);
+    one that cannot be resolved or verified stays readable and is not evidence.
+    """
     if path is None or not path.exists():
         return RatingLog(revision=digest(["no-rating-log"]))
     problems: list[str] = []
@@ -104,6 +109,17 @@ def read_rating_log(path: Path | None) -> RatingLog:
         problems.append(
             f"{unidentified} saved rating(s) lack a durable image identity and were not used."
         )
+    rows, unavailable, altered = resolve_rows(latest.values(), snapshot_lookup)
+    if altered:
+        problems.append(
+            f"{altered} saved rating(s) refer to a stored experiment snapshot that fails hash verification "
+            "and are not evidence."
+        )
+    if unavailable:
+        problems.append(
+            f"{unavailable} saved rating(s) refer to an experiment snapshot the job repository does not hold "
+            "and are not evidence."
+        )
     revision_input: dict[str, Any] = {
         "ratings": sorted(
             [*ident, (row.get("metadata") or {}).get("user_rating")]
@@ -118,7 +134,7 @@ def read_rating_log(path: Path | None) -> RatingLog:
             for ident, row in study_latest.items()
         )
     return RatingLog(
-        tuple(latest.values()),
+        tuple(rows),
         tuple(problems),
         digest(revision_input),
         tuple(study_latest.values()),

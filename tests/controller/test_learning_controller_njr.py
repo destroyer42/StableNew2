@@ -113,7 +113,7 @@ class TestLearningControllerNJR:
         job_service = Mock()
         # JobService answers with the IDs of the records it was given (the admission contract).
         job_service.submit_njrs = Mock(
-            side_effect=lambda records, _policy: [r.job_id for r in records]
+            side_effect=lambda records, _policy, **_: [r.job_id for r in records]
         )
         job_service.register_callback = Mock()
         pipeline_controller._job_service = job_service

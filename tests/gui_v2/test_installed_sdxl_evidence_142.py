@@ -90,7 +90,7 @@ def test_structural_preview_run_never_reinspects_or_adapts(operator, monkeypatch
     )
     (operator.view._resolve_packs_dir() / "study.json").write_text("changed after Preview")
     service = SimpleNamespace(
-        submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records])
+        submit_njrs=Mock(side_effect=lambda records, policy, **_: [r.job_id for r in records])
     )
     operator.controller.execution_controller = LearningExecutionController(
         operator.controller.learning_state, service

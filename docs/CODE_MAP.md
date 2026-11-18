@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-757 of 912 modules have a docstring.
+758 of 913 modules have a docstring.
 
 ## src/
 
@@ -899,6 +899,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `embedding_scanner.py`: Compatibility projection from AssetRegistry; it owns no scan or cache
 - `error_envelope_v2.py`: Unified error envelope for structured errors across StableNew phases
 - `exceptions_v2.py`: Exception taxonomy for StableNew Unified Error Model
+- `experiment_snapshot_ref.py`: The one rule for a frozen Learning experiment snapshot carried by reference (LEARN-SNAPSHOT-914)
 - `file_access_log_v2_5_2025_11_26.py`: (no docstring)
 - `file_io.py`: File I/O utilities with UTF-8 support
 - `gpu_device_health.py`: Read-only host GPU evidence and the accelerator-fault vocabulary (PR-QUEUE-GPU-180)

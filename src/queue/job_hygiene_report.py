@@ -38,6 +38,11 @@ _COLUMNS = (
 )
 _JOB_ID_PATTERN = re.compile(r'"job_id"\s*:\s*"([^"]+)"')
 _FROZEN_MARKER = '"frozen_experiment"'
+# The by-reference marker of ``src.utils.experiment_snapshot_ref`` (LEARN-SNAPSHOT-914), copied because this report
+# is loaded by path without the application; a test keeps the two equal.
+STORAGE_KEY = "snapshot_storage"
+STORAGE_JOB_REPOSITORY = "job_repository"
+_BY_REFERENCE_MARKER = f'"{STORAGE_KEY}":"{STORAGE_JOB_REPOSITORY}"'
 _TOP = 10
 
 
@@ -103,11 +108,18 @@ def _column_bytes(connection: sqlite3.Connection) -> dict[str, int]:
 
 
 def _frozen_snapshots(value: Any) -> Iterator[tuple[str, str, int]]:
-    """Every ``frozen_experiment`` block in a parsed NJR as ``(snapshot_sha256, experiment_id, snapshot_bytes)``."""
+    """Every embedded ``frozen_experiment`` body in a parsed NJR as ``(snapshot_sha256, experiment_id, snapshot_bytes)``.
+
+    A block that carries its snapshot by hash (LEARN-SNAPSHOT-914) embeds no body and is not a copy.
+    """
 
     if isinstance(value, dict):
         frozen = value.get("frozen_experiment")
-        if isinstance(frozen, dict) and frozen.get("snapshot_sha256"):
+        if (
+            isinstance(frozen, dict)
+            and frozen.get("snapshot_sha256")
+            and frozen.get(STORAGE_KEY) != STORAGE_JOB_REPOSITORY
+        ):
             snapshot = frozen.get("snapshot") or {}
             size = len(json.dumps(snapshot, sort_keys=True, separators=(",", ":")))
             yield str(frozen["snapshot_sha256"]), str(frozen.get("experiment_id") or ""), size
@@ -169,6 +181,24 @@ def _duplicated_snapshots(connection: sqlite3.Connection) -> dict[str, Any]:
             for digest, group in top
         ],
     }
+
+
+def _experiment_snapshots(connection: sqlite3.Connection) -> dict[str, Any]:
+    """The bodies stored once by hash (LEARN-SNAPSHOT-914) and the jobs that refer to them; zero on an older file."""
+
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'experiment_snapshots'"
+    ).fetchone()
+    rows = stored = 0
+    if exists is not None:
+        row = connection.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(snapshot_json)), 0) AS b FROM experiment_snapshots"
+        ).fetchone()
+        rows, stored = int(row["n"]), int(row["b"])
+    by_reference = connection.execute(
+        "SELECT COUNT(*) AS n FROM jobs WHERE instr(njr_snapshot, ?) > 0", (_BY_REFERENCE_MARKER,)
+    ).fetchone()["n"]
+    return {"rows": rows, "bytes": stored, "jobs_by_reference": int(by_reference)}
 
 
 def _learning_job_ids(root: Path | None) -> set[str]:
@@ -547,6 +577,7 @@ def build_report(
         "jobs": _jobs_section(connection),
         "column_bytes": _column_bytes(connection),
         "duplicated_snapshots": _duplicated_snapshots(connection),
+        "experiment_snapshots": _experiment_snapshots(connection),
         "prune": _prune_section(connection, options),
     }
     if options.result_json:
@@ -588,6 +619,11 @@ def format_report(report: dict[str, Any]) -> str:
             f"    {item['snapshot_sha256']}  {item['jobs']:,} jobs x {item['copies'] // max(1, item['jobs'])} copies  "
             f"{_mb(item['bytes_all_copies'])}  ({item['experiment_id']})"
         )
+    stored = report["experiment_snapshots"]
+    lines.append(
+        f"  stored once by hash (LEARN-SNAPSHOT-914): {stored['rows']:,} snapshot(s), {_mb(stored['bytes'])}; "
+        f"jobs referring by hash: {stored['jobs_by_reference']:,}"
+    )
     criteria = prune["criteria"]
     lines += [
         "",
