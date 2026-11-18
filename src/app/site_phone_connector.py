@@ -31,6 +31,7 @@ from src.app.site_phone_credentials import (
     PhoneGrantStore,
 )
 from src.app.site_queue_bridge import SITE_ORIGIN
+from src.utils.thread_registry import get_thread_registry
 
 _ENDPOINT = "/api/stablenew/connector/"
 _HOST = urlsplit(SITE_ORIGIN).netloc
@@ -208,8 +209,24 @@ class SitePhoneConnector:
 
     def start(self) -> None:
         if self._thread is None:
-            self._thread = Thread(target=self._run, name="StableNew phone connector", daemon=True)
-            self._thread.start()
+            registry = get_thread_registry()
+            remove_listener = registry.add_shutdown_listener(self._signal_stop)
+
+            def run() -> None:
+                try:
+                    self._run()
+                finally:
+                    remove_listener()
+
+            try:
+                self._thread = registry.spawn(
+                    target=run,
+                    name="StableNew phone connector",
+                    purpose="Paired phone review transport",
+                )
+            except RuntimeError:
+                remove_listener()
+                self.status = "Phone review is unavailable during shutdown."
 
     def inspect(self, site_secret: str, challenge: str) -> Future[PhoneEnrollment]:
         future: Future[PhoneEnrollment] = Future()
@@ -295,9 +312,12 @@ class SitePhoneConnector:
         self._commands.put(command)
         return future
 
-    def close(self) -> None:
+    def _signal_stop(self) -> None:
         self._stopping.set()
         self._commands.put(lambda: None)
+
+    def close(self) -> None:
+        self._signal_stop()
         if self._thread is not None:
             self._thread.join(timeout=1.0)
 
@@ -483,4 +503,9 @@ class SitePhoneConnector:
                 _call_deadline.reset(token)
                 self._commands.put(lambda: None)
 
-        Thread(target=dispatch, name="StableNew phone review call", daemon=True).start()
+        try:
+            get_thread_registry().spawn(
+                target=dispatch, name="StableNew phone review call", purpose="Scoped Output review"
+            )
+        except RuntimeError:
+            self._claim = None
