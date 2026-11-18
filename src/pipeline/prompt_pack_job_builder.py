@@ -20,7 +20,8 @@ from src.image_backends.forge_zimage_profile import zimage_selected
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import (
     FamilyLookup,
-    apply_model_compile_policy,
+    ModelPolicyResult,
+    compile_model_policy,
     normalize_profile_owned_values,
 )
 from src.pipeline import config_contract_v26
@@ -34,6 +35,7 @@ from src.pipeline.config_contract_v26 import (
     extract_secondary_motion_intent,
 )
 from src.pipeline.controlnet_compile import CompiledUnits, compile_units
+from src.pipeline.exact_profile_effective_config import prepare_effective_config
 from src.pipeline.global_prompt_policy import has_frozen_global_prompt_policy
 from src.pipeline.job_builder_v2 import JobBuilderV2, config_mapping, stage_prompt_info
 from src.pipeline.job_models_v2 import (
@@ -60,7 +62,6 @@ from src.pipeline.njr_compiler import (
     NjrDraft,
     PolicyState,
     compile_njr,
-    prepare_image_config,
 )
 from src.pipeline.openpose_compile import CompiledConditioning, OpenPoseCompiler
 from src.pipeline.prompt_pack_parser import PackRow
@@ -120,6 +121,9 @@ class _PreparedPrompt:
     metadata: dict[str, Any]
     style: dict[str, Any] | None
     intent: PackPromptIntent
+    #: The one model compile-policy evaluation of this prompt: ``config`` is its nested projection and every record's
+    #: flat payload is a projection of it too (P4-2G).
+    policy: ModelPolicyResult
     revision: Any = None
     selection: KleinLoraSelection | None = None
     #: Transient (never frozen as text): stored global positive terms and whether the source enabled them, for a target
@@ -409,7 +413,10 @@ class PromptPackNormalizedJobBuilder:
                 # Positive execution text is rendered from structured intent later.
                 section.pop("prompt", None)
             executable_config.setdefault("pipeline", {})
-        merged_config = apply_model_compile_policy(executable_config)
+        # The one model compile-policy evaluation of this prompt (nested shape). Its flat projection, per record, is
+        # applied in ``_build_jobs_for_entry``; the policy does not run again.
+        policy = compile_model_policy(executable_config)
+        merged_config = policy.project_nested()
         stage_flags = self._normalize_stage_flags(
             merged_config.get("pipeline", {}),
             entry.stage_flags or {},
@@ -433,7 +440,8 @@ class PromptPackNormalizedJobBuilder:
             resolved_style_lora,
         )
         return _PreparedPrompt(entry, matrix_variant_index, matrix_variant_count, source_config,
-                               merged_config, stage_chain, record_metadata, resolved_style_lora, intent, pack_config.get("version"),
+                               merged_config, stage_chain, record_metadata, resolved_style_lora, intent, policy,
+                               pack_config.get("version"),
                                global_positive=global_positive, global_positive_enabled=global_positive_enabled,
                                normalizations=tuple(normalizations))
 
@@ -542,11 +550,12 @@ class PromptPackNormalizedJobBuilder:
 
         drafts: list[NjrDraft] = []
         for item in expansion:
-            # The second compile-policy application, on the flat payload this record carries (once per record). It is
-            # not redundant with the one in _prepare_entry: the payload built by _build_config_payload omits the
-            # profile's backend options, the txt2img section and some profile keys, which only this application
-            # restores in ``workload.config``.
-            record_config, _evidence = prepare_image_config(config_mapping(item.config))
+            # The flat payload this record carries: its effective configuration, then the prompt's one policy result
+            # projected onto it. ``_build_config_payload`` omits the profile's backend options, the txt2img section
+            # and some profile keys; the projection restores them in ``workload.config``. No second policy application.
+            record_config = prepared.policy.project_flat(
+                prepare_effective_config(config_mapping(item.config)).config
+            )
             prompt_info = stage_prompt_info(record_config)
             # The expansion numbers variants within one Matrix variant; combine them with the Matrix position.
             inner_variant_total = max(1, int(item.variant_total))

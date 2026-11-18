@@ -430,7 +430,7 @@ normalization, I intent canonicalization. "Planner" means the route runs the ste
 |---|---|---|---|---|---|
 | CLI (S1) | `cli_njr_builder.build_cli_njr` | `EFFECTIVE` | `()` | P, A, B, I (planner) | E |
 | Generic Pipeline tab (S2) | `JobBuilderV2.build_jobs` | `RAW` | `(PROFILE_NJR,)` | E, P, A (conditional), B, I (core, once per record) | none |
-| PromptPack (S3) | `PromptPackNormalizedJobBuilder.build_jobs` | `EFFECTIVE` | `(PROFILE_NJR,)` | P twice: nested per prepared prompt (planner) and flat per record (`prepare_image_config`); E per record (`prepare_image_config`; Z-Image also `normalize_profile_owned_values` per prepared prompt); A per prepared prompt; B and I per record (planner) | none |
+| PromptPack (S3) | `PromptPackNormalizedJobBuilder.build_jobs` | `EFFECTIVE` | `(PROFILE_NJR,)` | P once per prepared prompt on the nested configuration (planner; P4-2G: its result is projected onto each flat record payload, no second application); E per record (`prepare_image_config`; Z-Image also `normalize_profile_owned_values` per prepared prompt); A per prepared prompt; B and I per record (planner) | none |
 | Reprocess family (S4: Reprocess, Review, Photo Optimize, curation, masked edit, outpaint, SVD, Video Workflow, sequences, Movie Clips, Learning non-txt2img) | `ReprocessJobBuilder.build_reprocess_job` | `EFFECTIVE` | `()` | B (planner) | E, P, A, I |
 | Character Training (S5) | `training_njr_compiler` | `EFFECTIVE` | `()` | I (planner) | E, P, A, B |
 | Learning frozen arm (S6: Model Comparison, Two-Axis Grid, Prompt x Model Matrix) | `learning_njr.assemble_txt2img_njr` | `FROZEN` (prompt, negative, backend options) | `(PROFILE_NJR,)` | none at Run (validated at freeze) | E, P, A, B, I |
@@ -535,11 +535,10 @@ Risk: high relative to the others. Rollback: revert one commit; nothing persiste
 
 - **Left deliberately.** Everything marked allowed above, X1, X6, X7, X14, X15, `STATUS.md` decision 4, and the generic
   record's `SourceKind.CLI`. No golden file, refusal baseline or snapshot changed and `STABLENEW_UPDATE_GOLDEN` was not set.
-- **Open post-F design decision (unchanged from E, not implemented).** PromptPack applies the model compile policy twice
-  per record, once on the nested configuration per prepared prompt and once on the flat payload per record, because each
-  application produces part of the record (see the E block). "Exactly once per record" is therefore not true for that
-  route. Option 2, one policy result projected onto both shapes through a neutral seam in
-  `src/image_backends/model_policy.py`, needs an owner decision and its own package; `model_policy.py` is untouched here.
+- **Open post-F design decision (answered by P4-2G).** PromptPack applied the model compile policy twice per record,
+  once on the nested configuration per prepared prompt and once on the flat payload per record, because each
+  application produced part of the record (see the E block). The owner chose option 2 (one policy result projected
+  onto both shapes through a neutral seam in `src/image_backends/model_policy.py`); it is the P4-2G package below.
 - **Documentation.** `docs/ARCHITECTURE_v2.6.md` section 3.1 (single assembly boundary and the three policy states),
   `STATUS.md` known debt, `docs/CODEX_MAP.md` compilers row, `docs/Subsystems/Testing/TESTING_AND_CI.md` (the guard), and
   the two "eight construction sites" notes in `docs/Subsystems/Image/IMAGE_PIPELINE.md` and
@@ -593,6 +592,43 @@ Risk: high relative to the others. Rollback: revert one commit; nothing persiste
 ### Risk and rollback
 
 Risk: low. Rollback: revert.
+
+---
+
+## P4-2G — One policy result, two projections (PromptPack)
+
+### Status (2026-11-17): owner-approved option 2, on the P4-2 terms (no golden changes, merge when CI is green)
+
+Closes the one remaining P4-2 debt, X2. The PromptPack route evaluates the model compile policy **once per prepared
+prompt** and projects that one result onto the two configuration shapes the record needs; the per-record second
+application is gone.
+
+- **Seam.** `model_policy.compile_model_policy(config)` evaluates the policy once on the nested configuration (the
+  existing `apply_model_compile_policy`, unchanged: it keeps the exact-profile refusals and their order) and returns a
+  `ModelPolicyResult`. `project_nested()` is that configuration; `project_flat(payload)` writes the profile-owned values
+  onto a flat PromptPack payload (Z-Image: `backend_options`, the profile's `txt2img` defaults section, `distilled_cfg_scale`,
+  `sampler_name`, `frozen_njr`; Klein: `backend_options`, its `txt2img` section and the mirrored flat keys). The flat
+  projection reads the exact profile's own values (`ZIMAGE_PROFILE_V1`, `latest_klein_profile()`), never a rule held by
+  the planner. `model_policy.py` stays the single policy authority and the builder holds no model-family knowledge.
+- **Planner.** `_prepare_entry` calls `compile_model_policy` instead of `apply_model_compile_policy` (same place, same
+  order: stage chain, ADetailer, the randomizer and batch inputs and every exact-profile refusal still come from the nested
+  result before the Klein review). `_build_jobs_for_entry` prepares each record's effective configuration through the
+  core's `prepare_effective_config` and then projects the prepared prompt's result onto the record's flat payload.
+- **Counts.** Model compile policy: once per prepared prompt, shared by its randomizer variants and batch runs, so never
+  more than once per record and exactly once for a one-run prompt (before: once per prompt plus once per record).
+  Everything else in `test_njr_compile_invocations_p42e.py` holds.
+- **Allowed files.** `src/image_backends/model_policy.py`, `src/pipeline/prompt_pack_job_builder.py`, tests, and the
+  documentation named in the task: `STATUS.md` (X2 removed from known debt), `docs/CODEX_MAP.md`, this work package,
+  `docs/Subsystems/PromptPacks/PROMPTPACKS_AND_PROMPTING.md`, `docs/Subsystems/Image/MODEL_PROFILES.md` if it describes
+  policy timing. Not allowed: a golden, baseline, refusal-table or snapshot file; the profile modules; any other route;
+  stage-chain construction after the Klein review; a changed refusal order or message.
+- **Evidence.** `to_dict()` (or refusal type and message) for 91 inputs captured on unchanged `origin/main` `6c015442`
+  and again after the change, outside the repository, identical for all 91 (the P4-2E input list plus Z-Image and Klein
+  seed cases). In-repository: each projection is tested against what the old application produced for the same payload
+  (the legacy `apply_*` functions remain the oracle), the goldens, Klein and exact-profile suites pass unchanged, and
+  `STABLENEW_UPDATE_GOLDEN` was not set.
+- **Execution class and model recommendation.** Standard, Claude Code Sonnet 5.5 High. Controller surface touched: no.
+- **Rollback.** Revert; no stored record changes.
 
 ---
 
