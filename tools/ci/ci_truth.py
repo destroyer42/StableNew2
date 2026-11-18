@@ -12,6 +12,7 @@ pytest truth tests (``tests/system/test_ci_truth_sync_v2.py``) call the same fun
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import sys
 from pathlib import Path
@@ -29,6 +30,11 @@ STALE_PHRASES = {
 #: STATUS.md is current state only (audit P2-1). Its size, stale-marker and dead-reference rules are enforced here.
 STATUS = "STATUS.md"
 STATUS_MAX_LINES = 150
+#: Byte cap for any one STATUS.md line. A ratchet: it was set at the longest line when it was introduced (the Learning and Video
+#: capability paragraphs) and may only be lowered as those paragraphs are split at sentence boundaries.
+STATUS_MAX_LINE_BYTES = 3198
+#: Ratchet-line figures in STATUS.md must equal the checked-in baselines under tools/ci/.
+STATUS_RATCHET_ANCHOR = "Ratchets only allow recorded debt to shrink"
 #: Phrases that mean a per-PR narrative or an out-of-date lifecycle label crept back in (matched case-insensitively).
 STATUS_BANNED_MARKERS = (
     "not merged",
@@ -61,6 +67,65 @@ def _dead_references(root: Path, rel: str, text: str) -> list[str]:
     return problems
 
 
+def _status_ratchet_paragraph(text: str) -> str | None:
+    """The ratchet bullet, wrapped lines joined, or None when the anchor is absent."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if STATUS_RATCHET_ANCHOR in line:
+            parts = [line]
+            for follow in lines[index + 1 :]:
+                if not follow.strip() or follow.lstrip().startswith(("- ", "#", "**")):
+                    break
+                parts.append(follow)
+            return " ".join(part.strip() for part in parts)
+    return None
+
+
+def _load_baseline(root: Path, name: str) -> dict | None:
+    try:
+        data = json.loads((root / "tools" / "ci" / name).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def status_ratchet_problems(root: Path, text: str) -> list[str]:
+    """The ratchet line's numbers must equal the baselines (the AppController size is deliberately not checked here)."""
+    paragraph = _status_ratchet_paragraph(text)
+    if paragraph is None:
+        return [f"{STATUS} has no ratchet line starting {STATUS_RATCHET_ANCHOR!r}"]
+    mypy = _load_baseline(root, "mypy_baseline.json")
+    ruff = _load_baseline(root, "ruff_ratchet_baseline.json")
+    arch = _load_baseline(root, "architecture_baseline.json")
+    if mypy is None or ruff is None or arch is None:
+        return [f"{STATUS} ratchet line cannot be checked: a baseline under tools/ci/ is missing or unreadable"]
+    try:
+        totals = ruff["rules"]["totals"]
+        arch_totals = arch["totals"]
+        expected = {
+            "mypy errors": (r"\(([\d,]+) errors in", mypy["total"]),
+            "mypy files": (r"errors in\s+([\d,]+) files", len(mypy["counts"])),
+            "unformatted files": (r"unformatted files \(([\d,]+)\)", ruff["format"]["total"]),
+            "BLE001": (r"BLE001 ([\d,]+)", totals["BLE001"]),
+            "S110": (r"S110 ([\d,]+)", totals["S110"]),
+            "S112": (r"S112 ([\d,]+)", totals["S112"]),
+            "daemon threads": (r"daemon threads ([\d,]+)", arch_totals["daemon_threads"]),
+            "raw threads": (r"raw threads ([\d,]+)", arch_totals["raw_threads"]),
+            "utils importing upward": (r"utils importing upward ([\d,]+)", arch_totals["utils_upward_imports"]),
+            "controller importing the GUI": (r"controller importing the GUI ([\d,]+)", arch_totals["controller_gui_imports"]),
+        }
+    except (KeyError, TypeError):
+        return [f"{STATUS} ratchet line cannot be checked: a baseline under tools/ci/ has an unexpected shape"]
+    problems: list[str] = []
+    for label, (pattern, value) in expected.items():
+        match = re.search(pattern, paragraph)
+        if match is None:
+            problems.append(f"{STATUS} ratchet line does not state {label}")
+        elif int(match.group(1).replace(",", "")) != value:
+            problems.append(f"{STATUS} ratchet line says {label} {match.group(1)}; the baseline says {value:,}")
+    return problems
+
+
 def status_problems(root: Path = ROOT) -> list[str]:
     text = _read(root, STATUS)
     if text is None:
@@ -69,6 +134,11 @@ def status_problems(root: Path = ROOT) -> list[str]:
     lines = text.splitlines()
     if len(lines) > STATUS_MAX_LINES:
         problems.append(f"{STATUS} has {len(lines)} lines; the cap is {STATUS_MAX_LINES} (current state only, no PR narrative)")
+    for number, line in enumerate(lines, start=1):
+        size = len(line.encode("utf-8"))
+        if size > STATUS_MAX_LINE_BYTES:
+            problems.append(f"{STATUS} line {number} is {size} bytes; the cap is {STATUS_MAX_LINE_BYTES} (split it at sentence boundaries)")
+    problems.extend(status_ratchet_problems(root, text))
     lowered = text.lower()
     for marker in STATUS_BANNED_MARKERS:
         if marker in lowered:

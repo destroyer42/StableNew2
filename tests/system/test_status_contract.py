@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,7 +58,8 @@ def test_references_that_exist_and_non_path_code_spans_are_accepted(tmp_path: Pa
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "real.md").write_text("x", encoding="utf-8")
     text = "See `docs/real.md`, run `python tools/ci/run_pr_gate.py`, branch `main`, flag `--update`, glob `docs/*.md`.\n"
-    assert _truth().status_problems(_status_root(tmp_path, text)) == []
+    problems = _truth().status_problems(_status_root(tmp_path, text))
+    assert [p for p in problems if "ratchet" not in p] == []
 
 
 def test_a_missing_status_file_is_reported(tmp_path: Path) -> None:
@@ -89,3 +91,69 @@ def _root_with(text: str) -> Path:
     root = Path(tempfile.mkdtemp(prefix="status-contract-"))
     (root / "STATUS.md").write_text(text, encoding="utf-8")
     return root
+
+
+def _ratchet_root(tmp_path: Path, *, mypy_errors: int = 1403, line: str | None = None) -> Path:
+    """A throwaway repo whose STATUS ratchet line matches fixture baselines (wrapped like the real file)."""
+    ci = tmp_path / "tools" / "ci"
+    ci.mkdir(parents=True)
+    (ci / "mypy_baseline.json").write_text(
+        json.dumps({"total": mypy_errors, "counts": {"src/a.py": 1, "src/b.py": 2}}),
+        encoding="utf-8",
+    )
+    (ci / "ruff_ratchet_baseline.json").write_text(
+        json.dumps(
+            {
+                "format": {"total": 378, "files": []},
+                "rules": {"totals": {"BLE001": 1213, "S110": 479, "S112": 35}, "counts": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (ci / "architecture_baseline.json").write_text(
+        json.dumps(
+            {
+                "totals": {
+                    "daemon_threads": 13,
+                    "raw_threads": 9,
+                    "utils_upward_imports": 18,
+                    "controller_gui_imports": 6,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    text = line or (
+        "- Ratchets only allow recorded debt to shrink: whole-`src` strict mypy (1,403 errors in\n"
+        "  2 files), unformatted files (378), excepts (BLE001 1,213, S110 479, S112 35), threads\n"
+        "  (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6).\n"
+        "- Next bullet.\n"
+    )
+    return _status_root(tmp_path, text)
+
+
+def test_ratchet_numbers_matching_the_baselines_pass(tmp_path: Path) -> None:
+    assert _truth().status_problems(_ratchet_root(tmp_path)) == []
+
+
+def test_a_wrong_ratchet_number_is_rejected(tmp_path: Path) -> None:
+    root = _ratchet_root(tmp_path, mypy_errors=1500)
+    problems = _truth().status_problems(root)
+    assert any("mypy errors 1,403" in p and "1,500" in p for p in problems), problems
+
+
+def test_a_missing_ratchet_line_is_rejected(tmp_path: Path) -> None:
+    root = _ratchet_root(tmp_path, line="- Nothing about ratchets here.\n")
+    assert any("no ratchet line" in p for p in _truth().status_problems(root))
+
+
+def test_an_overlong_status_line_is_rejected(tmp_path: Path) -> None:
+    truth = _truth()
+    root = _ratchet_root(tmp_path)
+    status = root / "STATUS.md"
+    status.write_text(
+        status.read_text(encoding="utf-8") + "x" * (truth.STATUS_MAX_LINE_BYTES + 1) + "\n",
+        encoding="utf-8",
+    )
+    problems = truth.status_problems(root)
+    assert any("bytes; the cap is" in p for p in problems), problems
