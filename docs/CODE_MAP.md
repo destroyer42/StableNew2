@@ -230,7 +230,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui/
 
 - `__init__.py`: GUI module
-- `advanced_prompt_editor.py`: Advanced Prompt Pack Editor with validation, embedding/LoRA discovery, and smart features
 - `ai_preview_dialog.py`: AI Assist Preview enablement dialog (owner decision D13): the one place an operator enables or revokes Preview
 - `ai_suggestion_dialog.py`: Read-only AI review dialog; only an explicit Accept callback can edit the authoring buffer
 - `api_status_panel.py`: APIStatusPanel - UI component for displaying API connection status
@@ -391,6 +390,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `review_selection_contract.py`: Toolkit-neutral revision bookkeeping for Review's asynchronous selection (PR-GUI-UX-580)
 - `review_workspace_contract.py`: Toolkit-neutral session for the task-first Review workspace (PR-REVIEW-LIFECYCLE-621)
 - `selection_list_contract.py`: Selection list contract for deterministic list + selection behavior
+- `stale_pack_contract.py`: Toolkit-neutral rules for adding a PromptPack that has unsaved Prompt-tab edits (GUI-TRUTH-912)
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
 - `storyboard_contract.py`: Toolkit-neutral capture and dirty-state for the existing sequence editor; no executable state
 - `task_navigation_contract.py`: Task-first navigation contract (PR-GUI-410)

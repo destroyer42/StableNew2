@@ -14,13 +14,12 @@ from src.state.output_routing import OUTPUT_ROUTE_AUTO, OUTPUT_ROUTE_PIPELINE, O
 
 
 class OutputSettingsPanelV2(ttk.Frame):
-    """Expose output directory/profile, filename pattern, batch size, image format, seed mode.
+    """Expose output directory, batch size, seed mode and output route.
 
     When embed_mode=True, widgets are built directly into the master frame
     without creating additional frame structure.
     """
 
-    FORMATS = ("png", "jpg", "webp")
     SEED_MODES = ("fixed", "increment", "random")
     OUTPUT_ROUTES = (OUTPUT_ROUTE_AUTO, OUTPUT_ROUTE_PIPELINE, OUTPUT_ROUTE_TESTING)
 
@@ -49,8 +48,6 @@ class OutputSettingsPanelV2(ttk.Frame):
         abs_output = os.path.abspath(default_output)
 
         self.output_dir_var = tk.StringVar(value=abs_output)
-        self.filename_pattern_var = tk.StringVar(value=app_config.filename_pattern_default())
-        self.image_format_var = tk.StringVar(value=app_config.image_format_default())
         self.batch_size_var = tk.StringVar(value=str(app_config.batch_size_default()))
         self.seed_mode_var = tk.StringVar(value=app_config.seed_mode_default())
         self.output_route_var = tk.StringVar(value=OUTPUT_ROUTE_AUTO)
@@ -58,7 +55,7 @@ class OutputSettingsPanelV2(ttk.Frame):
         # Build output dir row with browse button
         self._build_dir_row(parent, "Output Dir", self.output_dir_var, 1, 0)
 
-        # Format, Batch Size, Seed Mode and Route wrap onto further rows when the column is narrow (GUI-COMPLETE-760);
+        # Batch Size, Seed Mode and Route wrap onto further rows when the column is narrow (GUI-COMPLETE-760);
         # a single packed row left the trailing pairs unmapped, so Seed Mode / Route could not be reached.
         controls_row = FlowRow(parent, gap=16)
         controls_row.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 4))
@@ -69,16 +66,6 @@ class OutputSettingsPanelV2(ttk.Frame):
             ttk.Label(pair, text=label, style="TLabel").pack(side="left", padx=(0, 4))
             controls_row.add(pair)
             return pair
-
-        format_combo = ttk.Combobox(
-            _pair("Format:"),
-            textvariable=self.image_format_var,
-            values=self.FORMATS,
-            state="readonly",
-            width=8,
-            style="Dark.TCombobox",
-        )
-        format_combo.pack(side="left")
 
         batch_spin = ttk.Spinbox(
             _pair("Batch Size:"),
@@ -167,8 +154,6 @@ class OutputSettingsPanelV2(ttk.Frame):
     def get_output_overrides(self) -> dict[str, object]:
         return {
             "output_dir": self.output_dir_var.get().strip(),
-            "filename_pattern": self.filename_pattern_var.get().strip(),
-            "image_format": self.image_format_var.get().strip(),
             "batch_size": self._safe_int(
                 self.batch_size_var.get(), app_config.batch_size_default()
             ),
@@ -180,12 +165,6 @@ class OutputSettingsPanelV2(ttk.Frame):
         if not overrides:
             return
         self.output_dir_var.set(str(overrides.get("output_dir", self.output_dir_var.get())))
-        self.filename_pattern_var.set(
-            str(overrides.get("filename_pattern", self.filename_pattern_var.get()))
-        )
-        fmt = overrides.get("image_format")
-        if fmt:
-            self.image_format_var.set(str(fmt))
         batch = overrides.get("batch_size")
         if batch is not None:
             try:

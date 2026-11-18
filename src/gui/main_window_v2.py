@@ -11,7 +11,6 @@ from typing import Any
 
 from src.api.webui_process_manager import WebUIProcessManager
 from src.controller.ports.presentation_actions import PresentationActions
-from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from src.gui.engine_settings_dialog import EngineSettingsDialog
@@ -74,7 +73,6 @@ class HeaderZone(ttk.Frame):
         super().__init__(master, style="Panel.TFrame")
         self.run_button = ttk.Button(self, text="Run", style="Primary.TButton")
         self.stop_button = ttk.Button(self, text="Stop", style="Secondary.TButton")
-        self.preview_button = ttk.Button(self, text="Preview", style="Secondary.TButton")
         self.settings_button = ttk.Button(self, text="Settings", style="Secondary.TButton")
         self.refresh_button = ttk.Button(self, text="Refresh", style="Secondary.TButton")
         self.help_button = ttk.Button(self, text="Help Mode: Off", style="Secondary.TButton")
@@ -85,7 +83,6 @@ class HeaderZone(ttk.Frame):
             [
                 self.run_button,
                 self.stop_button,
-                self.preview_button,
                 self.settings_button,
                 self.refresh_button,
                 self.help_button,
@@ -1263,7 +1260,6 @@ class MainWindowV2:
             for attr, btn in [
                 ("on_run_clicked", header.run_button),
                 ("on_stop_clicked", header.stop_button),
-                ("on_preview_clicked", header.preview_button),
                 ("on_open_settings", header.settings_button),
                 ("on_refresh_clicked", header.refresh_button),
                 ("on_help_clicked", header.help_button),
@@ -1616,44 +1612,6 @@ class MainWindowV2:
                     self.app_state.set_status_text(f"Pack applied: {pack_name}")
             except Exception:
                 pass
-
-    def open_advanced_editor(
-        self,
-        *,
-        initial_prompt: str = "",
-        initial_negative_prompt: str | None = None,
-        on_apply: Callable[[str, str | None], None] | None = None,
-    ) -> None:
-        if not getattr(self, "root", None):
-            return
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Advanced Prompt Editor")
-        dialog.transient(self.root)
-
-        def _handle_apply(prompt_value: str, negative_value: str | None = None) -> None:
-            if callable(on_apply):
-                try:
-                    on_apply(prompt_value, negative_value)
-                except Exception:
-                    pass
-            try:
-                dialog.destroy()
-            except Exception:
-                pass
-
-        editor = AdvancedPromptEditorV2(
-            dialog,
-            initial_prompt=initial_prompt,
-            initial_negative_prompt=initial_negative_prompt,
-            on_apply=_handle_apply,
-            on_cancel=lambda: dialog.destroy(),
-        )
-        editor.pack(fill=tk.BOTH, expand=True)
-        try:
-            dialog.grab_set()
-        except Exception:
-            pass
 
     def apply_prompt_text(self, prompt: str, negative_prompt: str | None = None) -> None:
         text = prompt or ""

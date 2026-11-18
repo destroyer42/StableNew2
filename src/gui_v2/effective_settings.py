@@ -218,7 +218,6 @@ def _job_rows(job: Any, context: EffectiveContext) -> dict[str, str]:
         "Output folder": _text(
             getattr(output_plan, "base_output_dir", None) or pipeline.get("output_dir")
         ),
-        "Output format": _text(pipeline.get("image_format"), "default"),
         "Output route": _text(route, "auto"),
     }
 
