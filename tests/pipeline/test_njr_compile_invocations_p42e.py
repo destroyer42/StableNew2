@@ -45,6 +45,7 @@ CORE_STEPS = (
 )
 PACK_STEPS = (
     "compile_model_policy",
+    "prepare_effective_config",
     "normalize_profile_owned_values",
     "compile_adetailer",
     "normalize_image_backend_options",
@@ -189,7 +190,8 @@ def test_the_prompt_pack_compile_policy_runs_once_per_prepared_prompt(
     assert (
         calls["policy.project_flat"] == loop_count
     )  # each record's flat payload is a projection of the one result
-    assert calls["core.prepare_effective_config"] == loop_count
+    assert calls["pack.prepare_effective_config"] == loop_count
+    assert calls["core.prepare_effective_config"] == 0
     assert calls["policy.evaluate"] <= len(records)
 
 

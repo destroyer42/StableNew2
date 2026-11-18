@@ -24,7 +24,7 @@ from src.image_backends.model_policy import (
     compile_model_policy,
     normalize_profile_owned_values,
 )
-from src.pipeline import config_contract_v26, njr_compiler
+from src.pipeline import config_contract_v26
 from src.pipeline.adetailer_profiles import FACE_PROMPT_FIELDS, compile_adetailer
 from src.pipeline.animatediff_retirement import refuse_enabled_animatediff
 from src.pipeline.compile_evidence import CompileEvidence
@@ -35,6 +35,7 @@ from src.pipeline.config_contract_v26 import (
     extract_secondary_motion_intent,
 )
 from src.pipeline.controlnet_compile import CompiledUnits, compile_units
+from src.pipeline.exact_profile_effective_config import prepare_effective_config
 from src.pipeline.global_prompt_policy import has_frozen_global_prompt_policy
 from src.pipeline.job_builder_v2 import JobBuilderV2, config_mapping, stage_prompt_info
 from src.pipeline.job_models_v2 import (
@@ -553,7 +554,7 @@ class PromptPackNormalizedJobBuilder:
             # projected onto it. ``_build_config_payload`` omits the profile's backend options, the txt2img section
             # and some profile keys; the projection restores them in ``workload.config``. No second policy application.
             record_config = prepared.policy.project_flat(
-                njr_compiler.prepare_effective_config(config_mapping(item.config)).config
+                prepare_effective_config(config_mapping(item.config)).config
             )
             prompt_info = stage_prompt_info(record_config)
             # The expansion numbers variants within one Matrix variant; combine them with the Matrix position.
