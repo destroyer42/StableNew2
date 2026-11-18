@@ -23,6 +23,7 @@ from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
+from src.utils.experiment_snapshot_ref import resolve_rows
 from tests.controller import test_generation_profile_integration_630 as profile_bench
 from tests.controller.test_generation_profile_integration_630 import (
     _add_to_draft,
@@ -56,7 +57,9 @@ def test_durable_controlled_evidence_to_next_ordinary_sqlite_job(
     writer = LearningRecordWriter(tmp_path / "ratings.jsonl")
     controller._learning_record_writer = writer
     controller._recommendation_engine = RecommendationEngine(
-        writer.records_path, policy_resolver=policy
+        writer.records_path,
+        policy_resolver=policy,
+        snapshot_lookup=repository.get_experiment_snapshot,
     )
     controller.execution_controller = LearningExecutionController(bench.state, service)
     controller.execution_controller.set_completion_callback(
@@ -100,7 +103,11 @@ def test_durable_controlled_evidence_to_next_ordinary_sqlite_job(
     artifacts = {ref: Path(ref).read_bytes() for v in bench.state.plan for ref in v.image_refs}
     for variant in bench.state.plan:
         controller.record_rating(variant.image_refs[0], 5 if variant.param_value == 6 else 2)
-    rows = [json.loads(line) for line in writer.records_path.read_text().splitlines()]
+    # Resolved once at the load boundary, as the publication coordinator does (LEARN-SNAPSHOT-914).
+    rows = resolve_rows(
+        [json.loads(line) for line in writer.records_path.read_text().splitlines()],
+        repository.get_experiment_snapshot,
+    )[0]
     ratings_bytes = writer.records_path.read_bytes()
     assert len(rows) == 3
     assert len({row["run_id"] for row in rows}) == 3
@@ -118,14 +125,20 @@ def test_durable_controlled_evidence_to_next_ordinary_sqlite_job(
     )
     restored.load_existing_ratings()
     assert restored.get_review_counts()["saved"] == 3
-    recs = RecommendationEngine(writer.records_path, policy_resolver=policy).recommend(
-        experiment.prompt_text, "txt2img", model=SDXL
-    )
+    recs = RecommendationEngine(
+        writer.records_path,
+        policy_resolver=policy,
+        snapshot_lookup=repository.get_experiment_snapshot,
+    ).recommend(experiment.prompt_text, "txt2img", model=SDXL)
     assert recs.automation_eligible
     assert recs.get_best_for_parameter("cfg_scale").recommended_value == 6
     summary = build_recommendation_summary(recs, mode="apply_with_confirm")
     assert "3 usable controlled ratings in 1 experiments" in summary.progress
-    proposal = publication.evaluate(rows, SDXL, experiment_id=experiment.experiment_id)
+    proposal = publication.evaluate(
+        rows,
+        SDXL,
+        experiment_id=experiment.experiment_id,
+    )
     assert proposal.settings == {"cfg_scale": 6}, (proposal.blockers, proposal.excluded)
     assert proposal.sample_count == 3
     with pytest.raises(ValueError, match="confirmation"):

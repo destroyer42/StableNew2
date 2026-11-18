@@ -41,6 +41,7 @@ from src.learning.preference_evidence import (
     summarize_preferences,
 )
 from src.learning.profile_publication import ProfilePublicationService, PublicationProposal
+from src.utils.experiment_snapshot_ref import SnapshotLookup
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,14 @@ def load_sources(
     records_path: Path | None,
     store: LearningExperimentStore | None,
     publication_service: ProfilePublicationService | None = None,
+    snapshot_lookup: SnapshotLookup | None = None,
 ) -> IntelligenceSources:
     """Read the rating log and saved experiments. Worker thread only; never writes."""
     return IntelligenceSources(
-        context, read_rating_log(records_path), load_experiments(store), publication_service
+        context,
+        read_rating_log(records_path, snapshot_lookup),
+        load_experiments(store),
+        publication_service,
     )
 
 

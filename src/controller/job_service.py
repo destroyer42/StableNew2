@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from datetime import datetime
 from threading import Lock
@@ -466,10 +466,10 @@ class JobService:
         self,
         records: list[NormalizedJobRecord] | tuple[NormalizedJobRecord, ...],
         policy: SubmissionPolicy | None = None,
+        experiment_snapshots: Mapping[str, str] | None = None,
     ) -> list[str]:
-        """Validate, then admit a complete NJR batch all-or-none (one repository transaction).
-        Admission failures leave no jobs durable/runnable/announced. Post-admission
-        startup errors are logged separately; admitted job IDs are still returned."""
+        """Validate, then admit an NJR batch and the ``experiment_snapshots`` (hash -> JSON) it refers to all-or-none in one
+        repository transaction; a failure admits/announces nothing, post-admission startup errors are only logged."""
         submission_policy = policy or SubmissionPolicy()
         batch = tuple(records)
         if not batch:
@@ -484,7 +484,7 @@ class JobService:
             if not ok:
                 raise ValueError(details.get("message", "Invalid normalized job record"))
         jobs = [self._job_from_njr(record, policy=submission_policy) for record in batch]
-        self.job_queue.submit_many(jobs)  # raises => nothing admitted or announced
+        self.job_queue.submit_many(jobs, experiment_snapshots=experiment_snapshots)  # raises => none admitted
         if hasattr(self, "_on_queue_activity") and self._on_queue_activity:
             self._on_queue_activity()
         for job in jobs:

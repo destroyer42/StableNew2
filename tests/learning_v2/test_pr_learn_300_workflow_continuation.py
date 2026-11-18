@@ -217,7 +217,7 @@ def test_confirmed_suggestion_submission_uses_selected_candidate_and_job_service
     controller.build_staged_curation_advancement_plan = build  # type: ignore[method-assign]
     submitted: list[object] = []
     service = SimpleNamespace(
-        submit_njrs=lambda jobs, _policy: submitted.extend(jobs) or ["queued-1"]
+        submit_njrs=lambda jobs, _policy, **_: submitted.extend(jobs) or ["queued-1"]
     )
     controller._get_job_service = lambda: service  # type: ignore[method-assign]
     patch = {

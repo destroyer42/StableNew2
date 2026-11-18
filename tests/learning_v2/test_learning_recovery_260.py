@@ -32,13 +32,14 @@ class RepositoryService:
     def register_callback(self, event, callback):
         self.listeners[event].append(callback)
 
-    def submit_njrs(self, records, policy):
+    def submit_njrs(self, records, policy, *, experiment_snapshots=None):
         self.calls.append(list(records))
         if self.mode == "raise_before":
             raise RuntimeError("admission refused")
         if self.mode not in {"empty", "partial"}:
             self.history_store.record_job_submissions(
-                [Job(record.job_id, _normalized_record=record) for record in records]
+                [Job(record.job_id, _normalized_record=record) for record in records],
+                experiment_snapshots=experiment_snapshots,
             )
         if self.mode in {"empty", "ambiguous"}:
             return []
@@ -690,8 +691,8 @@ def test_synchronous_completion_during_admission_cannot_be_downgraded(
     controller, service = planned(tmp_path, repository)
     submit = service.submit_njrs
 
-    def immediate(records, policy):
-        result = submit(records, policy)
+    def immediate(records, policy, **kwargs):
+        result = submit(records, policy, **kwargs)
         service.finish(
             transition(repository, records[0].job_id, JobStatus.COMPLETED, result_for(tmp_path))
         )
@@ -820,7 +821,10 @@ def test_malformed_completion_is_atomic_uncontrolled_and_repeatable(tmp_path, re
                 job.result = result
             return job
 
-        service.history_store = SimpleNamespace(get_job_model=malformed_lookup)
+        service.history_store = SimpleNamespace(
+            get_job_model=malformed_lookup,
+            get_experiment_snapshot=repository.get_experiment_snapshot,
+        )
     assert restored.restore_resume_state(copy.deepcopy(saved))
     first = restored.learning_state.plan[0]
     assert first.status == "uncontrolled"

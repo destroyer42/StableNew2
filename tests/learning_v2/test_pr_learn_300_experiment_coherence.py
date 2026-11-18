@@ -56,7 +56,7 @@ def test_admission_compiles_every_record_before_one_submit() -> None:
         lambda value: compiled.append(value) or SimpleNamespace(job_id=value),
     )
     job_service = SimpleNamespace(calls=[])
-    job_service.submit_njrs = lambda records, policy: job_service.calls.append((records, policy)) or [
+    job_service.submit_njrs = lambda records, policy, **_: job_service.calls.append((records, policy)) or [
         record.job_id for record in records
     ]
 
@@ -69,7 +69,7 @@ def test_admission_compiles_every_record_before_one_submit() -> None:
 def test_admission_does_not_submit_when_any_compile_fails() -> None:
     service = ExperimentAdmissionService()
     job_service = SimpleNamespace(calls=[])
-    job_service.submit_njrs = lambda records, policy: job_service.calls.append(records)
+    job_service.submit_njrs = lambda records, policy, **_: job_service.calls.append(records)
 
     with pytest.raises(ValueError, match="invalid variant"):
         service.compile_all(

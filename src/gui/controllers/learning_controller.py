@@ -137,6 +137,7 @@ from src.review.workflow_adapter import (
 )
 from src.state.output_routing import get_output_root, resolve_output_artifact_path
 from src.utils.config import ConfigManager
+from src.utils.experiment_snapshot_ref import STORAGE_JOB_REPOSITORY, STORAGE_KEY, by_reference
 from src.utils.image_metadata import (
     extract_embedded_metadata,
     resolve_model_vae_fields,
@@ -196,7 +197,10 @@ class LearningController:
         # Initialize recommendation engine if record writer is available
         self._recommendation_engine: RecommendationEngine | None = None
         if learning_record_writer:
-            self._recommendation_engine = RecommendationEngine(learning_record_writer.records_path)
+            self._recommendation_engine = RecommendationEngine(
+                learning_record_writer.records_path,
+                snapshot_lookup=self.lookup_experiment_snapshot,
+            )
 
         # PR-LEARN-012: Set up execution controller callbacks
         if self.execution_controller:
@@ -205,6 +209,25 @@ class LearningController:
             present = getattr(self.execution_controller, "set_presentation_callback", None)
             if callable(present):
                 present(self._on_variant_completion_published)
+
+    def lookup_experiment_snapshot(self, sha256: str) -> str | None:
+        """The stored body of one frozen experiment from the job repository (LEARN-SNAPSHOT-914), else ``None``.
+
+        Resolved at call time, so the rating readers built before the execution controller still see the repository.
+        Readers verify the hash through ``experiment_snapshot_ref.resolve_experiment_snapshot``.
+        """
+        repository = getattr(getattr(self, "execution_controller", None), "repository", None)
+        lookup = getattr(repository, "get_experiment_snapshot", None)
+        if not callable(lookup):
+            return None
+        try:
+            stored = lookup(sha256)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("Experiment snapshot lookup failed")
+            return None
+        return stored if isinstance(stored, str) else None
 
     def _build_execution_controller(self) -> Any | None:
         """Create the canonical learning execution controller when JobService is available."""
@@ -1440,15 +1463,38 @@ class LearningController:
                 "experiment_timestamp": str(snapshot.get("experiment_timestamp") or ""),
                 "config": final_config,
             },
-            "frozen_experiment": {
+            "frozen_experiment": self._frozen_job_block(
+                experiment=experiment, variant=variant, snapshot_json=snapshot_json, final_config=final_config
+            ),
+        }
+
+    @staticmethod
+    def _frozen_job_block(
+        *,
+        experiment: LearningExperiment,
+        variant: LearningVariant,
+        snapshot_json: str,
+        final_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        """LEARN-SNAPSHOT-914: the job carries the frozen snapshot by hash; its body is stored once by JobRepository."""
+        if not snapshot_json:
+            return {
                 "schema_version": 1,
                 "experiment_id": experiment.experiment_id,
                 "variant_id": variant.variant_id,
-                "snapshot_sha256": snapshot_digest(snapshot_json) if snapshot_json else "",
-                "snapshot": thaw_snapshot(snapshot_json) if snapshot_json else {},
+                "snapshot_sha256": "",
+                "snapshot": {},
+                "executed_config": final_config,
+            }
+        return by_reference(
+            {
+                "experiment_id": experiment.experiment_id,
+                "variant_id": variant.variant_id,
+                "snapshot_sha256": snapshot_digest(snapshot_json),
                 "executed_config": final_config,
             },
-        }
+            schema_version=2,
+        )
 
     def _validate_baseline_config(self, config: dict[str, Any]) -> tuple[bool, str]:
         """Validate baseline config structure and required fields.
@@ -2181,6 +2227,9 @@ class LearningController:
         executed_config = dict(target_variant.executed_config or {})
         snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
         snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
+        by_hash = bool(snapshot_json) and (
+            self.lookup_experiment_snapshot(snapshot_digest(snapshot_json)) == snapshot_json
+        )
         base_config = dict(executed_config or snapshot.get("baseline_config") or {})
         from src.learning.model_comparison import rating_classification
         from src.learning.prompt_slot_experiment import rating_metadata
@@ -2246,12 +2295,14 @@ class LearningController:
                     "variant_id": target_variant.variant_id or str(target_variant.param_value),
                     "variant_name": f"{experiment.variable_under_test}={target_variant.param_value}",
                 },
+                # LEARN-SNAPSHOT-914: schema 3 carries the snapshot by hash when JobRepository stores its body (every
+                # experiment admitted since this package); an experiment admitted earlier keeps the embedded schema 2.
                 "frozen_experiment": {
-                    "schema_version": 2,
+                    "schema_version": 3 if by_hash else 2,
                     "experiment_id": experiment.experiment_id,
                     "variant_id": target_variant.variant_id,
                     "snapshot_sha256": snapshot_digest(snapshot_json) if snapshot_json else "",
-                    "snapshot": snapshot,
+                    **({STORAGE_KEY: STORAGE_JOB_REPOSITORY} if by_hash else {"snapshot": snapshot}),
                     "executed_config": executed_config,
                     "controlled_evidence_valid": bool(
                         dict(getattr(target_variant, "execution_metadata", {}) or {}).get(

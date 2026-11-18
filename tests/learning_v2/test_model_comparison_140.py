@@ -386,7 +386,7 @@ def test_njr_audit_and_actual_atomic_jobservice_boundary(tmp_path, models):
     controller = controller_for(exp, baseline())
     snapshot = thaw_snapshot(exp.execution_snapshot_json)
     service = SimpleNamespace(
-        submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records])
+        submit_njrs=Mock(side_effect=lambda records, policy, **_: [r.job_id for r in records])
     )
     controller.pipeline_controller = object()
     controller.execution_controller = LearningExecutionController(

@@ -30,6 +30,7 @@ from src.learning.intelligence_contracts import (
 from src.learning.intelligence_sources import rating_identity, valid_rating
 from src.learning.learning_record import LearningRecord
 from src.learning.profile_publication import ControlledSample, controlled_sample, strong_match
+from src.utils.experiment_snapshot_ref import ExperimentSnapshotError, resolve_experiment_snapshot
 
 MIN_RATINGS_PER_VALUE = 3  # the same floor the recommendation engine uses for controlled ratings
 MIN_LEADING_MARGIN = (
@@ -70,7 +71,7 @@ def _overall(meta: Mapping[str, Any]) -> float | None:
 def _other_model(row: Mapping[str, Any], target: ResolvedModel) -> bool:
     try:
         saved = ModelIdentity.from_dict(
-            row["metadata"]["frozen_experiment"]["snapshot"]["model_identity"]
+            (resolve_experiment_snapshot(row["metadata"]) or {})["model_identity"]
         )
     except (KeyError, TypeError, ValueError, AttributeError):
         return False
@@ -81,9 +82,9 @@ def _other_model(row: Mapping[str, Any], target: ResolvedModel) -> bool:
 
 def _prompt_context(row: Mapping[str, Any]) -> str:
     try:
-        snapshot = row["metadata"]["frozen_experiment"]["snapshot"]
+        snapshot = resolve_experiment_snapshot(row["metadata"]) or {}
         prompt = snapshot["prompt_text"]
-    except (KeyError, TypeError):
+    except (KeyError, TypeError, ExperimentSnapshotError):
         return ""
     if not isinstance(prompt, str) or not prompt.strip():
         return ""

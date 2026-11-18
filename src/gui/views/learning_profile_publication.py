@@ -76,6 +76,9 @@ class LearningProfilePublicationPanel(ttk.Frame):
                 catalogs=self._catalogs,
                 show=self._show,
                 refresh_catalog=profile_controller.notify_changed,
+                snapshot_lookup=lambda sha: getattr(
+                    self._controller_getter(), "lookup_experiment_snapshot", lambda _sha: None
+                )(sha),
             )
             self._last_context = self._coordinator.context()
         return self._coordinator

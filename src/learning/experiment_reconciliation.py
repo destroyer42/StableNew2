@@ -13,6 +13,7 @@ from src.learning.experiment_freeze import normalize_actual_seed_vector, seed_ve
 from src.learning.lora_variant import validate_executed_lora
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.njr_core_v26 import thaw_json
+from src.utils.experiment_snapshot_ref import resolve_experiment_snapshot
 
 _logger = logging.getLogger(__name__)
 
@@ -71,7 +72,11 @@ def read_job_evidence(repository: Any, experiment: Any, variant: Any) -> JobEvid
         snapshot = str(experiment.execution_snapshot_json or "")
         if not snapshot or frozen["snapshot_sha256"] != snapshot_digest(snapshot):
             raise ValueError("saved preview conflicts with immutable NJR snapshot")
-        if snapshot_digest(freeze_snapshot(frozen["snapshot"])) != frozen["snapshot_sha256"]:
+        # Legacy NJRs embed the body; newer ones carry it by hash, resolved and verified from the repository.
+        body = resolve_experiment_snapshot(
+            metadata, getattr(repository, "get_experiment_snapshot", None)
+        )
+        if body is None or snapshot_digest(freeze_snapshot(body)) != frozen["snapshot_sha256"]:
             raise ValueError("immutable Learning snapshot digest is invalid")
         config = frozen["executed_config"]
         if not isinstance(config, dict):

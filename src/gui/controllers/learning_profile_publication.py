@@ -11,6 +11,7 @@ from typing import Any
 from src.generation_profiles.contract import GenerationProfile, ProfileError, ProfileRef
 from src.learning.learning_record import evidence_file_lock
 from src.learning.profile_publication import ProfilePublicationService, PublicationProposal
+from src.utils.experiment_snapshot_ref import SnapshotLookup, resolve_rows
 
 
 @dataclass(frozen=True)
@@ -49,8 +50,10 @@ class LearningProfilePublicationCoordinator:
         catalogs: Callable[[], dict[str, Any]],
         show: Callable[[str, Any], None],
         refresh_catalog: Callable[[], None],
+        snapshot_lookup: SnapshotLookup | None = None,
     ) -> None:
         self.service = service
+        self.snapshot_lookup = snapshot_lookup
         self.records_path = records_path
         self.runner = runner
         self.context = context
@@ -87,7 +90,9 @@ class LearningProfilePublicationCoordinator:
                     if not isinstance(row, dict):
                         raise ProfileError("Learning evidence contains a malformed record.")
                     rows.append(row)
-        return rows
+        # Ratings carrying their frozen experiment by hash resolve through the job repository (LEARN-SNAPSHOT-914);
+        # an unresolvable one stays unresolved and the domain rejects it as evidence.
+        return resolve_rows(rows, self.snapshot_lookup)[0]
 
     def review(self) -> None:
         if self._closed or self._publishing:
