@@ -106,6 +106,8 @@ def test_startup_shares_configured_output_and_visible_packs_without_opening_a_di
     app = Mock(_is_shutting_down=False, _packs_dir=packs, packs=[])
     app.app_state.resources = {}
     app._config_manager.load_settings.return_value = {"output_dir": str(output)}
+    phone = Mock()
+    monkeypatch.setattr(site_connection_dialog, "SitePhoneConnector", Mock(return_value=phone))
     dialog = site_connection_dialog.SiteConnectionDialog(Mock(), app)
     listener = Mock()
     registry = Mock()
@@ -113,11 +115,13 @@ def test_startup_shares_configured_output_and_visible_packs_without_opening_a_di
     monkeypatch.setattr(site_connection_dialog, "register_protocol", registry)
     monkeypatch.setattr(dialog, "_tick", Mock())
     dialog.start_default()
+    phone.start.assert_called_once_with()
     assert dialog.dialog is None
     session = listener.call_args.args[0]
     assert session.output_catalog is not None
     assert session.pack_catalog is not None
     dialog._timer = "pending"
     dialog.shutdown()
+    phone.close.assert_called_once_with()
     dialog.root.after_cancel.assert_not_called()
     listener.return_value.close.assert_called_once()

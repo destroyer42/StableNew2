@@ -51,6 +51,8 @@ SOURCES = frozenset(_SOURCE_ORDER["image"])
 _SCAN_FIRST = ("pipeline", "movie_clips", "svd", "learning", "reprocess", "video_eval")
 logger = logging.getLogger(__name__)
 _DOCUMENT_LIMIT = 512 * 1024
+# Catalog grants have separate identifiers but can write the same native record.
+_GALLERY_WRITE_LOCK = Lock()
 _IMAGE_TYPES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
 _ID = re.compile(r"[a-f0-9]{32}")
 _DIGEST = re.compile(r"[a-f0-9]{64}")
@@ -133,7 +135,6 @@ class OutputLibrary:
         self.require_active = require_active
         self.index = Index()
         self._lock = Lock()
-        self._write_lock = Lock()
         self._started = False
         self._scan_cancel: Event | None = None
 
@@ -595,7 +596,7 @@ class OutputLibrary:
         encoded = json.dumps(record, ensure_ascii=False, sort_keys=True).encode()
         if len(encoded) > _DOCUMENT_LIMIT:
             raise SiteOutputError("library_record_too_large")
-        with self._write_lock:
+        with _GALLERY_WRITE_LOCK:
             previous = self._document(path, record["schema"])
             if previous.get("operation") == operation:
                 if previous.get("operation_digest") == payload_hash:
@@ -603,7 +604,6 @@ class OutputLibrary:
                 raise SiteOutputError("library_conflict")
             if previous.get("revision", 0) != expected:
                 raise SiteOutputError("library_conflict")
-            self.require_active()
             inside(self.root, path.parent)
             if path.exists() or path.is_symlink():
                 inside(self.root, path)
@@ -616,6 +616,7 @@ class OutputLibrary:
                 "updated_at": now,
                 "created_at": previous.get("created_at", now),
             }
+            self.require_active()
             atomic_write_bytes(path, json.dumps(stamped, ensure_ascii=False, indent=2).encode())
             if self._document(path, record["schema"]) != stamped:
                 raise SiteOutputError("library_conflict")

@@ -586,6 +586,19 @@ contract. Rendering, dialogs and event handling remain in `src/gui/`.
 The MVP remains a single-process desktop application. Threaded work must marshal
 UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 
+The Windows Operator Site phone connector is an opt-in, application-owned HTTPS
+client. Sites supplies the signed-in browser identity or admits the backend with
+its Site-wide service credential. The Worker requires a separate enrolled host
+credential on the connector routes and signed-in visitor identity everywhere
+else. A browser's phone grant binds one Site owner and one cookie to a separate
+browse and rating policy. Presence belongs to the desktop process and expires
+within 30 seconds of its last heartbeat. Pairing has a 30-day absolute limit.
+The phone resumes the same grant with a renewable 15-minute browser lease.
+Windows stores the host and Site credentials and the approved folder identity
+in current-user DPAPI. Connector and legacy relay both use the existing native
+output readers and rating writers. Queue operations are outside the connector
+route set. [Operator Site runbook](runbooks/stablenew_operator_site.md)
+
 The queue stack is constructed in one place: `src/app/runtime_stack.py` builds the
 `JobRepository`, `JobQueue`, `SingleNodeJobRunner` and `JobService`, called from
 `JobExecutionController` and `PipelineController` in their existing order. The frozen
