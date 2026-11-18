@@ -49,6 +49,7 @@ class PhoneGrant:
     rating: bool
     pending: str = ""
     revoked: bool = False
+    native_review: bool = False
 
 
 class _Blob(ctypes.Structure):
@@ -117,6 +118,7 @@ class PhoneGrantStore:
                 and HOST_SECRET.fullmatch(grant.host_secret)
                 and (grant.pending == "" or IDENTIFIER.fullmatch(grant.pending))
                 and type(grant.rating) is bool
+                and type(grant.native_review) is bool
                 and type(grant.revoked) is bool
                 and Path(grant.folder.path).is_absolute()
                 and type(grant.folder.device) is int

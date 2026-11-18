@@ -8,7 +8,7 @@ import json
 import re
 import secrets
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
@@ -20,7 +20,13 @@ from urllib.parse import urlsplit
 
 from src.app.site_media_files import SiteOutputError
 from src.app.site_output_catalog import SiteOutputCatalog
-from src.app.site_output_routes import OUTPUT_CHUNK, OUTPUT_LIBRARY, OUTPUT_PLAY, OUTPUT_RATING
+from src.app.site_output_routes import (
+    NATIVE_REVIEW_ACTIONS,
+    OUTPUT_CHUNK,
+    OUTPUT_LIBRARY,
+    OUTPUT_PLAY,
+    OUTPUT_RATING,
+)
 from src.app.site_output_routes import post as post_output
 from src.app.site_output_routes import read as read_output
 from src.app.site_phone_credentials import (
@@ -35,7 +41,7 @@ from src.utils.thread_registry import get_thread_registry
 
 _ENDPOINT = "/api/stablenew/connector/"
 _HOST = urlsplit(SITE_ORIGIN).netloc
-_LIBRARY_READS = frozenset({"search", "thumbnails", "inspect", "albums", "album"})
+_LIBRARY_READS = frozenset({"search", "thumbnails", "inspect", "albums", "album", "review_results"})
 _RUN = re.compile(r"/v1/output/runs/(\d{8}_\d{6}_[A-Za-z0-9_-]{1,150})")
 _MEDIA = re.compile(r"/v1/output/media/([a-f0-9]{32})")
 _POLL_INTERVAL = 4.0
@@ -157,7 +163,13 @@ def _desktop_call(
             allowed_library = (
                 path == OUTPUT_LIBRARY
                 and isinstance(action, str)
-                and (action in _LIBRARY_READS or rating and action == "rate")
+                and (
+                    action in _LIBRARY_READS
+                    or rating
+                    and action in {"rate", "rating_sync"}
+                    or catalog.native_review is not None
+                    and action in NATIVE_REVIEW_ACTIONS
+                )
             )
             if not (
                 allowed_library
@@ -193,9 +205,18 @@ class _Claim:
 class SitePhoneConnector:
     """One polling actor and at most one native call. No Tk or queue dependency."""
 
-    def __init__(self, store: PhoneGrantStore | None = None, http: PhoneHttp | None = None) -> None:
+    def __init__(
+        self,
+        store: PhoneGrantStore | None = None,
+        http: PhoneHttp | None = None,
+        *,
+        review_outputs: Callable[[str], Sequence[str]] | None = None,
+        review_records: Path | None = None,
+    ) -> None:
         self._store = store if store is not None else PhoneGrantStore()
         self._http = http if http is not None else PhoneHttp()
+        self._review_outputs = review_outputs
+        self._review_records = review_records
         self._commands: Queue[Callable[[], None]] = Queue()
         self._stopping = Event()
         self._revoke_requested = Event()
@@ -254,7 +275,14 @@ class SitePhoneConnector:
         self._commands.put(command)
         return future
 
-    def enroll(self, enrollment: PhoneEnrollment, folder: Path, rating: bool) -> Future[None]:
+    def enroll(
+        self,
+        enrollment: PhoneEnrollment,
+        folder: Path,
+        rating: bool,
+        *,
+        native_review: bool = False,
+    ) -> Future[None]:
         future: Future[None] = Future()
 
         def command() -> None:
@@ -269,6 +297,7 @@ class SitePhoneConnector:
                     PhoneFolder.approve(folder),
                     rating,
                     pending=enrollment.challenge,
+                    native_review=native_review,
                 )
                 self._store.save(grant)
                 self._grant = grant
@@ -399,6 +428,7 @@ class SitePhoneConnector:
                     body={
                         "host": hashlib.sha256(grant.host_secret.encode()).hexdigest(),
                         "rating": grant.rating,
+                        **({"native_review": True} if grant.native_review else {}),
                     },
                 )
                 if approved.get("id") != grant.id:
@@ -458,7 +488,10 @@ class SitePhoneConnector:
         if self._presence is None or self._presence[0] != session:
             self._drop_presence()
             self._catalog = SiteOutputCatalog(
-                Path(grant.folder.path), active=lambda: self._live(session, grant.folder)
+                Path(grant.folder.path),
+                active=lambda: self._live(session, grant.folder),
+                review_outputs=self._review_outputs,
+                review_records=self._review_records if grant.native_review else None,
             )
         self._presence = session, started + ttl / 1000
         if not self._live(session, grant.folder):

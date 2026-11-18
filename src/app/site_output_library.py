@@ -11,7 +11,7 @@ import os
 import re
 import secrets
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,6 +29,7 @@ from src.app.site_media_files import (
     is_link,
     open_scoped,
 )
+from src.app.site_rating_sync import edit_stamp, field_conflicts, root_identity, was_applied
 from src.utils.atomic_io import atomic_write_bytes
 from src.utils.image_metadata import (
     ImageMetadataContractV26,
@@ -56,6 +57,7 @@ _GALLERY_WRITE_LOCK = Lock()
 _IMAGE_TYPES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
 _ID = re.compile(r"[a-f0-9]{32}")
 _DIGEST = re.compile(r"[a-f0-9]{64}")
+_RATING_RECEIPTS = "site_rating_receipts"
 
 
 def _key(relative: str) -> str:
@@ -145,7 +147,22 @@ class OutputLibrary:
             self.index = Index()
 
     def _id(self, relative: str) -> str:
-        return hashlib.sha256((self.scope + _key(relative)).encode()).hexdigest()[:32]
+        return self._scoped_id(_key(relative))
+
+    def _scoped_id(self, target: str) -> str:
+        return hashlib.sha256((self.scope + target).encode()).hexdigest()[:32]
+
+    def resolve_rating_target(self, target: object) -> str:
+        if not isinstance(target, str) or not _ID.fullmatch(target):
+            raise SiteOutputError("invalid_rating")
+        self.start()
+        identifier = self._scoped_id(target)
+        with self._lock:
+            if identifier in self.index.items:
+                return identifier
+            if self.index.scanning:
+                raise SiteOutputError("library_scanning")
+        raise SiteOutputError("unknown_media")
 
     def _metadata(
         self, path: Path, relative: str, mime: str, version: tuple[int, int, int, int]
@@ -590,17 +607,34 @@ class OutputLibrary:
         return expected, operation, hashlib.sha256(encoded).hexdigest()
 
     def _save(
-        self, path: Path, record: dict[str, Any], mutation: tuple[int, str, str]
+        self,
+        path: Path,
+        record: dict[str, Any],
+        mutation: tuple[int, str, str],
+        *,
+        base: dict[str, Any] | None = None,
+        stamp: dict[str, str] | None = None,
+        before_replace: Callable[[], Any] | None = None,
     ) -> dict[str, Any]:
         expected, operation, payload_hash = mutation
-        encoded = json.dumps(record, ensure_ascii=False, sort_keys=True).encode()
-        if len(encoded) > _DOCUMENT_LIMIT:
-            raise SiteOutputError("library_record_too_large")
         with _GALLERY_WRITE_LOCK:
             previous = self._document(path, record["schema"])
-            if previous.get("operation") == operation:
+            receipts = previous.get(_RATING_RECEIPTS, {})
+            if not isinstance(receipts, dict):
+                raise SiteOutputError("library_record_invalid")
+            if stamp is not None and base is not None:
+                if was_applied(receipts, operation, stamp):
+                    return self._public_rating(previous)
+                current = {"score": previous.get("score"), "notes": previous.get("notes", "")}
+                patch = {key: record[key] for key in base}
+                if conflicts := field_conflicts(current, base, patch):
+                    return {"conflict": conflicts, "revision": previous.get("revision", 0)}
+                record = {**record, **current, **patch}
+                receipts = {**receipts, operation: stamp}
+                expected = previous.get("revision", 0)
+            elif previous.get("operation") == operation:
                 if previous.get("operation_digest") == payload_hash:
-                    return previous
+                    return self._public_rating(previous)
                 raise SiteOutputError("library_conflict")
             if previous.get("revision", 0) != expected:
                 raise SiteOutputError("library_conflict")
@@ -616,11 +650,22 @@ class OutputLibrary:
                 "updated_at": now,
                 "created_at": previous.get("created_at", now),
             }
+            if receipts:
+                stamped[_RATING_RECEIPTS] = receipts
+            encoded = json.dumps(stamped, ensure_ascii=False, indent=2).encode()
+            if len(encoded) > _DOCUMENT_LIMIT:
+                raise SiteOutputError("library_record_too_large")
+            if before_replace is not None:
+                before_replace()
             self.require_active()
-            atomic_write_bytes(path, json.dumps(stamped, ensure_ascii=False, indent=2).encode())
+            atomic_write_bytes(path, encoded)
             if self._document(path, record["schema"]) != stamped:
                 raise SiteOutputError("library_conflict")
-            return stamped
+            return self._public_rating(stamped)
+
+    @staticmethod
+    def _public_rating(record: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in record.items() if key != _RATING_RECEIPTS}
 
     def inspect(self, identifier: object) -> dict[str, Any]:
         item, _raw, digest = self.image(identifier)
@@ -628,9 +673,32 @@ class OutputLibrary:
         return {
             "item": item.public(str(identifier)),
             "digest": digest,
-            "rating": rating,
+            "rating": self._public_rating(rating),
+            "rating_target": _key(item.path),
             "prompt": item.prompt,
         }
+
+    def review_results(
+        self, identifier: object, digest: object, resolve: Callable[[str], Sequence[str]]
+    ) -> list[dict[str, Any]]:
+        original, _raw, verified = self.image(identifier)
+        if verified != digest:
+            raise SiteOutputError("media_changed")
+        results = []
+        for output in resolve(verified)[:12]:
+            self.require_active()
+            path = Path(output).absolute()
+            if path == self.root / original.path or not path.is_relative_to(self.root):
+                continue
+            child_id = self._id(path.relative_to(self.root).as_posix())
+            try:
+                item, _bytes, child_digest = self.image(child_id)
+                if self.path_for(item) != path:
+                    continue
+            except (OSError, SiteOutputError):
+                continue
+            results.append({"item": item.public(child_id), "digest": child_digest})
+        return results
 
     def _read_rating(self, item: LibraryItem, digest: str) -> dict[str, Any]:
         try:
@@ -644,11 +712,7 @@ class OutputLibrary:
         if body.get("digest") != digest:
             raise SiteOutputError("media_changed")
         score, notes = body.get("score"), body.get("notes")
-        if (
-            (score is not None and (type(score) is not int or not 1 <= score <= 5))
-            or not isinstance(notes, str)
-            or len(notes) > 8000
-        ):
+        if not self._valid_score(score) or not self._valid_notes(notes):
             raise SiteOutputError("invalid_rating")
         record = {
             "schema": "stablenew.output-rating.v1",
@@ -658,6 +722,55 @@ class OutputLibrary:
         }
         path = self._folder("ratings", create=True) / f"{_key(item.path)}-{digest}.rating.json"
         return self._save(path, record, self._mutation(body))
+
+    @staticmethod
+    def _valid_score(value: object) -> bool:
+        return value is None or (type(value) is int and 1 <= value <= 5)
+
+    @staticmethod
+    def _valid_notes(value: object) -> bool:
+        return isinstance(value, str) and len(value) <= 8000
+
+    def sync_rating(self, body: dict[str, Any]) -> dict[str, Any]:
+        if body["root"] != root_identity(self.root):
+            raise SiteOutputError("output_folder_changed")
+        base, changes = body["base"], body["changes"]
+        validators = {"score": self._valid_score, "notes": self._valid_notes}
+        if (
+            not isinstance(base, dict)
+            or not isinstance(changes, dict)
+            or not changes
+            or base.keys() != changes.keys()
+            or not changes.keys() <= validators.keys()
+            or any(
+                not validators[key](value)
+                for fields in (base, changes)
+                for key, value in fields.items()
+            )
+            or type(body["revision"]) is not int
+            or body["revision"] < 0
+        ):
+            raise SiteOutputError("invalid_rating")
+        stamp = edit_stamp(
+            body["operation"],
+            body["actor_time"],
+            {key: value for key, value in body.items() if key != "scope"},
+        )
+        identifier = self.resolve_rating_target(body["target"])
+        item, _raw, digest = self.image(identifier)
+        if body["digest"] != digest:
+            raise SiteOutputError("media_changed")
+        record = {"schema": "stablenew.output-rating.v1", "sha256": digest, **changes}
+        self.require_active()
+        path = self._folder("ratings", create=True) / f"{_key(item.path)}-{digest}.rating.json"
+        return self._save(
+            path,
+            record,
+            (body["revision"], body["operation"], stamp["digest"]),
+            base=base,
+            stamp=stamp,
+            before_replace=lambda: self.path_for(item),
+        )
 
     def albums(self) -> list[dict[str, Any]]:
         try:

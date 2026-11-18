@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, Lock
@@ -14,7 +15,9 @@ from typing import Any
 
 from src.app.site_media_files import MEDIA_TYPES, checked_digest, inside, open_scoped
 from src.app.site_media_files import SiteOutputError as SiteOutputError
+from src.app.site_native_review import NativeImageReview
 from src.app.site_output_library import OutputLibrary
+from src.app.site_rating_sync import edit_stamp, field_conflicts, root_identity, was_applied
 from src.app.site_video_playback import VideoPlayback
 from src.video.video_eval_ratings_store import (
     ARTIFACT_COLUMN,
@@ -39,6 +42,7 @@ _MAX_MEDIA = 64 * 1024 * 1024
 _MAX_RUNS = 100
 _MAX_CELLS = 500
 _JUDGMENTS = set(RATING_COLUMNS) - {*KEY_COLUMNS, ARTIFACT_COLUMN}
+_RECEIPTS_COLUMN = "site_rating_receipts"
 
 
 @dataclass(frozen=True)
@@ -85,7 +89,14 @@ def _index(items: object, key: str) -> dict[str, dict[str, Any]]:
 class SiteOutputCatalog:
     """One grant for one output root. Public identifiers never directly resolve paths."""
 
-    def __init__(self, output_root: Path, *, active: Callable[[], bool] = lambda: True) -> None:
+    def __init__(
+        self,
+        output_root: Path,
+        *,
+        active: Callable[[], bool] = lambda: True,
+        review_outputs: Callable[[str], Sequence[str]] | None = None,
+        review_records: Path | None = None,
+    ) -> None:
         self._root = output_root.resolve(strict=True)
         if not self._root.is_dir():
             raise SiteOutputError("output_folder_required")
@@ -94,6 +105,10 @@ class SiteOutputCatalog:
         self._active = active
         self.scope = secrets.token_hex(16)
         self.library = OutputLibrary(self._root, self.scope, self.require_active)
+        self.review_outputs = review_outputs
+        self.native_review = (
+            NativeImageReview(self.library, review_records) if review_records is not None else None
+        )
         self.playback = VideoPlayback(self._root, self.require_active)
         self._media: dict[str, _Asset] = {}
         self._results: dict[str, _Asset] = {}
@@ -257,6 +272,7 @@ class SiteOutputCatalog:
         if loaded is not None:
             result.update(
                 scope=self.scope,
+                rating_root=root_identity(self._root),
                 revision=hashlib.sha256(loaded.raw or b"").hexdigest(),
                 built_at=_text(metrics.get("generated_at")),
                 report_stale=loaded.path.stat().st_mtime_ns
@@ -289,6 +305,9 @@ class SiteOutputCatalog:
             ARTIFACT_COLUMN,
             "source_sha256",
         }
+        durable = "sync" in body
+        if durable:
+            fields.add("sync")
         patch = body.get("judgments")
         if (
             set(body) != fields
@@ -296,7 +315,10 @@ class SiteOutputCatalog:
             or not patch
             or body.get("scope") != self.scope
             or type(body.get("rebind")) is not bool
-            or any(not isinstance(body.get(name), str) for name in fields - {"rebind", "judgments"})
+            or any(
+                not isinstance(body.get(name), str)
+                for name in fields - {"rebind", "judgments", "sync"}
+            )
             or any(
                 key not in _JUDGMENTS or not isinstance(value, str) or len(value) > 8000
                 for key, value in patch.items()
@@ -304,6 +326,10 @@ class SiteOutputCatalog:
             or parse_rating_row(patch).issues
         ):
             raise SiteOutputError("invalid_rating")
+        sync = body.get("sync")
+        stamp = None
+        if durable:
+            stamp = self._rating_stamp(run_id, body, sync)
         report = self.get_run(run_id, review=True)
         case_id, arm_id, job_id = (body[name] for name in KEY_COLUMNS)
         clip = next(
@@ -322,8 +348,8 @@ class SiteOutputCatalog:
             or clip["source_sha256"] != body["source_sha256"]
         ):
             raise SiteOutputError("media_changed")
-        self.verify_media(clip["clip"])
-        self.verify_media(clip["source"])
+        clip_check = self.verify_media(clip["clip"])
+        source_check = self.verify_media(clip["source"])
         loaded = self._ratings(run_id)
         revision = hashlib.sha256(loaded.raw or b"").hexdigest()
         key = (case_id, arm_id, job_id)
@@ -331,40 +357,91 @@ class SiteOutputCatalog:
         if previous is None:
             raise SiteOutputError("ratings_conflict")
         digest = body[ARTIFACT_COLUMN]
-        matches = previous.get(ARTIFACT_COLUMN) == digest and all(
-            previous.get(column, "") == value for column, value in patch.items()
-        )
-        if matches:
-            return {"revision": revision, "saved": True}
-        if revision != body["revision"]:
-            raise SiteOutputError("ratings_conflict")
+        extra = {}
+        if stamp is not None and isinstance(sync, dict):
+            receipts = self._read_rating_receipts(previous)
+            operation = sync["operation"]
+            if was_applied(receipts, operation, stamp):
+                return {"revision": revision, "saved": True}
+            current = {name: previous.get(name, "") for name in patch}
+            conflicts = field_conflicts(current, sync["base"], patch)
+            bound = previous.get(ARTIFACT_COLUMN, "")
+            if bound not in {sync["base_artifact_sha256"], digest}:
+                conflicts[ARTIFACT_COLUMN] = bound
+            if conflicts:
+                return {"revision": revision, "conflict": conflicts}
+            extra[_RECEIPTS_COLUMN] = json.dumps({**receipts, operation: stamp}, sort_keys=True)
+        else:
+            matches = previous.get(ARTIFACT_COLUMN) == digest and all(
+                previous.get(column, "") == value for column, value in patch.items()
+            )
+            if matches:
+                return {"revision": revision, "saved": True}
+            if revision != body["revision"]:
+                raise SiteOutputError("ratings_conflict")
         if previous.get(ARTIFACT_COLUMN) != digest and row_has_content(previous):
             if not body["rebind"] or set(patch) != _JUDGMENTS:
                 raise SiteOutputError("rereview_required")
         if parse_rating_row(patch, duration_seconds=clip["duration"]).issues:
             raise SiteOutputError("invalid_rating")
-        updated = {**previous, **patch, ARTIFACT_COLUMN: digest}
+        updated = {**previous, **patch, **extra, ARTIFACT_COLUMN: digest}
         rows = [
             updated if tuple(row[name] for name in KEY_COLUMNS) == key else row
             for row in loaded.rows
         ]
         try:
             header = output_header(loaded)
+            if durable and _RECEIPTS_COLUMN not in header:
+                header = (*header, _RECEIPTS_COLUMN)
             all_rows = (*rows, *loaded.keyless)
             expected = render_csv(header, all_rows).encode("utf-8")
+            if len(expected) > MAX_RATINGS_BYTES:
+                raise SiteOutputError("rating_store_full")
             write_ratings(
                 loaded,
                 header,
                 all_rows,
-                before_replace=self.require_active,
+                before_replace=lambda: self._confirm_rating_media(clip_check, source_check),
                 reader=self._read_ratings_file,
             )
         except RatingsFileError as exc:
-            raise SiteOutputError("ratings_conflict") from exc
+            raise SiteOutputError("rating_retry" if durable else "ratings_conflict") from exc
         saved = self._ratings(run_id)
         if saved.raw != expected:
-            raise SiteOutputError("ratings_conflict")
+            raise SiteOutputError("rating_retry" if durable else "ratings_conflict")
         return {"revision": hashlib.sha256(saved.raw or b"").hexdigest(), "saved": True}
+
+    def _rating_stamp(self, run_id: str, body: dict[str, Any], sync: Any) -> dict[str, str]:
+        if (
+            not isinstance(sync, dict)
+            or set(sync) != {"root", "base", "base_artifact_sha256", "operation", "actor_time"}
+            or not isinstance(sync["base"], dict)
+            or sync["base"].keys() != body["judgments"].keys()
+            or any(
+                not isinstance(value, str) or len(value) > 8000 for value in sync["base"].values()
+            )
+            or not isinstance(sync["base_artifact_sha256"], str)
+            or len(sync["base_artifact_sha256"]) > 64
+            or not _DIGEST.fullmatch(body["revision"])
+        ):
+            raise SiteOutputError("invalid_rating")
+        if sync["root"] != root_identity(self._root):
+            raise SiteOutputError("output_folder_changed")
+        return edit_stamp(
+            sync["operation"],
+            sync["actor_time"],
+            (run_id, {key: value for key, value in body.items() if key != "scope"}),
+        )
+
+    @staticmethod
+    def _read_rating_receipts(row: dict[str, str]) -> dict[str, Any]:
+        try:
+            receipts = json.loads(row.get(_RECEIPTS_COLUMN) or "{}")
+        except (ValueError, RecursionError) as exc:
+            raise SiteOutputError("ratings_unavailable") from exc
+        if not isinstance(receipts, dict):
+            raise SiteOutputError("ratings_unavailable")
+        return receipts
 
     def _asset(self, identifier: str) -> _Asset:
         with self._lock:
@@ -373,14 +450,27 @@ class SiteOutputCatalog:
             raise SiteOutputError("unknown_media")
         return asset
 
-    def verify_media(self, identifier: str) -> None:
+    def verify_media(self, identifier: str) -> tuple[Path, os.stat_result]:
         asset = self._asset(identifier)
         with open_scoped(self._root, asset.path) as stream:
+            version = os.fstat(stream.fileno())
             if stream.seek(0, 2) > 512 * 1024 * 1024:
                 raise SiteOutputError("media_too_large")
             stream.seek(0)
             if checked_digest(stream, size_limit=512 * 1024 * 1024) != asset.sha256:
                 raise SiteOutputError("media_changed")
+            return asset.path, version
+
+    def _confirm_rating_media(self, *checks: tuple[Path, os.stat_result]) -> None:
+        for path, version in checks:
+            current = self._inside(path).stat()
+            if (
+                not os.path.samestat(version, current)
+                or version.st_mtime_ns != current.st_mtime_ns
+                or version.st_size != current.st_size
+            ):
+                raise SiteOutputError("media_changed")
+        self.require_active()
 
     def open_video(self, identifier: str, *, library: bool) -> dict[str, object]:
         if not library:
