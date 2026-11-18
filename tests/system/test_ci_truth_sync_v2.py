@@ -285,6 +285,9 @@ def test_a_docs_edit_that_violates_current_ci_truth_is_detected(tmp_path: Path) 
         "docs/AI_MODEL_SELECTION.md",
         ".github/pull_request_template.md",
         "docs/CODEX_WORK_PACKAGE_TEMPLATE.md",
+        "tools/ci/mypy_baseline.json",
+        "tools/ci/ruff_ratchet_baseline.json",
+        "tools/ci/architecture_baseline.json",
     ):
         target = tmp_path / rel
         target.parent.mkdir(parents=True, exist_ok=True)
