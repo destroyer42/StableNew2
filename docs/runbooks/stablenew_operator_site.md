@@ -19,6 +19,42 @@ Site** is in the top toolbar beside **Readiness**.
    A hosted remote session lasts up to 15 minutes. Stop it from its Windows browser tab. A host without a heartbeat
    for 80 seconds stops accepting new remote requests.
 
+## Pair a phone for browserless review
+
+The private Site must have the guarded connector Worker deployed and the
+browserless hosted canary accepted before you install a Site service credential.
+On the paired PC, StableNew needs to be running. The phone can connect over
+Wi-Fi or cellular while the PC's browser is closed.
+
+1. Sign in to the private Site on the phone. In **Connect StableNew**, enter a
+   name under **Phone review** and request a pairing code. The code expires
+   after five minutes.
+2. On Windows, open **Operator Site → Phone review**. Enter the Site service
+   credential and the phone code. Check the displayed phone name, choose the
+   exact Output folder, and approve browse access. Choose **Also allow saving
+   ratings** to grant writes to the native video ratings CSV and gallery
+   rating records. Create, queue submission and album edits use the existing
+   browser workflow.
+3. Use **Output Library** or **Video Review** on the phone. After a lock or
+   network switch, the Site resumes the paired browser. A 15-minute browser
+   lease renews while the same pairing and Sites sign-in are valid. Pair
+   again after 30 days. Restarting StableNew allocates a new presence lease
+   under the same grant. Reopen a result or clip whose old link expired.
+4. Choose **Revoke phone** in StableNew to stop new native work for this device
+   immediately. StableNew saves the revocation locally and confirms it with
+   the Site when reachable. On a disconnect, the hosted presence and result
+   access expire within 30 seconds. A prior native rating may already have
+   committed, so check the item before retrying. A browser that lost its
+   device cookie or a replacement PC must pair again after revoking the old
+   grant on the original phone or PC.
+
+Windows protects the credentials and exact folder identity with current-user
+DPAPI under local application data. Use **Update credential** if the owner
+replaces the Site service credential. The credential belongs to the whole
+Site. Keep it in the Windows control and provision it only after the guarded
+Worker is live. During rollout, the separate **Connect via PC browser tab**
+flow remains available.
+
 ## Browse evals and submit PromptPacks
 
 - Under **Evaluate runs**, select **Find shared runs**, choose a report, then browse its clips and source images. Build the eval report in
