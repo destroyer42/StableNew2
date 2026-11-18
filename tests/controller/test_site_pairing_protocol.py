@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.app.site_pairing_protocol import SCHEME, TICKET_SECONDS, PairingTickets, handle_protocol
-from src.app.site_queue_bridge import SiteSession
+from src.app.site_queue_bridge import PAIR_SECONDS, SiteSession
 from src.gui import site_connection_dialog
 from tests.controller.test_site_queue_bridge import request
 
@@ -50,6 +50,50 @@ def test_site_claim_requires_origin_and_one_matching_fresh_ticket(tmp_path):
     tickets.offer(nonce)
     session.revoke()
     assert request(session, "POST", route)[0] == 409
+
+
+def test_desktop_activity_extends_only_authenticated_live_pairing(monkeypatch):
+    from src.app import site_queue_bridge
+
+    now = 30.0
+    monkeypatch.setattr(site_queue_bridge, "time", Mock(monotonic=lambda: now))
+    session = SiteSession()
+    original_expiry = session.expires_at
+    route = "/v1/operator-keepalive"
+    now += PAIR_SECONDS - 1
+    assert request(session, "POST", route, body=b"{}")[0] == 401
+    assert (
+        request(
+            session, "POST", route, body=b"{}", token=session.code, origin="https://other.invalid"
+        )[0]
+        == 403
+    )
+    assert (
+        request(session, "POST", route, body=b'{"unexpected":true}', token=session.code)[0] == 400
+    )
+    assert session.expires_at == original_expiry
+    assert request(session, "POST", route, body=b"{}", token=session.code)[0] == 204
+    assert session.expires_at == now + PAIR_SECONDS
+    now += 2
+    preview = request(session, "GET", "/v1/preview", token=session.code)
+    assert preview[0] == 200
+    assert preview[2]["desktop_keepalive"] is True
+    now = session.expires_at
+    assert request(session, "POST", route, body=b"{}", token=session.code)[0] == 401
+    assert session.expired
+
+
+def test_pairing_claim_starts_a_full_desktop_window(monkeypatch):
+    from src.app import site_queue_bridge
+
+    now = 30.0
+    monkeypatch.setattr(site_queue_bridge, "time", Mock(monotonic=lambda: now))
+    session = SiteSession(claim_ticket=lambda _nonce: True)
+    now += PAIR_SECONDS - 1
+    assert request(session, "POST", "/v1/operator-pair/" + "a" * 32)[0] == 200
+    assert session.expires_at == now + PAIR_SECONDS
+    session.revoke()
+    assert not session.renew_desktop_lease()
 
 
 def test_startup_shares_configured_output_and_visible_packs_without_opening_a_dialog(

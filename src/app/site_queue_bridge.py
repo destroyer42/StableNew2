@@ -43,6 +43,7 @@ _PREPARE = "/v1/prepare"
 _PREPARE_STATUS = "/v1/prepare-status"
 _RESULT = re.compile(r"/v1/results/([a-f0-9]{32})")
 _OPERATOR_PAIR = re.compile(r"/v1/operator-pair/([a-f0-9]{32})")
+_DESKTOP_KEEPALIVE = "/v1/operator-keepalive"
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,7 @@ class SiteSession:
         self.code = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + PAIR_SECONDS
         self._revoked = Event()
+        self._lease_lock = Lock()
         self._lock = Lock()
         self._preview: PreviewView | None = None
         self._reason: str = "open_an_image_preview"
@@ -96,10 +98,21 @@ class SiteSession:
 
     @property
     def expired(self) -> bool:
-        return self._revoked.is_set() or time.monotonic() >= self.expires_at
+        with self._lease_lock:
+            return self._revoked.is_set() or time.monotonic() >= self.expires_at
+
+    def renew_desktop_lease(self) -> bool:
+        """Extend a live loopback grant while its operator is using the desktop Site."""
+        with self._lease_lock:
+            now = time.monotonic()
+            if self._revoked.is_set() or now >= self.expires_at:
+                return False
+            self.expires_at = now + PAIR_SECONDS
+            return True
 
     def revoke(self) -> None:
-        self._revoked.set()
+        with self._lease_lock:
+            self._revoked.set()
         self.set_output_folder(None)
 
     def authorizes(self, value: str) -> bool:
@@ -201,10 +214,16 @@ class SiteSession:
         with self._lock:
             view = self._preview
             if view is None:
-                return {"state": "unavailable", "reason": self._reason, "jobs": []}
+                return {
+                    "state": "unavailable",
+                    "reason": self._reason,
+                    "jobs": [],
+                    "desktop_keepalive": True,
+                }
             return {
                 "state": "ready",
                 "preview_id": view.preview_id,
+                "desktop_keepalive": True,
                 **(
                     {
                         "preparation_id": view.preparation_id,
@@ -376,6 +395,7 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 ("GET", _PACKS),
                 ("GET", _PREPARE_STATUS),
                 ("POST", _PREPARE),
+                ("POST", _DESKTOP_KEEPALIVE),
             }
             legacy_output_read = method == "GET" and (
                 self.path == _OUTPUT_RUNS
@@ -503,7 +523,7 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
             if not self._authorized():
                 return
             media_route = output_post(self.path)
-            if self.path not in {_SUBMIT, _PREPARE} and not media_route:
+            if self.path not in {_SUBMIT, _PREPARE, _DESKTOP_KEEPALIVE} and not media_route:
                 self._reply(HTTPStatus.NOT_FOUND, {"error": "unknown_route"})
                 return
             lengths = self.headers.get_all("Content-Length") or []
@@ -523,6 +543,14 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 return
             try:
                 raw = self.rfile.read(length)
+                if self.path == _DESKTOP_KEEPALIVE:
+                    if raw != b"{}":
+                        self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
+                    elif session.renew_desktop_lease():
+                        self._reply(HTTPStatus.NO_CONTENT)
+                    else:
+                        self._reply(HTTPStatus.UNAUTHORIZED, {"error": "pairing_required"})
+                    return
                 if len(raw) != length:
                     raise ValueError("incomplete body")
                 if media_route:
@@ -547,9 +575,11 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
             elif session.claim_ticket is None:
                 self._reply(HTTPStatus.NOT_FOUND, {"error": "pairing_unavailable"})
-            elif session.expires_at - time.monotonic() < 20 or session.expired:
-                self._reply(HTTPStatus.CONFLICT, {"error": "pairing_pending"})
-            elif not session.claim_ticket(nonce) or session.expired:
+            elif (
+                session.expired
+                or not session.claim_ticket(nonce)
+                or not session.renew_desktop_lease()
+            ):
                 self._reply(HTTPStatus.CONFLICT, {"error": "pairing_pending"})
             else:
                 self._reply(HTTPStatus.OK, {"code": session.code})

@@ -13,8 +13,11 @@ Site** is in the top toolbar beside **Readiness**.
 3. To work from another device, click **Start remote session** in the paired PC browser. Keep that tab, the StableNew
    window and the PC online. Sign in to the same private Site on the other device and enter the separate remote code.
    Hosted requests are handled by the paired browser on the PC. The local StableNew pairing code stays on the PC.
-4. Stop the relay in the PC browser or close the StableNew pairing window when finished. A pairing lasts up to 15
-   minutes. A host without a heartbeat for 80 seconds stops accepting new remote requests.
+4. Active use in the Windows Site tab renews its desktop pairing. An idle desktop pairing expires about 15 minutes
+   after its final renewal. Brief loopback interruptions can recover while that pairing is still valid. Choose
+   **Reconnect StableNew** after the grant expires, StableNew restarts, or you disconnect from the desktop app.
+   A hosted remote session lasts up to 15 minutes. Stop it from its Windows browser tab. A host without a heartbeat
+   for 80 seconds stops accepting new remote requests.
 
 ## Browse evals and submit PromptPacks
 
