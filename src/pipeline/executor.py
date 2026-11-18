@@ -87,6 +87,7 @@ from src.prompting.prompt_splitter import split_prompt_chunks
 from src.prompting.prompt_types import PromptOptimizationPairResult
 from src.prompting.stage_policy_engine import StagePolicyEngine
 from src.refinement.prompt_patcher import apply_prompt_patch
+from src.utils.atomic_io import atomic_write_json
 from src.utils.embedding_prompt_utils import (
     is_invocable_embedding_name,
     render_embedding_invocation,
@@ -605,8 +606,7 @@ class Pipeline:
         if prompt_optimizer_v3_payload:
             metadata["prompt_optimizer_v3"] = dict(prompt_optimizer_v3_payload)
         manifest_path.parent.mkdir(exist_ok=True, parents=True)
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        atomic_write_json(manifest_path, metadata, indent=2, ensure_ascii=False)
         if prompt_optimizer_v3_payload:
             self._maybe_write_prompt_optimizer_v3_sidecar(
                 manifest_path=manifest_path,

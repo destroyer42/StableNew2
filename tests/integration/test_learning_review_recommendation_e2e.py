@@ -27,7 +27,7 @@ def _build_reprocess_controller() -> AppController:
     with patch("src.controller.app_controller.AppController.__init__", return_value=None):
         controller = AppController.__new__(AppController)
     controller.job_service = SimpleNamespace(
-        submit_njrs=Mock(side_effect=lambda njrs, _policy: [record.job_id for record in njrs])
+        submit_njrs=Mock(side_effect=lambda njrs, _policy, **_: [record.job_id for record in njrs])
     )
     controller._append_log = Mock()
     controller._api_client = Mock()

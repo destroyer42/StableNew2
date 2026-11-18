@@ -229,7 +229,7 @@ def test_operator_preview_to_run_is_frozen_and_admits_once(operator, monkeypatch
     )
     operator.controller._get_baseline_config = lambda: pytest.fail("live cards at Run")
     service = SimpleNamespace(
-        submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records])
+        submit_njrs=Mock(side_effect=lambda records, policy, **_: [r.job_id for r in records])
     )
     operator.controller.execution_controller = LearningExecutionController(
         operator.controller.learning_state, service

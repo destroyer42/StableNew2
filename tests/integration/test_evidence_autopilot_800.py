@@ -18,6 +18,7 @@ from src.learning.recommendation_engine import RecommendationEngine
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
+from src.utils.experiment_snapshot_ref import resolve_rows
 from tests.controller.test_job_service_unit import FakeRunner
 from tests.learning_v2.test_evidence_autopilot_800 import context as context_fixture
 from tests.learning_v2.test_profile_publication_660 import make_publication
@@ -102,7 +103,11 @@ def test_v2_steps_draft_preview_admission_restart_ratings_and_explicit_publicati
         for ref in variant.image_refs:
             controller.record_rating(ref, 5 if variant.param_value == 50 else 2)
     ratings_bytes = writer.records_path.read_bytes()
-    rows = [json.loads(line) for line in ratings_bytes.decode().splitlines()]
+    # Resolved once at the load boundary, as the publication coordinator does (LEARN-SNAPSHOT-914).
+    rows = resolve_rows(
+        [json.loads(line) for line in ratings_bytes.decode().splitlines()],
+        repository.get_experiment_snapshot,
+    )[0]
     assert len(rows) == 12
     store.save_session(
         display_name=state.current_experiment.name,
@@ -122,10 +127,16 @@ def test_v2_steps_draft_preview_admission_restart_ratings_and_explicit_publicati
     assert restored.get_review_counts()["saved"] == 12
     assert repository.count() == 2
     recommendations = RecommendationEngine(
-        writer.records_path, policy_resolver=lambda _name: context.target.policy
+        writer.records_path,
+        policy_resolver=lambda _name: context.target.policy,
+        snapshot_lookup=repository.get_experiment_snapshot,
     ).recommend("a lighthouse at dusk", "txt2img", model="test.safetensors")
     assert recommendations.get_best_for_parameter("steps").recommended_value == 50
-    proposal = publication.evaluate(rows, "test.safetensors", experiment_id=chosen.proposal_id)
+    proposal = publication.evaluate(
+        rows,
+        "test.safetensors",
+        experiment_id=chosen.proposal_id,
+    )
     assert proposal.settings == {"steps": 50}, (proposal.blockers, proposal.excluded)
     assert not publication.store.root.exists()
     with pytest.raises(ValueError, match="confirmation"):

@@ -219,13 +219,14 @@ def test_frozen_klein_lora_compiles_canonical_settings_and_ignores_live_model():
     assert record.workload.config["txt2img"]["vae"] == ""
     assert "<lora:adapter:0.4>" in record.positive_prompt
     from src.learning.value_identity import plain_value
+    from src.utils.experiment_snapshot_ref import resolve_experiment_snapshot
 
-    assert (
-        plain_value(
-            record.workload.metadata["frozen_experiment"]["snapshot"]["model_policy_context"]
-        )
-        == context
+    # LEARN-SNAPSHOT-914: the NJR carries the frozen snapshot by hash; it resolves to the preview's body.
+    assert "snapshot" not in record.workload.metadata["frozen_experiment"]
+    resolved = resolve_experiment_snapshot(
+        plain_value(record.workload.metadata), lambda _sha: experiment.execution_snapshot_json
     )
+    assert resolved["model_policy_context"] == context
 
 
 @pytest.mark.parametrize(

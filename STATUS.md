@@ -26,9 +26,8 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
   boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
 - Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,403 errors in
-  174 files), unformatted files (378), blind/silent excepts in `src` (BLE001 1,190, S110 467, S112 34), thread and layering
-  rules (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6), and the four
-  controller line ceilings.
+  174 files), unformatted files (378), blind/silent excepts in `src` (BLE001 1,187, S110 467, S112 34), thread and layering
+  rules (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6), plain truncating file writes outside `atomic_io` (non-atomic file writes 17; allowlist in `tools/ci/run_architecture_ratchets.py`), and the four controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
   Flaky tests are repaired or quarantined with an owner and expiry (`tests/quarantine/README.md`).
 
@@ -112,9 +111,9 @@ of the roadmap; where they conflict with this file, this file and the repository
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: inpainting/ControlNet (the local LoRA browser, history browser, Iterate from History, parent/child compare and Learning payoff are in).
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments). Decided: store it
-   once per experiment by hash, forward-only (an NJR contract change, its own PR). Open: backfilling existing rows, and whether to prune jobs
-   whose images and manifests were deleted (archive then delete, or delete), both only after the owner reads the output of
-   `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
+   once per experiment by hash, forward-only; implemented forward-only; backfill/prune still open (LEARN-SNAPSHOT-914: new Learning jobs and ratings carry `snapshot_sha256`, the body lives once in the job repository's `experiment_snapshots` table).
+   Open: backfilling existing rows, and whether to prune jobs whose images and manifests were deleted (archive then delete, or delete), both
+   only after the owner reads the output of `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
 10. Decided 2026-10-20 and implemented: Movie Clips assembly is a queued CPU `movie_assembly` job on the canonical path
    (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows are production video backends and Wan2.2
    TI2V-5B 1.2.0 is promoted; the frames-out 1.3.0 was promoted on 2026-10-21 after real acceptance runs.

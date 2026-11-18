@@ -16,6 +16,7 @@ from typing import Any, BinaryIO, NamedTuple
 from PIL import Image, PngImagePlugin
 
 from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.utils.atomic_io import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -368,9 +369,8 @@ def write_review_sidecar(
 ) -> PortableReviewMetadataWriteResult:
     sidecar_path = build_review_sidecar_path(image_path)
     try:
-        sidecar_path.write_text(
-            json.dumps({PORTABLE_REVIEW_KEY: payload}, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        atomic_write_json(
+            sidecar_path, {PORTABLE_REVIEW_KEY: payload}, indent=2, ensure_ascii=False
         )
         return PortableReviewMetadataWriteResult(
             success=True,

@@ -22,6 +22,7 @@ from src.api.webui_runtime_identity import (
     resolve_effective_webui_base_url,
 )
 from src.utils import LogContext, get_logger, log_with_ctx
+from src.utils.atomic_io import atomic_write_json
 from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
 from src.utils.managed_process import (
     ContainmentError,
@@ -80,8 +81,7 @@ def _save_webui_cache(cache: dict[str, Any]) -> None:
     """Save WebUI configuration to cache."""
     try:
         _WEBUI_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with _WEBUI_CACHE_FILE.open("w") as f:
-            json.dump(cache, f, indent=2)
+        atomic_write_json(_WEBUI_CACHE_FILE, cache, indent=2)
     except Exception:
         pass
 

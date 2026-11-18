@@ -279,10 +279,16 @@ def compile_variant(config, experiment):
 
 
 def evidence_context(metadata):
-    return dict(
-        (metadata.get("frozen_experiment") or {}).get("snapshot", {}).get("model_policy_context")
-        or {}
+    from src.utils.experiment_snapshot_ref import (
+        ExperimentSnapshotError,
+        resolve_experiment_snapshot,
     )
+
+    try:
+        snapshot = resolve_experiment_snapshot(metadata) or {}
+    except ExperimentSnapshotError:
+        snapshot = {}
+    return dict(snapshot.get("model_policy_context") or {})
 
 
 def negative_prompt_supported(controller, config, stage):

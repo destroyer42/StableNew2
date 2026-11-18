@@ -899,6 +899,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `embedding_scanner.py`: Compatibility projection from AssetRegistry; it owns no scan or cache
 - `error_envelope_v2.py`: Unified error envelope for structured errors across StableNew phases
 - `exceptions_v2.py`: Exception taxonomy for StableNew Unified Error Model
+- `experiment_snapshot_ref.py`: The one rule for a frozen Learning experiment snapshot carried by reference (LEARN-SNAPSHOT-914)
 - `file_access_log_v2_5_2025_11_26.py`: (no docstring)
 - `file_io.py`: File I/O utilities with UTF-8 support
 - `gpu_device_health.py`: Read-only host GPU evidence and the accelerator-fault vocabulary (PR-QUEUE-GPU-180)
@@ -915,7 +916,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `negative_helpers_v2.py`: Helper utilities for global prompt merging
 - `njr_identity.py`: The one identity of a stored NJR snapshot
 - `os_shell.py`: Open a file in the system viewer or reveal it in the file manager (PR-VID-UX-314)
-- `preferences.py`: Persistence helpers for GUI preferences and last-used settings
 - `process_container_v2.py`: OS-level process container helpers (job objects / cgroup v2) for StableNew
 - `process_inspector_v2.py`: Utilities for inspecting and describing Python processes
 - `process_observation.py`: Read-only snapshots of a bounded child's owned container; no lifecycle authority

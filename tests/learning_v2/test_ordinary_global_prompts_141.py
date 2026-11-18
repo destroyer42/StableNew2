@@ -123,7 +123,7 @@ def test_ui_frozen_source_and_atomic_run_use_preview_base(tmp_path, monkeypatch)
     ):
         monkeypatch.setattr(target, lambda *a, **kw: pytest.fail("Run reopened source"))
     service = SimpleNamespace(
-        submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records])
+        submit_njrs=Mock(side_effect=lambda records, policy, **_: [r.job_id for r in records])
     )
     controller.pipeline_controller = object()
     controller.execution_controller = LearningExecutionController(controller.learning_state, service)
@@ -277,7 +277,7 @@ def test_frozen_source_policy_variants_and_one_jobservice_admission(
     )
     exp.values = [999]
     service = SimpleNamespace(
-        submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records])
+        submit_njrs=Mock(side_effect=lambda records, policy, **_: [r.job_id for r in records])
     )
     controller.pipeline_controller = object()
     controller.execution_controller = LearningExecutionController(

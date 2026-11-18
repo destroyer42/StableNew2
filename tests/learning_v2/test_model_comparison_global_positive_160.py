@@ -271,7 +271,7 @@ def test_atomic_admission_through_the_job_service_boundary(tmp_path):
     exp = study(tmp_path, models=[SDXL, ZIMAGE], text=PROSE)
     controller = controller_for(exp, global_baseline())
     service = SimpleNamespace(
-        submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records])
+        submit_njrs=Mock(side_effect=lambda records, policy, **_: [r.job_id for r in records])
     )
     controller.pipeline_controller = object()
     controller.execution_controller = LearningExecutionController(controller.learning_state, service)

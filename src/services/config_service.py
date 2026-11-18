@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from src.utils.atomic_io import atomic_write_json
+
 
 class ConfigService:
     def __init__(self, packs_dir: Path, presets_dir: Path, lists_dir: Path):
@@ -32,8 +34,7 @@ class ConfigService:
 
     def save_pack_config(self, pack: str, cfg: dict) -> None:
         path = self._resolve_pack_path(pack)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
+        atomic_write_json(path, cfg, indent=2)
 
     def _resolve_list_path(self, name: str | Path) -> Path:
         candidate = Path(name)
@@ -53,8 +54,7 @@ class ConfigService:
         path = self._resolve_list_path(name)
         if path.exists() and not overwrite:
             raise FileExistsError(f"List {name} already exists.")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({"packs": packs}, f, indent=2)
+        atomic_write_json(path, {"packs": packs}, indent=2)
 
     def delete_list(self, name: str) -> None:
         path = self._resolve_list_path(name)

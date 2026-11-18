@@ -51,6 +51,7 @@ from src.learning.recommendation_engine import (
     recommendation_confidence,
 )
 from src.learning.variable_metadata import LEARNING_VARIABLES
+from src.utils.experiment_snapshot_ref import resolve_experiment_snapshot
 
 LIMITATION = (
     "These findings describe the tested prompts and frozen context. They do not establish "
@@ -193,7 +194,10 @@ class _Sample:
 def _sample(row: Mapping[str, Any], target: ResolvedModel) -> _Sample:
     meta = row["metadata"]
     frozen = meta["frozen_experiment"]
-    snapshot = frozen["snapshot"]
+    # The legacy embedded body, or the stored body by hash (verified on read).
+    snapshot = resolve_experiment_snapshot(meta)
+    if snapshot is None:
+        raise KeyError("snapshot")
     from src.learning.evidence_proposals import validate_proposal_snapshot
     from src.learning.setting_evidence import require_rating_proof
 

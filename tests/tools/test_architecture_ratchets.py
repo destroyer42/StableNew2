@@ -148,5 +148,87 @@ def test_ai_assist_relative_imports_that_leave_the_package_are_counted() -> None
 
 def test_the_ai_assist_rule_applies_only_to_ai_assist_and_the_package_is_clean() -> None:
     assert arch.scan_source("src/services/x.py", "from src.queue.job_queue import JobQueue\n") == {}
-    assert not [path for path in arch.collect() if path.startswith("src/ai_assist/")]
+    assert not [
+        path
+        for path, per in arch.collect().items()
+        if path.startswith("src/ai_assist/") and "ai_assist_forbidden_imports" in per
+    ]
     assert "ai_assist_forbidden_imports" in arch.RULES
+
+
+def test_a_truncating_text_write_is_counted_in_every_form() -> None:
+    source = (
+        "import json\n"
+        "from pathlib import Path\n"
+        "def f(path, data):\n"
+        "    with open(path, 'w', encoding='utf-8') as fh:\n"
+        "        json.dump(data, fh)\n"
+        "    with path.open('w') as fh:\n"
+        "        fh.write('x')\n"
+        "    with open(path, mode='w') as fh:\n"
+        "        fh.write('x')\n"
+        "    Path(path).write_text('x')\n"
+    )
+    assert arch.scan_source("src/services/x.py", source) == {"non_atomic_writes": 5}
+
+
+def test_reads_appends_binary_payloads_and_exclusive_creates_are_not_counted() -> None:
+    source = (
+        "def f(path, info, bundle):\n"
+        "    open(path)\n"
+        "    open(path, 'r')\n"
+        "    open(path, 'a')\n"
+        "    open(path, 'wb')\n"
+        "    path.open('wb')\n"
+        "    path.open('x')\n"
+        "    bundle.open(info)\n"
+        "    path.read_text()\n"
+        "    json.dumps({})\n"
+    )
+    assert arch.scan_source("src/services/x.py", source) == {}
+
+
+def test_atomic_io_and_the_allowlist_are_exempt_and_every_allowlist_entry_has_a_reason() -> None:
+    source = "def f(p):\n    p.write_text('x')\n"
+    assert arch.scan_source(arch.ATOMIC_IO_FILE, source) == {}
+    assert arch.NON_ATOMIC_WRITE_ALLOWLIST
+    for path, reason in arch.NON_ATOMIC_WRITE_ALLOWLIST.items():
+        assert (ROOT / path).is_file(), f"allowlisted file is gone: {path}"
+        assert reason.strip()
+        assert arch.scan_source(path, source) == {}
+
+
+def test_end_to_end_a_new_non_atomic_write_in_a_clean_module_fails_the_real_check() -> None:
+    probe = ROOT / "src" / "_store_atomic_913_probe.py"
+    probe.write_text(
+        "import json\n"
+        "def save(path, data):\n"
+        "    with open(path, 'w', encoding='utf-8') as handle:\n"
+        "        json.dump(data, handle)\n",
+        encoding="utf-8",
+    )
+    try:
+        problems = arch.compare(arch.collect(), arch.load_baseline())
+        assert any(
+            p.startswith("non_atomic_writes REGRESSION: src/_store_atomic_913_probe.py: 2 ")
+            for p in problems
+        ), problems
+    finally:
+        probe.unlink()
+
+
+def test_the_converted_stores_no_longer_contain_a_truncating_write() -> None:
+    converted = (
+        "src/utils/config.py",
+        "src/pipeline/last_run_store_v2_5.py",
+        "src/pipeline/executor.py",
+        "src/services/config_service.py",
+        "src/gui/prompt_pack_list_manager.py",
+        "src/video/svd_registry.py",
+        "src/video/comfy_workflow_backend.py",
+        "src/api/webui_process_manager.py",
+        "src/utils/image_metadata.py",
+    )
+    baseline = arch.load_baseline()
+    for path in converted:
+        assert "non_atomic_writes" not in baseline.get(path, {}), path

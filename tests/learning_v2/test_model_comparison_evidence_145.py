@@ -290,7 +290,7 @@ def test_frozen_run_makes_no_registry_scan_hash_or_policy_lookup_and_admits_once
     controller._get_baseline_config = lambda: pytest.fail("live cards at Run")
     controller._learning_policy_resolver = lambda _: pytest.fail("live policy at Run")
 
-    service = SimpleNamespace(submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records]))
+    service = SimpleNamespace(submit_njrs=Mock(side_effect=lambda records, policy, **_: [r.job_id for r in records]))
     controller.pipeline_controller = object()
     controller.execution_controller = LearningExecutionController(controller.learning_state, service)
     controller.run_plan()
