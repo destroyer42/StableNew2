@@ -18,6 +18,7 @@ from src.services.runtime_transition_service import (
     RuntimeTransitionCoordinator,
     RuntimeTransitionError,
 )
+from src.utils.atomic_io import atomic_write_json
 from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.comfy_healthcheck import wait_for_comfy_ready
@@ -1545,9 +1546,7 @@ class ComfyWorkflowVideoBackend:
         }
         payload.update(dict(provenance_extra or {}))
         payload.update(dict(manifest_extra or {}))
-        manifest_path.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        atomic_write_json(manifest_path, payload, indent=2, ensure_ascii=False)
         return manifest_path
 
 

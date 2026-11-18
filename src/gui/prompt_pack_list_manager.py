@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from src.state.workspace_paths import workspace_paths
+from src.utils.atomic_io import atomic_write_json
 
 
 class PromptPackListManager:
@@ -40,8 +41,7 @@ class PromptPackListManager:
         """Saves the current lists to the JSON file."""
         try:
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.file_path.open("w", encoding="utf-8") as f:
-                json.dump(self.lists, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.file_path, self.lists, indent=2, ensure_ascii=False)
             return True
         except OSError:
             return False

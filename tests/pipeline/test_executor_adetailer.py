@@ -43,7 +43,7 @@ def test_adetailer_dispatch_and_metadata_use_the_same_requested_seed(requested, 
             "images": ["result_b64"], "info": json.dumps({"seed": 987654}),
         }) as generate,
         patch("src.pipeline.executor.save_image_from_base64", return_value=True),
-        patch("src.pipeline.executor.json.dump") as write_manifest,
+        patch("src.pipeline.executor.atomic_write_json") as write_manifest,
         patch("builtins.open", MagicMock()),
     ):
         result = pipeline.run_adetailer(tmp_path / "input.png", "prompt", "negative", config,
@@ -52,8 +52,8 @@ def test_adetailer_dispatch_and_metadata_use_the_same_requested_seed(requested, 
     assert payload["seed"] == (-1 if requested is None else requested)
     assert result["requested_seed"] == result["seeds"]["original_seed"] == payload["seed"]
     assert result["actual_seed"] == result["seeds"]["final_seed"] == 987654
-    manifest = next(call.args[0] for call in write_manifest.call_args_list
-                    if call.args[0].get("stage") == "adetailer")
+    manifest = next(call.args[1] for call in write_manifest.call_args_list
+                    if call.args[1].get("stage") == "adetailer")
     assert manifest["requested_seed"] == payload["seed"] and manifest["actual_seed"] == 987654
     assert config == original_config
 

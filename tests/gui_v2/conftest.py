@@ -11,7 +11,6 @@ import pytest
 
 from src.services.config_service import ConfigService
 from src.utils.config import ConfigManager
-from src.utils.preferences import PreferencesManager
 
 DEFAULT_TXT2IMG_CFG = {
     "model": "sd_xl_base_1.0",
@@ -304,12 +303,10 @@ def gui_app_factory(monkeypatch: pytest.MonkeyPatch, tk_root: tk.Tk, tmp_path):
         )
 
         config_manager = config_manager_override or ConfigManager(str(presets_dir))
-        preferences = PreferencesManager(str(tmp_path / "prefs.json"))
 
         app = StableNewGUI(
             root=tk_root,
             config_manager=config_manager,
-            preferences=preferences,
             controller=controller_override,
             title="StableNew Test",
             geometry="1024x720",

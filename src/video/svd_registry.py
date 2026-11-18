@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.utils.atomic_io import atomic_write_json
 from src.utils.file_io import get_safe_filename
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import SVDResult
@@ -88,7 +88,7 @@ def write_svd_run_manifest(
         payload["portable_provenance"] = dict(portable_provenance_summary)
     if before_write is not None:
         before_write(manifest_path)
-    manifest_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic_write_json(manifest_path, payload, indent=2, ensure_ascii=False)
     return manifest_path
 
 

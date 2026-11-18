@@ -15,6 +15,11 @@ must have none, and an improvement must be locked in with ``--update``.
 * **ai_assist_forbidden_imports** - ``src/ai_assist`` importing anything under ``src`` except ``ai_assist``, ``utils`` and
   ``prompting`` (PR-AI-110): AI suggestions are advisory data, so the package may not reach the queue, repository, job
   service, runner, NJR core, backends or any GUI module. Unlike the others its baseline is zero and must stay zero.
+* **non_atomic_writes** - ``open(..., "w")``, ``.write_text(`` and ``json.dump(`` in ``src`` outside
+  ``src/utils/atomic_io.py`` and :data:`NON_ATOMIC_WRITE_ALLOWLIST` (STORE-ATOMIC-913): a plain truncate-then-write leaves a
+  torn or empty file when the host dies mid-write, so a persisted store goes through ``atomic_io``. A site that is
+  deliberately not atomic (an operator-chosen export, a file that already stages a temp file and replaces it, an
+  exclusive create) is allowlisted with its reason; every other remaining site is recorded debt that may only shrink.
 
 Pure ``ast`` (no imports of application code), so it is instant and identical on every platform.
 
@@ -52,12 +57,25 @@ UTILS_UPWARD_PACKAGES = frozenset(
     }
 )
 AI_ASSIST_ALLOWED_PACKAGES = frozenset({"ai_assist", "utils", "prompting"})
+ATOMIC_IO_FILE = "src/utils/atomic_io.py"
+#: Files exempt from ``non_atomic_writes`` and why. Add an entry only with a reason a reviewer can check; prefer converting
+#: the store to ``atomic_io`` over allowlisting it.
+NON_ATOMIC_WRITE_ALLOWLIST: dict[str, str] = {
+    "src/promptpacks/storage.py": "export to an operator-chosen path, not application state",
+    "src/learning/learning_analytics.py": "analytics exports to an operator-chosen path, not application state",
+    "src/learning/learning_record.py": "already writes a temp file and replaces it",
+    "src/services/persistence_worker.py": "already writes a temp file and replaces it",
+    "src/assets/registry.py": "already writes a temp file and replaces it",
+    "src/learning/probe_verdict.py": "exclusive create (mode x): a file that appeared meanwhile is never replaced",
+    "src/utils/cgroup_v2.py": "kernel cgroup control files, not persisted application state",
+}
 RULES = (
     "daemon_threads",
     "raw_threads",
     "utils_upward_imports",
     "controller_gui_imports",
     "ai_assist_forbidden_imports",
+    "non_atomic_writes",
 )
 
 
@@ -77,6 +95,42 @@ def _has_daemon_true(call: ast.Call) -> bool:
         kw.arg == "daemon" and isinstance(kw.value, ast.Constant) and kw.value.value is True
         for kw in call.keywords
     )
+
+
+def _is_write_open(call: ast.Call) -> bool:
+    """``open(path, "w"...)`` / ``path.open("w"...)`` with a literal text write mode (``mode=`` or positional).
+
+    Binary modes (``"wb"``) are payload and artifact writes (downloads, extracted archives), not state files."""
+
+    func = call.func
+    if isinstance(func, ast.Name) and func.id == "open":
+        positional = call.args[1:2]
+    elif isinstance(func, ast.Attribute) and func.attr == "open":
+        positional = call.args[:1] if call.args and _is_str(call.args[0]) else call.args[1:2]
+    else:
+        return False
+    candidates = list(positional) + [kw.value for kw in call.keywords if kw.arg == "mode"]
+    return any(
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and "w" in node.value
+        and "b" not in node.value
+        for node in candidates
+    )
+
+
+def _is_str(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def _is_non_atomic_write(call: ast.Call) -> bool:
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        if func.attr == "write_text":
+            return True
+        if func.attr == "dump" and isinstance(func.value, ast.Name) and func.value.id == "json":
+            return True
+    return _is_write_open(call)
 
 
 def _imported_src_packages(node: ast.AST) -> list[str]:
@@ -106,12 +160,15 @@ def scan_source(relative: str, source: str) -> dict[str, int]:
     in_utils = relative.startswith("src/utils/")
     in_controller = relative.startswith("src/controller/")
     in_ai_assist = relative.startswith("src/ai_assist/")
+    atomic_exempt = relative == ATOMIC_IO_FILE or relative in NON_ATOMIC_WRITE_ALLOWLIST
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             if _has_daemon_true(node):
                 counts["daemon_threads"] += 1
             if _is_thread_constructor(node) and relative != THREAD_REGISTRY_FILE:
                 counts["raw_threads"] += 1
+            if not atomic_exempt and _is_non_atomic_write(node):
+                counts["non_atomic_writes"] += 1
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             packages = _imported_src_packages(node)
             if in_utils and any(p in UTILS_UPWARD_PACKAGES for p in packages):

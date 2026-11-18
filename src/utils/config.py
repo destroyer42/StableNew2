@@ -10,7 +10,7 @@ from typing import Any
 
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.state.workspace_paths import workspace_paths
-from src.utils.atomic_io import atomic_write_json
+from src.utils.atomic_io import atomic_write_json, atomic_write_text
 
 DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
     "blurry, bad quality, distorted, ugly, malformed, nsfw, nude, naked, explicit, "
@@ -836,7 +836,7 @@ class ConfigManager:
                 prompt = text
             else:
                 self._global_negative_path.parent.mkdir(parents=True, exist_ok=True)
-                self._global_negative_path.write_text(prompt, encoding="utf-8")
+                atomic_write_text(self._global_negative_path, prompt)
         except Exception as exc:  # noqa: BLE001 - log and fall back to default
             logger.warning("Failed reading global negative prompt: %s", exc)
         self._global_negative_cache = prompt
@@ -848,7 +848,7 @@ class ConfigManager:
         text = (prompt or "").strip()
         try:
             self._global_negative_path.parent.mkdir(parents=True, exist_ok=True)
-            self._global_negative_path.write_text(text, encoding="utf-8")
+            atomic_write_text(self._global_negative_path, text)
             self._global_negative_cache = text
             logger.info("Saved global negative prompt (%s chars)", len(text))
             return True
@@ -884,7 +884,7 @@ class ConfigManager:
                     prompt = text
             else:
                 self._global_positive_path.parent.mkdir(parents=True, exist_ok=True)
-                self._global_positive_path.write_text(prompt, encoding="utf-8")
+                atomic_write_text(self._global_positive_path, prompt)
         except Exception as exc:  # noqa: BLE001 - log and fall back to default
             logger.warning("Failed reading global positive prompt: %s", exc)
         self._global_positive_cache = prompt
@@ -896,7 +896,7 @@ class ConfigManager:
         text = (prompt or "").strip()
         try:
             self._global_positive_path.parent.mkdir(parents=True, exist_ok=True)
-            self._global_positive_path.write_text(text, encoding="utf-8")
+            atomic_write_text(self._global_positive_path, text)
             self._global_positive_cache = text
             logger.info("Saved global positive prompt (%s chars)", len(text))
             return True
@@ -968,8 +968,7 @@ class ConfigManager:
             return
         try:
             LAST_RUN_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with LAST_RUN_PATH.open("w", encoding="utf-8") as fh:
-                json.dump(payload, fh, indent=2, ensure_ascii=False)
+            atomic_write_json(LAST_RUN_PATH, payload, indent=2, ensure_ascii=False)
             logger.info("Last run configuration written to %s", LAST_RUN_PATH)
         except Exception as exc:
             logger.warning("Failed to write last run configuration: %s", exc)

@@ -5,11 +5,21 @@
     "raw_threads": 9,
     "utils_upward_imports": 18,
     "controller_gui_imports": 6,
-    "ai_assist_forbidden_imports": 0
+    "ai_assist_forbidden_imports": 0,
+    "non_atomic_writes": 17
   },
   "counts": {
+    "src/ai_assist/runtime.py": {
+      "non_atomic_writes": 2
+    },
     "src/api/webui_process_manager.py": {
       "daemon_threads": 2
+    },
+    "src/conditioning/reference_map/providers.py": {
+      "non_atomic_writes": 1
+    },
+    "src/conditioning/reference_map/worker.py": {
+      "non_atomic_writes": 1
     },
     "src/controller/app_controller.py": {
       "daemon_threads": 1,
@@ -35,6 +45,18 @@
     "src/main.py": {
       "daemon_threads": 2
     },
+    "src/migrations/sqlite_job_importer.py": {
+      "non_atomic_writes": 1
+    },
+    "src/photo_optimize/migration.py": {
+      "non_atomic_writes": 2
+    },
+    "src/pipeline/video.py": {
+      "non_atomic_writes": 1
+    },
+    "src/prompting/prompt_optimizer_registry.py": {
+      "non_atomic_writes": 3
+    },
     "src/queue/single_node_runner.py": {
       "raw_threads": 1
     },
@@ -54,10 +76,12 @@
     },
     "src/utils/diagnostics_bundle_v2.py": {
       "raw_threads": 1,
-      "utils_upward_imports": 2
+      "utils_upward_imports": 2,
+      "non_atomic_writes": 1
     },
     "src/utils/file_io.py": {
-      "utils_upward_imports": 2
+      "utils_upward_imports": 2,
+      "non_atomic_writes": 1
     },
     "src/utils/gpu_device_health.py": {
       "daemon_threads": 1,
@@ -68,6 +92,9 @@
     },
     "src/utils/image_metadata.py": {
       "utils_upward_imports": 1
+    },
+    "src/utils/logger.py": {
+      "non_atomic_writes": 2
     },
     "src/utils/managed_process.py": {
       "daemon_threads": 1
@@ -89,6 +116,9 @@
     },
     "src/utils/watchdog_v2.py": {
       "utils_upward_imports": 1
+    },
+    "src/video/motion_conversion/conversion_service.py": {
+      "non_atomic_writes": 2
     }
   }
 }

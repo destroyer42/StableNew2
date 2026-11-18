@@ -118,6 +118,7 @@ def _ratchet_root(tmp_path: Path, *, mypy_errors: int = 1403, line: str | None =
                     "raw_threads": 9,
                     "utils_upward_imports": 18,
                     "controller_gui_imports": 6,
+                    "non_atomic_writes": 17,
                 }
             }
         ),
@@ -126,7 +127,7 @@ def _ratchet_root(tmp_path: Path, *, mypy_errors: int = 1403, line: str | None =
     text = line or (
         "- Ratchets only allow recorded debt to shrink: whole-`src` strict mypy (1,403 errors in\n"
         "  2 files), unformatted files (378), excepts (BLE001 1,213, S110 479, S112 35), threads\n"
-        "  (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6).\n"
+        "  (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6, non-atomic file writes 17).\n"
         "- Next bullet.\n"
     )
     return _status_root(tmp_path, text)
