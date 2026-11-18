@@ -811,9 +811,10 @@ class _Journey:
             shown_params == ["lora_strength"] and self.config.lora_name in shown,
             f"review panel recommendation parameters={shown_params} text={shown[:300]!r}",
         )
-        engine_set = RecommendationEngine(self.ws.records_path).recommend(
-            self.prompt, "txt2img", model=self.ev.summary["model"]
-        )
+        engine_set = RecommendationEngine(
+            self.ws.records_path,
+            snapshot_lookup=learning.learning_controller.lookup_experiment_snapshot,
+        ).recommend(self.prompt, "txt2img", model=self.ev.summary["model"])
         engine_params = {r.parameter_name: r.recommended_value for r in engine_set.recommendations}
         self.check(
             ph,

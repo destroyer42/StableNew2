@@ -119,14 +119,17 @@ class JobQueue:
     def submit(self, job: Job) -> None:
         self.submit_many([job])
 
-    def submit_many(self, jobs: Iterable[Job]) -> None:
+    def submit_many(
+        self, jobs: Iterable[Job], *, experiment_snapshots: Mapping[str, str] | None = None
+    ) -> None:
         """Admit a batch all-or-none: durable commit first, then ONE projection step.
 
         The repository commits the whole batch in a single transaction.  If that raises, nothing
         was added to the runnable projection and no state change is announced.  Only after the
         commit are all new jobs made runnable together under the queue lock, so a worker can never
         observe a partially projected batch. Admissions serialize durable commit and projection
-        together, preserving repository FIFO order across concurrent callers.
+        together, preserving repository FIFO order across concurrent callers. ``experiment_snapshots``
+        (hash -> canonical JSON) are stored once in the same repository transaction (LEARN-SNAPSHOT-914).
         """
 
         batch = list(jobs)
@@ -134,7 +137,12 @@ class JobQueue:
             return
         # Keep the projection lock free for repository observers that read the queue.
         with self._admission_lock:
-            self._repository.record_job_submissions(batch)
+            if experiment_snapshots:
+                self._repository.record_job_submissions(
+                    batch, experiment_snapshots=experiment_snapshots
+                )
+            else:
+                self._repository.record_job_submissions(batch)
             for job in batch:
                 job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
             with self._lock:

@@ -112,9 +112,9 @@ of the roadmap; where they conflict with this file, this file and the repository
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: inpainting/ControlNet (the local LoRA browser, history browser, Iterate from History, parent/child compare and Learning payoff are in).
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments). Decided: store it
-   once per experiment by hash, forward-only (an NJR contract change, its own PR). Open: backfilling existing rows, and whether to prune jobs
-   whose images and manifests were deleted (archive then delete, or delete), both only after the owner reads the output of
-   `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
+   once per experiment by hash, forward-only; implemented forward-only; backfill/prune still open (LEARN-SNAPSHOT-914: new Learning jobs and ratings carry `snapshot_sha256`, the body lives once in the job repository's `experiment_snapshots` table).
+   Open: backfilling existing rows, and whether to prune jobs whose images and manifests were deleted (archive then delete, or delete), both
+   only after the owner reads the output of `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
 10. Decided 2026-10-20 and implemented: Movie Clips assembly is a queued CPU `movie_assembly` job on the canonical path
    (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows are production video backends and Wan2.2
    TI2V-5B 1.2.0 is promoted; the frames-out 1.3.0 was promoted on 2026-10-21 after real acceptance runs.

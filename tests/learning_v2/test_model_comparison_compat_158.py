@@ -173,7 +173,7 @@ def test_run_admits_all_arms_once_after_independent_exact_profile_validation(tmp
     exp = study(tmp_path, models=[SDXL, ZIMAGE])
     controller = controller_for(exp, shared_baseline())
     service = SimpleNamespace(
-        submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records])
+        submit_njrs=Mock(side_effect=lambda records, policy, **_: [r.job_id for r in records])
     )
     controller.pipeline_controller = object()
     controller.execution_controller = LearningExecutionController(controller.learning_state, service)

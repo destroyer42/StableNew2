@@ -22,6 +22,12 @@ from typing import Any, TypedDict
 from src.learning.evidence_revision import evidence_revision
 from src.learning.learning_record import DISPOSITION_SOFT_SCORES, current_rating_revisions
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
+from src.utils.experiment_snapshot_ref import (
+    ExperimentSnapshotError,
+    SnapshotLookup,
+    resolve_experiment_snapshot,
+    resolve_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +147,14 @@ class RecommendationSet:
         return [rec.to_dict() for rec in self.recommendations]
 
 
+def _resolved_snapshot(metadata: dict[str, Any]) -> dict[str, Any] | None:
+    """The record's frozen experiment through the one resolver; an unresolvable one is no snapshot (not evidence)."""
+    try:
+        return resolve_experiment_snapshot(metadata)
+    except ExperimentSnapshotError:
+        return None
+
+
 class RecommendationEngine:
     """Analyzes learning records to provide parameter recommendations.
 
@@ -148,10 +162,21 @@ class RecommendationEngine:
     for different prompts and pipeline stages.
     """
 
-    def __init__(self, records_path: str | os.PathLike[str], *, policy_resolver=None) -> None:
-        """Initialize with path to learning records JSONL file."""
+    def __init__(
+        self,
+        records_path: str | os.PathLike[str],
+        *,
+        policy_resolver=None,
+        snapshot_lookup: SnapshotLookup | None = None,
+    ) -> None:
+        """Initialize with path to learning records JSONL file.
+
+        ``snapshot_lookup`` resolves ratings that carry their frozen experiment by hash (LEARN-SNAPSHOT-914); without it
+        such ratings are not evidence.
+        """
         self.records_path = Path(records_path)
         self._policy_resolver = policy_resolver
+        self._snapshot_lookup = snapshot_lookup
         self._cache: dict[str, Any] | None = None
         self._cache_timestamp: float = 0.0
         self._cache_mtime: float = 0.0
@@ -342,6 +367,14 @@ class RecommendationEngine:
             logger.error(f"Failed to load records from {self.records_path}: {e}")
             return []
 
+        records, unavailable, altered = resolve_rows(records, self._snapshot_lookup)
+        if altered:
+            logger.error(
+                "%d rating(s) refer to a stored experiment snapshot that fails hash verification; not evidence",
+                altered,
+            )
+        if unavailable:
+            logger.warning("%d rating(s) refer to an experiment snapshot that is not stored; not evidence", unavailable)
         return records
 
     @staticmethod
@@ -432,8 +465,9 @@ class RecommendationEngine:
                 "prompt_model_matrix",
                 "compatibility_probe",
             )
+            snapshot = _resolved_snapshot(metadata)
             if (metadata.get("study_type") in excluded_studies or
-                ((metadata.get("frozen_experiment") or {}).get("snapshot") or {}).get("study_type") in excluded_studies):
+                (snapshot or {}).get("study_type") in excluded_studies):
                 continue
             record_kind = str(metadata.get("record_kind") or "").strip()
             if record_kind and record_kind not in {
@@ -459,7 +493,7 @@ class RecommendationEngine:
                 record_kind == "learning_experiment_rating"
                 and experiment_id
                 and isinstance(frozen, dict)
-                and isinstance(frozen.get("snapshot"), dict)
+                and isinstance(snapshot, dict)
                 and isinstance(frozen.get("executed_config"), dict)
                 and frozen.get("controlled_evidence_valid", True) is True
                 and str(metadata.get("variable_under_test") or "").strip()

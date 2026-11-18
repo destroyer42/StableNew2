@@ -15,6 +15,7 @@ from src.learning.evidence_intelligence import assess, load_sources
 from src.learning.experiment_store import LearningExperimentStore
 from src.learning.intelligence_contracts import IntelligenceReport, NextAction, StaleActionError
 from src.learning.profile_publication import ProfilePublicationService
+from src.utils.experiment_snapshot_ref import SnapshotLookup
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class NextTestServices:
     records_path: Path | None
     store: LearningExperimentStore | None
     publication: ProfilePublicationService | None
+    snapshot_lookup: SnapshotLookup | None = None
 
 
 def capture_services(owner: Any) -> NextTestServices:
@@ -34,6 +36,7 @@ def capture_services(owner: Any) -> NextTestServices:
         Path(records) if records else None,
         getattr(owner, "experiment_store", None),
         ProfilePublicationService(service.store, service) if service is not None else None,
+        getattr(controller, "lookup_experiment_snapshot", None),
     )
 
 
@@ -46,6 +49,7 @@ def assess_model(
             records_path=services.records_path,
             store=services.store,
             publication_service=services.publication,
+            snapshot_lookup=services.snapshot_lookup,
         )
     )
 

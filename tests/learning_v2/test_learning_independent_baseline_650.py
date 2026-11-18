@@ -67,7 +67,7 @@ class Bench:
             self.controller.app_state = SimpleNamespace(resources=resources)
         self.service = SimpleNamespace(
             submit_njrs=Mock(
-                side_effect=lambda records, policy_: [record.job_id for record in records]
+                side_effect=lambda records, policy_, **_: [record.job_id for record in records]
             )
         )
         self.controller.pipeline_controller = object()

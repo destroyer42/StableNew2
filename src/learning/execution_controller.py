@@ -26,6 +26,7 @@ from src.learning.experiment_reconciliation import (
     unresolved,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.utils.experiment_snapshot_ref import snapshot_references, snapshot_sha256
 
 _logger = logging.getLogger(__name__)
 
@@ -42,6 +43,29 @@ class LearningJobContext:
 
 class LearningAdmissionError(RuntimeError):
     """An unconfirmed response, with repository truth retained for reconciliation."""
+
+
+def experiment_snapshot_bodies(
+    records: list[NormalizedJobRecord] | tuple[NormalizedJobRecord, ...], experiment: Any
+) -> dict[str, str]:
+    """The frozen experiment body each by-reference record needs, keyed by hash (LEARN-SNAPSHOT-914).
+
+    Only the experiment's own canonical snapshot can be supplied; a record referring to any other hash must already be
+    stored (a replay), and the repository refuses the whole batch otherwise.
+    """
+
+    snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
+    if not snapshot_json:
+        return {}
+    refs = snapshot_references(
+        getattr(getattr(record, part, None), "metadata", None)
+        for record in records
+        for part in ("workload", "provenance")
+    )
+    if not refs:
+        return {}
+    digest = snapshot_sha256(snapshot_json)
+    return {digest: snapshot_json} if digest in refs else {}
 
 
 class LearningExecutionController:
@@ -381,7 +405,13 @@ class LearningExecutionController:
                 self._validating.add(record.job_id)
             failure = None
             try:
-                returned = self.job_service.submit_njrs(list(records), SubmissionPolicy())
+                bodies = experiment_snapshot_bodies(records, experiment)
+                if bodies:
+                    returned = self.job_service.submit_njrs(
+                        list(records), SubmissionPolicy(), experiment_snapshots=bodies
+                    )
+                else:
+                    returned = self.job_service.submit_njrs(list(records), SubmissionPolicy())
                 if not isinstance(returned, (list, tuple)):
                     raise LearningAdmissionError("JobService returned no valid admission ID list")
                 ids = [str(value) for value in (returned or [])]

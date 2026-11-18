@@ -202,11 +202,11 @@ def test_partial_or_ambiguous_submission_stops_without_retry(
     submit = env.service.submit_njrs
     calls = []
 
-    def fault(records, policy):
+    def fault(records, policy, **kw):
         calls.append(records)
         if len(calls) == 2:
             if mode == "lost_response":
-                submit(records, policy)
+                submit(records, policy, **kw)
             if mode == "unknown":
                 monkeypatch.setattr(
                     env.repository,
@@ -214,7 +214,7 @@ def test_partial_or_ambiguous_submission_stops_without_retry(
                     lambda _id: (_ for _ in ()).throw(RuntimeError("repository unavailable")),
                 )
             raise RuntimeError("synthetic response failure")
-        return submit(records, policy)
+        return submit(records, policy, **kw)
 
     monkeypatch.setattr(env.service, "submit_njrs", fault)
     outcome = admit(env, batch)
@@ -241,8 +241,8 @@ def test_completion_during_admission_and_visible_switch_keeps_every_mapping(batc
     submit = env.service.submit_njrs
     entered = []
 
-    def complete_inside(records, policy):
-        ids = submit(records, policy)
+    def complete_inside(records, policy, **kw):
+        ids = submit(records, policy, **kw)
         if not entered:
             entered.append(True)
             terminal(env, batch.experiments[0])
@@ -415,8 +415,8 @@ def test_last_draft_edited_during_admission_is_preserved(batch_env, monkeypatch)
     submit = env.service.submit_njrs
     edited = []
 
-    def edit_after_first(records, policy):
-        ids = submit(records, policy)
+    def edit_after_first(records, policy, **kw):
+        ids = submit(records, policy, **kw)
         payload = env.store.load_session(env.ids[1])
         payload["current_experiment"]["description"] = "operator edit during admission"
         env.store.save_session(display_name="edited", payload=payload, experiment_id=env.ids[1])
