@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-771 of 926 modules have a docstring.
+773 of 928 modules have a docstring.
 
 ## src/
 
@@ -67,8 +67,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `site_phone_admission.py`: Prepare and admit one explicitly reviewed phone Preview through the native services
 - `site_phone_connector.py`: App-owned outbound transport for a locally enrolled phone browser
 - `site_phone_credentials.py`: Windows-local persistence for a single Operator Site phone grant
+- `site_phone_eval.py`: Scoped access to the desktop's native video evaluation report builder
 - `site_phone_preview_host.py`: Capture native inputs on the GUI thread and run the existing Preview compilers off it
 - `site_phone_queue.py`: Phone-scoped projections over the native queue and History repository
+- `site_phone_video.py`: Translate bounded phone intent into the native Video Workflow and eval planners
 - `site_queue_bridge.py`: Loopback transport for the operator Site
 - `site_rating_sync.py`: Idempotent edits carried by the existing Site rating transports
 - `site_video_playback.py`: Bounded video snapshots for range playback over the existing Site relay
