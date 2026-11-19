@@ -18,6 +18,7 @@ from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.video.video_eval_run import (
     EVAL_OUTPUT_FOLDER,
     BuiltEvalJob,
+    EvalJobPlan,
     VideoEvalRunService,
 )
 from src.video.video_eval_suite import (
@@ -259,7 +260,15 @@ class PhoneVideo:
             identified = replace(
                 plan,
                 jobs=tuple(
-                    replace(job, job_id=record.job_id, njr=record)
+                    EvalJobPlan(
+                        case_id=job.case_id,
+                        arm_id=job.arm_id,
+                        backend=job.backend,
+                        job_id=record.job_id,
+                        seed=job.seed,
+                        frame_count=job.frame_count,
+                        njr=record,
+                    )
                     for job, record in zip(plan.jobs, records, strict=True)
                 ),
             )
