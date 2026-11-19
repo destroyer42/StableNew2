@@ -16,6 +16,19 @@ def default_stage_defaults() -> dict[str, bool]:
     }
 
 
+def runnable_stage_defaults(stage_defaults: dict[str, Any] | None) -> dict[str, bool]:
+    """Stage choices for a newly imported photo, with img2img on when none of the photo stages is.
+
+    Import copies the live Pipeline's toggles, and a txt2img Pipeline turns every photo stage off; a photo imported
+    that way could never be optimized until each one was edited.
+    """
+
+    chosen = {str(stage): bool(value) for stage, value in (stage_defaults or {}).items()}
+    if not any(chosen.get(stage) for stage in default_stage_defaults()):
+        chosen["img2img"] = True
+    return chosen
+
+
 @dataclass
 class PhotoOptimizeBaseline:
     prompt: str = ""

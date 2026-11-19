@@ -6,7 +6,13 @@ from copy import deepcopy
 from tkinter import messagebox
 from typing import Any, cast
 
-from src.photo_optimize.editing import apply_edit, prepare_edit, selection_values
+from src.photo_optimize.editing import (
+    EditPlan,
+    EditResult,
+    apply_edit,
+    prepare_edit,
+    selection_values,
+)
 from src.photo_optimize.submission import describe_photo_plan
 
 from .photo_optimize_editors import pipeline_copy_dialog, review_dialog
@@ -52,18 +58,20 @@ class PhotoOptimizeScopeMixin:
             lambda: self._review_saved_edit(ids, mask, source), action="Applying a batch edit"
         )
 
+    def _render_edit_value(self, asset: Any, value: Any) -> str:
+        subject = {
+            "positive_prompt": asset.baseline.prompt,
+            "negative_prompt": asset.baseline.negative_prompt,
+            "name": asset.source_filename,
+        }
+        subject["description"] = repr(value)
+        return str(cast(Any, self)._visibility_resolver().redact_text(repr(value), item=subject))
+
     def _review_saved_edit(self, ids: Any, mask: Any, source: Any) -> None:
         def prepared(plan):
-            def render(asset, value):
-                subject = {
-                    "positive_prompt": asset.baseline.prompt,
-                    "negative_prompt": asset.baseline.negative_prompt,
-                    "name": asset.source_filename,
-                }
-                subject["description"] = repr(value)
-                return self._visibility_resolver().redact_text(repr(value), item=subject)
-
-            if review_dialog(self, source, plan.describe(render), accept="Apply listed changes"):
+            if review_dialog(
+                self, source, plan.describe(self._render_edit_value), accept="Apply listed changes"
+            ):
                 self.after_idle(
                     lambda: self._run_photo_operation(
                         lambda: apply_edit(self.store, plan), self._edit_completed
@@ -121,7 +129,72 @@ class PhotoOptimizeScopeMixin:
         if not self._workspace_ready():
             return
         cast(Any, self)._with_saved_baseline(
-            lambda: self._optimize_saved(batch_all=batch_all), action="Preparing a plan"
+            lambda: self._optimize_with_batch_edit(batch_all=batch_all), action="Preparing a plan"
+        )
+
+    def _pending_batch_edit(self) -> tuple[list[str], dict[str, Any]] | None:
+        """The checked Batch Edit fields and their targets, when Batch Edit is the workspace on screen.
+
+        The checked fields are what the operator sees as this batch's settings, so reviewing the selection saves them
+        first (through the same reviewed, fingerprinted edit as "Review selected-photo changes…") instead of
+        ignoring them. Single Photo scope never applies them.
+        """
+
+        editor = self.__dict__.get("batch_editor")
+        scope = self.__dict__.get("edit_scope_var")
+        if editor is None or scope is None or scope.get() != "Batch Edit":
+            return None
+        if not editor.has_checked_fields():
+            return None
+        ids: list[str] = cast(Any, self)._selected_asset_ids(batch_all=False)
+        return (ids, editor.collect_mask()) if ids else None
+
+    def _optimize_with_batch_edit(self, *, batch_all: bool) -> None:
+        host = cast(Any, self)  # the tab supplies the store, the operation runner and Tk scheduling
+        try:
+            pending = self._pending_batch_edit()
+        except ValueError as exc:
+            messagebox.showerror("Cannot prepare batch edit", str(exc))
+            return
+        if pending is None:
+            self._optimize_saved(batch_all=batch_all)
+            return
+        ids, mask = pending
+        store = host.store
+
+        def optimize_next() -> None:
+            host.after_idle(lambda: self._optimize_saved(batch_all=batch_all))
+
+        def applied(result: EditResult) -> None:
+            host._refresh_assets()
+            if result.failed or result.unconfirmed:
+                messagebox.showerror(
+                    "Batch Edit not fully saved", f"{result.describe()}\n\nNothing was queued."
+                )
+                return
+            optimize_next()
+
+        def prepared(plan: EditPlan) -> None:
+            if not any(row.changes for row in plan.rows):
+                optimize_next()
+                return
+            text = (
+                plan.describe(self._render_edit_value)
+                + "\n\nThese checked Batch Edit fields are saved to the photos first; "
+                "the queue plan is reviewed next and nothing is queued until you confirm it."
+            )
+            if review_dialog(
+                host,
+                "Batch Edit changes to save before queueing",
+                text,
+                accept="Save changes and continue",
+            ):
+                host.after_idle(
+                    lambda: host._run_photo_operation(lambda: apply_edit(store, plan), applied)
+                )
+
+        host._run_photo_operation(
+            lambda: prepare_edit(store, ids, mask, source="Batch Edit saved baselines"), prepared
         )
 
     def _optimize_saved(self, *, batch_all: bool) -> None:
@@ -156,6 +229,7 @@ class PhotoOptimizeScopeMixin:
                 "assets": [
                     {
                         "asset_id": a.asset_id,
+                        "source_filename": a.source_filename,
                         "managed_original_path": a.managed_original_path,
                         "input_image_path": str(a.current_input_path),
                         "baseline": a.baseline.to_dict(),
