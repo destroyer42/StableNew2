@@ -305,8 +305,10 @@ class PhoneQueueAdmission:
             return self._receipt(owner, identifier)
         try:
             if (
-                preview.evidence_kind in {"rating", "returned"} and not grant.native_review
-                or preview.evidence_kind == "evaluation" and not grant.rating
+                preview.evidence_kind in {"rating", "returned"}
+                and not grant.native_review
+                or preview.evidence_kind == "evaluation"
+                and not grant.rating
             ):
                 raise SiteOutputError("phone_scope_refused")
             if preview.scope != catalog.scope or preview.until <= time.monotonic():
