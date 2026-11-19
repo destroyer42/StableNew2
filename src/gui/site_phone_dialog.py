@@ -13,14 +13,19 @@ from src.app.site_phone_connector import PhoneConnectorError, PhoneEnrollment, S
 DEFAULT_NATIVE_REVIEW = True
 
 
-def pairing_permissions(rating: bool, native_review: bool) -> str:
+def pairing_permissions(rating: bool, native_review: bool, queue_submit: bool = False) -> str:
     gallery = "Browse Output and save gallery and video ratings" if rating else "Browse Output"
     review = (
         "Write native Review evidence with ratings, Retain, and Mark for rework"
         if native_review
         else "Native Review evidence permission off"
     )
-    return f"• {gallery}\n• {review}"
+    queue = (
+        "Preview and submit saved PromptPacks and images marked for rework"
+        if queue_submit
+        else "Phone queue submission permission off"
+    )
+    return f"• {gallery}\n• {review}\n• {queue}"
 
 
 class PhoneReviewDialog:
@@ -60,6 +65,13 @@ class PhoneReviewDialog:
         ttk.Label(
             panel, text="Native Review ratings, Retain, and Mark for rework", wraplength=370
         ).pack(anchor="w", padx=18)
+        queue_submit = tk.BooleanVar(master=dialog, value=False)
+        ttk.Checkbutton(
+            panel, text="Allow phone Preview and queue submission", variable=queue_submit
+        ).pack(anchor="w")
+        ttk.Label(
+            panel, text="Saved PromptPacks and images marked for rework", wraplength=370
+        ).pack(anchor="w", padx=18)
         status = ttk.Label(panel, wraplength=370)
         status.pack(anchor="w", pady=(10, 4))
         feedback = ttk.Label(panel, wraplength=370)
@@ -77,17 +89,22 @@ class PhoneReviewDialog:
                 return
             can_rate = rating.get()
             can_review = native_review.get()
+            can_submit = queue_submit.get()
             if messagebox.askyesno(
                 "Approve phone review?",
                 f"Approve {enrollment.name} for up to 30 days?\n\n{folder}\n\n"
-                f"{pairing_permissions(can_rate, can_review)}",
+                f"{pairing_permissions(can_rate, can_review, can_submit)}",
                 parent=dialog,
                 default=messagebox.NO,
             ):
                 self._watch(
                     dialog,
                     self._connector.enroll(
-                        enrollment, Path(folder), can_rate, native_review=can_review
+                        enrollment,
+                        Path(folder),
+                        can_rate,
+                        native_review=can_review,
+                        queue_submit=can_submit,
                     ),
                     lambda _: feedback.configure(text="Pairing approved on this PC."),
                     feedback,

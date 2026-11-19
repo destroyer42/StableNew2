@@ -880,6 +880,40 @@ class JobRepository(JobHistoryStore):
             ).fetchone()
         return self._row_to_history(row) if row is not None else None
 
+    def get_job_entries(self, job_ids: Sequence[str]) -> dict[str, JobHistoryEntry]:
+        """Read exact History identities in bounded SQLite batches."""
+        result: dict[str, JobHistoryEntry] = {}
+        with self._lock:
+            for start in range(0, len(job_ids), _IN_CHUNK):
+                chunk = job_ids[start : start + _IN_CHUNK]
+                placeholders = ",".join("?" for _ in chunk)
+                rows = self._connection.execute(
+                    f"SELECT * FROM jobs WHERE job_id IN ({placeholders})", tuple(chunk)
+                ).fetchall()
+                result.update((row["job_id"], self._row_to_history(row)) for row in rows)
+        return result
+
+    def read_phone_job_page(
+        self, owner: str, *, before: int | None = None
+    ) -> tuple[list[JobHistoryEntry], int | None]:
+        """Read up to 50 matching rows from one window of at most 512 stored jobs."""
+        with self._lock:
+            top = self._connection.execute(
+                "SELECT COALESCE(MAX(rowid), 0) FROM jobs"
+            ).fetchone()[0]
+            if before is not None:
+                top = min(top, before)
+            low = max(0, top - 512)
+            rows = self._connection.execute(
+                "SELECT rowid AS cursor, * FROM jobs WHERE rowid > ? AND rowid <= ? "
+                "AND CASE WHEN json_valid(njr_snapshot) THEN "
+                "json_extract(njr_snapshot, '$.normalized_job.provenance.metadata.phone_submission.owner') END = ? "
+                "ORDER BY rowid DESC LIMIT 50",
+                (low, top, owner),
+            ).fetchall()
+        next_cursor = rows[-1]["cursor"] - 1 if len(rows) == 50 else low
+        return [self._row_to_history(row) for row in rows], next_cursor or None
+
     def query_history(self, query: HistoryQuery) -> HistoryPage:
         """Read-only paged search (see ``src.queue.history_query``); no schema, index or lifecycle effect."""
 
