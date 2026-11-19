@@ -25,7 +25,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below), the controller Tk import
   boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
-- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,403 errors in
+- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,401 errors in
   174 files), unformatted files (378), blind/silent excepts in `src` (BLE001 1,187, S110 467, S112 34), thread and layering
   rules (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6), plain truncating file writes outside `atomic_io` (non-atomic file writes 17; allowlist in `tools/ci/run_architecture_ratchets.py`), and the four controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
@@ -108,7 +108,7 @@ of the roadmap; where they conflict with this file, this file and the repository
    enabled stage is refused; disabled placeholders and history stay readable), the disabled LTX specs (future LTX support is not ruled
    out and needs bridge implementations plus accepted runtime evidence), the dormant story-plan/continuity authoring code, the AI
    settings-suggestion stub (external scripts importing `src.ai` would break, unverified) and the cluster scaffolding.
-7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
+7. Decided 2026-11-18: `PR-IMG-120` (Ideogram 4 NF4 on a Diffusers backend) is authorized and its licence accepted; implemented on a branch, not physically qualified (`docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md`).
 8. Product order after the safety work: inpainting/ControlNet (the local LoRA browser, history browser, Iterate from History, parent/child compare and Learning payoff are in).
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments). Decided: store it
    once per experiment by hash, forward-only; implemented forward-only; backfill/prune still open (LEARN-SNAPSHOT-914: new Learning jobs and ratings carry `snapshot_sha256`, the body lives once in the job repository's `experiment_snapshots` table).

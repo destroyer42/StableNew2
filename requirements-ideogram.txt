@@ -1,0 +1,4 @@
+# Optional Ideogram 4 NF4 runtime (PR-IMG-120). Install explicitly, never by default:
+#   python -m pip install -c constraints/windows-py314-cu130.txt -r requirements-ideogram.txt
+# Without it StableNew does not offer Ideogram 4 and refuses queued Ideogram work with a reason.
+bitsandbytes==0.50.2

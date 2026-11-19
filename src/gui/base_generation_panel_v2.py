@@ -599,6 +599,11 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 if key == "vaes":
                     display = normalize_vae_config_value(display) or "No VAE (model default)"
                 mapping[display] = str(internal)
+            if key == "models":
+                from src.image_backends.model_backend_routing import offered_backend_models
+
+                for display, internal in offered_backend_models():
+                    mapping.setdefault(display, internal)
             # Resolve identity against both API names and display labels, including hash aliases.
             matches = [
                 display for display, internal in mapping.items()
@@ -1071,13 +1076,24 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 mapping = {}
             if values:
                 self._model_name_map = mapping
-                return tuple(values)
+                return self._with_backend_models(values)
         values = tuple(
             self._models
             or self._names_from_adapter(self._model_adapter, "get_model_names", "list_models")
         )
         self._model_name_map = {value: value for value in values}
-        return values
+        return self._with_backend_models(list(values))
+
+    def _with_backend_models(self, values: list[str]) -> tuple[str, ...]:
+        """Append installed models that run on their own backend (PR-IMG-120 Ideogram 4); they never need the WebUI."""
+
+        from src.image_backends.model_backend_routing import offered_backend_models
+
+        for display, internal in offered_backend_models():
+            if display not in self._model_name_map:
+                values.append(display)
+                self._model_name_map[display] = internal
+        return tuple(values)
 
     def _build_vae_values(self) -> tuple[str, ...]:
         controller = self._controller

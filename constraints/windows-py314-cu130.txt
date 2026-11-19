@@ -17,7 +17,10 @@
 # A deliberate upgrade of any pin is its own reviewed change; do not "freeze" over this file.
 #
 # Profiles: pins below are the CORE profile (native SVD + StableNew). The optional postprocess
-# profile (local restoration/upscale) starts at the `# profile: postprocess` directive.
+# profile (local restoration/upscale) starts at the `# profile: postprocess` directive. The optional
+# ideogram profile (PR-IMG-120: bitsandbytes for the Ideogram 4 NF4 weights, the version PR-IMG-110R
+# qualified) starts at `# profile: ideogram`; it is installed only by an explicit owner step
+# (`pip install -c <this file> -r requirements-ideogram.txt`).
 
 accelerate==1.15.0
 annotated-doc==0.0.5
@@ -86,3 +89,6 @@ lpips==0.1.4
 scipy==1.18.1
 spandrel==0.4.2
 spandrel-extra-arches==0.2.0
+
+# profile: ideogram
+bitsandbytes==0.50.2

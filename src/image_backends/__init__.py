@@ -1,6 +1,7 @@
 """StableNew-owned still-image backend contracts and implementations."""
 
 from src.image_backends.a1111_webui_backend import A1111WebUIImageBackend
+from src.image_backends.diffusers_backend import DiffusersImageBackend
 from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
 from src.image_backends.image_backend_registry import (
     ImageBackendRegistry,
@@ -8,6 +9,7 @@ from src.image_backends.image_backend_registry import (
 )
 from src.image_backends.image_backend_types import (
     A1111_IMAGE_BACKEND_ID,
+    DIFFUSERS_IMAGE_BACKEND_ID,
     FORGE_IMAGE_BACKEND_ID,
     LEGACY_MISSING_IMAGE_BACKEND_ID,
     NEW_IMAGE_BACKEND_DEFAULT_ID,
@@ -22,6 +24,8 @@ from src.image_backends.image_backend_types import (
 __all__ = [
     "A1111WebUIImageBackend",
     "A1111_IMAGE_BACKEND_ID",
+    "DIFFUSERS_IMAGE_BACKEND_ID",
+    "DiffusersImageBackend",
     "FORGE_IMAGE_BACKEND_ID",
     "ForgeWebUIImageBackend",
     "ImageBackendCapabilities",

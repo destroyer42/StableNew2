@@ -426,6 +426,23 @@
       "limits": "IMG-02 selects the Klein exact-name fixture and reads the profile it applies; no Klein or Z-Image generation runs.",
       "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
       "remaining_risk": "Real generation with these families is unverified here (qualified elsewhere)."
+    },
+    {
+      "id": "ideogram4-diffusers-txt2img",
+      "title": "Ideogram 4 NF4 txt2img on the Diffusers backend",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/image_backends/test_diffusers_backend_120.py",
+        "tests/image_backends/test_diffusers_residency_120.py",
+        "tests/image_backends/test_diffusers_ideogram4_worker_120.py",
+        "tests/image_backends/test_diffusers_ideogram4_profile_120.py",
+        "tests/image_backends/test_ideogram4_caption_120.py",
+        "tests/gui_v2/test_ideogram4_gui_120.py"
+      ],
+      "limits": "The compiler, NJR, run_njr dispatch, GPU lease, floors, contained-child file protocol, staged-swap residency and artifacts run with hermetic fakes; no desktop journey selects Ideogram 4 and no model is loaded.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real Ideogram 4 generation through StableNew is unqualified; the 110R residency envelope was measured with the qualification harness, not this product code."
     }
   ]
 }

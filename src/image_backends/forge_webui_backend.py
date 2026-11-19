@@ -43,7 +43,7 @@ from src.assets.component_evidence import ComponentEvidence, inspect_component_f
 from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_FIELD
 from src.conditioning.openpose_snapshot import FrozenOpenPose, verify_frozen
 from src.image_backends.exact_model_profile import (
-    ExactModelProfile,
+    ForgeExactModelProfile,
     resolve_model_profile,
     validate_profile_intent,
 )
@@ -247,11 +247,18 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     # ------------------------------------------------------------------ profile validation
 
     @staticmethod
-    def _profile_for(backend_options: Any) -> ExactModelProfile | None:
-        return resolve_model_profile(backend_options)
+    def _profile_for(backend_options: Any) -> ForgeExactModelProfile | None:
+        profile = resolve_model_profile(backend_options)
+        if profile is None or isinstance(profile, (KleinProfile, ZImageProfile)):
+            return profile
+        # Unreachable through admission (the foreign-profile guard runs first); fail closed regardless.
+        raise KleinProfileError(
+            f"{profile.display_name} requires the '{profile.backend_id}' backend; StableNew never switches or falls "
+            "back between backends."
+        )
 
     @staticmethod
-    def _vae_conflict(vae: Any, profile: ExactModelProfile) -> list[str]:
+    def _vae_conflict(vae: Any, profile: ForgeExactModelProfile) -> list[str]:
         name = str(vae or "").strip()
         if name.lower() in _AUTOMATIC_VAE:
             return []
@@ -277,7 +284,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
 
     def _lora_conflicts(
         self,
-        profile: ExactModelProfile,
+        profile: ForgeExactModelProfile,
         *,
         stage_names: Any,
         prompt: str,
@@ -783,7 +790,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         return {"name": source.name, "sha256": actual, "frozen_sha256": frozen, "verified_before_dispatch": True}
 
     @staticmethod
-    def _assert_assets_listed(pipeline: Any, profile: ExactModelProfile) -> None:
+    def _assert_assets_listed(pipeline: Any, profile: ForgeExactModelProfile) -> None:
         """Read-only: refuse before any write if Forge does not list the exact installed assets.
 
         The executor swallows stage exceptions into a generic "no images" failure, so the actionable

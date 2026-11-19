@@ -28,6 +28,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from src.image_backends.diffusers_ideogram4_profile import (
+    IDEOGRAM4_PROFILE_V1,
+    Ideogram4Profile,
+    apply_ideogram4_compile_policy,
+    frozen_profile_is_ideogram4,
+    ideogram4_selected,
+    is_ideogram4_model_name,
+)
 from src.image_backends.exact_model_profile import ExactModelProfile, resolve_model_profile
 from src.image_backends.forge_klein_profile import (
     KLEIN_PROFILE_ID,
@@ -57,6 +65,7 @@ from src.image_backends.image_backend_types import (
 # -- broad model families (concept B) ---------------------------------------------------------------------------
 FAMILY_SDXL = "sdxl"
 FAMILY_FLUX2_KLEIN = "flux2_klein"
+FAMILY_IDEOGRAM4 = "ideogram4"
 FAMILY_UNKNOWN = "unknown"
 
 EVIDENCE_PROFILE = "exact_profile"
@@ -247,6 +256,8 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
     """The policy of one exact qualified profile version (v1 admits no LoRA, v2 admits one)."""
 
     fixed = ControlMode.FIXED
+    if isinstance(profile, Ideogram4Profile):
+        return _ideogram4_policy(profile)
     if isinstance(profile, ZImageProfile):
         return ModelPolicy(
             policy_id=profile.profile_id, family="z_image", display_name=profile.display_name,
@@ -317,6 +328,32 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
     )
 
 
+def _ideogram4_policy(profile: Ideogram4Profile) -> ModelPolicy:
+    """Ideogram 4 NF4 via Diffusers (PR-IMG-120): txt2img only, the official presets, the 110R-tested sizes."""
+
+    fixed = ControlMode.FIXED
+    return ModelPolicy(
+        policy_id=profile.profile_id, family=FAMILY_IDEOGRAM4, display_name=profile.display_name,
+        evidence=EVIDENCE_PROFILE, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
+        profile_ref=profile.reference(), stages=(STAGE_TXT2IMG,), modes=profile.modes,
+        controls=_controls(
+            sampler=ControlPolicy(fixed, profile.sampler), scheduler=ControlPolicy(fixed, profile.scheduler),
+            # A restricted choice: each allowed step count is one official preset (the first listed is the default).
+            steps=ControlPolicy(ControlMode.CONFIGURABLE, allowed=(profile.default_steps, *(
+                s for s in profile.allowed_steps if s != profile.default_steps))),
+            cfg_scale=ControlPolicy(fixed, profile.cfg_scale), vae=ControlPolicy(fixed, ""),
+            geometry=ControlPolicy(ControlMode.CONFIGURABLE, allowed=profile.geometries),
+        ),
+        features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
+        note=("Ideogram 4 NF4 runs in its own contained Diffusers process, one job at a time, after StableNew releases "
+              "its own Forge/A1111, Comfy and SVD runtimes. Steps choose the official preset: 12 Turbo, 20 Default, "
+              "48 Quality; sizes are the tested 1024x1024, 768x1024, 1024x768, 768x768 and 512x512; 1-4 images per job. "
+              "Write plain text, or paste an Ideogram JSON caption (checked against the official caption schema before "
+              "queueing). No negative prompt, LoRA, embeddings or extra stages. Each job loads the model again "
+              "(about 20 s). Non-commercial licence. Not yet physically qualified in StableNew."),
+    )
+
+
 def _sdxl_policy(evidence: str) -> ModelPolicy:
     """Existing StableNew behavior for an SDXL-family checkpoint: nothing narrowed, nothing newly claimed qualified."""
 
@@ -382,6 +419,8 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
         return policy_for_profile(latest_klein_profile())
     if is_zimage_transformer_name(model_name):
         return policy_for_profile(ZIMAGE_PROFILE_V1)
+    if is_ideogram4_model_name(model_name):
+        return policy_for_profile(IDEOGRAM4_PROFILE_V1)
     if not str(model_name or "").strip() or family_lookup is None:
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_NONE)
     try:
@@ -518,6 +557,8 @@ def apply_model_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
         return apply_zimage_compile_policy(config)
     if isinstance(resolve_model_profile(config.get("backend_options")), ZImageProfile):
         raise ValueError("The frozen Z-Image profile requires its exact selected checkpoint")
+    if ideogram4_selected(config) or frozen_profile_is_ideogram4(config.get("backend_options")):
+        return apply_ideogram4_compile_policy(config)
     if klein_selected(config):
         return _COMPILE_POLICIES[KLEIN_PROFILE_ID](config)
     return config
@@ -560,6 +601,8 @@ class ModelPolicyResult:
             return _project_zimage_flat(payload)
         if isinstance(resolve_model_profile(payload.get("backend_options")), ZImageProfile):
             raise ValueError("The frozen Z-Image profile requires its exact selected checkpoint")
+        if ideogram4_selected(payload) or frozen_profile_is_ideogram4(payload.get("backend_options")):
+            return apply_ideogram4_compile_policy(payload)
         if klein_selected(payload):
             return _project_klein_flat(payload)
         return payload
@@ -670,6 +713,7 @@ __all__ = [
     "EVIDENCE_REGISTRY",
     "EVIDENCE_UNKNOWN",
     "FAMILY_FLUX2_KLEIN",
+    "FAMILY_IDEOGRAM4",
     "FAMILY_SDXL",
     "FAMILY_UNKNOWN",
     "FEATURES",
