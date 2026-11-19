@@ -245,11 +245,12 @@
       "tests": [
         "tests/tools/test_golden_path_journeys.py",
         "tests/video/test_pr_vid_motion_354_conversion.py",
-        "tests/tools/test_golden_path_blender_833.py"
+        "tests/tools/test_golden_path_blender_833.py",
+        "tests/tools/test_golden_path_offline_vid02.py"
       ],
-      "limits": "Lane A converts a sample with a real CPU Blender only when an executable is supplied explicitly (--blender or STABLENEW_JOURNEY_BLENDER); it is verified with the bounded version check and registered inside the disposable workspace only. Without one the lane is a HOLD that names why (not supplied, missing, not Blender, unsupported version, verification failed) and no render is faked. Lane B imports a labelled pre-rendered clip and never substitutes for Lane A. Prepare Motion Source is not driven.",
-      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
-      "remaining_risk": "Conversion output quality is unverified (the check is that the MP4 decodes, its identity matches the record, the provenance names the original and the Motion Library registered it); character-mesh FBX rendering is not driven."
+      "limits": "Lane A converts a sample with a real CPU Blender only when an executable is supplied explicitly (--blender or STABLENEW_JOURNEY_BLENDER); it is verified with the bounded version check and registered inside the disposable workspace only. Without one the lane is a HOLD that names why (not supplied, missing, not Blender, unsupported version, verification failed) and no render is faked. Lane B imports a labelled pre-rendered clip and never substitutes for Lane A. Prepare Motion Source is not driven in the simulated lane. QUAL-922 adds an offline physical lane for the Windows driver (no model, no backend, no GPU work, no job): it reads the Blender executable identity, the asset directory with the SHA-256 of every file, the render profile, the Prepare Motion Source window and the driving workflow from the frozen plan target, converts the operator's own assets, restarts and reopens the library, hands the converted clip to the driving-video field, records its SHA-256 in the job record and prepares a motion source (content-addressed output, window recorded). It uses no lane-B stand-in clip and no loopback backend.",
+      "physical_qualification": "NOT RUN: the offline physical lane exists and is covered deterministically (plan shape, readiness, refusal under pytest and CI, frozen inputs), but no physical run has been made. It needs a frozen plan, an owner authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Conversion and preparation output quality is unverified (the checks are that the MP4 decodes, its identity matches the record, the provenance names the original and the Motion Library registered it, and the prepared clip is content-addressed with its window recorded); only the conversion sample is driven, not Convert remaining; character-mesh FBX rendering is not driven; the lane's GUI body has been rehearsed only against synthetic assets."
     },
     {
       "id": "storyboard-persistent-multi-shot-sequence",

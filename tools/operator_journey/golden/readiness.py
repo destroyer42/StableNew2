@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from tools.operator_journey.golden.host import HostProbes
+from tools.operator_journey.golden.offline import asset_listing, directory_problems, is_offline
 from tools.operator_journey.golden.plan import (
     authorization_problems,
     environment_diffs,
@@ -129,8 +131,6 @@ def _resource_gates(plan: dict[str, Any], probes: HostProbes) -> list[Gate]:
                 f"{commit:.1f} GB committed of {memory['commit_limit_gb']:.1f} GB (plan ceiling {ceiling} GB)",
             )
         )
-    from pathlib import Path
-
     free = probes.disk_free_gb(Path(plan.get("evidence_dir") or "."))
     need = limits.get("min_free_disk_gb", 0)
     gates.append(
@@ -143,7 +143,76 @@ def _resource_gates(plan: dict[str, Any], probes: HostProbes) -> list[Gate]:
     return gates
 
 
+def _offline_gates(journey: str, target: dict[str, Any], ctx: ReadinessContext) -> list[Gate]:
+    """Gates of a journey that runs no inference: no endpoint, runtime or model is observed, adopted or started.
+
+    What can change its result is the converter and the originals, so those are checked against the plan's *declared*
+    identity (not only against the frozen snapshot): the Blender executable, the SHA-256 of every source asset and the
+    exact file listing of the asset directory.  The shared resource gates (GPU idle, memory, storage) still apply."""
+
+    probes = ctx.probes
+    gates = [
+        Gate(
+            f"{journey}:offline_lane",
+            PASS,
+            "offline lane: no runtime is probed, started or adopted and no model is loaded",
+        )
+    ]
+    declared = target.get("blender") or {}
+    live = probes.blender(str(declared.get("executable") or ""))
+    if live is None:
+        gates.append(
+            Gate(
+                f"{journey}:blender_identity",
+                HOLD,
+                f"Blender at {declared.get('executable')!r} is missing or not a supported Blender",
+            )
+        )
+    else:
+        wrong = [
+            f"{key}: plan {declared.get(key)!r}, live {live.get(key)!r}"
+            for key in ("version", "sha256")
+            if declared.get(key) != live.get(key)
+        ]
+        gates.append(
+            Gate(
+                f"{journey}:blender_identity",
+                HOLD if wrong else PASS,
+                "; ".join(wrong)
+                or f"Blender {live['version']} matches the plan's executable identity",
+            )
+        )
+    frozen_hashes = {str(a["path"]): str(a["sha256"]) for a in target.get("source_assets") or []}
+    live_hashes: dict[str, str | None] = {}
+    for path in asset_listing(target.get("asset_directory") or ""):
+        try:
+            live_hashes[path] = probes.file_sha256(Path(path))
+        except OSError:
+            live_hashes[path] = None
+    drift = directory_problems(frozen_hashes, live_hashes)
+    gates.append(
+        Gate(
+            f"{journey}:source_assets",
+            HOLD if drift else PASS,
+            "; ".join(drift[:4])
+            or f"{len(frozen_hashes)} source asset(s) match their declared SHA-256 and the folder holds nothing else",
+        )
+    )
+    gates.append(
+        Gate(
+            f"{journey}:ffmpeg",
+            PASS if probes.ffmpeg() else HOLD,
+            "FFmpeg is available for the MP4 decode and Prepare Motion Source"
+            if probes.ffmpeg()
+            else "FFmpeg is not available on this host (the converted MP4 cannot be decoded or prepared)",
+        )
+    )
+    return gates
+
+
 def _target_gates(journey: str, target: dict[str, Any], ctx: ReadinessContext) -> list[Gate]:
+    if is_offline(journey):
+        return _offline_gates(journey, target, ctx)
     runtime = target["runtime"]
     kind, ownership, base = runtime["kind"], runtime["ownership"], runtime["base_url"]
     gates: list[Gate] = []
@@ -290,7 +359,7 @@ def evaluate_readiness(plan: dict[str, Any], ctx: ReadinessContext | None = None
         gates.extend(_resource_gates(plan, probes))
         extra = probes.processes()
         owned_managed = any(
-            t["runtime"]["ownership"] == "managed" for t in plan["targets"].values()
+            (t.get("runtime") or {}).get("ownership") == "managed" for t in plan["targets"].values()
         )
         gates.append(
             Gate(

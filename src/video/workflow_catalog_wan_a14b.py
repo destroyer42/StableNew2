@@ -1,4 +1,4 @@
-"""Wan2.2 I2V-A14B lightx2v 4-step experimental workflow spec (VID-CLIP-370).
+"""Wan2.2 I2V-A14B lightx2v 4-step workflow spec (VID-CLIP-370; approved by VID-CLIP-372).
 
 The stock-node graph frozen in ``tools/qualification/wan321f/plan.py`` and run three times on the
 target host (``docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md``): two scaled-fp8 A14B experts
@@ -9,11 +9,14 @@ and returning leftover noise; steps [2, 4) on the low-noise expert with no added
 lossless PNG frames (``SaveImage``) that StableNew encodes, like TI2V-5B 1.3.0, at the model's native
 16 fps.
 
-This is an eval candidate, not a qualified or promoted workflow.  It is ``experimental``: it runs only
-with the job's own opt-in, only after the execution-time GPU guard, and is never recommended or
-preselected.  The 321F session ended with an INCONCLUSIVE frozen verdict (teardown was not verified)
-and made no quality claim.  The readiness floors below are derived from that one session's numbers; they
-are a guard, not a qualification.  StableNew binds the same inputs it binds for TI2V-5B (source image,
+It was an eval candidate (VID-CLIP-370) and is now ``approved`` by the owner's recorded GO decision of
+2026-11-18 (``docs/Subsystems/Video/PR-VID-CLIP-371_Three_Engine_Eval.md``): the promoted human-motion
+engine and the Make Video default.  Approval is governance only; the graph is byte-for-byte the 321F
+graph.  It is not QUALIFIED by the qualification ledger: the 321F session ended with an INCONCLUSIVE
+frozen verdict (teardown was not verified) and the 371 evidence rests on the owner's own ratings.  It
+still runs only after the execution-time GPU guard and only on a managed ComfyUI launched with
+``--disable-pinned-memory``.  The readiness floors below are derived from the 321F session's numbers;
+they are a guard, not a qualification.  StableNew binds the same inputs it binds for TI2V-5B (source image,
 prompt, negative prompt, seed, frozen geometry, frozen frame count) and nothing else: there is no LoRA
 control and no first/last-frame input.
 """
@@ -24,7 +27,7 @@ from typing import Any
 
 from src.video.workflow_contracts import (
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
-    WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+    WORKFLOW_GOVERNANCE_APPROVED,
     WorkflowDependencySpec,
     WorkflowInputBinding,
     WorkflowOutputBinding,
@@ -213,13 +216,13 @@ def build_wan_a14b_spec() -> WorkflowSpec:
         workflow_id=WAN_A14B_ID,
         workflow_version=WAN_A14B_VERSION,
         backend_id="comfy",
-        display_name="Wan2.2 I2V-A14B 4-step (Experimental)",
+        display_name="Wan2.2 I2V-A14B 4-step",
         description=(
-            "Experimental prompt-directed image-to-video with the Wan2.2 I2V-A14B high-noise and "
-            "low-noise experts and the lightx2v 4-step LoRAs, on stock ComfyUI nodes. One source "
-            "image and a prompt; no anchors, control video or pose video. Native 16 fps. It ran "
-            "three times on the target host (feasibility only, no quality claim) and is offered "
-            "for side-by-side evaluation, not as a recommended engine."
+            "Prompt-directed image-to-video with the Wan2.2 I2V-A14B high-noise and low-noise "
+            "experts and the lightx2v 4-step LoRAs, on stock ComfyUI nodes. One source image and "
+            "a prompt; no anchors, control video or pose video. Native 16 fps. The owner-promoted "
+            "engine for human motion and the Make Video default; it needs a managed ComfyUI "
+            "launched with --disable-pinned-memory and a host with RAM headroom for its two experts."
         ),
         capability_tags=(WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,),
         input_bindings=(
@@ -300,23 +303,31 @@ def build_wan_a14b_spec() -> WorkflowSpec:
                 for node in WAN_A14B_STOCK_NODES
             ),
         ),
-        governance_state=WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+        governance_state=WORKFLOW_GOVERNANCE_APPROVED,
         pinned_revision=f"catalog:{WAN_A14B_ID}@{WAN_A14B_VERSION}",
         governance_notes=(
-            "EXPERIMENTAL, per-job opt-in only. The graph is the PR-VID-WAN-321F frozen stock-node "
-            "graph, which completed three feasibility runs (frozen verdict INCONCLUSIVE; no motion, "
-            "identity or visual-quality claim; not QUALIFIED). Runs only on a StableNew-managed "
-            "ComfyUI launched with --disable-pinned-memory; the owned runtime is released after "
-            "every job. The GPU readiness floor is derived from that single session and gates "
-            "execution; host RAM is advisory. No LoRA control, no first/last-frame input."
+            "APPROVED by the owner's decision of 2026-11-18 (VID-CLIP-371 eval record: 80-generation "
+            "human-motion evaluation, 8/8 action achieved in both stages, no identity breaks, owner "
+            "means 5/5) as the promoted engine and the Make Video default (VID-CLIP-372). Governance "
+            "only: the graph is the PR-VID-WAN-321F frozen stock-node graph, unchanged. Not QUALIFIED "
+            "by the qualification ledger (321F verdict INCONCLUSIVE; eval ratings are the owner's, "
+            "saturated, with no host-commit telemetry). Runs only on a StableNew-managed ComfyUI "
+            "launched with --disable-pinned-memory (applied at launch or the job is blocked); the "
+            "owned runtime is released after every job. The GPU readiness floor is derived from the "
+            "321F session and gates execution; host RAM is advisory. Qualified on ComfyUI 0.38.0: "
+            "another runtime version runs with a warning. No LoRA control, no first/last-frame input."
         ),
         backend_defaults={
             "workflow_family": "wan22_i2v_a14b",
             "transport": "local_comfy",
             "output_transport": "comfy_view",
             "default_negative_prompt": WAN_A14B_DEFAULT_NEGATIVE,
-            # 321F prompt times were 91-125 s for 81 frames; leave room for a cold load of two experts.
+            # 321F prompt times were 91-125 s for 81 frames and the VID-CLIP-371 clips took 140-176 s
+            # wall (cold load of two experts included); 1200 s keeps about 7x headroom for a slow load
+            # on a 32 GB host without abandoning a clip Comfy is still producing.
             "history_timeout_seconds": 1200,
+            # The owner's decision (2026-11-18): the engine Make Video preselects among approved ones.
+            "make_video_default": True,
             "frame_count_policy": dict(WAN_A14B_FRAME_COUNT_POLICY),
             "output_policy": {"mode": "frames", "fps": WAN_A14B_FRAME_COUNT_POLICY["fps"]},
             "runtime_policy": {
@@ -325,8 +336,8 @@ def build_wan_a14b_spec() -> WorkflowSpec:
             },
             "provenance": {
                 "qualification": (
-                    "PR-VID-WAN-321F feasibility session (frozen verdict INCONCLUSIVE); "
-                    "not QUALIFIED"
+                    "PR-VID-WAN-321F feasibility session (frozen verdict INCONCLUSIVE) and the "
+                    "VID-CLIP-371 owner evaluation (GO 2026-11-18); not QUALIFIED by the ledger"
                 ),
                 "comfyui_version": "0.38.0",
                 "comfyui_revision": "6b747c0428c343e1417219641db93a4fb7cb69ae",
@@ -361,7 +372,10 @@ def build_wan_a14b_spec() -> WorkflowSpec:
                         "lossless PNG frames from Comfy; StableNew encodes the clip (CRF 16, BT.709) "
                         "and can smooth it"
                     ),
-                    "hardware": "feasibility only (321F, INCONCLUSIVE); not QUALIFIED",
+                    "hardware": (
+                        "321F feasibility (INCONCLUSIVE) and the VID-CLIP-371 evaluation; "
+                        "RTX 4070 Ti 12 GB, 32 GB RAM; not QUALIFIED by the ledger"
+                    ),
                 },
             },
             "prompt_template": _prompt_template(),

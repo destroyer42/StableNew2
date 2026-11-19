@@ -808,10 +808,20 @@ class OutputLibrary:
                 raise SiteOutputError("library_record_invalid")
             try:
                 key = self._id(relative)
-                item, _raw, digest = self.image(key)
+                item, raw, digest = self.image(key)
                 if digest != ref.get("sha256"):
                     raise SiteOutputError("media_changed")
-                result.append({**item.public(key), "position": position})
+                result.append(
+                    {
+                        **item.public(key),
+                        "position": position,
+                        "download": {
+                            "bytes": len(raw),
+                            "digest": digest,
+                            "rating_target": _key(item.path),
+                        },
+                    }
+                )
             except (OSError, SiteOutputError):
                 result.append(
                     {"position": position, "name": Path(relative).name, "unavailable": True}

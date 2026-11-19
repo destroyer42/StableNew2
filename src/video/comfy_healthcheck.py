@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -72,7 +73,13 @@ def wait_for_comfy_ready(
     *,
     timeout: float = 30.0,
     poll_interval: float = 0.5,
+    abort_if: Callable[[], str | None] | None = None,
 ) -> bool:
+    """Wait until ``/system_stats`` and ``/object_info`` answer.
+
+    ``abort_if`` lets the caller that owns the process stop the wait as soon as waiting is pointless
+    (the child exited): it returns a reason, or ``None`` to keep waiting."""
+
     deadline = time.time() + max(timeout, 0.0)
     poll_delay = max(poll_interval, 0.01)
     request_timeout = min(max(timeout, 0.01), 5.0)
@@ -81,6 +88,10 @@ def wait_for_comfy_ready(
     last_error: Exception | None = None
 
     while time.time() < deadline:
+        if abort_if is not None:
+            reason = abort_if()
+            if reason:
+                raise ComfyHealthCheckTimeout(f"ComfyUI will not become ready: {reason}")
         system_error = _probe_json_endpoint(system_stats_url, timeout=request_timeout)
         if system_error is None:
             object_info_error = _probe_json_endpoint(object_info_url, timeout=request_timeout)

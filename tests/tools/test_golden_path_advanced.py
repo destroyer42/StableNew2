@@ -28,11 +28,12 @@ ADVANCED_IDS = {"IMG-02", "IMG-03", "VID-02", "VID-03", "LRN-02", "OPS-01"}
 # --- definitions and routing -------------------------------------------------------------------------------------------
 
 
-#: Advanced journeys with a gated physical lane (QUAL-921); every other advanced journey is simulated-only.
-PHYSICAL_ADVANCED_IDS = {"IMG-03"}
+#: Advanced journeys with a gated physical lane: IMG-03 (QUAL-921) and the offline VID-02 (QUAL-922).  Every other advanced
+#: journey is simulated-only.
+PHYSICAL_ADVANCED_IDS = {"IMG-03", "VID-02"}
 
 
-def test_advanced_journeys_are_defined_with_acceptance_criteria_and_only_img03_is_physical() -> (
+def test_advanced_journeys_are_defined_with_acceptance_criteria_and_only_img03_and_vid02_are_physical() -> (
     None
 ):
     chosen = defs.select("advanced")
@@ -41,8 +42,10 @@ def test_advanced_journeys_are_defined_with_acceptance_criteria_and_only_img03_i
     for journey in chosen:
         if journey.id in PHYSICAL_ADVANCED_IDS:
             assert journey.physical is True and journey.physical_acceptance, journey.id
+            assert journey.offline is (journey.id == "VID-02"), journey.id
         else:
             assert journey.physical is False and not journey.physical_acceptance, journey.id
+            assert journey.offline is False, journey.id
         assert journey.steps and journey.simulated_acceptance, journey.id
     assert len({j.key for j in chosen}) == len(chosen)
     assert len({j.id for j in defs.JOURNEYS.values()}) == len(defs.JOURNEYS)
@@ -92,7 +95,7 @@ def test_an_unknown_advanced_journey_has_no_runner() -> None:
 @pytest.mark.parametrize("mode", ["physical", "readiness"])
 @pytest.mark.parametrize(
     "choice",
-    ["advanced", "recovery", "prompt-model", "storyboard", "motion-assets", "learning-profile"],
+    ["advanced", "recovery", "prompt-model", "storyboard", "learning-profile"],
 )
 def test_physical_and_readiness_modes_refuse_every_simulated_only_journey(
     mode: str, choice: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

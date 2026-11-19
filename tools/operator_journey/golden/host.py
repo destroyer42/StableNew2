@@ -144,6 +144,33 @@ def probe_processes() -> list[dict[str, Any]]:
     return found
 
 
+def probe_blender(executable: str) -> dict[str, Any] | None:
+    """Identity of the Blender at ``executable``: its SHA-256 and the version it reports (bounded ``--version``).
+
+    ``None`` when it is missing or not a supported Blender.  Starts no render and nothing that outlives the call."""
+
+    from tools.operator_journey.golden import blender_gate
+
+    qualification = blender_gate.qualify_blender(executable)
+    if not qualification.verified or qualification.install is None:
+        return None
+    return {
+        "version": ".".join(str(part) for part in qualification.install.version),
+        "sha256": sha256_file(Path(executable)),
+    }
+
+
+def probe_ffmpeg() -> bool:
+    """Whether the product's FFmpeg is usable (Prepare Motion Source and the MP4 decode check need it)."""
+
+    try:
+        from src.pipeline.video import VideoCreator
+
+        return bool(VideoCreator().ffmpeg_available)
+    except Exception:  # noqa: BLE001 - an unprobeable FFmpeg is simply not available
+        return False
+
+
 def probe_display() -> dict[str, Any]:
     """Resolution and scaling as the process sees them (empty off Windows)."""
 
@@ -172,6 +199,8 @@ class HostProbes:
     disk_free_gb: Callable[[Path], float | None] = probe_disk_free_gb
     endpoint: Callable[[str, str], dict[str, Any]] = probe_endpoint
     processes: Callable[[], list[dict[str, Any]]] = probe_processes
+    blender: Callable[[str], dict[str, Any] | None] = probe_blender
+    ffmpeg: Callable[[], bool] = probe_ffmpeg
     file_sha256: Callable[[Path], str] = sha256_file
     env: dict[str, str] = field(default_factory=lambda: dict(os.environ))
     python: Callable[[], str] = lambda: platform.python_version()

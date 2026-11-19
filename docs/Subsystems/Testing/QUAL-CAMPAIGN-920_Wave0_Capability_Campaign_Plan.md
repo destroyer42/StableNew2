@@ -21,7 +21,7 @@ From `tools/qualification/system840/ledger.py` (`derive_status`), `verdict.py` a
 - Standing hold `HOLD-GPU-DEVICE-LOSS`: any new device loss stops the campaign. GPU arms never run concurrently, and CPU
   inference (AI Assist, Smart Review) never shares a session with a GPU arm.
 
-## 2. Scope: about 35 qualifiable entries
+## 2. Scope: 34 qualifiable entries (16 out of scope)
 
 | Out of scope for this campaign | Count | Reason |
 | --- | --- | --- |
@@ -108,9 +108,11 @@ Lane: G = GPU, C = CPU-only, O = offline (no inference). "Harness" is what exist
 | Wan2.2 Fun Control 5B | found (ComfyUI `diffusion_models`) |
 | Native SVD XT (`svd_xt.safetensors`, also XT 1.1) | found (Hugging Face cache) |
 | RIFE (`rife-ncnn-vulkan.exe`) | found by `find_rife_executable()` |
-| SDXL baseline checkpoint (`cyberrealisticXL_v90-16fp`) | not under the searched A1111 `models` root; the managed Forge runtime resolves it from its `forge_ref_a1111_home` reference, and readiness verifies the SHA-256 at plan time |
-| SDXL ControlNet models (OpenPose/Canny/Depth) | not found in the searched roots (ComfyUI `controlnet` is empty) |
-| SAM 2.1 Small, Florence-2 Base FT weights | not found in the searched roots |
+| SDXL baseline checkpoint (`cyberrealisticXL_v90-16fp`) | found under the WebUI root the app resolves (`app_config.get_webui_workdir()`); readiness verifies the SHA-256 at plan time |
+| SDXL ControlNet OpenPose (`thibaud_xl_openpose`) | installed; SHA-256 equals the ledger identity of `IMG-Q2.controlnet-openpose` (`9e070426…`) |
+| SDXL ControlNet Canny (`diffusers_xl_canny_full`) | installed 2026-11-18 at the catalog-pinned revision; SHA-256 and size verified against `config/curated_asset_catalog.json` |
+| SDXL ControlNet Depth | `diffusers_xl_depth_fp16` installed 2026-11-18 at the catalog-pinned revision and verified; an older `diffusers_xl_depth_full` file of unknown provenance does not match the catalog hash for that name and is not used for qualification |
+| SAM 2.1 Small, Florence-2 Base FT | installed 2026-11-18 under `models/StableNewAux/` at the catalog-pinned revisions; every file's SHA-256 and size verified (not yet refreshed into the app's registry) |
 
 Not found here means "not in these folders", not "absent". Readiness checks the exact frozen identity before any run, and a
 missing model is a HOLD, never a download.
@@ -159,6 +161,39 @@ messages truthful.
 3. Pace: one sitting per wave with several plans approved together, or one run at a time.
 4. Confirm the out-of-scope list in section 2.
 5. Which SDXL ControlNet models are installed (Wave 3 cannot be planned until this is known).
+
+### Decisions recorded 2026-11-18
+
+1. **Rubric: accepted** as written in section 7. Keep one or two owner-rated PASS outputs per class as reference examples.
+2. **Smart Review: in scope, last** (Wave 6), under the same plan, `APPROVE <arm> <digest12>` and `RUN <digest12>` gate as
+   the GPU arms, with a fixed corpus of about ten owner outputs as the quality reference.
+3. **Pace: accepted.** One sitting per wave; plans frozen and approved together; runs launched one at a time with each
+   canary inspected before the next; at most about four GPU runs per sitting because of `HOLD-GPU-DEVICE-LOSS`.
+4. **Out-of-scope list: decided item by item** (the section 2 table is the starting point; these decisions replace it).
+   Each decision authorizes planning and build work only. Every physical run still needs its own frozen plan and owner
+   approval, and every ledger change is an owner-accepted edit in a reviewed commit.
+   - **AI track (`AI-Q0`, `AI-Q1`, `AI-Q2`): resumes as its own track.** The owner will do the one-time elevated setup in
+     `docs/runbooks/ai_qualification_etw_capture.md` (a system-wide Python in Program Files, the protected
+     `ProgramData\StableNewCap` copy), then a fresh canary-2 capture, D12a/D12b authorization text and the firewall
+     attestation. Candidates kept: `qwen3.5-9b-q4_k_m-unsloth`, `qwen3.5-4b-q4_k_m-unsloth`, `lfm3-1.7b-q4_k_m-liquidai`,
+     `lfm3-1.7b-q8_0-liquidai`. Dropped: `qwen3.5-9b-q5_k_m-unsloth`, `qwen3.5-4b-q8_0-unsloth`. `AI-Q2` follows a
+     qualified runtime automatically.
+   - **`IMG-Q1.zimage-turbo-fp8`: back in scope.** Both its inconclusive result and A14B's come from a teardown check made once
+     with no bounded wait. After that harness fix, one new exact authorization and one run go into the Forge sitting.
+   - **`IMG-Q4.forge-vs-comfy-still`: in scope.** This needs a Comfy still-image backend package (architectural, design first).
+   - **`VID-Q4.wan-a14b-480p`: recommendation accepted.** After the teardown and worker-tree memory fix, A14B qualification
+     is re-targeted to the experimental A14B 4-step workflow, as a conditional wave after Wave 4, under a new owner budget.
+   - **`IMG-Q1.klein-base-9b`: stays NO-GO.** The owner asked for the cached third-party re-upload to be deleted.
+   - **`IMG-Q1.qwen-image`: in scope, tied to the Comfy still-image package.**
+   - **`IMG-Q1.other-generic-families`: generic FLUX families come into scope.** This needs a model-policy family and profile
+     package. SD1, SD2 and SD3 stay out.
+   - **`IMG-Q4.ideogram4-diffusers`: in scope.** The owner accepts the non-commercial licence for this non-commercial work and
+     authorizes the PR-IMG-120 Diffusers production slice. It is architectural, so design comes first; the GPU residency lease
+     and the JSON-caption mapping still need owner decisions in that design.
+   - **`VID-Q0.wan22-ti2v-5b-legacy-1.0.0-1.1.0`: stays out** (replay only).
+5. **ControlNet models: answered** (section 5). OpenPose matches the ledger; Canny full and Depth fp16 are installed from
+   the catalog pins. The `IMG-Q2.controlnet-depth` identity is to move to `diffusers_xl_depth_fp16` by an owner-accepted
+   ledger edit.
 
 ## 9. Proposed build packages (no physical work)
 

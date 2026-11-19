@@ -25,6 +25,7 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_wan22_ti2v_5b_i2v_v1_2(),
         _build_wan22_ti2v_5b_i2v_v1_3(),
         _build_wan22_ti2v_5b_i2v_v1_4(),
+        _build_wan22_ti2v_5b_i2v_720p_v1(),
         *build_wan_animate2_specs(),
         build_fun_control_spec(_build_wan22_ti2v_5b_i2v_v1_3()),
         build_wan_a14b_spec(),
@@ -33,6 +34,9 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
 
 __all__ = [
     "WAN22_720P_VERSION",
+    "WAN22_720P_WORKFLOW_ID",
+    "WAN22_720P_WORKFLOW_VERSION",
+    "WAN22_WORKFLOW_ID",
     "WAN22_FRAMES_VERSION",
     "WAN22_RUNTIME_PROVENANCE",
     "WAN22_RUNTIME_VERSION",
@@ -131,9 +135,14 @@ WAN22_RUNTIME_PROVENANCE = {
 # PNG (``SaveImage``) and StableNew encodes them with its one encoder, so every clip gets the CRF,
 # colour tags, cancellation and optional RIFE smoothing, and the last frame exists exactly.
 WAN22_FRAMES_VERSION = "1.3.0"
+WAN22_WORKFLOW_ID = "wan22_ti2v_5b_i2v_v1"
+# The approved 720p alternate is its own workflow id (VID-CLIP-372), so the picker lists both resolutions.
+WAN22_720P_WORKFLOW_ID = "wan22_ti2v_5b_i2v_720p_v1"
+WAN22_720P_WORKFLOW_VERSION = "1.0.0"
 # VID-CLIP-370: the 1.3.0 frames-out graph at the model's 720p design point (1280x704, both sides
 # multiples of 32), an EXPERIMENTAL eval candidate beside the approved 1.3.0.
 WAN22_720P_VERSION = "1.4.0"
+WAN22_720P_HISTORY_TIMEOUT_SECONDS = 1200
 WAN22_720P_TARGETS = {
     "portrait_target": {"width": 704, "height": 1280},
     "landscape_target": {"width": 1280, "height": 704},
@@ -203,6 +212,10 @@ def _build_wan22_ti2v_5b_i2v_v1_4() -> WorkflowSpec:
     )
     defaults = deepcopy(base.backend_defaults)
     defaults["source_preparation"].update(deepcopy(WAN22_720P_TARGETS))
+    # VID-CLIP-371 measured 47-622 s per 720p clip (means 399 s and 314 s) on the 12 GB / 32 GB host, and
+    # two clips were abandoned at the 600 s the 480p versions use.  1200 s is about twice the slowest
+    # clip seen; 480p (32-132 s) keeps 600.
+    defaults["history_timeout_seconds"] = WAN22_720P_HISTORY_TIMEOUT_SECONDS
     defaults["provenance"]["qualification"] = (
         "1.3.0 graph and files at 704x1280 / 1280x704; NOT QUALIFIED at this geometry "
         "(VID-CLIP-370 eval candidate)"
@@ -230,9 +243,57 @@ def _build_wan22_ti2v_5b_i2v_v1_4() -> WorkflowSpec:
     )
 
 
+def _build_wan22_ti2v_5b_i2v_720p_v1() -> WorkflowSpec:
+    """Its own workflow id for the 720p engine (VID-CLIP-372).  The graph, files, frame-count and runtime
+    policy are the approved 1.3.0 frames-out ones with 704x1280 / 1280x704 targets, exactly as the
+    experimental 1.4.0 of the 480p id.  APPROVED by the owner's 2026-11-18 decision after the
+    VID-CLIP-371 eval, as an alternate: the Make Video default stays A14B and the 480p id keeps its own
+    picker entry, so a newer version of one id never hides the other resolution.  Not ledger-qualified."""
+
+    base = _build_wan22_ti2v_5b_i2v(
+        workflow_version=WAN22_720P_WORKFLOW_VERSION,
+        workflow_id=WAN22_720P_WORKFLOW_ID,
+        frame_count_policy=WAN22_FRAME_COUNT_POLICY,
+        runtime_policy=WAN22_RUNTIME_POLICY,
+        provenance_overrides=WAN22_RUNTIME_PROVENANCE,
+        governance_state=WORKFLOW_GOVERNANCE_APPROVED,
+        frames_out=True,
+    )
+    defaults = deepcopy(base.backend_defaults)
+    defaults["source_preparation"].update(deepcopy(WAN22_720P_TARGETS))
+    defaults["history_timeout_seconds"] = WAN22_720P_HISTORY_TIMEOUT_SECONDS
+    defaults["provenance"]["qualification"] = (
+        "1.3.0 graph and files at 704x1280 / 1280x704; approved by owner decision 2026-11-18 "
+        "(VID-CLIP-371 eval), NOT QUALIFIED by the qualification ledger"
+    )
+    fixed = defaults["operator_projection"]["fixed_settings"]
+    fixed["geometry"] = "source-aware: portrait 704x1280; landscape 1280x704; square uses portrait"
+    fixed["hardware"] = "NOT QUALIFIED at this geometry; GPU memory at 720p is unmeasured"
+    return replace(
+        base,
+        display_name="Wan2.2 TI2V-5B Prompt-Directed I2V 720p",
+        description=(
+            "Prompt-directed image-to-video with the same stock ComfyUI nodes and Wan2.2 TI2V-5B "
+            "files as the 480p workflow, at the model's 720p design point (704x1280 portrait, "
+            "1280x704 landscape). One source image and a prompt; no anchors, control video or pose "
+            "video. An alternate to the 480p workflow, slower per clip."
+        ),
+        governance_notes=(
+            "APPROVED by the owner's 2026-11-18 decision after the VID-CLIP-371 eval, as an alternate "
+            "to the 480p workflow; not QUALIFIED by the qualification ledger. The 1.3.0 frames-out "
+            "graph, files, frame-count envelope and runtime policy with 704x1280 / 1280x704 targets. "
+            "Not qualified at this geometry: GPU memory at 720p is unmeasured and the readiness "
+            "floors are the 480p ones. The eval saw 47-622 s per clip, so the history timeout is "
+            "1200 s. The StableNew-owned ComfyUI is released after every job (PR-VID-190)."
+        ),
+        backend_defaults=defaults,
+    )
+
+
 def _build_wan22_ti2v_5b_i2v(
     *,
     workflow_version: str,
+    workflow_id: str = WAN22_WORKFLOW_ID,
     frame_count_policy: dict[str, int] | None = None,
     runtime_policy: dict[str, Any] | None = None,
     provenance_overrides: dict[str, str] | None = None,
@@ -301,11 +362,9 @@ def _build_wan22_ti2v_5b_i2v(
         # Longer frame counts take longer than the backend's default generation wait
         # (81 frames used ~100 s of the 120 s default on the original runtime).
         extra_defaults["history_timeout_seconds"] = 600
-        governance_notes += (
-            " The StableNew-owned ComfyUI is released after every job (PR-VID-190)."
-        )
+        governance_notes += " The StableNew-owned ComfyUI is released after every job (PR-VID-190)."
     return WorkflowSpec(
-        workflow_id="wan22_ti2v_5b_i2v_v1",
+        workflow_id=workflow_id,
         workflow_version=workflow_version,
         backend_id="comfy",
         display_name=(
@@ -396,7 +455,7 @@ def _build_wan22_ti2v_5b_i2v(
             ),
         ),
         governance_state=governance_state,
-        pinned_revision=f"catalog:wan22_ti2v_5b_i2v_v1@{workflow_version}",
+        pinned_revision=f"catalog:{workflow_id}@{workflow_version}",
         governance_notes=governance_notes,
         backend_defaults={
             **extra_defaults,

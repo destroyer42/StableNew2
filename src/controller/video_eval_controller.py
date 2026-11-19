@@ -40,6 +40,9 @@ class VideoEvalControllerMixin:
     def build_default_form_state(self) -> dict[str, Any]:  # provided by the controller
         raise NotImplementedError
 
+    def list_workflow_specs(self) -> list[dict[str, Any]]:  # provided by the controller
+        raise NotImplementedError
+
     def _eval_service(self) -> VideoEvalRunService:
         return VideoEvalRunService(
             builders={
@@ -71,7 +74,20 @@ class VideoEvalControllerMixin:
 
     def _build_workflow_eval_job(self, case: EvalCase, arm: EvalArm, seed: int) -> BuiltEvalJob:
         form = self.build_default_form_state()
-        form.update(dict(arm.overrides))
+        overrides = dict(arm.overrides)
+        named = str(overrides.get("workflow_id") or "")
+        if named and named != form.get("workflow_id") and "workflow_version" not in overrides:
+            # The default form's version belongs to the default workflow; an arm that names only another
+            # workflow runs the version the picker offers for it, never a version of the wrong workflow.
+            form["workflow_version"] = next(
+                (
+                    str(record.get("workflow_version") or "")
+                    for record in self.list_workflow_specs()
+                    if record.get("workflow_id") == named
+                ),
+                "",
+            )
+        form.update(overrides)
         form.update(prompt=case.prompt, negative_prompt=case.negative_prompt, seed=str(seed))
         frozen = self._njr_builder.freeze_inputs(case.image_path, form)
         built = self._njr_builder.build_job(form, frozen)

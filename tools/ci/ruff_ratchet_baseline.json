@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 378,
+    "total": 377,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -134,7 +134,6 @@
       "src/video/restoration/upscaler.py",
       "src/video/svd_preprocess.py",
       "src/video/video_workflow_njr_builder.py",
-      "src/video/workflow_catalog.py",
       "src/video/workflow_catalog_wan_animate2.py",
       "src/video/workflow_controls.py",
       "src/video/workflow_source_preparation.py",

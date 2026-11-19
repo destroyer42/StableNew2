@@ -32,6 +32,7 @@ from src.video.managed_comfy_runtime import (
     plan_comfy_launch,
     workflow_launch_requirements,
 )
+from src.video.runtime_version_check import qualified_comfyui_version, runtime_version_warning
 from src.video.workflow_asset_integrity import configured_asset_issues
 from src.video.workflow_readiness import WorkflowResourceReadiness, required_launch_flags
 
@@ -345,6 +346,35 @@ def _digest(dependency: Any) -> str:
     return "not pinned"
 
 
+def _runtime_version_gate(spec: Any, probes: PreflightProbes, state: str) -> PreflightGate | None:
+    """Advisory only: an approved workflow on a ComfyUI version other than the one it was qualified on.
+
+    The version is what a serving ComfyUI reports, else the managed installation the configured command
+    selects; with neither, it is unknown and nothing is said (the backend checks again at execution)."""
+
+    if not qualified_comfyui_version(spec):
+        return None
+    actual = ""
+    if state == ENDPOINT_HEALTHY:
+        stats = probes.fetch_system_stats(probes.base_url)
+        system = stats.get("system") if isinstance(stats, Mapping) else None
+        actual = str(system.get("comfyui_version") or "") if isinstance(system, Mapping) else ""
+    elif probes.managed_contract is not None:
+        command = _launch_facts(probes).command_in_force
+        if command and assess_comfy_command(command, probes.managed_contract).kind == "managed":
+            actual = probes.managed_contract.version
+    warning = runtime_version_warning(spec, actual)
+    if warning is None:
+        return None
+    return PreflightGate(
+        "runtime_version",
+        "ComfyUI version",
+        GATE_ADVISORY,
+        warning,
+        "Use the managed install (Engine Settings) to match the qualified version.",
+    )
+
+
 def _resource_gates(spec: Any, probes: PreflightProbes, state: str) -> tuple[PreflightGate, ...]:
     readiness = WorkflowResourceReadiness(ram_probe=probes.ram_probe, gpu_probe=probes.gpu_probe)
     policy = readiness.policy_for(spec)
@@ -412,6 +442,9 @@ def evaluate_workflow_preflight(spec: Any, probes: PreflightProbes) -> WorkflowP
     gates.append(_runtime_gate(probes, state))
     node_gate, file_gate, _info = _dependency_gates(spec, probes, state)
     gates.extend((node_gate, file_gate))
+    version_gate = _runtime_version_gate(spec, probes, state)
+    if version_gate is not None:
+        gates.append(version_gate)
     if spec.backend_defaults.get("asset_integrity"):
         issues = configured_asset_issues(spec, probes.extras.get("process_config"))
         gates.append(

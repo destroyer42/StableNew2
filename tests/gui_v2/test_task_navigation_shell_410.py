@@ -29,7 +29,7 @@ from src.gui.widgets.task_navigation_bar_v2 import (
 from src.queue.job_history_store import JobHistoryEntry, JobStatus
 from src.services.ui_state_store import get_ui_state_store
 from tests.helpers.gui_harness_v2 import GuiV2Harness
-from tests.helpers.make_video_313 import ANIMATE2_ID, TI2V_ID, make_image
+from tests.helpers.make_video_313 import ANIMATE2_ID, RECOMMENDED_ID, make_image
 
 pytestmark = pytest.mark.gui
 
@@ -348,7 +348,7 @@ def test_pipeline_to_review_to_video_workflow_make_video(build, tmp_path) -> Non
     assert _current(window) == "video_workflow"
     assert window.task_navigation.active_group_id == "motion"
     assert window.video_workflow_tab.source_image_var.get() == paths[1]
-    assert window.video_workflow_tab.workflow_var.get() == TI2V_ID
+    assert window.video_workflow_tab.workflow_var.get() == RECOMMENDED_ID
     submit.assert_not_called()
 
 
@@ -364,7 +364,7 @@ def test_history_make_video_opens_the_video_workflow_tab(build, tmp_path) -> Non
         _pump(window)
     assert _current(window) == "video_workflow"
     assert window.video_workflow_tab.source_image_var.get() == image
-    assert window.video_workflow_tab.workflow_var.get() == TI2V_ID
+    assert window.video_workflow_tab.workflow_var.get() == RECOMMENDED_ID
     submit.assert_not_called()
 
 

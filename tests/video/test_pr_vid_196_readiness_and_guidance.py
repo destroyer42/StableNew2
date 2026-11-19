@@ -595,12 +595,13 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
 
     expected = {
         "wan22_fun_control_5b_canny_i2v_v1@1.0.0": "8882daeda0571cc4cc00cf6d96e6a4fff25411a571f62626dd5bfc87389beac5",
-        "wan22_i2v_a14b_4step_v1@1.0.0": "de161ecbd16fe9fc33005d31ee4df7cd44221ac4a3fe3d950e9dca85daa24a28",
+        "wan22_i2v_a14b_4step_v1@1.0.0": "b41a7d90e663a008e7625fb17ca6e6ff32ae5d1df064a9cc75c97f4b9eb090f2",
+        "wan22_ti2v_5b_i2v_720p_v1@1.0.0": "00a676cfe01120df98e24d1ccebb5a14084a6cb5181f759cb0b84b5a15da766e",  # VID-CLIP-372
         "wan22_ti2v_5b_i2v_v1@1.0.0": "42dac69b34130c4db06ea5dc0e91dd7b35bba2ff0c960ab24b406437adb58332",
         "wan22_ti2v_5b_i2v_v1@1.1.0": "e5821b1cf6eadf0d93e666f4a606d7540d53298cf3bfc51402393f80388fe731",
         "wan22_ti2v_5b_i2v_v1@1.2.0": "5bce60b5e7d0b233a3ddbff2225546e41b7f4415af001a0da6de443757df0bec",
         "wan22_ti2v_5b_i2v_v1@1.3.0": "61971186f6921b95427fa94c4f2c0fe2f30d180cec06839519cbd5fbaf478d18",
-        "wan22_ti2v_5b_i2v_v1@1.4.0": "afb5154fd629d8ff45db0c315dd220ed229283e09a03bcf1bdccd7a66697e969",
+        "wan22_ti2v_5b_i2v_v1@1.4.0": "6f3ed73e5507e920f2fb760fdf61cce53b6511afe8ec9694085e4f5f981fb499",
         "wan_animate2_drive_i2v_v1@1.0.0": "c610171704dc2aff829a1cc7e494f3b01cff0108eb9a64ed830fedaa63f0704e",
         "wan_animate2_drive_i2v_v1@1.1.0": "75da00b523e0762d2d42e67dca30a328e99ace1175d6d7fa23041394de68d9d3",
         "wan_animate2_drive_i2v_v1@1.2.0": "57ca14d77b305beca3626fbfa5dde75144c06bb49b065807ba88666ac8f979db",

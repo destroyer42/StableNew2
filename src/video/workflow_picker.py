@@ -6,8 +6,9 @@ value the form stores, submits and persists, so saved state and frozen jobs are 
 
 Governance is read from the record, never assumed:
 
-* the *recommended* workflow is the first ``approved`` one in catalog order (owner decision D2: approved
-  Comfy workflows are production backends);
+* the *recommended* workflow is the approved one the catalog declares as the Make Video default
+  (``make_video_default``; the owner's 2026-11-18 decision promoted Wan2.2 I2V-A14B 4-step), else the first
+  ``approved`` one in catalog order (owner decision D2: approved Comfy workflows are production backends);
 * an experimental workflow is never recommended and never preselected by a handoff.  It stays selectable,
   is labelled as experimental, and still needs the job's own opt-in.
 """
@@ -37,13 +38,22 @@ def _is_approved(record: Mapping[str, Any]) -> bool:
     return str(record.get("governance_state") or "") == WORKFLOW_GOVERNANCE_APPROVED
 
 
-def recommended_workflow_id(records: Iterable[Mapping[str, Any]]) -> str:
-    """The first approved workflow, or an empty string when none is approved."""
+def approved_in_preference_order(records: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Approved, non-experimental records: the declared Make Video default first, then catalog order."""
 
-    for record in records:
-        if record.get("workflow_id") and _is_approved(record) and not record.get("experimental"):
-            return str(record["workflow_id"])
-    return ""
+    approved = [
+        record
+        for record in records
+        if record.get("workflow_id") and _is_approved(record) and not record.get("experimental")
+    ]
+    return sorted(approved, key=lambda record: not record.get("make_video_default"))
+
+
+def recommended_workflow_id(records: Iterable[Mapping[str, Any]]) -> str:
+    """The preferred approved workflow, or an empty string when none is approved."""
+
+    ordered = approved_in_preference_order(records)
+    return str(ordered[0]["workflow_id"]) if ordered else ""
 
 
 def _base_name(record: Mapping[str, Any]) -> str:
@@ -91,6 +101,7 @@ __all__ = [
     "EXPERIMENTAL_SUFFIX",
     "RECOMMENDED_SUFFIX",
     "WorkflowChoice",
+    "approved_in_preference_order",
     "recommended_workflow_id",
     "workflow_choices",
 ]
