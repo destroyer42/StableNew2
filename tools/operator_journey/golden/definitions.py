@@ -128,8 +128,9 @@ LRN_01 = JourneyDef(
 )
 
 # --- advanced journeys (PR-TEST-JOURNEYS-832) --------------------------------------------------------------------------
-# Simulated lane only: no advanced journey has a physical lane, and ``physical`` stays False until a physical
-# qualification of that journey is separately planned, authorised and run.
+# Simulated lane only unless ``physical`` is True.  IMG-03 has a gated physical lane (QUAL-921); every other advanced
+# journey stays simulated-only until a physical lane for it is separately built.  A physical lane is a capability of the
+# harness, never an authorization: each run still needs a frozen plan, an owner authorization of its digest and a launch.
 
 IMG_02 = JourneyDef(
     key="prompt-model",
@@ -175,6 +176,9 @@ IMG_03 = JourneyDef(
         "Open the edited result",
         "Compare with Parent",
         "Verify provenance and original-asset preservation",
+        "Optional (frozen inputs): extend the canvas through Review's Extend Canvas and queue the outpaint",
+        "Optional (frozen inputs): Regenerate with Changes from History, edit the draft, Preview, Add to Queue",
+        "Optional (frozen inputs): Replay the source job from History and compare it with its recorded parent",
     ),
     simulated_acceptance=(
         "the source image is byte-identical after the edit",
@@ -183,9 +187,21 @@ IMG_03 = JourneyDef(
         "Review compares the parent and the edit",
         "unsupported operations refuse honestly",
         "no prior artifact or History entry is overwritten",
+        "the outpaint keeps every original pixel at its frozen bounding box",
+        "Regenerate with Changes queues exactly the edited draft with parent lineage",
+        "a replay is a new NJR whose recorded parent is the replayed job",
     ),
-    physical_acceptance=(),
-    physical=False,
+    physical_acceptance=(
+        "source SHA-256",
+        "protected region byte-identical",
+        "edited region changed",
+        "mask geometry frozen in the NJR",
+        "new job identity with parent lineage",
+        "Compare with Parent shows the right pair",
+        "model and runtime identity",
+        "peak VRAM, host RAM and commit",
+        "teardown evidence",
+    ),
 )
 
 VID_02 = JourneyDef(
