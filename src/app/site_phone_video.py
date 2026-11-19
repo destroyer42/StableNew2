@@ -163,6 +163,68 @@ class PhoneVideo:
         cases, sizes = self._select_sources(
             catalog, sources, prompt.strip(), negative_prompt.strip()
         )
+        return self._build(catalog, cases, sizes, selected, supported, seed, evaluation=evaluation)
+
+    def followup_workflow(self, workflow: tuple[str, str]) -> WorkflowSpec:
+        spec = self._supported().get(workflow)
+        if spec is None or spec.governance_state != "approved":
+            raise SiteOutputError("followup_workflow_unavailable")
+        return spec
+
+    def followup(
+        self,
+        catalog: SiteOutputCatalog,
+        case: EvalCase,
+        size: tuple[int, int],
+        spec: WorkflowSpec,
+        seed: int,
+        frames: tuple[int, int],
+    ) -> PhonePreviewInput:
+        if frames[0] == frames[1] or any(value not in legal_frame_counts(spec) for value in frames):
+            raise SiteOutputError("invalid_followup_value")
+        arms = [
+            EvalArm(
+                f"arm-{index}",
+                f"{spec.display_name} · {count} frames",
+                ARM_BACKEND_WORKFLOW,
+                {
+                    "workflow_id": spec.workflow_id,
+                    "workflow_version": spec.workflow_version,
+                    "experimental_opt_in": False,
+                    "frame_count": count,
+                },
+            )
+            for index, count in enumerate(frames, 1)
+        ]
+        draft = self._build(
+            catalog,
+            [case],
+            {case.case_id: size},
+            arms,
+            {spec.registry_key: spec},
+            seed,
+            evaluation=True,
+        )
+        return replace(
+            draft,
+            label="Video frame count follow-up",
+            job_details=tuple(
+                {key: value for key, value in details.items() if key != "negative_prompt"}
+                for details in draft.job_details
+            ),
+        )
+
+    def _build(
+        self,
+        catalog: SiteOutputCatalog,
+        cases: list[EvalCase],
+        sizes: dict[str, tuple[int, int]],
+        selected: list[EvalArm],
+        supported: dict[tuple[str, str], WorkflowSpec],
+        seed: int,
+        *,
+        evaluation: bool,
+    ) -> PhonePreviewInput:
         root = catalog.library.root
         builder = VideoWorkflowNjrBuilder(
             workflow_registry=self._registry, output_dir_provider=lambda: str(root)

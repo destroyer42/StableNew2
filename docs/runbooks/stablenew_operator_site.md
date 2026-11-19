@@ -125,6 +125,23 @@ used by the Windows builder. Playback uses the recorded clip stream, with the di
 - If the Preview changes or an admission cannot be verified, inspect the Windows draft or queue. A timed-out remote
   request is never resubmitted automatically.
 
+## Plan a follow-up from Review
+
+With phone Preview and queue permission, choose **Plan a follow-up** from a synced Native Review image rating,
+a verified returned rework comparison, or a matched video evaluation pair with both ratings synced. Image
+follow-ups also require Native Review permission. Video follow-ups require ratings permission.
+
+The image template compares two sampling-step counts on the original, verified single-image text-to-image
+recipe. A returned rework can motivate that test, while its result remains observational evidence. The video
+template compares two legal frame counts on the recorded baseline's approved workflow. When the earlier pair
+changed workflow version and generation resolution together, the plan calls out both changes and tests frame
+count with a single workflow, graph, and generation size.
+
+Load the plan in **Queue** to see the objective, fixed controls, two-job count, and evidence to collect. Choose a
+test value and review the plan before building Preview. Review the exact jobs, then explicitly submit if desired.
+StableNew checks the original evidence again before admission. If it changed, return to the current evidence and
+load a fresh plan. The templates run on Windows using the native evidence, model policy, and workflow catalog.
+
 ## Ownership and access
 
 The native listener binds only IPv4 loopback port 49381 and requires the precise Site origin and an in-memory bearer.

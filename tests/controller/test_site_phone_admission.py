@@ -14,6 +14,7 @@ from src.app.site_phone_admission import PhoneQueueAdmission
 from src.app.site_phone_connector import _desktop_call
 from src.app.site_phone_credentials import PhoneFolder, PhoneGrant
 from src.app.site_phone_eval import PhoneEvalReports
+from src.app.site_phone_followup import PhoneFollowup
 from src.app.site_phone_preview_host import PhonePreviewHost
 from src.app.site_phone_queue import PHONE_QUEUE_PATH, PhoneQueueView
 from src.app.site_phone_video import PhoneVideo
@@ -27,14 +28,17 @@ from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
-from src.review.review_evidence import save_disposition
+from src.review.review_evidence import build_review_rating_record, save_disposition
 from src.review.review_lineage import verified_review_outputs
 from src.utils.config import ConfigManager
+from src.utils.image_metadata import ImageMetadataContractV26, write_png_metadata
+from src.utils.njr_identity import snapshot_fingerprint
 from src.utils.prompt_packs import PromptPackInfo
 from src.video.video_eval_metrics import ClipMeasurement
 from src.video.video_eval_report import build_eval_report
 from tests.controller.test_site_output_library import _library, _search
 from tests.gui_v2.test_review_batch_200 import images
+from tests.pipeline.test_history_variation_compiler_610a import _source
 from tests.video.test_pr_vid_eval_320_report import _metrics
 
 
@@ -47,7 +51,9 @@ def native(tmp_path):
     runner = Mock(job_queue=queue, is_running=lambda: True)
     jobs = JobService(queue, runner=runner)
     records = tmp_path / "review.jsonl"
-    catalog = SiteOutputCatalog(output, review_outputs=partial(verified_review_outputs, repository))
+    catalog = SiteOutputCatalog(
+        output, review_outputs=partial(verified_review_outputs, repository), review_records=records
+    )
     grant = PhoneGrant(
         "1" * 32,
         "Synthetic phone",
@@ -76,13 +82,15 @@ def native(tmp_path):
     app.pipeline_controller = compiler
     host = PhonePreviewHost(app, repository, records)
     queue_view = PhoneQueueView(repository, jobs)
+    video = PhoneVideo(jobs)
     admission = PhoneQueueAdmission(
         queue_view,
         jobs,
         packs=host.packs,
         compile_pack=host.compile_pack,
         compile_rework=host.compile_rework,
-        video=PhoneVideo(jobs),
+        video=video,
+        followup=PhoneFollowup(repository, video),
     )
     reports = PhoneEvalReports(repository)
 
@@ -248,6 +256,93 @@ def test_phone_rework_rechecks_mark_and_bytes_and_returns_native_lineage(native)
     )
     returned = _library(native.catalog, "review_results", id=target, digest=digest)["results"]
     assert [result["item"]["id"] for result in returned] == [ids[child.name]]
+
+
+def test_image_followup_binds_rating_and_returned_lineage_to_history_recipe(native, monkeypatch):
+    monkeypatch.setattr(
+        "src.learning.model_policy_service.RegistryFamilyLookup",
+        lambda: lambda _name: SimpleNamespace(
+            status=SimpleNamespace(value="resolved"), family="sdxl"
+        ),
+    )
+    record = _source()
+    native.jobs.submit_njrs((record,))
+    job = native.repository.get_job_model(record.job_id)
+    entry = native.repository.get_job(record.job_id)
+    path = native.root / "origin.png"
+    Image.new("RGB", (64, 64), "blue").save(path)
+    assert write_png_metadata(
+        path,
+        {
+            ImageMetadataContractV26.KEY_JOB_ID: record.job_id,
+            ImageMetadataContractV26.KEY_NJR_SHA256: snapshot_fingerprint(entry.snapshot),
+        },
+    )
+    running = native.repository.transition_job(job, JobStatus.RUNNING)
+    native.repository.transition_job(
+        running,
+        JobStatus.COMPLETED,
+        result={
+            "artifact": {"artifact_type": "image", "primary_path": str(path)},
+            "metadata": {"actual_seed": 1234},
+        },
+    )
+    returned = native.root / "rework.png"
+    Image.new("RGB", (64, 64), "green").save(returned)
+    by_name = {item["name"]: item["id"] for item in _search(native.catalog)["items"]}
+    original = _library(native.catalog, "inspect", id=by_name[path.name])
+    child = _library(native.catalog, "inspect", id=by_name[returned.name])
+    source = {"kind": "rating", "id": by_name[path.name], "digest": original["digest"]}
+    query = {"scope": native.catalog.scope, "source": source}
+    planner = replace(native.grant, native_review=True)
+    assert native.call("followup", query)[0] == 403
+    assert native.call("followup", query, device=planner)[1]["error"] == "followup_rating_required"
+    rating = build_review_rating_record(
+        {"image_path": str(path), "rating": 3, "notes": "Local notes"},
+        artifact_sha256=original["digest"],
+    )
+    assert LearningRecordWriter(native.review).append_record(rating)
+    status, plan = native.call("followup", query, device=planner)
+    assert status == 200, plan
+    assert plan["baseline"] == 30 and plan["job_count"] == 2
+    assert "Local notes" not in json.dumps(plan) and str(native.root) not in json.dumps(plan)
+    query["source"] = {
+        **source,
+        "kind": "returned",
+        "result_id": by_name[returned.name],
+        "result_digest": child["digest"],
+    }
+    assert (
+        native.call("followup", query, device=planner)[1]["error"]
+        == "followup_provenance_unverified"
+    )
+    monkeypatch.setattr(
+        native.catalog,
+        "review_outputs",
+        lambda digest: [str(returned)] if digest == original["digest"] else [],
+    )
+    status, plan = native.call("followup", query, device=planner)
+    assert status == 200 and "observational evidence" in plan["finding"]
+    intent = {
+        **query,
+        "kind": "followup",
+        "revision": plan["revision"],
+        "reviewed": True,
+        "value": 25,
+    }
+    status, preview = native.call("preview", intent, device=planner)
+    assert status == 200, preview
+    assert len(native.repository.list_jobs()) == 1
+    baseline, variant = preview["jobs"]
+    assert baseline["steps"] == 30 and variant["steps"] == 25
+    assert baseline["seed"] == variant["seed"] == 1234
+    submit = {"preview_id": preview["preview_id"], "confirmed": True}
+    assert native.call("submit", submit)[1]["cause"] == "phone_scope_refused"
+    _, preview = native.call("preview", intent, device=planner)
+    submit["preview_id"] = preview["preview_id"]
+    _, receipt = native.call("submit", submit, device=planner)
+    assert receipt["state"] == "admitted" and len(receipt["job_ids"]) == 2
+    assert native.call("submit", submit, device=planner)[1] == receipt
 
 
 def _arm(workflow, version, opt_in=False):
@@ -417,6 +512,97 @@ def test_phone_eval_480p_720p_alternate_receipt_and_report_refresh(native, monke
     refreshed = native.catalog.get_run(run_id, review=True)
     assert refreshed["report_revision"] == refreshed["revision"] and not refreshed["report_stale"]
     assert refreshed["clips"][0]["rating"]["notes"] == "Synthetic review"
+
+    pair = next(pair for pair in refreshed["pairs"] if pair["candidate"] == "arm-2")
+    source = {"kind": "evaluation", "run": run_id, **pair}
+    suggestion = {**body, "source": source}
+    assert native.call("followup", suggestion)[0] == 403
+    assert native.call("followup", suggestion, device=rater)[0] == 403
+    planner = replace(native.grant, rating=True)
+    assert (
+        native.call("followup", suggestion, device=planner)[1]["error"]
+        == "followup_rating_required"
+    )
+
+    def rate(row, judgments):
+        current = native.catalog.get_run(run_id, review=True)
+        native.catalog.save_rating(
+            run_id,
+            {
+                **body,
+                "revision": current["revision"],
+                "case_id": row["case"],
+                "arm_id": row["arm_id"],
+                "job_id": row["job_id"],
+                "artifact_sha256": row["artifact_sha256"],
+                "source_sha256": row["source_sha256"],
+                "rebind": False,
+                "judgments": judgments,
+            },
+        )
+
+    pair_rows = [
+        row
+        for row in refreshed["clips"]
+        if row["case"] == pair["case"] and row["arm_id"] in {pair["baseline"], pair["candidate"]}
+    ]
+    for row in pair_rows:
+        rate(
+            row,
+            {
+                "requested_action": "achieved",
+                "source_fidelity_1_to_5": "4",
+                "subject_stability_1_to_5": "3",
+                "critical_identity_break": "no",
+            },
+        )
+
+    status, plan = native.call("followup", suggestion, device=planner)
+    assert status == 200, plan
+    assert "workflow version" in plan["finding"] and "generation resolution" in plan["finding"]
+    assert plan["job_count"] == 2 and "Pan slowly" not in json.dumps(plan)
+    choices = [value for value in plan["choices"] if value != plan["suggested"]]
+    intent = {
+        **suggestion,
+        "kind": "followup",
+        "revision": plan["revision"],
+        "value": choices[0],
+        "reviewed": True,
+    }
+    assert native.call("preview", {**intent, "reviewed": False}, device=planner)[0] == 409
+    assert (
+        native.call("preview", {**intent, "value": 82}, device=planner)[1]["error"]
+        == "invalid_followup_value"
+    )
+    status, followup = native.call("preview", intent, device=planner)
+    assert status == 200, followup
+    assert len(native.repository.list_jobs()) == 6
+    baseline_job, variant_job = followup["jobs"]
+    assert baseline_job["frames"] == 81 and variant_job["frames"] == choices[0]
+    for key in (
+        "workflow_id",
+        "workflow_version",
+        "graph_revision",
+        "width",
+        "height",
+        "seed",
+        "fps",
+        "models",
+    ):
+        assert baseline_job[key] == variant_job[key]
+    rate(pair_rows[0], {"source_fidelity_1_to_5": "5"})
+    submit = {"preview_id": followup["preview_id"], "confirmed": True}
+    _, refused = native.call("submit", submit, device=planner)
+    assert refused["cause"] == "followup_evidence_changed"
+    assert len(native.repository.list_jobs()) == 6
+
+    _, fresh = native.call("followup", suggestion, device=planner)
+    _, followup = native.call("preview", {**intent, "revision": fresh["revision"]}, device=planner)
+    submit["preview_id"] = followup["preview_id"]
+    _, accepted = native.call("submit", submit, device=planner)
+    assert accepted["state"] == "admitted" and len(accepted["job_ids"]) == 2
+    assert native.call("submit", submit, device=planner)[1] == accepted
+    assert len(native.repository.list_jobs()) == 8
 
 
 def test_phone_report_refresh_refuses_source_outside_share(native, tmp_path):
