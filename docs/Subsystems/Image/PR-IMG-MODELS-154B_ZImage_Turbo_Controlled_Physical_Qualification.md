@@ -63,6 +63,8 @@ no-survivor facts therefore remained false, producing `INSTRUMENTATION_GAP`; thi
 
 At 2026-10-11T01:52:26Z, a separate read-only process/port observation found none of the recorded root/survivor PIDs and
 no port 7886 listener. This later observation does not prove absence at the original verification time or change its verdict.
+**Fixed by QUAL-927:** `OwnedRuntime.stop` now verifies the recorded tree and port 7886 with a bounded, timestamped,
+observation-only wait (`tools/qualification/owned_tree.py`) instead of one immediate check; the case-2 verdict is unchanged.
 The supplemental observation is outside the frozen bundle, in the local temporary retry package's
 `post-run-process-observation.json`; no process was stopped or restarted by that observation.
 

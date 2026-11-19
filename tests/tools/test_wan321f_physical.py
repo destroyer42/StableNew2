@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -133,11 +133,9 @@ def test_valid_pngs_are_decoded_and_hashed(tmp_path):
         physical.validate_outputs(history, tmp_path)
 
 
-@pytest.mark.parametrize("failure", [None, "ambiguous", "oom", "startup"])
+@pytest.mark.parametrize("failure", [None, "ambiguous", "oom", "startup", "survivor"])
 def test_complete_fake_session_exact_once_and_teardown(tmp_path, monkeypatch, failure):
     import hashlib
-
-    import psutil
 
     root = tmp_path / "evidence"
     root.mkdir()
@@ -223,7 +221,7 @@ def test_complete_fake_session_exact_once_and_teardown(tmp_path, monkeypatch, fa
             pass
 
     class Monitor:
-        def __init__(self, manager, path, policy):
+        def __init__(self, manager, path, policy, **kwargs):
             self.reason, self.path = "", path
             monitors.append(self)
 
@@ -244,26 +242,133 @@ def test_complete_fake_session_exact_once_and_teardown(tmp_path, monkeypatch, fa
     monkeypatch.setattr("src.video.comfy_process_manager.ComfyProcessManager", Manager)
     monkeypatch.setattr("src.video.comfy_api_client.ComfyApiClient", Client)
     monkeypatch.setattr(physical, "Monitor", Monitor)
-    original_process = psutil.Process
+
+    class Table:
+        """The owned launcher exists while its manager owns it; a ``survivor`` child outlives the stop."""
+
+        def running(self):
+            return any(m.owns_process for m in managers)
+
+        def exists(self, pid):
+            return (pid == 424242 and self.running()) or (pid == 424243 and failure == "survivor")
+
+        def create_time(self, pid):
+            return {424242: 1.0, 424243: 2.0}.get(pid)
+
+        def children(self, pid):
+            return [424243] if failure == "survivor" else []
+
+        def listening_pids(self, port):
+            assert port == 8197
+            return []
+
+    monkeypatch.setattr(physical, "process_table", Table)
     monkeypatch.setattr(
-        psutil,
-        "Process",
-        lambda pid: SimpleNamespace(children=lambda **_: [])
-        if pid == 424242
-        else original_process(pid),
-    )
-    monkeypatch.setattr(psutil, "pid_exists", lambda pid: False)
+        physical, "TEARDOWN_DEADLINE_SECONDS", 0.0
+    )  # a survivor ends the wait at once
     assert physical.main() == (1 if failure else 0)
     result = json.loads((root / "physical-001/result.json").read_text())
     assert result["verdict"] == (
         "NO-GO" if failure == "oom" else "INCONCLUSIVE" if failure else "PASS"
     )
-    expected_posts = 0 if failure == "startup" else 1 if failure else 3
+    expected_posts = 0 if failure == "startup" else 1 if failure not in (None, "survivor") else 3
     assert len(clients[0].posts) == expected_posts
     assert managers[0].stops == 1
-    assert json.loads((root / "physical-001/teardown.json").read_text())["verified"]
+    teardown = json.loads((root / "physical-001/teardown.json").read_text())
+    assert teardown["verified"] is (failure != "survivor")
+    assert teardown["bounded_wait"]["deadline_seconds"] == 0.0
+    assert teardown["bounded_wait"]["observations"][0]["utc"]
+    if failure == "survivor":
+        assert teardown["surviving_pids"] == [424243] and teardown["observed_children"] == [424243]
     with pytest.raises(FileExistsError):
         physical.main()
     assert len(clients[0].posts) == expected_posts
     if failure == "oom":
         assert (root / "physical-001/attempt-1/history.json").is_file()
+
+
+def test_qual927_monitor_samples_the_whole_owned_tree_not_the_launcher_stub(tmp_path, monkeypatch):
+    """The 321F session measured only the 4.7 MB launcher; the worker beneath it is now counted."""
+
+    from tools.qualification.vid160c import win_memory
+
+    @dataclass(frozen=True)
+    class Mem:
+        working_set_gb: float
+        private_usage_gb: float
+
+    class Table:
+        def exists(self, pid):
+            return pid in (10, 11, 12)
+
+        def create_time(self, pid):
+            return float(pid)
+
+        def children(self, pid):
+            assert pid == 10  # only the owned root is ever walked
+            return [11, 12]
+
+        def listening_pids(self, port):
+            return []
+
+    memory = {10: Mem(0.0044, 0.0009), 11: Mem(8.0, 12.0), 12: Mem(0.5, 0.25)}
+    commit = win_memory.SystemCommit(22.5, 56.0, 30.0, 33.5, 40.2, 31.9, 16.0)
+    monkeypatch.setattr(win_memory, "read_system_commit", lambda: commit)
+    monkeypatch.setattr(
+        physical,
+        "gpu_sample",
+        lambda: {"name": "NVIDIA GeForce RTX 4070 Ti", "total_mib": 12282, "used_mib": 2000.0},
+    )
+    manager = SimpleNamespace(
+        pid=10, owns_process=True, get_stdout_tail=lambda: [], get_stderr_tail=lambda: []
+    )
+    monitor = physical.Monitor(
+        manager, tmp_path, frozen_plan()["safety_proposal"], table=Table(), memory=memory.get
+    )
+    monitor.sample_once()
+
+    record = json.loads((tmp_path / "telemetry.jsonl").read_text().splitlines()[-1])
+    assert record["sample"]["owned_working_set_gib"] == pytest.approx(8.5044)
+    assert record["sample"]["owned_private_gib"] == pytest.approx(12.2509)
+    assert record["process_tree"]["pids"] == [10, 11, 12]
+    assert record["process_tree"]["processes"]["11"] == {
+        "working_set_gib": 8.0,
+        "private_gib": 12.0,
+    }
+    assert record["system"]["physical_available_gb"] == 16.0
+    assert monitor.children == {11, 12}
+    assert [p.pid for p in monitor.tree.recorded] == [10, 11, 12]
+    assert monitor.tree.peaks["tree_private_gib"] == pytest.approx(12.2509)
+
+
+def test_qual927_monitor_fails_closed_when_no_owned_process_can_be_read(tmp_path, monkeypatch):
+    from tools.qualification.vid160c import win_memory
+
+    class Table:
+        def exists(self, pid):
+            return True
+
+        def create_time(self, pid):
+            return 1.0
+
+        def children(self, pid):
+            return []
+
+        def listening_pids(self, port):
+            return []
+
+    commit = win_memory.SystemCommit(22.5, 56.0, 30.0, 33.5, 40.2, 31.9, 16.0)
+    monkeypatch.setattr(win_memory, "read_system_commit", lambda: commit)
+    monkeypatch.setattr(
+        physical,
+        "gpu_sample",
+        lambda: {"name": "NVIDIA GeForce RTX 4070 Ti", "total_mib": 12282, "used_mib": 2000.0},
+    )
+    manager = SimpleNamespace(
+        pid=10, owns_process=True, get_stdout_tail=lambda: [], get_stderr_tail=lambda: []
+    )
+    monitor = physical.Monitor(
+        manager, tmp_path, frozen_plan()["safety_proposal"], table=Table(), memory=lambda pid: None
+    )
+    with pytest.raises(RuntimeError, match="memory telemetry unavailable"):
+        monitor.sample_once()

@@ -576,11 +576,35 @@ def profile(tmp_path, layout):
     return rt.build_isolated_launch_profile(layout, str(tmp_path / "install"), contract=CONTRACT)
 
 
-def started_runtime(profile, facts=None, **forge_kwargs):
+class FakeClock:
+    """The teardown wait's clock: every wait advances time and may let scripted processes exit (QUAL-927)."""
+
+    def __init__(self, on_wait=None):
+        self.now, self.waits, self.on_wait = 0.0, 0, on_wait
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+        self.waits += 1
+        if self.on_wait is not None:
+            self.on_wait(self.waits)
+
+
+def started_runtime(profile, facts=None, clock=None, **forge_kwargs):
     forge = FakeForge(profile.as_runtime_dict(), **forge_kwargs)
     facts = facts or FakeFacts()
+    clock = clock or FakeClock()
     runtime = rt.OwnedRuntime(
-        profile, forge_factory=lambda p: forge, process_facts=facts, stop_timeout_s=2.0
+        profile,
+        forge_factory=lambda p: forge,
+        process_facts=facts,
+        stop_timeout_s=2.0,
+        monotonic=clock,
+        sleep=clock.sleep,
+        teardown_deadline_s=5.0,
+        teardown_poll_s=0.5,
     )
     runtime.start()
     return runtime, forge, facts
@@ -633,6 +657,7 @@ def test_t32_a_clean_manager_owned_stop_is_verified_only_with_no_survivors(profi
     facts = FakeFacts()
     runtime, forge, _ = started_runtime(profile, facts=facts)
     facts.alive.clear()  # the manager's stop removed the tree
+    facts.listeners.clear()  # and its listener: a clean stop also frees the qualification port (QUAL-927)
     result = runtime.stop()
     assert result.outcome == "verified_clean" and result.verified and result.survivors == ()
     assert forge.calls == ["start", "stop"]
@@ -646,6 +671,62 @@ def test_t32_a_survivor_after_the_stop_is_reported_and_not_clean(profile):
     facts.alive = {4243}
     result = runtime.stop()
     assert result.outcome == "requested_unverified" and result.survivors == (4243,)
+
+
+# --- QUAL-927: the stop is verified by a bounded wait, not one immediate check -------------------------------------------
+
+
+def test_qual927_a_tree_that_exits_after_some_polls_is_verified_clean_within_the_deadline(profile):
+    # Case 2's shape: right after the manager's stop the whole tree (here 20 processes) is still present.
+    tree = tuple(range(4243, 4262))
+    facts = FakeFacts(alive=(4242, *tree), children=tree, listeners=(4243,))
+
+    def exit_gradually(waits):
+        if waits == 2:
+            facts.alive -= set(tree[:10])
+        if waits == 4:
+            facts.alive.clear()
+            facts.listeners.clear()
+
+    clock = FakeClock(exit_gradually)
+    runtime, _, _ = started_runtime(profile, facts=facts, clock=clock)
+    result = runtime.stop()
+
+    assert result.outcome == "verified_clean" and result.verified and result.survivors == ()
+    record = result.as_dict()["teardown"]
+    assert record["deadline_seconds"] == 5.0 and record["poll_seconds"] == 0.5
+    assert len(record["observations"]) == 5 and record["elapsed_seconds"] == 2.0
+    assert len(record["observations"][0]["alive_pids"]) == 20
+    assert record["observations"][0]["listeners"] == {"7886": [4243]}
+    assert all("utc" in o and "t" in o for o in record["observations"])
+    assert {o["pid"] for o in record["owned"]} == {4242, *tree}
+
+
+def test_qual927_survivors_past_the_deadline_stay_unverified_and_are_named(profile):
+    facts = FakeFacts(listeners=())
+
+    def root_exits(waits):
+        facts.alive.discard(
+            4242
+        )  # the root exits on the first wait; its child 4243 outlives the deadline
+
+    clock = FakeClock(root_exits)
+    runtime, _, _ = started_runtime(profile, facts=facts, clock=clock)
+    result = runtime.stop()
+
+    assert result.outcome == "requested_unverified" and not result.verified
+    assert result.survivors == (4243,) and "4243" in result.detail
+    assert clock.now == 5.0  # the wait ended at the recorded deadline
+    assert result.as_dict()["teardown"]["survivors"] == [4243]
+
+
+def test_qual927_a_held_qualification_port_keeps_the_stop_unverified(profile):
+    facts = FakeFacts()
+    runtime, _, _ = started_runtime(profile, facts=facts)
+    facts.alive.clear()  # the tree is gone, but something still listens on 7886
+    result = runtime.stop()
+    assert not result.verified and result.outcome == "requested_unverified"
+    assert result.as_dict()["teardown"]["held_ports"] == {"7886": [4243]}
 
 
 def test_t32_a_stop_that_raises_or_hangs_is_not_clean_and_triggers_operator_instructions(profile):

@@ -21,6 +21,7 @@ from typing import Any
 
 from tools.operator_journey.golden.media import sha256_file
 from tools.operator_journey.workspace import REPO_ROOT, repo_sha
+from tools.qualification.owned_tree import PsutilProcessTable, read_process_memory
 
 # Process image names that identify a generation runtime or trainer (observed, never signalled).
 RUNTIME_PROCESS_HINTS = ("webui", "forge", "comfy", "launch.py", "main.py")
@@ -208,6 +209,9 @@ class HostProbes:
     os_name: Callable[[], str] = (
         lambda: f"{platform.system()} {platform.release()} {platform.version()}"
     )
+    #: Read-only process table and per-process memory reader for the owned worker tree and its teardown (QUAL-927).
+    process_table: Any = field(default_factory=PsutilProcessTable)
+    process_memory: Callable[[int], Any] = read_process_memory
 
     def working_tree_dirty(self) -> list[str]:
         try:
