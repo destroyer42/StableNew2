@@ -21,7 +21,7 @@ From `tools/qualification/system840/ledger.py` (`derive_status`), `verdict.py` a
 - Standing hold `HOLD-GPU-DEVICE-LOSS`: any new device loss stops the campaign. GPU arms never run concurrently, and CPU
   inference (AI Assist, Smart Review) never shares a session with a GPU arm.
 
-## 2. Scope: about 35 qualifiable entries
+## 2. Scope: 34 qualifiable entries (16 out of scope)
 
 | Out of scope for this campaign | Count | Reason |
 | --- | --- | --- |
@@ -108,9 +108,11 @@ Lane: G = GPU, C = CPU-only, O = offline (no inference). "Harness" is what exist
 | Wan2.2 Fun Control 5B | found (ComfyUI `diffusion_models`) |
 | Native SVD XT (`svd_xt.safetensors`, also XT 1.1) | found (Hugging Face cache) |
 | RIFE (`rife-ncnn-vulkan.exe`) | found by `find_rife_executable()` |
-| SDXL baseline checkpoint (`cyberrealisticXL_v90-16fp`) | not under the searched A1111 `models` root; the managed Forge runtime resolves it from its `forge_ref_a1111_home` reference, and readiness verifies the SHA-256 at plan time |
-| SDXL ControlNet models (OpenPose/Canny/Depth) | not found in the searched roots (ComfyUI `controlnet` is empty) |
-| SAM 2.1 Small, Florence-2 Base FT weights | not found in the searched roots |
+| SDXL baseline checkpoint (`cyberrealisticXL_v90-16fp`) | found under the WebUI root the app resolves (`app_config.get_webui_workdir()`); readiness verifies the SHA-256 at plan time |
+| SDXL ControlNet OpenPose (`thibaud_xl_openpose`) | installed; SHA-256 equals the ledger identity of `IMG-Q2.controlnet-openpose` (`9e070426…`) |
+| SDXL ControlNet Canny (`diffusers_xl_canny_full`) | installed 2026-11-18 at the catalog-pinned revision; SHA-256 and size verified against `config/curated_asset_catalog.json` |
+| SDXL ControlNet Depth | `diffusers_xl_depth_fp16` installed 2026-11-18 at the catalog-pinned revision and verified; an older `diffusers_xl_depth_full` file of unknown provenance does not match the catalog hash for that name and is not used for qualification |
+| SAM 2.1 Small, Florence-2 Base FT | installed 2026-11-18 under `models/StableNewAux/` at the catalog-pinned revisions; every file's SHA-256 and size verified (not yet refreshed into the app's registry) |
 
 Not found here means "not in these folders", not "absent". Readiness checks the exact frozen identity before any run, and a
 missing model is a HOLD, never a download.
@@ -159,6 +161,18 @@ messages truthful.
 3. Pace: one sitting per wave with several plans approved together, or one run at a time.
 4. Confirm the out-of-scope list in section 2.
 5. Which SDXL ControlNet models are installed (Wave 3 cannot be planned until this is known).
+
+### Decisions recorded 2026-11-18
+
+1. **Rubric: accepted** as written in section 7. Keep one or two owner-rated PASS outputs per class as reference examples.
+2. **Smart Review: in scope, last** (Wave 6), under the same plan, `APPROVE <arm> <digest12>` and `RUN <digest12>` gate as
+   the GPU arms, with a fixed corpus of about ten owner outputs as the quality reference.
+3. **Pace: accepted.** One sitting per wave; plans frozen and approved together; runs launched one at a time with each
+   canary inspected before the next; at most about four GPU runs per sitting because of `HOLD-GPU-DEVICE-LOSS`.
+4. Out-of-scope list: under item-by-item review.
+5. **ControlNet models: answered** (section 5). OpenPose matches the ledger; Canny full and Depth fp16 are installed from
+   the catalog pins. The `IMG-Q2.controlnet-depth` identity is to move to `diffusers_xl_depth_fp16` by an owner-accepted
+   ledger edit.
 
 ## 9. Proposed build packages (no physical work)
 
