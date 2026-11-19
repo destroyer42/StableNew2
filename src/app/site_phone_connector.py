@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import http.client
 import json
+import logging
 import re
 import secrets
 import time
@@ -30,6 +31,7 @@ from src.app.site_output_routes import (
 )
 from src.app.site_output_routes import post as post_output
 from src.app.site_output_routes import read as read_output
+from src.app.site_phone_admission import PhoneQueueAdmission
 from src.app.site_phone_credentials import (
     IDENTIFIER,
     SITE_SECRET,
@@ -50,6 +52,7 @@ _POLL_INTERVAL = 4.0
 _IO_TIMEOUT = 4.0
 _MAX_RESPONSE = 32 * 1024 * 1024
 _call_deadline: ContextVar[float | None] = ContextVar("site_phone_call_deadline", default=None)
+log = logging.getLogger(__name__)
 
 
 class PhoneConnectorError(ValueError):
@@ -150,7 +153,7 @@ def _desktop_call(
     body: object,
     rating: bool,
     *,
-    phone_queue: PhoneQueueView | None = None,
+    phone_queue: PhoneQueueView | PhoneQueueAdmission | None = None,
     grant: PhoneGrant | None = None,
 ) -> _Reply:
     if not isinstance(path, str):
@@ -158,14 +161,20 @@ def _desktop_call(
     result: dict[str, Any] | tuple[str, bytes]
     try:
         catalog.require_active()
-        if method == "GET" and body is None:
-            if (
-                path.startswith(PHONE_QUEUE_PATH + "/")
-                and phone_queue is not None
-                and grant is not None
-            ):
-                result = phone_queue.read(catalog, grant, path)
-            elif path == "/v1/output/runs":
+        if (
+            path.startswith(PHONE_QUEUE_PATH + "/")
+            and phone_queue is not None
+            and grant is not None
+        ):
+            try:
+                result = phone_queue.handle(
+                    catalog, grant, path.removeprefix(PHONE_QUEUE_PATH + "/"), method, body
+                )
+            except (AttributeError, KeyError, RuntimeError, TypeError):
+                log.exception("Phone queue request could not complete")
+                return _json_reply(503, {"error": "queue_unavailable"})
+        elif method == "GET" and body is None:
+            if path == "/v1/output/runs":
                 result = {"runs": catalog.list_runs()}
             elif match := _RUN.fullmatch(path):
                 result = catalog.get_run(match[1])
@@ -197,7 +206,9 @@ def _desktop_call(
             return _json_reply(403, {"error": "phone_scope_refused"})
         catalog.require_active()
     except SiteOutputError as error:
-        return _json_reply(409, {"error": str(error)})
+        return _json_reply(
+            403 if str(error) == "phone_scope_refused" else 409, {"error": str(error)}
+        )
     except SQLiteError:
         return _json_reply(503, {"error": "queue_unavailable"})
     except (ValueError, OSError, RecursionError):
@@ -229,7 +240,7 @@ class SitePhoneConnector:
         *,
         review_outputs: Callable[[str], Sequence[str]] | None = None,
         review_records: Path | None = None,
-        phone_queue: PhoneQueueView | None = None,
+        phone_queue: PhoneQueueView | PhoneQueueAdmission | None = None,
     ) -> None:
         self._store = store if store is not None else PhoneGrantStore()
         self._http = http if http is not None else PhoneHttp()
@@ -301,6 +312,7 @@ class SitePhoneConnector:
         rating: bool,
         *,
         native_review: bool = False,
+        queue_submit: bool = False,
     ) -> Future[None]:
         future: Future[None] = Future()
 
@@ -317,6 +329,7 @@ class SitePhoneConnector:
                     rating,
                     pending=enrollment.challenge,
                     native_review=native_review,
+                    queue_submit=queue_submit,
                 )
                 self._store.save(grant)
                 self._grant = grant
@@ -448,6 +461,7 @@ class SitePhoneConnector:
                         "host": hashlib.sha256(grant.host_secret.encode()).hexdigest(),
                         "rating": grant.rating,
                         **({"native_review": True} if grant.native_review else {}),
+                        **({"queue_submit": True} if grant.queue_submit else {}),
                     },
                 )
                 if approved.get("id") != grant.id:

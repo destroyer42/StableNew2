@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from src.contracts import PackJobEntry
+from src.controller.app_controller_services.gui_config_service import PackDraftConfig
 from src.pipeline.site_create_settings import Choice, apply_site_settings
+from src.utils.prompt_packs import PromptPackInfo
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +24,41 @@ class SitePackDraft:
     complete: Callable[[str], None]
     previous: tuple[PackJobEntry, ...] = ()
     overrides: tuple[tuple[str, Choice], ...] = ()
+
+
+def build_pack_entries(
+    pack_id: str,
+    pack: PromptPackInfo,
+    prompts: list[dict[str, str]],
+    draft_config: PackDraftConfig,
+    pack_config: dict[str, Any],
+    stage_flags: dict[str, bool],
+    randomizer_metadata: dict[str, Any],
+    *,
+    slots: tuple[int, ...] | None = None,
+    overrides: tuple[tuple[str, Choice], ...] = (),
+) -> list[PackJobEntry]:
+    config_snapshot = draft_config.merge(pack_config)
+    if overrides:
+        config_snapshot = apply_site_settings(config_snapshot, dict(overrides))
+    pipeline_section = config_snapshot["pipeline"]
+    for stage in ("adetailer", "upscale", "txt2img", "img2img"):
+        pipeline_section[f"{stage}_enabled"] = stage_flags.get(stage, stage == "txt2img")
+    config_snapshot.setdefault("randomization_enabled", randomizer_metadata["enabled"])
+    return [
+        PackJobEntry(
+            pack_id=pack_id,
+            pack_name=pack.name,
+            config_snapshot=config_snapshot,
+            prompt_text=row.get("positive", "").strip(),
+            negative_prompt_text=row.get("negative", "").strip(),
+            stage_flags=stage_flags,
+            randomizer_metadata=randomizer_metadata,
+            pack_row_index=index,
+        )
+        for index, row in enumerate(prompts)
+        if slots is None or index in slots
+    ]
 
 
 def prepare_pack_draft(
@@ -72,22 +109,6 @@ def prepare_pack_draft(
                     pack_config = None
 
                 try:
-                    config_snapshot = draft_config.merge(pack_config or {})
-                    if selection is not None and selection.overrides:
-                        config_snapshot = apply_site_settings(
-                            config_snapshot, dict(selection.overrides)
-                        )
-                except (TypeError, ValueError, AttributeError) as exc:
-                    raise ValueError(f"Could not merge settings for '{pack_id}'. {exc}") from exc
-
-                pipeline_section = config_snapshot["pipeline"]
-                for stage in ("adetailer", "upscale", "txt2img", "img2img"):
-                    pipeline_section[f"{stage}_enabled"] = stage_flags.get(
-                        stage, stage == "txt2img"
-                    )
-                config_snapshot.setdefault("randomization_enabled", randomizer_metadata["enabled"])
-
-                try:
                     prompts = read_rows(pack.path)
                 except Exception as exc:  # noqa: BLE001 - report the unreadable pack and continue with others
                     messages.append(f"Failed to read pack '{pack_id}': {exc}")
@@ -99,21 +120,19 @@ def prepare_pack_draft(
                     not selection.current() or max(selection.slots) >= len(prompts)
                 ):
                     raise ValueError("Selected PromptPack slots or settings changed.")
-                for row_index, row in enumerate(prompts):
-                    if selection is not None and row_index not in selection.slots:
-                        continue
-                    entries.append(
-                        PackJobEntry(
-                            pack_id=pack_id,
-                            pack_name=pack.name,
-                            config_snapshot=config_snapshot,
-                            prompt_text=row.get("positive", "").strip(),
-                            negative_prompt_text=row.get("negative", "").strip(),
-                            stage_flags=stage_flags,
-                            randomizer_metadata=randomizer_metadata,
-                            pack_row_index=row_index,
-                        )
+                entries.extend(
+                    build_pack_entries(
+                        pack_id,
+                        pack,
+                        prompts,
+                        draft_config,
+                        pack_config or {},
+                        stage_flags,
+                        randomizer_metadata,
+                        slots=selection.slots if selection else None,
+                        overrides=selection.overrides if selection else (),
                     )
+                )
         except Exception as exc:  # noqa: BLE001 - report worker failure on the GUI thread
             log.exception("Failed to build the PromptPack draft")
             message = f"Could not add PromptPacks. {exc}"

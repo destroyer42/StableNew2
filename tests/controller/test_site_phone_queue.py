@@ -152,7 +152,7 @@ def test_queue_database_failure_returns_a_reply_and_keeps_native_details_private
         "1" * 32, "Fixture", "site-secret", "2" * 64, PhoneFolder.approve(tmp_path), False
     )
     queue_view = Mock(spec=PhoneQueueView)
-    queue_view.read.side_effect = OperationalError("database with private location locked")
+    queue_view.handle.side_effect = OperationalError("database with private location locked")
     reply = _desktop_call(
         SiteOutputCatalog(tmp_path),
         "GET",

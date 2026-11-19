@@ -119,6 +119,18 @@ class PhoneQueueView:
             "jobs": [self._project(jobs[job_id], claim) for job_id in job_ids],
         }
 
+    def handle(
+        self,
+        catalog: SiteOutputCatalog,
+        grant: PhoneGrant,
+        route: str,
+        method: object,
+        body: object,
+    ) -> dict[str, Any]:
+        if method != "GET" or body is not None:
+            raise SiteOutputError("phone_scope_refused")
+        return self.read(catalog, grant, PHONE_QUEUE_PATH + "/" + route)
+
     def read(self, catalog: SiteOutputCatalog, grant: PhoneGrant, path: str) -> dict[str, Any]:
         match = _READ.fullmatch(path.removeprefix(PHONE_QUEUE_PATH + "/"))
         if match is None:
