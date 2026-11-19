@@ -14,6 +14,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from pathlib import Path
 from queue import Empty, Queue
+from sqlite3 import Error as SQLiteError
 from threading import Event, Thread
 from typing import Any
 from urllib.parse import urlsplit
@@ -36,6 +37,7 @@ from src.app.site_phone_credentials import (
     PhoneGrant,
     PhoneGrantStore,
 )
+from src.app.site_phone_queue import PHONE_QUEUE_PATH, PhoneQueueView
 from src.app.site_queue_bridge import SITE_ORIGIN
 from src.utils.thread_registry import get_thread_registry
 
@@ -142,7 +144,14 @@ class PhoneHttp:
 
 
 def _desktop_call(
-    catalog: SiteOutputCatalog, method: object, path: object, body: object, rating: bool
+    catalog: SiteOutputCatalog,
+    method: object,
+    path: object,
+    body: object,
+    rating: bool,
+    *,
+    phone_queue: PhoneQueueView | None = None,
+    grant: PhoneGrant | None = None,
 ) -> _Reply:
     if not isinstance(path, str):
         return _json_reply(403, {"error": "phone_scope_refused"})
@@ -150,7 +159,13 @@ def _desktop_call(
     try:
         catalog.require_active()
         if method == "GET" and body is None:
-            if path == "/v1/output/runs":
+            if (
+                path.startswith(PHONE_QUEUE_PATH + "/")
+                and phone_queue is not None
+                and grant is not None
+            ):
+                result = phone_queue.read(catalog, grant, path)
+            elif path == "/v1/output/runs":
                 result = {"runs": catalog.list_runs()}
             elif match := _RUN.fullmatch(path):
                 result = catalog.get_run(match[1])
@@ -183,6 +198,8 @@ def _desktop_call(
         catalog.require_active()
     except SiteOutputError as error:
         return _json_reply(409, {"error": str(error)})
+    except SQLiteError:
+        return _json_reply(503, {"error": "queue_unavailable"})
     except (ValueError, OSError, RecursionError):
         return _json_reply(409, {"error": "output_unavailable"})
     if isinstance(result, tuple):
@@ -203,7 +220,7 @@ class _Claim:
 
 
 class SitePhoneConnector:
-    """One polling actor and at most one native call. No Tk or queue dependency."""
+    """One polling actor and at most one native call, independent of Tk."""
 
     def __init__(
         self,
@@ -212,11 +229,13 @@ class SitePhoneConnector:
         *,
         review_outputs: Callable[[str], Sequence[str]] | None = None,
         review_records: Path | None = None,
+        phone_queue: PhoneQueueView | None = None,
     ) -> None:
         self._store = store if store is not None else PhoneGrantStore()
         self._http = http if http is not None else PhoneHttp()
         self._review_outputs = review_outputs
         self._review_records = review_records
+        self._phone_queue = phone_queue
         self._commands: Queue[Callable[[], None]] = Queue()
         self._stopping = Event()
         self._revoke_requested = Event()
@@ -506,10 +525,10 @@ class SitePhoneConnector:
                 )
         call = reply.get("call")
         if call is not None and self._claim is None and self._catalog is not None:
-            self._start_call(call, session, started, self._catalog, grant.rating)
+            self._start_call(call, session, started, self._catalog, grant)
 
     def _start_call(
-        self, call: Any, session: str, started: float, catalog: SiteOutputCatalog, rating: bool
+        self, call: Any, session: str, started: float, catalog: SiteOutputCatalog, grant: PhoneGrant
     ) -> None:
         if not isinstance(call, dict):
             return
@@ -529,7 +548,13 @@ class SitePhoneConnector:
             try:
                 future.set_result(
                     _desktop_call(
-                        catalog, call.get("method"), call.get("path"), call.get("body"), rating
+                        catalog,
+                        call.get("method"),
+                        call.get("path"),
+                        call.get("body"),
+                        grant.rating,
+                        phone_queue=self._phone_queue,
+                        grant=grant,
                     )
                 )
             finally:

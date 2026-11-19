@@ -14,6 +14,7 @@ from typing import Any
 from src.app.site_pack_catalog import PreparePack, SitePackCatalog, pack_digest
 from src.app.site_pairing_protocol import PairingTickets, register_protocol
 from src.app.site_phone_connector import SitePhoneConnector
+from src.app.site_phone_queue import PhoneQueueView
 from src.app.site_queue_bridge import (
     PreviewJob,
     PreviewView,
@@ -293,6 +294,7 @@ class SiteConnectionDialog:
         self._phone = SitePhoneConnector(
             review_outputs=self._review_outputs,
             review_records=get_learning_records_path(create_parent=False),
+            phone_queue=PhoneQueueView(repository, app.job_service) if repository else None,
         )
         self._phone_dialog = PhoneReviewDialog(root, self._phone)
 
