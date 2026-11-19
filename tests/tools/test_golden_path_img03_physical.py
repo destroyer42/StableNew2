@@ -94,8 +94,9 @@ def test_img03_has_a_physical_lane_with_the_campaign_acceptance() -> None:
     )
     joined = " ".join(journey.steps)
     assert "Extend Canvas" in joined and "Regenerate with Changes" in joined and "Replay" in joined
-    # every other advanced journey stays simulated-only
-    assert [j.key for j in defs.select("advanced") if j.physical] == ["image-edit"]
+    # every other advanced journey stays simulated-only, except VID-02's offline lane (QUAL-922)
+    assert [j.key for j in defs.select("advanced") if j.physical] == ["image-edit", "motion-assets"]
+    assert [j.key for j in defs.select("advanced") if j.offline] == ["motion-assets"]
 
 
 def test_alignment_and_size_rules_match_the_product() -> None:

@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from tools.operator_journey.golden.offline import is_offline
 from tools.operator_journey.observe import SubmissionObserver
 
 
@@ -34,6 +35,10 @@ def journey_inputs(key: str) -> dict[str, Any]:
         from tools.operator_journey.golden import vid01
 
         return {"motion_prompt": vid01.MOTION_PROMPT}
+    if key == "motion-assets":
+        from tools.operator_journey.golden import offline
+
+        return offline.default_inputs()
     if key == "image-edit":
         from tools.operator_journey.golden import img03_frozen as img03
 
@@ -165,6 +170,11 @@ class PlanGate(SubmissionObserver):
         def gated(records: Any, *args: Any, **kwargs: Any) -> Any:
             batch = list(records)
             problems: list[str] = []
+            if is_offline(self.key):
+                # An offline journey runs no inference: any submission at all is a deviation from its plan.
+                problems.append(
+                    f"{self.key} is an offline journey and submits no job ({len(batch)} submitted)"
+                )
             allowed = int(self.target.get("job_count", 0) or 0)
             if allowed and self.verified + len(batch) > allowed:
                 problems.append(
