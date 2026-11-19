@@ -214,9 +214,16 @@ def test_gallery_search_album_order_and_rating_survive_a_new_pairing(tmp_path):
     _search(connected)
     album = _library(connected, "album", id=album_id)
     assert [item["name"] for item in album["items"]] == [item["name"] for item in page["items"]]
-    assert _library(connected, "inspect", id=album["items"][0]["id"])["rating"]["score"] == 4
+    connected_first = _library(connected, "inspect", id=album["items"][0]["id"])
+    assert connected_first["rating"]["score"] == 4
+    assert album["items"][0]["download"] == {
+        "bytes": len(original),
+        "digest": first["digest"],
+        "rating_target": connected_first["rating_target"],
+    }
     (tmp_path / album["items"][0]["name"]).unlink()
-    assert _library(connected, "album", id=album_id)["items"][0]["unavailable"]
+    missing = _library(connected, "album", id=album_id)["items"][0]
+    assert missing["unavailable"] and "download" not in missing
     _library(
         connected,
         "save_album",
