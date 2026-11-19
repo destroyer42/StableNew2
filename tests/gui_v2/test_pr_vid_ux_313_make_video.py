@@ -40,6 +40,9 @@ from tests.helpers.make_video_313 import (
 
 pytestmark = pytest.mark.gui
 
+# VID-CLIP-372: the catalog declares A14B 4-step the Make Video default.
+RECOMMENDED_ID = "wan22_i2v_a14b_4step_v1"
+
 
 def _pump(root: tk.Misc, milliseconds: int = 120) -> None:
     import time
@@ -154,7 +157,7 @@ def test_make_video_loads_the_selected_image_and_the_recommended_workflow(
     assert (
         env.tab.source_image_var.get() == paths[1]
     )  # the selected image, not the first or the latest
-    assert env.tab.workflow_var.get() == TI2V_ID
+    assert env.tab.workflow_var.get() == RECOMMENDED_ID
     assert "(recommended)" in env.tab.workflow_label_var.get()
     assert env.window.center_notebook.selected[-1] is env.tab
     assert env.service.calls == []  # a handoff queues nothing
@@ -223,12 +226,12 @@ def test_the_pipeline_make_video_failure_is_shown_beside_the_button(env, monkeyp
 def test_make_video_keeps_an_approved_choice_and_never_carries_an_opt_in(env) -> None:
     path = make_image(env.tmp / "src.png")
     route_image_to_video_workflow(main_window=env.window, image_path=path)
-    assert env.tab.workflow_var.get() == TI2V_ID  # the recommended approved workflow
+    assert env.tab.workflow_var.get() == RECOMMENDED_ID  # the recommended approved workflow
 
     env.tab.workflow_var.set(ANIMATE2_ID)
     env.tab._on_workflow_selected(None)
     route_image_to_video_workflow(main_window=env.window, image_path=path)
-    assert env.tab.workflow_var.get() == TI2V_ID
+    assert env.tab.workflow_var.get() == RECOMMENDED_ID
     assert env.tab._experimental_selection_confirmed() is False
     assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is False
 
@@ -260,11 +263,14 @@ def test_an_experimental_workflow_stays_selectable_and_needs_its_own_opt_in(env)
 
 def test_the_picker_shows_friendly_names_but_state_keeps_the_workflow_id(env) -> None:
     labels = list(env.tab.workflow_combo["values"])
-    assert labels and all(TI2V_ID not in label and ANIMATE2_ID not in label for label in labels)
-    assert env.tab.workflow_label_var.get() == "Wan2.2 TI2V-5B Prompt-Directed I2V (recommended)"
+    assert labels and all(
+        TI2V_ID not in label and RECOMMENDED_ID not in label and ANIMATE2_ID not in label
+        for label in labels
+    )
+    assert env.tab.workflow_label_var.get() == "Wan2.2 I2V-A14B 4-step (recommended)"
 
     state = env.tab.get_video_workflow_state()
-    assert state["workflow_id"] == TI2V_ID  # persisted state is unchanged by the picker
+    assert state["workflow_id"] == RECOMMENDED_ID  # persisted state is unchanged by the picker
     env.tab.restore_video_workflow_state({**state, "workflow_id": ANIMATE2_ID})
     assert env.tab.workflow_var.get() == ANIMATE2_ID
     assert "Driving Video" in env.tab.workflow_label_var.get()
@@ -336,7 +342,7 @@ def test_advanced_values_survive_collapse_and_are_announced(env) -> None:
 
 def test_conditioning_fields_are_hidden_unless_the_workflow_declares_them(env) -> None:
     tab = env.tab
-    assert tab.workflow_var.get() == TI2V_ID
+    assert tab.workflow_var.get() == RECOMMENDED_ID
     assert tab.conditioning_section.winfo_manager() == ""  # no camera, depth or ControlNet for TI2V
     tab.workflow_var.set(ANIMATE2_ID)
     assert tab.conditioning_section.winfo_manager() == ""

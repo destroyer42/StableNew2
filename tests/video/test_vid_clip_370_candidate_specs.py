@@ -24,7 +24,12 @@ from src.video.video_backend_types import (
     CONTROL_PROMPT_TEXT,
     CONTROL_SOURCE_IMAGE,
 )
-from src.video.workflow_catalog import WAN22_720P_VERSION, WAN22_FRAMES_VERSION
+from src.video.workflow_catalog import (
+    WAN22_720P_VERSION,
+    WAN22_720P_WORKFLOW_ID,
+    WAN22_720P_WORKFLOW_VERSION,
+    WAN22_FRAMES_VERSION,
+)
 from src.video.workflow_catalog_wan_a14b import (
     WAN_A14B_ID,
     WAN_A14B_MODEL_FILES,
@@ -68,11 +73,11 @@ def _differences(left: Any, right: Any, path: str = "") -> set[str]:
 # --- registration, governance and the picker --------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("workflow_id", "version"), [(WAN_ID, WAN22_720P_VERSION), (WAN_A14B_ID, WAN_A14B_VERSION)]
-)
-def test_both_candidates_are_experimental_and_need_the_per_job_opt_in(
-    workflow_id: str, version: str
+@pytest.mark.parametrize(("workflow_id", "version"), [(WAN_ID, WAN22_720P_VERSION)])
+def test_the_720p_candidate_is_still_experimental_and_needs_the_per_job_opt_in(
+    # VID-CLIP-372 approved A14B 1.0.0 (see test_vid_clip_372_promotion.py); the 720p approval is held.
+    workflow_id: str,
+    version: str,
 ) -> None:
     registry = build_default_workflow_registry()
     spec = registry.get(workflow_id, version, allow_experimental=True)
@@ -101,7 +106,9 @@ def _controller() -> VideoWorkflowController:
     )
 
 
-def test_the_picker_keeps_offering_and_recommending_the_approved_ti2v_1_3_0() -> None:
+def test_the_picker_keeps_offering_the_approved_ti2v_1_3_0_and_recommends_the_promoted_a14b() -> (
+    None
+):
     controller = _controller()
     records = {r["workflow_id"]: r for r in controller.list_workflow_specs()}
 
@@ -114,17 +121,20 @@ def test_the_picker_keeps_offering_and_recommending_the_approved_ti2v_1_3_0() ->
     a14b = records[WAN_A14B_ID]
     assert (a14b["workflow_version"], a14b["governance_state"]) == (
         WAN_A14B_VERSION,
-        "experimental",
+        "approved",
     )
-    assert a14b["experimental"] is True
+    assert a14b["experimental"] is False and a14b["make_video_default"] is True
 
     listed = controller.list_workflow_specs()
-    assert recommended_workflow_id(listed) == WAN_ID
+    assert recommended_workflow_id(listed) == WAN_A14B_ID
     labels = {c.workflow_id: c for c in workflow_choices(listed)}
-    assert labels[WAN_ID].recommended and not labels[WAN_ID].experimental
-    assert labels[WAN_A14B_ID].experimental and not labels[WAN_A14B_ID].recommended
+    assert labels[WAN_A14B_ID].recommended and not labels[WAN_A14B_ID].experimental
+    assert not labels[WAN_ID].recommended and not labels[WAN_ID].experimental
+    # The 720p alternate is its own approved entry beside 480p (VID-CLIP-372), never recommended.
+    assert records[WAN22_720P_WORKFLOW_ID]["governance_state"] == "approved"
+    assert not labels[WAN22_720P_WORKFLOW_ID].recommended
     form = controller.build_default_form_state()
-    assert (form["workflow_id"], form["workflow_version"]) == (WAN_ID, WAN22_FRAMES_VERSION)
+    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
 
 
 def test_a_newer_experimental_version_never_displaces_the_newest_approved_one() -> None:
@@ -153,21 +163,25 @@ def test_ti2v_1_4_0_is_the_1_3_0_graph_at_720p_targets_and_nothing_else() -> Non
     candidate = _spec(WAN_ID, WAN22_720P_VERSION)
     changed = _differences(base, candidate.to_dict())
 
-    assert changed == {
-        "workflow_version",
-        "pinned_revision",
-        "governance_state",
-        "governance_notes",
-        "display_name",
-        "description",
-        "backend_defaults.source_preparation.portrait_target.width",
-        "backend_defaults.source_preparation.portrait_target.height",
-        "backend_defaults.source_preparation.landscape_target.width",
-        "backend_defaults.source_preparation.landscape_target.height",
-        "backend_defaults.provenance.qualification",
-        "backend_defaults.operator_projection.fixed_settings.geometry",
-        "backend_defaults.operator_projection.fixed_settings.hardware",
-    }
+    assert (
+        changed
+        == {
+            "workflow_version",
+            "pinned_revision",
+            "governance_state",
+            "governance_notes",
+            "display_name",
+            "description",
+            "backend_defaults.history_timeout_seconds",  # VID-CLIP-372: 1200 s from the 720p eval timings
+            "backend_defaults.source_preparation.portrait_target.width",
+            "backend_defaults.source_preparation.portrait_target.height",
+            "backend_defaults.source_preparation.landscape_target.width",
+            "backend_defaults.source_preparation.landscape_target.height",
+            "backend_defaults.provenance.qualification",
+            "backend_defaults.operator_projection.fixed_settings.geometry",
+            "backend_defaults.operator_projection.fixed_settings.hardware",
+        }
+    )
     prep = candidate.backend_defaults["source_preparation"]
     assert prep["portrait_target"] == {"width": 704, "height": 1280}
     assert prep["landscape_target"] == {"width": 1280, "height": 704}
@@ -432,12 +446,12 @@ def test_an_a14b_job_completes_through_the_frames_out_path(tmp_path: Path, _no_e
     )
 
 
-def test_an_a14b_job_without_the_opt_in_is_refused_before_queue_prompt(tmp_path: Path) -> None:
+def test_an_approved_a14b_job_runs_without_the_per_job_opt_in(tmp_path: Path, _no_encode) -> None:
     client = _FramesFake(tmp_path, save_node="16", info=_a14b_info())
 
-    with pytest.raises(KeyError, match="explicit experimental opt-in"):
-        _a14b_backend(client, tmp_path).execute(None, _a14b_request(tmp_path, opt_in=False))
-    assert client.queued == []
+    result = _a14b_backend(client, tmp_path).execute(None, _a14b_request(tmp_path, opt_in=False))
+
+    assert result is not None and len(client.queued) == 1
 
 
 def test_an_a14b_job_needs_a_runtime_that_supports_disable_pinned_memory(tmp_path: Path) -> None:
@@ -566,14 +580,13 @@ def test_the_example_suite_is_synthetic_and_names_the_three_arms() -> None:
         "1.3.0",
     )
     assert "experimental_opt_in" not in arms["ti2v_480p"]
-    assert (arms["ti2v_720p"]["workflow_version"], arms["ti2v_720p"]["experimental_opt_in"]) == (
-        "1.4.0",
-        True,
+    assert (arms["ti2v_720p"]["workflow_id"], arms["ti2v_720p"]["workflow_version"]) == (
+        WAN22_720P_WORKFLOW_ID,
+        WAN22_720P_WORKFLOW_VERSION,
     )
-    assert (arms["a14b_480p"]["workflow_id"], arms["a14b_480p"]["experimental_opt_in"]) == (
-        WAN_A14B_ID,
-        True,
-    )
+    assert arms["a14b_480p"]["workflow_id"] == WAN_A14B_ID
+    # VID-CLIP-372: every arm is approved, so none declares the experimental opt-in.
+    assert all("experimental_opt_in" not in form for form in arms.values())
 
 
 def test_the_example_suite_builds_one_njr_per_case_per_arm_and_admits_once(tmp_path: Path) -> None:
@@ -589,13 +602,13 @@ def test_the_example_suite_builds_one_njr_per_case_per_arm_and_admits_once(tmp_p
 
     assert plan.eligible, plan.summary()
     assert len(plan.jobs) == 9 and job_service.calls == []  # a preview admits nothing
-    assert set(plan.experimental_arms) == {"ti2v_720p", "a14b_480p"}
+    assert set(plan.experimental_arms) == set()
     by_cell = {(job.case_id, job.arm_id): job.njr.config["video_workflow"] for job in plan.jobs}
     assert len(by_cell) == 9
     expected = {
         "ti2v_480p": (WAN_ID, "1.3.0", False, (480, 832)),
-        "ti2v_720p": (WAN_ID, "1.4.0", True, (704, 1280)),
-        "a14b_480p": (WAN_A14B_ID, "1.0.0", True, (480, 832)),
+        "ti2v_720p": (WAN22_720P_WORKFLOW_ID, "1.0.0", False, (704, 1280)),
+        "a14b_480p": (WAN_A14B_ID, "1.0.0", False, (480, 832)),
     }
     for (case_id, arm_id), config in by_cell.items():
         workflow_id, version, opt_in, portrait = expected[arm_id]

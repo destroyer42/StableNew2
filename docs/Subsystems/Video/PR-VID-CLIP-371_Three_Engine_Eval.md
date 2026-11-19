@@ -73,6 +73,13 @@ intended Make Video default. TI2V-5B 720p is an alternate. TI2V-5B 480p stays
 available but is not the default. This record changes no code, spec or
 setting; implementing the decision is a separate package.
 
+Implementation (VID-CLIP-372): A14B 1.0.0 is approved and the Make Video default, the 720p history timeout is
+1200 s (per spec), an owned ComfyUI gets a 180 s cold-start readiness window, the A14B launch flag is applied or
+Queue is blocked, and an approved workflow on a ComfyUI other than 0.38.0 warns (`VIDEO_PIPELINE.md` sections 1.1
+and 4.4). TI2V-5B 720p is approved as an alternate under its own workflow id, `wan22_ti2v_5b_i2v_720p_v1` 1.0.0 (the owner
+chose a separate id over per-version picker entries), so 1.3.0 (480p) stays selectable; 1.4.0 of the 480p id stays
+experimental.
+
 ## Recommended next actions (each a new package)
 
 1. Promotion package: move `wan22_i2v_a14b_4step_v1` 1.0.0 from experimental to

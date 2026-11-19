@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-763 of 918 modules have a docstring.
+764 of 919 modules have a docstring.
 
 ## src/
 
@@ -968,6 +968,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `recent_video_outputs.py`: Recent video outputs recovered from canonical persisted jobs (PR-VID-UX-314)
 - `review_preview.py`: Bounded, read-only review previews of existing video outputs (PR-VID-QUALITY-211)
 - `rife_runtime.py`: Locate the external ``rife-ncnn-vulkan`` runtime and choose its model and factor (PR-VID-SMOOTH-302)
+- `runtime_version_check.py`: Warn when an approved Comfy workflow runs on a ComfyUI version it was not qualified on (VID-CLIP-372)
 - `sequence_admission.py`: Admission of a multi-segment video job: intent in, frozen ``SequencePlan`` out (PR-VID-SEQ-330-CORE)
 - `sequence_assembly.py`: Assemble a sequence's frames into one movie with the ASM-332 engine, inside the sequence job (PR-VID-SEQ-330-…
 - `sequence_frames.py`: Frame-level helpers of a sequence job: the exact final frame, overlap trimming, opt-in colour matching and th…
@@ -1020,7 +1021,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_asset_integrity.py`: Read-only verification of catalog-pinned assets in the configured Comfy model folders
 - `workflow_catalog.py`: (no docstring)
 - `workflow_catalog_fun_control.py`: Pinned stock-node Fun Control graph; no installation or physical qualification
-- `workflow_catalog_wan_a14b.py`: Wan2.2 I2V-A14B lightx2v 4-step experimental workflow spec (VID-CLIP-370)
+- `workflow_catalog_wan_a14b.py`: Wan2.2 I2V-A14B lightx2v 4-step workflow spec (VID-CLIP-370; approved by VID-CLIP-372)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
 - `workflow_compiler.py`: (no docstring)
 - `workflow_contracts.py`: (no docstring)

@@ -17,7 +17,7 @@ from src.gui.views.video_workflow_task_panel_v2 import (
     SuggestedSettingsLine,
     WorkflowTaskSelector,
 )
-from tests.helpers.make_video_313 import ANIMATE2_ID, TI2V_ID, make_app, make_window
+from tests.helpers.make_video_313 import ANIMATE2_ID, RECOMMENDED_ID, TI2V_ID, make_app, make_window
 
 pytestmark = pytest.mark.gui
 
@@ -120,7 +120,7 @@ def test_pin_tracker_pins_operator_writes_only(tk_root):
 
 def test_default_task_is_animate_with_the_recommended_engine(env):
     assert env.tab.current_task() == "animate"
-    assert env.tab.workflow_var.get() == TI2V_ID
+    assert env.tab.workflow_var.get() == RECOMMENDED_ID
     assert env.tab.smooth_var.get() is True
     assert env.tab.task_selector.task_var.get() == "animate"
 
@@ -257,7 +257,7 @@ def test_pinned_smoothing_without_rife_is_warned_not_flipped(env_no_rife):
 def test_submitted_form_carries_no_task_and_the_same_fields(env):
     form = env.tab.get_video_workflow_state(for_submission=True)
     assert "task" not in form
-    assert form["workflow_id"] == TI2V_ID
+    assert form["workflow_id"] == RECOMMENDED_ID
     assert form["interpolation"] == {"enabled": True}
     assert form["experimental_opt_in"] is False
 
@@ -329,12 +329,12 @@ def test_unknown_task_falls_back_and_a_retired_workflow_is_shown_not_swapped(env
     assert env.tab.current_task() == "animate"
     assert env.tab.workflow_var.get() == "gone_v9"  # never silently replaced by another engine
     assert env.tab.select_task("animate")  # choosing the task again picks an installed engine
-    assert env.tab.workflow_var.get() == TI2V_ID
+    assert env.tab.workflow_var.get() == RECOMMENDED_ID
 
 
 def test_make_video_selects_animate(env):
     env.tab.select_task("follow_clip")
-    assert env.tab.apply_make_video_defaults() == TI2V_ID
+    assert env.tab.apply_make_video_defaults() == RECOMMENDED_ID
     assert env.tab.current_task() == "animate"
 
 
@@ -425,9 +425,9 @@ def test_the_operators_engine_choice_survives_a_task_round_trip(env):
     assert tab.select_task("animate")
     assert tab.workflow_var.get() == PROMPT_ENGINE_ID
     tab.suggested_line.reset_button.invoke()
-    assert tab.workflow_var.get() == TI2V_ID
+    assert tab.workflow_var.get() == RECOMMENDED_ID
     assert tab.select_task("follow_clip") and tab.select_task("animate")
-    assert tab.workflow_var.get() == TI2V_ID
+    assert tab.workflow_var.get() == RECOMMENDED_ID
 
 
 def test_browsing_a_single_image_leaves_the_batch_task(env, tmp_path, monkeypatch):

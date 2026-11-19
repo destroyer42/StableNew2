@@ -42,6 +42,7 @@ from src.video.managed_comfy_runtime import (
     plan_comfy_launch,
     workflow_launch_requirements,
 )
+from src.video.runtime_version_check import runtime_version_warning
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_backend_types import (
     CONTROL_CAMERA_INTENT,
@@ -591,9 +592,13 @@ class ComfyWorkflowVideoBackend:
         # check fails the job before anything is queued; nothing is stopped or restarted.
         readiness = None
         actual_runtime: dict[str, str] = {}
+        version_warning: str | None = None
         if self._readiness.policy_for(spec) is not None:
             system_stats = client.get_system_stats()
             actual_runtime = _actual_runtime_identity(system_stats)
+            version_warning = runtime_version_warning(spec, actual_runtime.get("comfyui_version"))
+            if version_warning:
+                logger.warning(version_warning)
             warm_pid = self._sequence_warm_pid
             readiness = self._readiness.evaluate(
                 spec,
@@ -731,6 +736,8 @@ class ComfyWorkflowVideoBackend:
             provenance_extra["runtime_policy"] = runtime_policy
         if actual_runtime:
             provenance_extra["actual_runtime"] = actual_runtime
+        if version_warning:
+            provenance_extra["runtime_version_warning"] = version_warning
         manifest_path = self._write_manifest(
             request=request,
             prompt_id=prompt_id,

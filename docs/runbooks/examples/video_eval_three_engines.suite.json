@@ -12,9 +12,9 @@
   "arms": [
     {"arm_id": "ti2v_480p", "label": "TI2V-5B 1.3.0 480p (approved baseline)", "backend": "video_workflow",
      "form": {"workflow_id": "wan22_ti2v_5b_i2v_v1", "workflow_version": "1.3.0", "frame_count": 81}},
-    {"arm_id": "ti2v_720p", "label": "TI2V-5B 1.4.0 720p (experimental)", "backend": "video_workflow",
-     "form": {"workflow_id": "wan22_ti2v_5b_i2v_v1", "workflow_version": "1.4.0", "frame_count": 81, "experimental_opt_in": true}},
-    {"arm_id": "a14b_480p", "label": "I2V-A14B 4-step 480p (experimental)", "backend": "video_workflow",
-     "form": {"workflow_id": "wan22_i2v_a14b_4step_v1", "workflow_version": "1.0.0", "frame_count": 81, "experimental_opt_in": true}}
+    {"arm_id": "ti2v_720p", "label": "TI2V-5B 720p (approved alternate)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_ti2v_5b_i2v_720p_v1", "workflow_version": "1.0.0", "frame_count": 81}},
+    {"arm_id": "a14b_480p", "label": "I2V-A14B 4-step 480p (approved default)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_i2v_a14b_4step_v1", "workflow_version": "1.0.0", "frame_count": 81}}
   ]
 }

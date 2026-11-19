@@ -53,7 +53,7 @@ Rules the loader enforces (`src/video/video_eval_suite.py`):
 * `svd` is merged over the SVD tab's default configuration (`SVDController.build_default_config`). Without a
   `preprocess.target_width` the target follows each source's aspect, like the tab's Match Source Aspect.
 * `form` is merged over the Video Workflow tab's default form. The prompt, negative prompt and seed come from the
-  case and the suite, so an arm may not set them. Wan2.2 TI2V-5B 1.2.0 is approved and needs no opt-in. A workflow
+  case and the suite, so an arm may not set them. Wan2.2 TI2V-5B 1.2.0 and 1.3.0, the 720p workflow and I2V-A14B 1.0.0 are approved and need no opt-in. A workflow
   that is still experimental (Wan-Animate-2, TI2V-5B 1.0.0 and 1.1.0) needs `"experimental_opt_in": true` in the arm:
   the suite file is the per-job opt-in, and the queue confirmation names every arm that sets it.
 * Admission refuses anything the normal submission would refuse (frame count, missing opt-in, an SVD preflight
@@ -224,11 +224,11 @@ file next to your own images and change `image` (and, ideally, pin `image_sha256
 | Arm | Workflow | Governance | What it tests |
 |---|---|---|---|
 | `ti2v_480p` (baseline) | `wan22_ti2v_5b_i2v_v1` 1.3.0 | approved | The current production engine at 480x832 / 832x480. |
-| `ti2v_720p` | `wan22_ti2v_5b_i2v_v1` 1.4.0 | experimental, `"experimental_opt_in": true` | The same graph at 704x1280 / 1280x704, the model's 720p design point. |
-| `a14b_480p` | `wan22_i2v_a14b_4step_v1` 1.0.0 | experimental, `"experimental_opt_in": true` | Wan2.2 I2V-A14B with the lightx2v 4-step LoRAs at 480x832 / 832x480. |
+| `ti2v_720p` | `wan22_ti2v_5b_i2v_720p_v1` 1.0.0 | approved (VID-CLIP-372) alternate | The same graph at 704x1280 / 1280x704, the model's 720p design point. |
+| `a14b_480p` | `wan22_i2v_a14b_4step_v1` 1.0.0 | approved since VID-CLIP-372, the Make Video default | Wan2.2 I2V-A14B with the lightx2v 4-step LoRAs at 480x832 / 832x480. |
 
-* Both experimental arms run only because the suite sets the opt-in; the queue confirmation names them. Neither is ever
-  recommended or preselected in the Video Workflow tab, and the picker keeps offering approved TI2V-5B 1.3.0.
+* No arm needs the experimental opt-in any more. The picker offers all three engines as separate approved entries (A14B is
+  the default; TI2V-5B 480p and the 720p workflow are listed beside it).
 * The execution-time GPU guard still applies to every arm. The A14B arm needs the six pinned files (two experts, two
   LoRAs, the UMT5 encoder and the Wan 2.1 VAE; names and SHA-256 in `docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md`
   and the catalog) and a managed Comfy launched with `--disable-pinned-memory`. A missing file refuses the job before

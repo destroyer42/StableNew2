@@ -24,6 +24,10 @@ COUNTS = {
     "adversarial_delimiter": 10,
     "adversarial_overlong": 10,
 }
+# The approved catalog identities this contract was frozen against (sorted; the latest is the oracle).  Pinned,
+# not recomputed: promoting another workflow (VID-CLIP-372 approved the A14B 4-step) must not change a frozen
+# corpus or its digest.  ``validate_oracles`` still refuses a choice the catalog no longer approves.
+FROZEN_WORKFLOW_CHOICES = ("wan22_ti2v_5b_i2v_v1@1.2.0", "wan22_ti2v_5b_i2v_v1@1.3.0")
 MINIMUMS = {
     "prompt_rewrite": 300,
     "target_workflow": 100,
@@ -37,13 +41,7 @@ def final_corpus() -> list[Case]:
     cases = build_corpus(11102, COUNTS)
     # Screening labels express generic image/video intent. Freeze final workflow
     # choices against the approved catalog's actual immutable ID/version pairs.
-    workflows = sorted(
-        (s for s in build_builtin_workflow_specs() if s.governance_state == "approved"),
-        key=lambda s: (s.workflow_id, s.workflow_version),
-    )
-    if not workflows:
-        raise ValueError("no approved workflow authority")
-    choices = tuple(f"{s.workflow_id}@{s.workflow_version}" for s in workflows)
+    choices = FROZEN_WORKFLOW_CHOICES
     selected = choices[-1]
     result = []
     for case in cases:
