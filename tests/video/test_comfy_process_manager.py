@@ -294,7 +294,8 @@ def test_owned_comfy_startup_failure_reports_bounded_process_diagnostics(
     assert "pid=24680" in message
     assert expected_process_state in message
     assert "endpoint=http://127.0.0.1:9000" in message
-    assert "timeout_seconds=30.0" in message
+    # The configured 30 s is raised to the owned cold-start floor (VID-CLIP-372); the message states what was used.
+    assert "timeout_seconds=180.0" in message
     assert "stdout_tail=['starting', '" in message
     assert "stderr_tail=['launcher warning']" in message
     assert "x" * 241 not in message

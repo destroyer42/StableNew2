@@ -45,7 +45,7 @@ def _controller(tmp_path: Path) -> tuple[VideoWorkflowController, _JobServiceStu
     )
 
 
-def test_list_workflow_specs_offers_the_approved_ti2v_and_the_experimental_animate2(tmp_path: Path) -> None:
+def test_list_workflow_specs_offers_the_approved_a14b_and_ti2v_and_the_experimental_animate2(tmp_path: Path) -> None:
     controller, _ = _controller(tmp_path)
 
     specs = controller.list_workflow_specs()
@@ -61,7 +61,7 @@ def test_list_workflow_specs_offers_the_approved_ti2v_and_the_experimental_anima
     ]
     assert {spec["workflow_id"]: spec["experimental"] for spec in specs} == {
         "wan22_fun_control_5b_canny_i2v_v1": True,
-        "wan22_i2v_a14b_4step_v1": True,
+        "wan22_i2v_a14b_4step_v1": False,
         "wan22_ti2v_5b_i2v_v1": False,
         "wan_animate2_drive_i2v_v1": True,
         "wan_animate2_prompt_i2v_v1": True,

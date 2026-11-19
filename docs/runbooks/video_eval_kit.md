@@ -225,7 +225,7 @@ file next to your own images and change `image` (and, ideally, pin `image_sha256
 |---|---|---|---|
 | `ti2v_480p` (baseline) | `wan22_ti2v_5b_i2v_v1` 1.3.0 | approved | The current production engine at 480x832 / 832x480. |
 | `ti2v_720p` | `wan22_ti2v_5b_i2v_v1` 1.4.0 | experimental, `"experimental_opt_in": true` | The same graph at 704x1280 / 1280x704, the model's 720p design point. |
-| `a14b_480p` | `wan22_i2v_a14b_4step_v1` 1.0.0 | experimental, `"experimental_opt_in": true` | Wan2.2 I2V-A14B with the lightx2v 4-step LoRAs at 480x832 / 832x480. |
+| `a14b_480p` | `wan22_i2v_a14b_4step_v1` 1.0.0 | approved since VID-CLIP-372 (the opt-in is ignored and recorded `false`) | Wan2.2 I2V-A14B with the lightx2v 4-step LoRAs at 480x832 / 832x480. |
 
 * Both experimental arms run only because the suite sets the opt-in; the queue confirmation names them. Neither is ever
   recommended or preselected in the Video Workflow tab, and the picker keeps offering approved TI2V-5B 1.3.0.

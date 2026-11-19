@@ -79,6 +79,9 @@ class VideoWorkflowController(VideoWorkflowMixins):
                         dependency.to_dict() for dependency in spec.dependency_specs
                     ],
                     "experimental": bool(getattr(spec, "is_experimental", False)),
+                    "make_video_default": bool(
+                        (getattr(spec, "backend_defaults", None) or {}).get("make_video_default")
+                    ),
                     "required_inputs": list(getattr(spec, "required_input_names", ())),
                     "accepted_controls": list(getattr(spec, "accepted_controls", ())),
                     "form_visibility": form_visibility(spec),

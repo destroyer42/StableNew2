@@ -46,7 +46,7 @@ EXPECTED_GOVERNANCE = {
     (WAN_ID, "1.2.0"): "approved",
     (WAN_ID, "1.3.0"): "approved",  # frames out (PR-VID-WAN-324), approved by the owner 2026-10-21
     (WAN_ID, "1.4.0"): "experimental",  # 704x1280 eval candidate (VID-CLIP-370)
-    (A14B_ID, "1.0.0"): "experimental",  # lightx2v 4-step eval candidate (VID-CLIP-370)
+    (A14B_ID, "1.0.0"): "approved",  # lightx2v 4-step, owner GO 2026-11-18 (VID-CLIP-372)
     **{
         (workflow_id, version): "experimental"
         for workflow_id in (WAN_ANIMATE2_PROMPT_ID, WAN_ANIMATE2_DRIVE_ID)
@@ -66,9 +66,12 @@ HISTORICAL_SPEC_SHA256 = {
     (WAN_ANIMATE2_PROMPT_ID, "1.0.0"): "fa3eed00ba5ce134f2f7fab4ce9c94abbc60f7de05efecb6bd3fc8b1206fceac",
     (WAN_ANIMATE2_PROMPT_ID, "1.1.0"): "75d1778e665015f4da4507d34ea165b3d9881eef3fcdab197d12f7c6bc12ed1c",
     (WAN_ID, "1.3.0"): "02eff4ac288f41b0630e7fbccc2c10b7ec7f4d2460cbf345ccda9a4f23f4d7be",
-    # VID-CLIP-370: the two eval candidates are pinned from their first registration.
-    (WAN_ID, "1.4.0"): "bd39ec9a26e99e5b8d3d72224c2b33d47d3bd3a3bc6f58cce4263fb5d38a8300",
-    (A14B_ID, "1.0.0"): "931aa2e56a7511e6bc825aafeaa67fd9557b2a2ed699b00f6760e7351f749593",
+    # VID-CLIP-370: the two eval candidates were pinned from their first registration.  VID-CLIP-372 re-pinned
+    # both deliberately, graph untouched (the template digests below did not move): A14B 1.0.0 became
+    # approved (governance text, make_video_default, provenance wording) and 1.4.0 gained its own 1200 s
+    # history timeout (it stays experimental).
+    (WAN_ID, "1.4.0"): "2bbeb38b27c878afabf34afd993668aed3f0db864cf8588e5d35281fb685a59e",
+    (A14B_ID, "1.0.0"): "b3aef49fb7766aafdc5d01631f0aaacddec3b100c0a96f2c7d647588f70b3849",
 }
 HISTORICAL_TEMPLATE_SHA256 = {
     (WAN_ID, "1.0.0"): "116e980387bc763c5a598641b81ead80201a2615ad19cdc625b4eb4da1484154",

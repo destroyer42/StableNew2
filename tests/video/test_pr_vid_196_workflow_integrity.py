@@ -147,7 +147,7 @@ def test_workflow_projection_gains_one_key_and_keeps_every_existing_one(tmp_path
         "operator_projection",
     }
     for record in records.values():
-        assert set(record) == expected_existing | {"motion_readiness"}
+        assert set(record) == expected_existing | {"motion_readiness", "make_video_default"}
         assert set(record["motion_readiness"]) == {
             "source_preparation",
             "accepts_driving_video",

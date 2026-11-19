@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.video.workflow_contracts import WORKFLOW_GOVERNANCE_APPROVED
+from src.video.workflow_picker import approved_in_preference_order
 
 TASK_ANIMATE = "animate"
 TASK_FOLLOW_CLIP = "follow_clip"
@@ -132,9 +133,9 @@ def choose_workflow(
         for record in eligible:
             if record["workflow_id"] == pinned_workflow_id:
                 return _choice(record, "Your choice.")
-    for record in eligible:
-        if _is_approved(record):
-            return _choice(record, "Recommended: approved for production.")
+    approved = approved_in_preference_order(eligible)
+    if approved:
+        return _choice(approved[0], "Recommended: approved for production.")
     for record in eligible:
         if not _block_reason(record):
             return _choice(

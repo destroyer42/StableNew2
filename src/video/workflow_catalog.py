@@ -134,6 +134,7 @@ WAN22_FRAMES_VERSION = "1.3.0"
 # VID-CLIP-370: the 1.3.0 frames-out graph at the model's 720p design point (1280x704, both sides
 # multiples of 32), an EXPERIMENTAL eval candidate beside the approved 1.3.0.
 WAN22_720P_VERSION = "1.4.0"
+WAN22_720P_HISTORY_TIMEOUT_SECONDS = 1200
 WAN22_720P_TARGETS = {
     "portrait_target": {"width": 704, "height": 1280},
     "landscape_target": {"width": 1280, "height": 704},
@@ -203,6 +204,10 @@ def _build_wan22_ti2v_5b_i2v_v1_4() -> WorkflowSpec:
     )
     defaults = deepcopy(base.backend_defaults)
     defaults["source_preparation"].update(deepcopy(WAN22_720P_TARGETS))
+    # VID-CLIP-371 measured 47-622 s per 720p clip (means 399 s and 314 s) on the 12 GB / 32 GB host, and
+    # two clips were abandoned at the 600 s the 480p versions use.  1200 s is about twice the slowest
+    # clip seen; 480p (32-132 s) keeps 600.
+    defaults["history_timeout_seconds"] = WAN22_720P_HISTORY_TIMEOUT_SECONDS
     defaults["provenance"]["qualification"] = (
         "1.3.0 graph and files at 704x1280 / 1280x704; NOT QUALIFIED at this geometry "
         "(VID-CLIP-370 eval candidate)"

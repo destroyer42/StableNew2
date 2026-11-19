@@ -23,6 +23,14 @@ _MANAGED_COMFY_LOG_PATH = (
 )
 
 
+# A cold first launch of the owned runtime (imports, custom-node scan, CUDA init) is slower than the
+# 30 s default of ``comfy_health_total_timeout_seconds`` (VID-CLIP-371: three cold starts failed their
+# health check at 30 s although ComfyUI was coming up).  The configured value remains the wait for an
+# endpoint this process did not launch; for a child StableNew owns, the wait is at least this long and
+# ends early if the child exits.  One lifecycle owner: this manager.
+OWNED_COLD_START_MIN_SECONDS = 180.0
+
+
 @dataclass
 class ComfyProcessConfig:
     command: list[str]
@@ -185,13 +193,31 @@ class ComfyProcessManager:
         if _GLOBAL_COMFY_PROCESS_MANAGER is self:
             _GLOBAL_COMFY_PROCESS_MANAGER = None
 
+    @property
+    def readiness_timeout_seconds(self) -> float:
+        """The wait for ``check_health``: the configured value, raised to the cold-start floor for an owned child."""
+
+        configured = float(self._config.startup_timeout_seconds)
+        return max(configured, OWNED_COLD_START_MIN_SECONDS) if self.owns_process else configured
+
+    def _owned_child_exited(self) -> str | None:
+        if self.is_running():
+            return None
+        process = self.process
+        code = process.poll() if process is not None else None
+        return f"the ComfyUI process StableNew launched exited (return code {code})"
+
     def check_health(self) -> bool:
         base_url = self._configured_base_url()
+        options: dict[str, Any] = {}
+        if self.owns_process:
+            options["abort_if"] = self._owned_child_exited
         try:
             return wait_for_comfy_ready(
                 base_url,
-                timeout=self._config.startup_timeout_seconds,
+                timeout=self.readiness_timeout_seconds,
                 poll_interval=self._config.poll_interval_seconds,
+                **options,
             )
         except Exception as exc:
             if self.owns_process:
@@ -250,7 +276,7 @@ class ComfyProcessManager:
         return (
             "Managed ComfyUI did not become ready "
             f"(pid={pid}, process={process_state}, endpoint={base_url}, "
-            f"timeout_seconds={self._config.startup_timeout_seconds}): {error}; "
+            f"timeout_seconds={self.readiness_timeout_seconds}): {error}; "
             f"stdout_tail={self._bounded_output_tail(self.get_stdout_tail())!r}; "
             f"stderr_tail={self._bounded_output_tail(self.get_stderr_tail())!r}"
         )
