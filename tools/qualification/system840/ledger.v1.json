@@ -11,28 +11,35 @@
       "date": "2026-11-05",
       "package": "QUAL-CLOSEOUT-860",
       "note": "Entries re-read against current source and the sealed golden-path archives; only the entries listed in docs/Subsystems/Testing/QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md changed."
+    },
+    "owner_decisions_applied": {
+      "main_sha": "989f99bc52dc035d184403c7c0da9af260174a61",
+      "date": "2026-11-18",
+      "package": "QUAL-928",
+      "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+      "note": "Owner decisions of 2026-11-18 (Wave 0 plan, section 8) applied by an owner-reviewed edit: ControlNet Depth identity, the AI-Q1 candidates not pursued, the updated holds and next tests, and five shipped candidates the ledger lacked (the 720p TI2V-5B 1.4.0 and its approved 720p workflow id, the A14B 4-step workflow, LFM3-VL-2B and Gemma 4 12B), with the VID-CLIP-371 eval record entered as evidence for the identities it ran. No existing status changed and no dimension was raised; the new entries' statuses are derived from the evidence they record. A merge of this commit is the owner's acceptance."
     }
   },
   "precedence": "Current code and AGENTS.md/STATUS.md override these records; a recorded claim that differs from live code is reported by reconcile_with_live, never silently adopted.",
   "standing_holds": [
     {
       "id": "HOLD-ZIMAGE-STABILITY",
-      "reason": "Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized.",
+      "reason": "Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized. Owner decision 2026-11-18: back in scope once QUAL-927 (bounded teardown wait) lands, then one new exact authorization and one run in the Forge sitting. The hold stays until then.",
       "source": "STATUS.md"
     },
     {
       "id": "HOLD-COMFY-STILL-IMAGE",
-      "reason": "Forge-vs-Comfy still-image qualification is offline only.",
+      "reason": "Forge-vs-Comfy still-image qualification is offline only. Owner decision 2026-11-18: in scope, through a Comfy still-image backend package (architectural, design first) that also carries Qwen image. No Comfy image backend exists yet, so the hold stays.",
       "source": "STATUS.md"
     },
     {
       "id": "HOLD-A14B-NEW-BUDGET",
-      "reason": "Wan A14B is INCONCLUSIVE; teardown and worker-memory defects unresolved; the three-attempt authorization is exhausted.",
+      "reason": "Wan A14B is INCONCLUSIVE; teardown and worker-memory defects unresolved; the three-attempt authorization is exhausted. Owner decision 2026-11-18: after QUAL-927 (bounded teardown wait and worker-tree memory sampling), qualification is re-targeted to the experimental A14B 4-step workflow as a conditional wave after Wave 4, under a new owner budget. The hold stays until then.",
       "source": "tools/qualification/README.md"
     },
     {
       "id": "HOLD-AI-ETW-CANARY",
-      "reason": "AI qualification is held on D12b and a protected-interpreter canary capture.",
+      "reason": "AI qualification is held on D12b and a protected-interpreter canary capture. Owner decision 2026-11-18: the AI track resumes as its own track; the owner performs the one-time elevated setup in docs/runbooks/ai_qualification_etw_capture.md (system-wide Python, protected ProgramData copy), then a fresh canary-2 capture, the D12a/D12b authorization text and the firewall attestation. None of that is done; the hold stays.",
       "source": "STATUS.md"
     },
     {
@@ -469,6 +476,14 @@
           "source": "STATUS.md",
           "date": "2026-10-26",
           "applies_to": {}
+        },
+        {
+          "id": "e3",
+          "kind": "owner_decision",
+          "claim": "Decision 4: back in scope. The inconclusive result came from a teardown check made once with no bounded wait; after the QUAL-927 harness fix, one new exact authorization and one run go into the Forge sitting. No attempt is authorized by this record.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -478,15 +493,17 @@
       },
       "status": "HOLD",
       "governance": {
-        "state": "hold: no repeat physical attempt authorized",
+        "state": "hold: back in scope (owner decision 2026-11-18) after QUAL-927; no repeat physical attempt authorized yet",
         "source": "STATUS.md"
       },
       "holds": [
         "HOLD-ZIMAGE-STABILITY"
       ],
-      "open_items": [],
+      "open_items": [
+        "Teardown is checked once with no bounded wait; QUAL-927 fixes the harness before any new attempt."
+      ],
       "next_test": {
-        "summary": "None without a new exact owner decision.",
+        "summary": "After QUAL-927 lands: one new exact owner authorization and one canary run in the Forge sitting (Wave 2). None before that.",
         "arm_id": "IMG-Q1",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -496,7 +513,8 @@
       "sources": [
         "docs/Subsystems/Image/PR-IMG-MODELS-154B_ZImage_Turbo_Controlled_Physical_Qualification.md",
         "docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md",
-        "STATUS.md"
+        "STATUS.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
       ]
     },
     {
@@ -524,6 +542,14 @@
           "source": "docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md",
           "date": "2026-10",
           "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Decision 4: in scope, tied to the Comfy still-image backend package (the same package as IMG-Q4.forge-vs-comfy-still). The status stays UNSUPPORTED until a backend route exists.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -533,15 +559,16 @@
       },
       "status": "UNSUPPORTED",
       "governance": {
-        "state": "integration gap: not registered, not routed",
+        "state": "integration gap: not registered, not routed; in scope (owner decision 2026-11-18) through the Comfy still-image backend package",
         "source": "STATUS.md"
       },
       "holds": [],
       "open_items": [
-        "Weights on disk never enable a model: classify as an integration gap"
+        "Weights on disk never enable a model: classify as an integration gap",
+        "Scheduled by owner decision 2026-11-18 behind the Comfy still-image backend package (architectural, design first)."
       ],
       "next_test": {
-        "summary": "None: needs a backend implementation package and an owner decision.",
+        "summary": "None until the Comfy still-image backend package gives Qwen image a registered route and an owner-approved profile; then a canary in the Comfy still-image sitting.",
         "arm_id": "IMG-Q1",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -550,7 +577,8 @@
       "confidence": "medium",
       "sources": [
         "docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md",
-        "docs/Subsystems/Image/PR-IMG-MODELS-152_Asset_Topology_and_Bundle_Discovery.md"
+        "docs/Subsystems/Image/PR-IMG-MODELS-152_Asset_Topology_and_Bundle_Discovery.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
       ]
     },
     {
@@ -578,6 +606,14 @@
           "source": "src/image_backends/model_policy.py",
           "date": "2026-10-26",
           "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Decision 4: generic FLUX families come into scope through a model-policy family and profile package. SD1, SD2 and SD3 stay out of scope. The status stays UNSUPPORTED until the package exists.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -587,13 +623,15 @@
       },
       "status": "UNSUPPORTED",
       "governance": {
-        "state": "unqualified families are refused qualification",
+        "state": "unqualified families are refused qualification; generic FLUX families in scope (owner decision 2026-11-18); SD1, SD2 and SD3 stay out",
         "source": "src/image_backends/model_policy.py"
       },
       "holds": [],
-      "open_items": [],
+      "open_items": [
+        "FLUX in scope behind a model-policy family and profile package (owner decision 2026-11-18); SD1, SD2 and SD3 are out of scope and remain labelled-only."
+      ],
       "next_test": {
-        "summary": "None until an owner approves a family and its profile.",
+        "summary": "None until the model-policy family and profile package approves a generic FLUX family and its profile; SD1, SD2 and SD3 have no test.",
         "arm_id": "IMG-Q1",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -602,7 +640,8 @@
       "confidence": "medium",
       "sources": [
         "src/image_backends/model_policy.py",
-        "docs/Subsystems/Image/MODEL_PROFILES.md"
+        "docs/Subsystems/Image/MODEL_PROFILES.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
       ]
     },
     {
@@ -916,10 +955,11 @@
       "id": "IMG-Q2.controlnet-depth",
       "version": "1",
       "arm_id": "IMG-Q2",
-      "title": "SDXL ControlNet Depth (up to two ordered units)",
+      "title": "SDXL ControlNet Depth (diffusers_xl_depth_fp16; up to two ordered units)",
       "identity": {
         "backend": "forge_webui",
-        "controlnet": "diffusers_xl_depth_full",
+        "controlnet": "diffusers_xl_depth_fp16",
+        "model_sha256": "66a6813e6bd7270ecfe68206a59ddd605a011ae85321188376605c66e0a4f303",
         "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
       },
       "reachability": {
@@ -939,6 +979,14 @@
           "source": "docs/Subsystems/Image/IMAGE_PIPELINE.md",
           "date": "2026-10-26",
           "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Decision 5: the identity moves from diffusers_xl_depth_full to diffusers_xl_depth_fp16, installed 2026-11-18 at the catalog-pinned revision with SHA-256 and size (2,502,139,134 bytes) verified against config/curated_asset_catalog.json (sdxl-controlnet-depth, variant diffusion_pytorch_model.fp16.safetensors). An older diffusers_xl_depth_full file of unknown provenance does not match the catalog hash for that name and is not used for qualification.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -952,18 +1000,25 @@
         "source": "STATUS.md"
       },
       "holds": [],
-      "open_items": [],
+      "open_items": [
+        "BLOCKER (live code vs decision 5): production Forge admission accepts only diffusers_xl_depth_full for a Depth unit (src/assets/controlnet_identity.py MODEL_MODALITIES); diffusers_xl_depth_fp16 verifies as bytes but is refused as controlnet_identity_not_admitted (docs/Subsystems/Image/IMAGE_PIPELINE.md section 3.1, tests/assets/test_resource_readiness_identity_230.py). A Depth canary on the recorded identity cannot be admitted until the owner chooses: admit the fp16 identity (a product change with its own package) or install the full variant at its catalog pin (SHA-256 b760b1ed26970c7c60abbcef08e7238bb9428bee510a405aff239e06a1471945) and re-record this identity."
+      ],
       "next_test": {
-        "summary": "One Depth unit with an operator-created map, after OpenPose passes.",
+        "summary": "One Depth unit with an operator-created map, after OpenPose passes. Blocked: the recorded identity is not admitted by production (see open_items).",
         "arm_id": "IMG-Q2",
         "stage": "canary",
         "needs_owner_authorization": true,
-        "admissible": true
+        "admissible": false,
+        "blocked": true,
+        "blocked_reason": "production Forge admission refuses diffusers_xl_depth_fp16 (controlnet_identity_not_admitted); needs an owner choice between admitting the fp16 identity and installing diffusers_xl_depth_full at its catalog pin"
       },
       "confidence": "medium",
       "sources": [
         "docs/Subsystems/Image/IMAGE_PIPELINE.md",
-        "STATUS.md"
+        "STATUS.md",
+        "config/curated_asset_catalog.json",
+        "src/assets/controlnet_identity.py",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
       ]
     },
     {
@@ -1358,6 +1413,14 @@
           "source": "docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md",
           "date": "2026-10",
           "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Decision 4: in scope. It needs a Comfy still-image backend package (architectural, design first); Qwen image rides on it. The hold stays until that backend exists.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -1367,7 +1430,7 @@
       },
       "status": "HOLD",
       "governance": {
-        "state": "conditional; Comfy image slice needs resource and fault clearance",
+        "state": "conditional; in scope (owner decision 2026-11-18) through a Comfy still-image backend package; no backend exists",
         "source": "STATUS.md"
       },
       "holds": [
@@ -1375,7 +1438,7 @@
       ],
       "open_items": [],
       "next_test": {
-        "summary": "An owner approval of a bounded matched run after fault clearance (no Comfy image backend is implemented here).",
+        "summary": "None until the Comfy still-image backend package exists (design first); then an owner approval of a bounded matched run against Forge.",
         "arm_id": "IMG-Q4",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -1384,7 +1447,8 @@
       "confidence": "medium",
       "sources": [
         "docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md",
-        "STATUS.md"
+        "STATUS.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
       ]
     },
     {
@@ -1399,7 +1463,7 @@
       "reachability": {
         "implemented": false,
         "operator_reachable": false,
-        "surface": "Isolated qualification harness; PR-IMG-120 is unauthorized",
+        "surface": "Isolated qualification harness; the PR-IMG-120 production slice is authorized (design first) and not built",
         "modules": [
           "tools/qualification/img110r/"
         ]
@@ -1416,6 +1480,14 @@
           "applies_to": {
             "backend": "diffusers"
           }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Decision 4: in scope. The owner accepts the Ideogram 4 non-commercial licence for this non-commercial work and authorizes the PR-IMG-120 Diffusers production slice. It is architectural, so design comes first. Nothing is implemented by this record.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -1425,15 +1497,15 @@
       },
       "status": "FEASIBLE",
       "governance": {
-        "state": "qualification-only; PR-IMG-120 unauthorized",
+        "state": "qualification-only; PR-IMG-120 authorized 2026-11-18, design first, not built; non-commercial licence accepted",
         "source": "STATUS.md"
       },
       "holds": [],
       "open_items": [
-        "GPU residency lease, JSON-caption mapping and the Ideogram 4 non-commercial licence need owner decisions"
+        "The GPU residency lease and the JSON-caption mapping still need owner decisions in the PR-IMG-120 design."
       ],
       "next_test": {
-        "summary": "None in StableNew until the owner decides PR-IMG-120.",
+        "summary": "None in StableNew until the PR-IMG-120 design is approved and its production slice is built.",
         "arm_id": "IMG-Q4",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -1442,7 +1514,8 @@
       "confidence": "medium",
       "sources": [
         "docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md",
-        "STATUS.md"
+        "STATUS.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
       ]
     },
     {
@@ -1646,6 +1719,160 @@
       "sources": [
         "docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md",
         "docs/Subsystems/Video/PR-VID-190_Comfy_Runtime_Recycling_and_Frame_Count.md"
+      ]
+    },
+    {
+      "id": "VID-Q0.wan22-ti2v-5b-1.4.0",
+      "version": "1",
+      "arm_id": "VID-Q0",
+      "title": "Wan2.2 TI2V-5B frames-out 720p 1.4.0 (experimental; superseded by the 720p workflow id)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.4.0",
+        "spec_sha256": "2bbeb38b27c878afabf34afd993668aed3f0db864cf8588e5d35281fb685a59e",
+        "geometry": "704x1280 portrait, 1280x704 landscape",
+        "model_files": {
+          "wan2.2_ti2v_5B_fp16.safetensors": "456f901338bd9eadbded3828b819109a9b68e8a525ca5cf8d0049a69fcfeca1e",
+          "umt5_xxl_fp8_e4m3fn_scaled.safetensors": "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68",
+          "wan2.2_vae.safetensors": "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156"
+        },
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Video Workflow tab eval suite arm with an explicit version and the job's own opt-in; never recommended, preselected or offered by the picker (operators use the approved wan22_ti2v_5b_i2v_720p_v1)",
+        "modules": [
+          "src/video/workflow_catalog.py",
+          "src/video/video_eval_suite.py",
+          "src/video/comfy_workflow_backend.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Live catalog on main 989f99bc: experimental; the 1.3.0 frames-out graph, files and policies with 704x1280 / 1280x704 targets and a 1200 s history timeout; spec digest 2bbeb38b... pinned in tests/video/test_pr_comfy_runtime_100_workflow_versions.py. GPU memory at 720p is unmeasured and the readiness floors are 1.3.0's.",
+          "source": "src/video/workflow_catalog.py",
+          "date": "2026-11-18",
+          "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "production_workflow",
+          "claim": "VID-CLIP-371 eval, owner-run 2026-11-16 to 2026-11-18: this workflow was the 720p arm (the separate 720p workflow id did not exist yet). Stage 1 rated 5 of 8 terse and 8 of 8 structured clips and stage 2 rated 7 of 8; 3 stage-1 jobs failed health checks or timeouts on 720p and 1 stage-2 cold-start health check failed. Requested action achieved or partial in 4 of 5, 5 of 8 and (stage 2) 5 of 7 rated clips, 2 cannot assess, 0 identity breaks, owner mean 5/5 on fidelity and stability, 47-622 s per clip; two stage-1 clips hit the then 600 s history timeout. Under the written thresholds the record's verdict is NO-GO (one clip took 622 s, over the 10-minute limit; the stability gain is unreachable on a saturated scale; stage 2 is INSUFFICIENT EVIDENCE). The owner judged 720p visually superior and decided GO on 2026-11-18. The record does not name the operator surface (GUI or driver).",
+          "source": "docs/Subsystems/Video/PR-VID-CLIP-371_Three_Engine_Eval.md",
+          "date": "2026-11-18",
+          "exact_source": "unverified: executed code SHA not recorded; owner-run eval kit runs 20261116_134153_clip371-stage1_c947ec0a (suite sha 03281df3...a9ed6) and 20261118_040044_clip371-stage2_b060db61 (suite sha 39e19991...e511b) as printed in the record; the owner's hand-edited ratings.csv, suites, source images and clips are private and not in the repository",
+          "result": "NO-GO under the written thresholds; owner GO 2026-11-18",
+          "applies_to": {
+            "workflow": "wan22_ti2v_5b_i2v_v1@1.4.0"
+          }
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "FEASIBLE",
+      "governance": {
+        "state": "experimental (per-job opt-in; never recommended or preselected); superseded for operators by the approved wan22_ti2v_5b_i2v_720p_v1",
+        "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md"
+      },
+      "holds": [],
+      "open_items": [
+        "The eval ratings are the owner's 1-5 scale (saturated), not the Wave 0 rubric, and 720p memory was not measured, so all three dimensions stay NOT TESTED; FEASIBLE is the status the validator derives from the recorded run. No ledger dimension is raised by the owner's GO.",
+        "The approved operator-facing 720p workflow is VID-Q0.wan22-ti2v-5b-720p-1.0.0 under its own id; this experimental identity is kept because stored jobs and eval suites can still name it."
+      ],
+      "next_test": {
+        "summary": "None for this identity: operators use the approved 720p workflow id, where a canary belongs (VID-Q0.wan22-ti2v-5b-720p-1.0.0).",
+        "arm_id": "VID-Q0",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "src/video/workflow_catalog.py",
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "docs/runbooks/video_eval_kit.md",
+        "docs/Subsystems/Video/PR-VID-CLIP-371_Three_Engine_Eval.md"
+      ]
+    },
+    {
+      "id": "VID-Q0.wan22-ti2v-5b-720p-1.0.0",
+      "version": "1",
+      "arm_id": "VID-Q0",
+      "title": "Wan2.2 TI2V-5B frames-out 720p alternate 1.0.0 (approved, own workflow id)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_720p_v1@1.0.0",
+        "spec_sha256": "b82c07195d8f6b6fcf96948614742b55c1f6ece9f4b346b93b6af2c8f45a505d",
+        "geometry": "704x1280 portrait, 1280x704 landscape",
+        "model_files": {
+          "wan2.2_ti2v_5B_fp16.safetensors": "456f901338bd9eadbded3828b819109a9b68e8a525ca5cf8d0049a69fcfeca1e",
+          "umt5_xxl_fp8_e4m3fn_scaled.safetensors": "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68",
+          "wan2.2_vae.safetensors": "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156"
+        },
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Video Workflow tab picker (approved alternate listed beside the 480p workflow, no per-job opt-in); never the Make Video default",
+        "modules": [
+          "src/video/workflow_catalog.py",
+          "src/video/workflow_picker.py",
+          "src/video/comfy_workflow_backend.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Live catalog on main 989f99bc: approved (VID-CLIP-372, owner decision 2026-11-18) as an alternate to the 480p workflow under its own id; the 1.3.0 frames-out graph (template digest 5a62e121..., the same as 1.3.0 and 1.4.0), files and policies with 704x1280 / 1280x704 targets and a 1200 s history timeout. GPU memory at 720p is unmeasured and the readiness floors are the 480p ones.",
+          "source": "src/video/workflow_catalog.py",
+          "date": "2026-11-18",
+          "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Owner decision 2026-11-18, recorded in the eval record: TI2V-5B 720p is an alternate, approved under its own workflow id so 480p 1.3.0 stays selectable. Governance only; the catalog says it is not ledger-qualified.",
+          "source": "docs/Subsystems/Video/PR-VID-CLIP-371_Three_Engine_Eval.md",
+          "date": "2026-11-18",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "approved (owner decision 2026-11-18; alternate to the 480p workflow; never the Make Video default); not ledger-qualified",
+        "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md"
+      },
+      "holds": [],
+      "open_items": [
+        "The VID-CLIP-371 eval ran this graph as wan22_ti2v_5b_i2v_v1@1.4.0 before this id existed (VID-Q0.wan22-ti2v-5b-1.4.0 e2). The template digest and files are identical, but the ledger counts evidence only for the exact workflow identity, so it is not applied here; the owner may decide to treat the two as one identity in a ledger edit.",
+        "GPU memory at 720p is unmeasured and the execution floors are the 480p ones, so a first canary also measures memory. No campaign wave scopes this entry yet."
+      ],
+      "next_test": {
+        "summary": "One 704x1280 canary through the Video Workflow tab picker (approved, no opt-in), after the 1.3.0 canary; needs an owner scope decision and a frozen, owner-authorized plan.",
+        "arm_id": "VID-Q0",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true,
+        "harness": "Video Workflow tab picker, entry 'Wan2.2 TI2V-5B Prompt-Directed I2V 720p'"
+      },
+      "confidence": "medium",
+      "sources": [
+        "src/video/workflow_catalog.py",
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "docs/Subsystems/Video/PR-VID-CLIP-371_Three_Engine_Eval.md"
       ]
     },
     {
@@ -2106,6 +2333,14 @@
           "applies_to": {
             "plan_sha256": "7b47d278e1519574330a3d912009fb14dba54d3090b5788ee6164c481562b976"
           }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Decision 4: after the teardown and worker-tree memory fix (QUAL-927), A14B qualification is re-targeted to the experimental A14B 4-step workflow as a conditional wave after Wave 4, under a new owner budget. This harness identity is not re-run.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -2115,7 +2350,7 @@
       },
       "status": "INCONCLUSIVE",
       "governance": {
-        "state": "research closed; no catalog entry; 3-attempt authorization exhausted",
+        "state": "research closed; harness identity only (the A14B 4-step catalog workflow is VID-Q4.wan22-i2v-a14b-4step-1.0.0); 3-attempt authorization exhausted; qualification re-targeted to that workflow after QUAL-927 (owner decision 2026-11-18)",
         "source": "docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md"
       },
       "holds": [
@@ -2126,7 +2361,7 @@
         "Defect 2: memory sampled only on the launcher stub, not the Comfy worker tree"
       ],
       "next_test": {
-        "summary": "None until teardown wait and worker-tree memory sampling are fixed and the owner grants a new exact budget.",
+        "summary": "None for this harness identity. After QUAL-927 (teardown wait and worker-tree memory sampling) qualification is re-targeted to VID-Q4.wan22-i2v-a14b-4step-1.0.0 under a new owner budget.",
         "arm_id": "VID-Q4",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -2135,7 +2370,111 @@
       "confidence": "medium",
       "sources": [
         "docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md",
-        "tools/qualification/README.md"
+        "tools/qualification/README.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
+      ]
+    },
+    {
+      "id": "VID-Q4.wan22-i2v-a14b-4step-1.0.0",
+      "version": "1",
+      "arm_id": "VID-Q4",
+      "title": "Wan2.2 I2V-A14B lightx2v 4-step 1.0.0 (experimental eval candidate)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_i2v_a14b_4step_v1@1.0.0",
+        "spec_sha256": "b3aef49fb7766aafdc5d01631f0aaacddec3b100c0a96f2c7d647588f70b3849",
+        "model_files": {
+          "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors": "6122e79d55e0f235698d11d657f3b196c5273c830da00b2b013c5a048d5e6a42",
+          "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors": "5471a457b6ac404202a5fbe6c11595a3d5641fc766b00f38763f72303fffc21e",
+          "umt5_xxl_fp8_e4m3fn_scaled.safetensors": "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68",
+          "wan_2.1_vae.safetensors": "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b",
+          "wan2.2_i2v_A14b_high_noise_lora_rank64_lightx2v_4step_1022.safetensors": "887c3bdeb74e83859c920438e16ca31f39ab18ce189abc5f0e36f8348c5bbb19",
+          "wan2.2_i2v_A14b_low_noise_lora_rank64_lightx2v_4step_1022.safetensors": "8833bd4fd7c8eabebf0bc8ee5cfaf47f4f310ce116928a02c1adf8941dd4b0f1"
+        },
+        "required_launch_flags": [
+          "--disable-pinned-memory"
+        ],
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Video Workflow tab picker (approved, no per-job opt-in) and the Make Video default; needs a managed Comfy launched with --disable-pinned-memory (applied at launch, otherwise the job is blocked)",
+        "modules": [
+          "src/video/workflow_catalog_wan_a14b.py",
+          "src/video/comfy_workflow_backend.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Live catalog on main 989f99bc: approved (VID-CLIP-372; governance only, the graph and template digest are unchanged) and the declared Make Video default; the PR-VID-WAN-321F frozen stock-node graph (two scaled-fp8 A14B experts, each with its lightx2v 4-step LoRA, shift 5, CPU UMT5, Wan 2.1 VAE), six pinned files, frames out at 16 fps, GPU readiness floor 8,600 MiB derived from the single 321F session; spec digest b3aef49f... pinned in tests/video/test_pr_comfy_runtime_100_workflow_versions.py.",
+          "source": "src/video/workflow_catalog_wan_a14b.py",
+          "date": "2026-11-18",
+          "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Decision 4: A14B qualification is re-targeted to this experimental 4-step workflow after QUAL-927, as a conditional wave after Wave 4, under a new owner budget. Nothing is authorized by this record.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
+        },
+        {
+          "id": "e3",
+          "kind": "production_workflow",
+          "claim": "VID-CLIP-371 three-engine human-motion eval, owner-run 2026-11-16 to 2026-11-18 through the eval kit (stage 1: 3 arms x 8 cases x 2 prompt styles; stage 2: A14B vs TI2V-720p, 8 full-body cases): 24 rated A14B 4-step 480p clips, requested action achieved or partial in 8 of 8 in each of the three groups (all achieved in stage 2), 0 identity breaks, owner mean 5/5 on fidelity and stability, 140-176 s per clip. Limits recorded by the record itself: ratings saturate at 5 so stability differences are hidden, images and prompts were authored by the evaluator, and there is no host-commit telemetry (the 0.95 stop rule is unobserved). The record does not name the operator surface (GUI or driver).",
+          "source": "docs/Subsystems/Video/PR-VID-CLIP-371_Three_Engine_Eval.md",
+          "date": "2026-11-18",
+          "exact_source": "unverified: executed code SHA not recorded; owner-run eval kit runs 20261116_134153_clip371-stage1_c947ec0a (suite sha 03281df3...a9ed6) and 20261118_040044_clip371-stage2_b060db61 (suite sha 39e19991...e511b) as printed in the record; the owner's hand-edited ratings.csv, suites, source images and clips are private and not in the repository",
+          "result": "OWNER GO; not ledger-QUALIFIED",
+          "applies_to": {
+            "workflow": "wan22_i2v_a14b_4step_v1@1.0.0"
+          }
+        },
+        {
+          "id": "e4",
+          "kind": "owner_decision",
+          "claim": "Owner decision 2026-11-18, recorded in the eval record: A14B 4-step 480p is a GO, treated as qualified by the owner, the promoted engine and the Make Video default. It changes governance only; no ledger dimension or status is changed by it.",
+          "source": "docs/Subsystems/Video/PR-VID-CLIP-371_Three_Engine_Eval.md",
+          "date": "2026-11-18",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "approved (owner decision 2026-11-18 after the VID-CLIP-371 eval; the Make Video default; not ledger-qualified); qualification held on HOLD-A14B-NEW-BUDGET",
+        "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md"
+      },
+      "holds": [
+        "HOLD-A14B-NEW-BUDGET"
+      ],
+      "open_items": [
+        "The PR-VID-WAN-321F session (VID-Q4.wan-a14b-480p e1, INCONCLUSIVE, teardown unverified) ran the same frozen graph under the harness identity; it is recorded there and does not apply to this production-workflow identity.",
+        "Defect 1: teardown is checked once with no bounded wait. Defect 2: memory is sampled on the launcher stub, not the Comfy worker tree. QUAL-927 addresses both before any new budget.",
+        "The eval ratings are the owner's 1-5 scale (saturated), not the Wave 0 rubric, and carry no resource telemetry, so all three dimensions stay NOT TESTED. Accepting them as the quality dimension is a dimension edit for the owner to make in this file; none is made here."
+      ],
+      "next_test": {
+        "summary": "None until QUAL-927 lands and the owner grants a new exact budget; then a conditional wave after Wave 4 re-targets A14B qualification to this workflow with the smallest meaningful canary.",
+        "arm_id": "VID-Q4",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "src/video/workflow_catalog_wan_a14b.py",
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+        "docs/Subsystems/Video/PR-VID-CLIP-371_Three_Engine_Eval.md"
       ]
     },
     {
@@ -2694,6 +3033,14 @@
           "source": "config/ai_model_registry.json",
           "date": "2026-10-26",
           "applies_to": {}
+        },
+        {
+          "id": "e3",
+          "kind": "owner_decision",
+          "claim": "Decision 4: dropped from the AI qualification track. The kept candidates are qwen3.5-9b-q4_k_m-unsloth, qwen3.5-4b-q4_k_m-unsloth, lfm3-1.7b-q4_k_m-liquidai and lfm3-1.7b-q8_0-liquidai. config/ai_model_registry.json is unchanged, so the entry stays in the ledger rather than being removed.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -2703,15 +3050,17 @@
       },
       "status": "HOLD",
       "governance": {
-        "state": "candidate; registry qualified=false; held on D12b and canary-2",
+        "state": "candidate; not pursued (owner decision 2026-11-18); registry qualified=false; registry entry unchanged",
         "source": "STATUS.md"
       },
       "holds": [
         "HOLD-AI-ETW-CANARY"
       ],
-      "open_items": [],
+      "open_items": [
+        "Not pursued: no D12a, D12b or canary work is planned for this candidate (owner decision 2026-11-18). The status stays HOLD on HOLD-AI-ETW-CANARY because the registry still lists the model."
+      ],
       "next_test": {
-        "summary": "D12a on the b11840 archive (--version/--help only), then D12b Stage A for this model; each needs its own owner package.",
+        "summary": "None: not pursued (owner decision 2026-11-18).",
         "arm_id": "AI-Q1",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -2721,7 +3070,8 @@
       "sources": [
         "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
         "config/ai_model_registry.json",
-        "STATUS.md"
+        "STATUS.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
       ]
     },
     {
@@ -2764,6 +3114,14 @@
           "source": "config/ai_model_registry.json",
           "date": "2026-10-26",
           "applies_to": {}
+        },
+        {
+          "id": "e3",
+          "kind": "owner_decision",
+          "claim": "Decision 4: dropped from the AI qualification track. The kept candidates are qwen3.5-9b-q4_k_m-unsloth, qwen3.5-4b-q4_k_m-unsloth, lfm3-1.7b-q4_k_m-liquidai and lfm3-1.7b-q8_0-liquidai. config/ai_model_registry.json is unchanged, so the entry stays in the ledger rather than being removed.",
+          "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+          "date": "2026-11-18",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -2773,15 +3131,17 @@
       },
       "status": "HOLD",
       "governance": {
-        "state": "candidate; registry qualified=false; held on D12b and canary-2",
+        "state": "candidate; not pursued (owner decision 2026-11-18); registry qualified=false; registry entry unchanged",
         "source": "STATUS.md"
       },
       "holds": [
         "HOLD-AI-ETW-CANARY"
       ],
-      "open_items": [],
+      "open_items": [
+        "Not pursued: no D12a, D12b or canary work is planned for this candidate (owner decision 2026-11-18). The status stays HOLD on HOLD-AI-ETW-CANARY because the registry still lists the model."
+      ],
       "next_test": {
-        "summary": "D12a on the b11840 archive (--version/--help only), then D12b Stage A for this model; each needs its own owner package.",
+        "summary": "None: not pursued (owner decision 2026-11-18).",
         "arm_id": "AI-Q1",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -2791,7 +3151,8 @@
       "sources": [
         "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
         "config/ai_model_registry.json",
-        "STATUS.md"
+        "STATUS.md",
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
       ]
     },
     {
@@ -3006,6 +3367,194 @@
       "sources": [
         "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
         "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q1.lfm3-vl-2b-q4_k_m-liquidai",
+      "version": "1",
+      "arm_id": "AI-Q1",
+      "title": "Visual evaluation candidate lfm3-vl-2b-q4_k_m-liquidai (operator-only, unqualified)",
+      "identity": {
+        "backend": "llama.cpp b11960 CPU (llama-mtmd-cli.exe, vision)",
+        "runtime_archive_sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287",
+        "executable_sha256": "5073109b15d7d19fd3cc4c23bdbdc2f3dfdae39a6410d80ea6e7b6929eb30b3a",
+        "model_id": "lfm3-vl-2b-q4_k_m-liquidai",
+        "model": "LFM3-VL-2B-Q4_K_M.gguf",
+        "model_sha256": "56dac2e192ff0d9ab8507f4f1aeb4aed0463449bbbefaac79497f041c95f21eb",
+        "size": 1099627808,
+        "projector": "mmproj-LFM3-VL-2B-F16.gguf",
+        "projector_sha256": "1d8e6e58eefc093e09d6332f081516e1ddbd5b35cfca7f35463fb270db230b1e",
+        "projector_size": 378996032
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Operator-only CPU evaluation harness (python -m tools.qualification.vl220); not in the application: qualified, production_eligible and text_registry_eligible are false in config/ai_visual_candidates.json",
+        "modules": [
+          "tools/qualification/vl220/driver.py",
+          "tools/qualification/vl220/candidates.py",
+          "config/ai_visual_candidates.json"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Pair verified 2026-11-14: sizes, SHA-256, GGUF headers (lfm3 / lfm3vl, projection width 2048) and pairing match the catalog; the pinned b11960 runtime's loadable files re-hash to their pins.",
+          "source": "docs/runbooks/ai_visual_evaluation.md",
+          "date": "2026-11-14",
+          "applies_to": {
+            "model_sha256": "56dac2e192ff0d9ab8507f4f1aeb4aed0463449bbbefaac79497f041c95f21eb",
+            "projector_sha256": "1d8e6e58eefc093e09d6332f081516e1ddbd5b35cfca7f35463fb270db230b1e"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "standalone_feasibility",
+          "claim": "CPU-only synthetic wiring runs 2 and 3 on 2026-11-14 (30 and 32 invocations): all exit 0, every scored answer structurally valid, no limit violations; median 3.9-4.6 s per case, about 1.7 GiB private, peak working set 2.4-2.5 GB. Synthetic drawn scenes are a wiring check, not quality evidence: defect triage precision was about 0.2 and before/after 0.0-0.5, which says nothing about real generated images. Run 1 scored near zero from harness defects fixed before runs 2 and 3.",
+          "source": "docs/work_packages/AI-VL-223_template_ab.md",
+          "date": "2026-11-14",
+          "exact_source": "unverified: executed code SHA not recorded; plan ea7f2bb8afbeb40450561e10648a5dc1abc868322a829326555187add7d6aea7 (run 2) and 15d7ab2ee6d5b5f21db3798dee3390ed6a8c4086dc973ce5593ee91a043db536 (run 3); machine-local evidence (outside Git) D:\\StableNew-Assets\\offline-ai\\vl220-evidence\\run2-synthetic-512.json sha256 d0d2b47ee7d55d95d1808b794978ef75e1228fd51fb6ca11bcc1028cb5e1e8b9, run3-512v-jinja.json sha256 18f9ec91802184396672c41fb9aae20e6bd5fa13baaaa37fb2b13b35e19e42b1, run3-512v-legacy.json sha256 ca0eef0a991bf70ad9f6b581498f9e6e8202a2e50fe794a123dc06f244436192",
+          "result": "SYNTHETIC WIRING PASS; unqualified",
+          "applies_to": {
+            "model_sha256": "56dac2e192ff0d9ab8507f4f1aeb4aed0463449bbbefaac79497f041c95f21eb",
+            "projector_sha256": "1d8e6e58eefc093e09d6332f081516e1ddbd5b35cfca7f35463fb270db230b1e"
+          },
+          "surface": "driver"
+        },
+        {
+          "id": "e3",
+          "kind": "offline_contract",
+          "claim": "Catalog on main 2d179a38: qualified=false, production_eligible=false, text_registry_eligible=false; the LFM Open License v1.0 (revenue-capped commercial use) must be acknowledged by the owner before any import.",
+          "source": "config/ai_visual_candidates.json",
+          "date": "2026-11-18",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "FEASIBLE",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "candidate; unqualified; operator-only (qualified, production_eligible and text_registry_eligible are false); held for system840 planning on HOLD-AI-ETW-CANARY",
+        "source": "config/ai_visual_candidates.json"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [
+        "Held for system840 planning on HOLD-AI-ETW-CANARY like every AI-lane arm (an AI-Q1 plan needs the protected capture). The operator-only vl220 harness (its own digest gate, licence acknowledgement and egress attestation) produced the synthetic runs and is not covered by that hold."
+      ],
+      "next_test": {
+        "summary": "None now. Real-image evaluation with human labels through tools.qualification.vl220 is a separate package whose scope, image-token budget and labeler need owner decisions (AI-VL-241 section 8); a system840 AI-Q1 plan also needs the protected capture (HOLD-AI-ETW-CANARY).",
+        "arm_id": "AI-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "config/ai_visual_candidates.json",
+        "docs/runbooks/ai_visual_evaluation.md",
+        "docs/work_packages/AI-VL-222_visual_diagnostic.md",
+        "docs/work_packages/AI-VL-223_template_ab.md",
+        "docs/Subsystems/AiAssist/INTELLIGENT_IMAGE_REVIEW_ROADMAP.md"
+      ]
+    },
+    {
+      "id": "AI-Q1.gemma-4-12b-it-qat-q4_0-google",
+      "version": "1",
+      "arm_id": "AI-Q1",
+      "title": "Visual evaluation candidate gemma-4-12b-it-qat-q4_0-google (operator-only, unqualified)",
+      "identity": {
+        "backend": "llama.cpp b11960 CPU (llama-mtmd-cli.exe, vision)",
+        "runtime_archive_sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287",
+        "executable_sha256": "5073109b15d7d19fd3cc4c23bdbdc2f3dfdae39a6410d80ea6e7b6929eb30b3a",
+        "model_id": "gemma-4-12b-it-qat-q4_0-google",
+        "model": "gemma-4-12b-it-qat-q4_0.gguf",
+        "model_sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+        "size": 6975879296,
+        "projector": "mmproj-gemma-4-12b-it-qat-q4_0.gguf",
+        "projector_sha256": "cb018338a7538a9814d994bfe54644c71eb7ed54e31eae2f721e45fd3c260da7",
+        "projector_size": 175115616
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Operator-only CPU evaluation harness (python -m tools.qualification.vl220); not in the application: qualified, production_eligible and text_registry_eligible are false in config/ai_visual_candidates.json",
+        "modules": [
+          "tools/qualification/vl220/driver.py",
+          "tools/qualification/vl220/candidates.py",
+          "config/ai_visual_candidates.json"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Pair staged and verified 2026-11-14 (verify-staging pair_verified: true before the run): sizes, SHA-256, GGUF headers (gemma4 / gemma4uv, projection width 3840) and pairing match the catalog; the staged Apache-2.0 licence text hashes to the catalog value.",
+          "source": "docs/work_packages/AI-VL-241_gemma_readiness.md",
+          "date": "2026-11-15",
+          "applies_to": {
+            "model_sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+            "projector_sha256": "cb018338a7538a9814d994bfe54644c71eb7ed54e31eae2f721e45fd3c260da7"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "standalone_feasibility",
+          "claim": "Run 4, 2026-11-15, owner-approved by digest: 16 CPU-only invocations on the synthetic 512 px set, all exit 0, none refused, timed out or cancelled; 14 of 14 scored answers valid; median 19.3 s per case (15.6-21.3 s); peak private 7.72 GiB; peak working set 13.2 GiB, which exceeds the plan's own 12 GiB working-set limit for all 14 cases (commit and the 12 GiB job limit were never approached); cleanup complete. Synthetic drawn scenes are a wiring check, not quality evidence: defect triage recall and precision were 0.33, and the thinking-channel free-text controls were cut at 256 tokens.",
+          "source": "docs/work_packages/AI-VL-241_gemma_readiness.md",
+          "date": "2026-11-15",
+          "exact_source": "unverified: executed code SHA not recorded (the AI-VL-241 head, merged as 13f06f1b); plan 82cd8ce7ca98376bbe5564b380df2da5f616d9b393b8d37563c171f4946d3d70, execution e0d125f5af941925d7591ab5f5636c05755af48148f5313a1f22ce70dcb425ed; machine-local evidence (outside Git) D:\\StableNew-Assets\\offline-ai\\vl220-evidence\\run4-gemma-512v.json sha256 bbab648054145800150cd0ebcbb4f2778fb919e1a1cb424dcebde9f30cf6a17e",
+          "result": "SYNTHETIC WIRING PASS; unqualified",
+          "applies_to": {
+            "model_sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+            "projector_sha256": "cb018338a7538a9814d994bfe54644c71eb7ed54e31eae2f721e45fd3c260da7"
+          },
+          "surface": "driver"
+        },
+        {
+          "id": "e3",
+          "kind": "offline_contract",
+          "claim": "Catalog on main 2d179a38: qualified=false, production_eligible=false, text_registry_eligible=false; Apache-2.0 acknowledgement is part of the owner's approval and was recorded for run 4.",
+          "source": "config/ai_visual_candidates.json",
+          "date": "2026-11-18",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "FEASIBLE",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "candidate; unqualified; operator-only (qualified, production_eligible and text_registry_eligible are false); held for system840 planning on HOLD-AI-ETW-CANARY",
+        "source": "config/ai_visual_candidates.json"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [
+        "Held for system840 planning on HOLD-AI-ETW-CANARY like every AI-lane arm (an AI-Q1 plan needs the protected capture). The operator-only vl220 harness (its own digest gate, licence acknowledgement and egress attestation) produced the synthetic runs and is not covered by that hold.",
+        "A 12 GiB commit headroom is required at admission, so Forge and the application must be closed during a run (AI-VL-241 section 3.3)."
+      ],
+      "next_test": {
+        "summary": "None now. Real-image evaluation with human labels through tools.qualification.vl220 is a separate package whose scope, image-token budget and labeler need owner decisions (AI-VL-241 section 8); a system840 AI-Q1 plan also needs the protected capture (HOLD-AI-ETW-CANARY).",
+        "arm_id": "AI-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "config/ai_visual_candidates.json",
+        "docs/runbooks/ai_visual_evaluation.md",
+        "docs/work_packages/AI-VL-241_gemma_readiness.md",
+        "docs/Subsystems/AiAssist/INTELLIGENT_IMAGE_REVIEW_ROADMAP.md"
       ]
     },
     {
