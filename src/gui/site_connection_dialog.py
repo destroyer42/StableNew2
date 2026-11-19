@@ -15,8 +15,10 @@ from src.app.site_pack_catalog import PreparePack, SitePackCatalog, pack_digest
 from src.app.site_pairing_protocol import PairingTickets, register_protocol
 from src.app.site_phone_admission import PhoneQueueAdmission
 from src.app.site_phone_connector import SitePhoneConnector
+from src.app.site_phone_eval import PhoneEvalReports
 from src.app.site_phone_preview_host import PhonePreviewHost
 from src.app.site_phone_queue import PhoneQueueView
+from src.app.site_phone_video import PhoneVideo
 from src.app.site_queue_bridge import (
     PreviewJob,
     PreviewView,
@@ -303,11 +305,13 @@ class SiteConnectionDialog:
                 packs=host.packs,
                 compile_pack=host.compile_pack,
                 compile_rework=host.compile_rework,
+                video=PhoneVideo(app.job_service),
             )
         self._phone = SitePhoneConnector(
             review_outputs=self._review_outputs,
             review_records=records,
             phone_queue=admission,
+            phone_eval=PhoneEvalReports(repository) if repository is not None else None,
         )
         self._phone_dialog = PhoneReviewDialog(root, self._phone)
 

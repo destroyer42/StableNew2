@@ -10,7 +10,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import PureWindowsPath
 from threading import Lock
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.app.site_media_files import SiteOutputError
 from src.app.site_output_catalog import SiteOutputCatalog
@@ -28,6 +28,9 @@ from src.controller.reprocess_admission import submit_reprocess_njrs
 from src.pipeline.job_models_v2 import NormalizedJobRecord, UnifiedJobSummary, WorkloadKind
 from src.pipeline.njr_compiler import NjrDerivation, derive_njr
 
+if TYPE_CHECKING:
+    from src.app.site_phone_video import PhoneVideo
+
 _DIGEST = re.compile(r"[a-f0-9]{64}")
 REWORK_STAGES = frozenset({"img2img", "adetailer", "upscale"})
 _PREVIEW_SECONDS = 600
@@ -39,6 +42,9 @@ class PhonePreviewInput:
     label: str
     records: tuple[NormalizedJobRecord, ...]
     require_current: Callable[[], None]
+    job_details: tuple[dict[str, Any], ...] = ()
+    admit: Callable[[tuple[NormalizedJobRecord, ...]], None] | None = None
+    eval_run: str = ""
 
 
 @dataclass(frozen=True)
@@ -93,12 +99,14 @@ class PhoneQueueAdmission:
         packs: Callable[[], SitePackCatalog],
         compile_pack: Callable[[PreparePack], PhonePreviewInput],
         compile_rework: Callable[[SiteOutputCatalog, str, str, str], PhonePreviewInput],
+        video: PhoneVideo | None = None,
     ) -> None:
         self._queue = queue_view
         self._jobs = jobs
         self._packs = packs
         self._compile_pack = compile_pack
         self._compile_rework = compile_rework
+        self._video = video
         self._lock = Lock()
         self._catalog: tuple[str, str, SitePackCatalog] | None = None
         self._preview: _FrozenPreview | None = None
@@ -126,6 +134,8 @@ class PhoneQueueAdmission:
         if not grant.queue_submit:
             raise SiteOutputError("phone_scope_refused")
         if method == "GET" and body is None:
+            if route == "video-options" and self._video is not None:
+                return self._video.options()
             if route == "packs":
                 shared = self._packs()
                 catalog.require_active()
@@ -155,6 +165,7 @@ class PhoneQueueAdmission:
         self, owner: str, catalog: SiteOutputCatalog, body: dict[str, Any]
     ) -> dict[str, Any]:
         kind = body.get("kind")
+        workload = WorkloadKind.IMAGE
         with self._lock:
             self._preview = None
         if kind == "promptpack" and body.keys() == {"kind", "pack_id", "revision", "slots"}:
@@ -191,12 +202,19 @@ class PhoneQueueAdmission:
             ):
                 raise SiteOutputError("invalid_preview")
             draft = self._compile_rework(catalog, key, digest, stage)
+        elif kind in ("video", "video_eval") and self._video is not None:
+            draft = self._video.preview(catalog, body, evaluation=kind == "video_eval")
+            workload = WorkloadKind.VIDEO
         else:
             raise SiteOutputError("invalid_preview")
         if not 1 <= len(draft.records) <= MAX_PHONE_JOBS or any(
-            record.workload_kind is not WorkloadKind.IMAGE for record in draft.records
+            record.workload_kind is not workload for record in draft.records
         ):
-            raise SiteOutputError("image_preview_required")
+            raise SiteOutputError(
+                "image_preview_required"
+                if workload is WorkloadKind.IMAGE
+                else "video_preview_failed"
+            )
         draft.require_current()
         catalog.require_active()
         identifier = secrets.token_hex(16)
@@ -215,6 +233,7 @@ class PhoneQueueAdmission:
                                 "kind": kind,
                                 "index": index,
                                 "count": len(draft.records),
+                                **({"eval_run": draft.eval_run} if draft.eval_run else {}),
                             },
                         },
                     ),
@@ -235,7 +254,12 @@ class PhoneQueueAdmission:
             "preview_id": identifier,
             "kind": kind,
             "label": draft.label,
-            "jobs": [_preview_job(record) for record in records],
+            "jobs": [
+                {"job_id": record.job_id, "stages": record.stage_chain_labels, **details}
+                for record, details in zip(records, draft.job_details, strict=True)
+            ]
+            if draft.job_details
+            else [_preview_job(record) for record in records],
         }
 
     def _refusal(self, identifier: str, reason: str) -> dict[str, Any]:
@@ -279,7 +303,9 @@ class PhoneQueueAdmission:
                 self._refused = owner, identifier, reason
             return self._refusal(identifier, reason)
         try:
-            if preview.kind == "rework":
+            if preview.draft.admit is not None:
+                preview.draft.admit(preview.draft.records)
+            elif preview.kind == "rework":
                 submit_reprocess_njrs(self._jobs, list(preview.draft.records))
             else:
                 self._jobs.submit_njrs(preview.draft.records)
