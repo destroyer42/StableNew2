@@ -225,7 +225,10 @@ def test_only_the_owner_promoted_qualification_candidate_is_an_approved_workflow
     promoted = {
         ("wan22_ti2v_5b_i2v_v1", "1.2.0"),
         ("wan22_ti2v_5b_i2v_v1", "1.3.0"),
-        ("wan22_ti2v_5b_i2v_720p_v1", "1.0.0"),  # 720p alternate, its own id, approved by VID-CLIP-372
+        (
+            "wan22_ti2v_5b_i2v_720p_v1",
+            "1.0.0",
+        ),  # 720p alternate, its own id, approved by VID-CLIP-372
         ("wan22_i2v_a14b_4step_v1", "1.0.0"),
     }
     approved = {
