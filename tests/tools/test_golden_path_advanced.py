@@ -28,18 +28,21 @@ ADVANCED_IDS = {"IMG-02", "IMG-03", "VID-02", "VID-03", "LRN-02", "OPS-01"}
 # --- definitions and routing -------------------------------------------------------------------------------------------
 
 
-#: The only advanced journey with a physical lane (QUAL-922): offline, gated like every physical run.
-PHYSICAL_ADVANCED = {"VID-02"}
+#: Advanced journeys with a gated physical lane: IMG-03 (QUAL-921) and the offline VID-02 (QUAL-922).  Every other advanced
+#: journey is simulated-only.
+PHYSICAL_ADVANCED_IDS = {"IMG-03", "VID-02"}
 
 
-def test_advanced_journeys_are_simulated_only_except_the_offline_vid02_lane() -> None:
+def test_advanced_journeys_are_defined_with_acceptance_criteria_and_only_img03_and_vid02_are_physical() -> (
+    None
+):
     chosen = defs.select("advanced")
     assert {j.id for j in chosen} == ADVANCED_IDS
     assert [j.key for j in chosen] == list(defs.ADVANCED_ORDER)
     for journey in chosen:
-        if journey.id in PHYSICAL_ADVANCED:
-            assert journey.physical is True and journey.offline is True, journey.id
-            assert journey.physical_acceptance, journey.id
+        if journey.id in PHYSICAL_ADVANCED_IDS:
+            assert journey.physical is True and journey.physical_acceptance, journey.id
+            assert journey.offline is (journey.id == "VID-02"), journey.id
         else:
             assert journey.physical is False and not journey.physical_acceptance, journey.id
             assert journey.offline is False, journey.id
@@ -90,8 +93,11 @@ def test_an_unknown_advanced_journey_has_no_runner() -> None:
 
 
 @pytest.mark.parametrize("mode", ["physical", "readiness"])
-@pytest.mark.parametrize("choice", ["advanced", "recovery", "image-edit", "storyboard"])
-def test_physical_and_readiness_modes_refuse_every_simulated_only_advanced_journey(
+@pytest.mark.parametrize(
+    "choice",
+    ["advanced", "recovery", "prompt-model", "storyboard", "learning-profile"],
+)
+def test_physical_and_readiness_modes_refuse_every_simulated_only_journey(
     mode: str, choice: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from tools.operator_journey.golden import suite

@@ -230,10 +230,21 @@ def real_executor(
         from tools.operator_journey.golden.vid01 import run_vid01
 
         body = lambda run: run_vid01(run, simulated=False, physical=target)  # noqa: E731
-    else:
+    elif journey.key == "image-edit":
+        from tools.operator_journey.golden.img03 import register_frozen_checkpoint, run_img03
+
+        def image_edit_body(run: Any) -> None:
+            # A masked edit needs registry evidence for the exact frozen checkpoint in the disposable workspace.
+            register_frozen_checkpoint(run, target)
+            run_img03(run, simulated=False, physical=target)
+
+        body = image_edit_body
+    elif journey.key == "learning":
         from tools.operator_journey.golden.lrn01 import run_lrn01
 
         body = lambda run: run_lrn01(run, simulated=False, physical=target)  # noqa: E731
+    else:  # never reached through run_physical: the plan and the suite refuse a journey without a physical lane
+        raise ValueError(f"{journey.id} has no physical lane")
     return run_journey_body(
         journey.id,
         body,

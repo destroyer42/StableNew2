@@ -228,7 +228,8 @@ def test_run_suite_refuses_physical_vid02_under_pytest_before_anything_is_create
 ) -> None:
     from tools.operator_journey.golden.suite import run_suite
 
-    with pytest.raises(ModeRefusal, match="refused under pytest"):
+    # pytest is refused for physical mode (and on hosted CI the CI/driver rule fires first); either way nothing starts
+    with pytest.raises(ModeRefusal, match="refused under pytest|refused in CI|never used in CI"):
         run_suite(
             journeys_choice=KEY,
             mode="physical",

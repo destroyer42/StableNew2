@@ -6,7 +6,10 @@ are owned and entered here, outside the journey; the journey is run with ``simul
 installed, and no fake object in ``GoldenRun``.  Nothing real is touched: the servers are loopback fakes, the driver is
 the semantic Tk driver and the evidence is labelled ``rehearsal`` (never ``physical``).
 
-``python -m tools.operator_journey.golden.rehearsal --journey image|video|learning --evidence-dir DIR [--tamper KEY]``
+``python -m tools.operator_journey.golden.rehearsal --journey image|image-edit|video|learning --evidence-dir DIR [--tamper KEY]``
+
+The ``image-edit`` rehearsal freezes inputs that differ from the journey defaults (``REHEARSAL_IMAGE_EDIT_INPUTS``), so
+its evidence shows the journey typed the plan's values, not its own constants.
 """
 
 from __future__ import annotations
@@ -22,7 +25,30 @@ from typing import Any
 from tools.operator_journey.evidence import JourneyEvidence
 
 REHEARSAL = "rehearsal"
-TAMPER_KEYS = ("steps", "seed", "width", "height", "frames", "model", "prompt")
+TAMPER_KEYS = (
+    "steps",
+    "seed",
+    "width",
+    "height",
+    "frames",
+    "model",
+    "prompt",
+    "edit_prompt",
+    "outpaint_extents",
+    "regenerate_seed",
+)
+#: Frozen IMG-03 inputs that differ from ``img03_frozen.default_inputs()`` in every operator-typed value.
+REHEARSAL_IMAGE_EDIT_INPUTS: dict[str, Any] = {
+    "prompt": "rehearsal edit source, a windmill on a hill, gouache",
+    "pack_name": "rehearsal_img03",
+    "edit_prompt": "a small wooden rowing boat",
+    "edit_denoise": 0.6,
+    "mask_strokes": [[0.30, 0.30, 0.55, 0.55]],
+    "outpaint_prompt": "rolling green fields under a pale sky",
+    "outpaint_extents": {"left": 64, "right": 0, "top": 0, "bottom": 64},
+    "regenerate_seed": 515151,
+    "regenerate_prompt_suffix": ", under a full moon",
+}
 
 
 def synthetic_target(
@@ -36,6 +62,17 @@ def synthetic_target(
         "base_url": base_url,
         "identity": "loopback-rehearsal",
     }
+    if key == "image-edit":
+        inputs = {**journey_inputs(key), **REHEARSAL_IMAGE_EDIT_INPUTS}
+        jobs = 2 + len(inputs["optional_steps"])
+        return {
+            "runtime": runtime,
+            "model": {"name": model_name, "path": "n/a", "sha256": "n/a"},
+            "settings": {"width": 512, "height": 512, "steps": 7, "seed": 313131},
+            "inputs": inputs,
+            "job_count": jobs,
+            "expected_artifacts": jobs,
+        }
     if key == "video":
         return {
             "runtime": runtime,
@@ -65,7 +102,15 @@ def _tamper(key: str, target: dict[str, Any], what: str) -> None:
     elif what == "model":
         target["model"]["name"] = "some-other-model.safetensors"
     elif what == "prompt":
-        target["inputs"]["prompt" if key == "image" else "motion_prompt"] = "a different prompt"
+        target["inputs"]["prompt" if key in ("image", "image-edit") else "motion_prompt"] = (
+            "a different prompt"
+        )
+    elif what == "edit_prompt":
+        target["inputs"]["edit_prompt"] = "a different edit"
+    elif what == "outpaint_extents":
+        target["inputs"]["outpaint_extents"] = {"left": 0, "right": 8, "top": 0, "bottom": 0}
+    elif what == "regenerate_seed":
+        target["inputs"]["regenerate_seed"] = int(target["inputs"]["regenerate_seed"]) + 1
 
 
 def rehearse(key: str, evidence_dir: Path, *, tamper: str | None = None) -> JourneyEvidence:
@@ -79,7 +124,9 @@ def rehearse(key: str, evidence_dir: Path, *, tamper: str | None = None) -> Jour
         mode="simulated", driver="tk", plan=None
     )  # refuses CI-hostile combinations early
     journey = JOURNEYS[key]
-    fake_a = make_fake_a1111(loras=(DEFAULT_LORA,) if key == "learning" else ())
+    fake_a = make_fake_a1111(
+        loras=(DEFAULT_LORA,) if key == "learning" else (), forge=key == "image-edit"
+    )
     fake_a.start()
     fake_c = None
     spec = None
@@ -123,6 +170,10 @@ def rehearse(key: str, evidence_dir: Path, *, tamper: str | None = None) -> Jour
             from tools.operator_journey.golden.vid01 import run_vid01
 
             body = lambda run: run_vid01(run, simulated=False, physical=target)  # noqa: E731
+        elif key == "image-edit":
+            from tools.operator_journey.golden.img03 import run_img03
+
+            body = lambda run: run_img03(run, simulated=False, physical=target)  # noqa: E731
         else:
             from tools.operator_journey.golden.lrn01 import run_lrn01
 
@@ -132,7 +183,18 @@ def rehearse(key: str, evidence_dir: Path, *, tamper: str | None = None) -> Jour
             from tools.operator_journey.golden.video_fixture import fixture_video_runtime
 
             boundary = fixture_video_runtime(fake_c, spec)  # entered here, outside the journey
-        from tools.operator_journey.golden.fixtures import seed_declared_sdxl
+        from tools.operator_journey.golden.fixtures import (
+            seed_declared_checkpoints,
+            seed_declared_sdxl,
+        )
+
+        def declare(ws: Any, _a: Any, _c: Any) -> None:
+            if (
+                key == "image-edit"
+            ):  # a masked edit needs a registry-verified SDXL base (fixture evidence)
+                seed_declared_checkpoints(ws, {fake_a.model: "sdxl"}, verified=(fake_a.model,))
+            else:
+                seed_declared_sdxl(ws, fake_a, None)
 
         with boundary:
             return run_journey_body(
@@ -141,8 +203,12 @@ def rehearse(key: str, evidence_dir: Path, *, tamper: str | None = None) -> Jour
                 config,
                 mode_label=REHEARSAL,
                 base_url=fake_a.base_url,
-                workspace_hook=lambda ws, _a, _c: seed_declared_sdxl(ws, fake_a, None),
+                workspace_hook=declare,
                 execution_mode=REHEARSAL,
+                # Masked edits are Forge-only: the workspace selects the Forge identity (the loopback server answers as Forge).
+                settings_extra={"webui_runtime_identity": "forge_webui"}
+                if key == "image-edit"
+                else None,
             )
     finally:
         fake_a.stop()
@@ -152,7 +218,9 @@ def rehearse(key: str, evidence_dir: Path, *, tamper: str | None = None) -> Jour
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m tools.operator_journey.golden.rehearsal")
-    parser.add_argument("--journey", choices=["image", "video", "learning"], required=True)
+    parser.add_argument(
+        "--journey", choices=["image", "image-edit", "video", "learning"], required=True
+    )
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--tamper", choices=TAMPER_KEYS, default=None)
     args = parser.parse_args(argv)
