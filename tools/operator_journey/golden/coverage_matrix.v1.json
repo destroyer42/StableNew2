@@ -1,7 +1,7 @@
 {
   "schema": "stablenew.golden_coverage_matrix",
-  "version": "1.2.0",
-  "recorded_for": "PR-TEST-DESKTOP-830; PR-TEST-JOURNEYS-832",
+  "version": "1.3.0",
+  "recorded_for": "PR-TEST-DESKTOP-830; PR-TEST-JOURNEYS-832; QUAL-921",
   "classes": {
     "full_desktop_journey": "Driven end to end through visible controls (semantic Tk and, locally, real Win32 input) against the real GUI, compiler, NJR, JobService, queue, runner and History. Backends are loopback fakes unless a physical run says otherwise.",
     "partial_journey": "Some steps of the workflow are exercised through visible controls inside another journey, but the workflow is not driven end to end.",
@@ -150,7 +150,7 @@
       "coverage": "untested",
       "journeys": [],
       "tests": [],
-      "limits": "Physical mode is gated and NOT RUN for this version; no evidence exists.",
+      "limits": "Physical mode is gated and NOT RUN for this version; no evidence exists. IMG-01, VID-01, LRN-01 and IMG-03 have physical lanes; each run needs its own frozen plan, owner authorization and launch.",
       "physical_qualification": "NOT RUN: see limits.",
       "remaining_risk": "Entire row: no physical evidence exists."
     },
@@ -177,11 +177,63 @@
       ],
       "tests": [
         "tests/tools/test_golden_path_journeys.py",
+        "tests/tools/test_golden_path_img03_physical.py",
         "tests/gui_v2/test_masked_edit_lineage_833.py"
       ],
-      "limits": "Loopback Forge returns a synthetic image: orchestration, provenance and preservation only, never edit quality. The edit's parent_job_id, parent artifact digest and Compare with Parent (direct parent and child, typed differences) are checked; Extend Canvas is not driven by the journey (its lineage is covered by a deterministic test).",
-      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
-      "remaining_risk": "Edit quality, outpaint and real Forge inpaint behaviour are unverified. Smart Review opens the editor without the History hand-off, so an edit started there records no parent (safe default)."
+      "limits": "Loopback Forge returns a synthetic image: orchestration, provenance and preservation only, never edit quality. The edit's parent_job_id, parent artifact digest, frozen mask geometry (NJR mask digest and bounding box equal to the painted strokes), edited-region change and Compare with Parent (direct parent and child, typed differences) are checked. Protected-region byte identity depends on the backend's composite and is asserted only in a physical run; the loopback server does not composite. The mask strokes, edit prompt and denoise come from the frozen plan in a physical run. Semantic Tk driver only; the Windows desktop lane does not drive IMG-03.",
+      "physical_qualification": "NOT RUN: IMG-03 has a gated physical lane (QUAL-921) that needs a frozen plan, an owner authorization naming its digest and a typed launch phrase; no physical run exists.",
+      "remaining_risk": "Edit quality, real Forge inpaint compositing (protected-region byte identity) and seams are unverified until an owner-authorized physical run. Smart Review opens the editor without the History hand-off, so an edit started there records no parent (safe default)."
+    },
+    {
+      "id": "review-outpaint-extend-canvas",
+      "title": "Open a History image in Review, Extend Canvas, preview the frozen outpaint, queue, compare with parent",
+      "coverage": "partial_journey",
+      "journeys": [
+        "IMG-03"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py",
+        "tests/tools/test_golden_path_img03_physical.py",
+        "tests/gui_v2/test_outpaint_dialog_310.py",
+        "tests/pipeline/test_outpaint_frozen_310.py"
+      ],
+      "limits": "Optional IMG-03 step (selected by the frozen inputs). Loopback Forge returns a synthetic image: the frozen extents and expanded size, parent lineage and artifact size are checked, and the original's pixels at the frozen bounding box are compared with the product's normalized original (the product pastes them at artifact finalization). Never outpaint quality or seams. Semantic Tk driver only.",
+      "physical_qualification": "NOT RUN: IMG-03 has a gated physical lane (QUAL-921) that needs a frozen plan, an owner authorization naming its digest and a typed launch phrase; no physical run exists.",
+      "remaining_risk": "Outpaint quality and seam visibility on a real SDXL Forge run are unverified."
+    },
+    {
+      "id": "history-regenerate-with-changes",
+      "title": "Regenerate with Changes from History: edit the Pipeline draft, Preview, Add to Queue",
+      "coverage": "partial_journey",
+      "journeys": [
+        "IMG-03"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py",
+        "tests/tools/test_golden_path_img03_physical.py",
+        "tests/gui_v2/test_history_iterate_gui_610a.py",
+        "tests/controller/test_history_variation_preview_610a.py"
+      ],
+      "limits": "Optional IMG-03 step. The draft's seed and positive prompt are edited through the variation editor (the frozen regenerate seed and prompt suffix in a physical run); the queued NJR must change only those fields and record the source job and artifact digest as its parent. Only the seed and positive prompt are exercised; steps, CFG and the negative prompt edits are not. Semantic Tk driver only.",
+      "physical_qualification": "NOT RUN: IMG-03 has a gated physical lane (QUAL-921) that needs a frozen plan, an owner authorization naming its digest and a typed launch phrase; no physical run exists.",
+      "remaining_risk": "Real-model output of a regenerated recipe and its quality are unverified."
+    },
+    {
+      "id": "history-replay-and-lineage",
+      "title": "Replay a completed still-image job from History and compare it with its recorded parent",
+      "coverage": "partial_journey",
+      "journeys": [
+        "IMG-03"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py",
+        "tests/tools/test_golden_path_img03_physical.py",
+        "tests/controller/test_pipeline_replay_job_v2.py",
+        "tests/pipeline/test_replay_njr_compiler.py"
+      ],
+      "limits": "Optional IMG-03 step. The replay must be a new NJR identity whose recorded parent is the replayed job, with an identical recipe; Compare with Parent shows the pair. The loopback backend is deterministic, so identical pixels are required in simulation; against a real backend pixel reproduction is recorded as a measurement, never required. Still images only (video and sequence replay are separate rows). Semantic Tk driver only.",
+      "physical_qualification": "NOT RUN: IMG-03 has a gated physical lane (QUAL-921) that needs a frozen plan, an owner authorization naming its digest and a typed launch phrase; no physical run exists.",
+      "remaining_risk": "Real-backend determinism of a replay (pixel reproduction) is unmeasured until a physical run."
     },
     {
       "id": "motion-library-batch-convert-and-driving-video",

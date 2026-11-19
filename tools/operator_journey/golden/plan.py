@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.operator_journey.golden import SUITE_ID, SUITE_VERSION
+from tools.operator_journey.golden.definitions import JOURNEYS
 from tools.operator_journey.golden.host import HostProbes
 
 PLAN_SCHEMA = 1
@@ -35,6 +36,8 @@ REQUIRED_LIMITS = (
 RUNTIME_KINDS = ("forge", "comfy")
 OWNERSHIP = ("managed", "external")
 _EXCLUDED_FROM_DIGEST = ("digest", "authorization", "generated_at")
+#: Journeys that have a physical lane; a plan target for any other key is refused before anything runs.
+_PHYSICAL_KEYS = frozenset(key for key, journey in JOURNEYS.items() if journey.physical)
 
 
 def canonical_json(value: Any) -> str:
@@ -160,6 +163,10 @@ def shape_problems(plan: dict[str, Any]) -> list[str]:
         from tools.operator_journey.golden.frozen import input_problems
 
         problems += input_problems(journey, target)
+        if journey == "image-edit":
+            from tools.operator_journey.golden.img03_frozen import target_problems
+
+            problems += target_problems(target, limits)
         settings = target.get("settings") or {}
         for key, limit in (
             ("width", "max_width"),
@@ -177,6 +184,9 @@ def shape_problems(plan: dict[str, Any]) -> list[str]:
         and int(plan.get("expected_artifacts", 0)) > limits["max_artifacts"]
     ):
         problems.append("expected artifacts exceed max_artifacts")
+    unknown = sorted(set(targets) - _PHYSICAL_KEYS)
+    if unknown:
+        problems.append(f"plan targets have no physical lane: {', '.join(unknown)}")
     return problems
 
 
