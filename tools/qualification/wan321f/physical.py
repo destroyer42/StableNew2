@@ -2,6 +2,12 @@
 
 No import-time device, runtime or filesystem operations. Launch/stop ownership stays
 with ComfyProcessManager; this adapter supplies bounded qualification policy only.
+
+QUAL-927 fixed the two adapter defects found in the 2026-10-23 session (whose evidence
+stays tied to the executed SHA 6fc4a906): per-process memory now covers the whole owned
+tree (the launcher stub and the Comfy worker beneath it), and teardown is verified by a
+bounded, observation-only wait over every recorded process and the owned port
+(tools/qualification/owned_tree.py) instead of one immediate pid_exists check.
 """
 
 from __future__ import annotations
@@ -19,7 +25,18 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
+from tools.qualification.owned_tree import (
+    DEFAULT_TEARDOWN_DEADLINE_SECONDS,
+    DEFAULT_TEARDOWN_POLL_SECONDS,
+    OwnedProcess,
+    OwnedTreeSampler,
+    ProcessTable,
+    PsutilProcessTable,
+    merge_owned,
+    verify_teardown,
+)
 from tools.qualification.wan321f.controls import (
     AttemptLedger,
     SafetyGuard,
@@ -46,6 +63,22 @@ DEVICE_LOSS = re.compile(
 ALLOCATION_FAILURE = re.compile(
     r"out.?of.?memory|\bOOM\b|Allocation on device|CUDA.*alloc.*fail", re.I
 )
+#: Bounded teardown wait after the manager's stop (QUAL-927); recorded in teardown.json.
+TEARDOWN_DEADLINE_SECONDS = DEFAULT_TEARDOWN_DEADLINE_SECONDS
+TEARDOWN_POLL_SECONDS = DEFAULT_TEARDOWN_POLL_SECONDS
+
+
+def process_table() -> ProcessTable:
+    """The read-only process table (a seam for deterministic tests)."""
+
+    return PsutilProcessTable()
+
+
+def owned_port(base_url: str) -> int:
+    parts = urlsplit(base_url)
+    if parts.port is None:
+        raise ValueError(f"the owned runtime URL names no port: {base_url!r}")
+    return parts.port
 
 
 class AllocationFailure(RuntimeError):
@@ -104,8 +137,20 @@ def gpu_sample() -> dict[str, Any]:
 class Monitor:
     """Independent sampling and deadline watchdogs; only the supplied manager stops its child."""
 
-    def __init__(self, manager: Any, root: Path, policy: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        manager: Any,
+        root: Path,
+        policy: dict[str, Any],
+        *,
+        table: ProcessTable | None = None,
+        memory: Any = None,
+    ) -> None:
         self.manager, self.root, self.policy = manager, root, dict(policy)
+        # The whole owned tree: the manager's PID is the launcher stub; the Comfy worker is its descendant (QUAL-927).
+        self.tree = OwnedTreeSampler(
+            lambda: self.manager.pid, table=table or process_table(), memory=memory
+        )
         self.stop_event = threading.Event()
         self.lock = threading.RLock()
         self.reason = ""
@@ -162,9 +207,7 @@ class Monitor:
             )
 
     def sample_once(self) -> None:
-        import psutil
-
-        from tools.qualification.vid160c.win_memory import read_process_memory, read_system_commit
+        from tools.qualification.vid160c.win_memory import read_system_commit
 
         commit = read_system_commit()
         gpu = gpu_sample()
@@ -173,11 +216,10 @@ class Monitor:
         if not 31 <= commit.physical_total_gb <= 32:
             raise RuntimeError("Target 32 GB host memory identity mismatch")
         pid = self.manager.pid
-        process = read_process_memory(pid) if pid else None
-        if pid and process is None:
+        tree = self.tree.sample()
+        if pid and not tree["readable_pids"]:
             raise RuntimeError("Owned-process memory telemetry unavailable")
-        if pid:
-            self.children.update(p.pid for p in psutil.Process(pid).children(recursive=True))
+        self.children.update(p for p in tree["pids"] if p != pid)
         logs = "\n".join(self.manager.get_stdout_tail() + self.manager.get_stderr_tail())
         if ALLOCATION_FAILURE.search(logs):
             self.abort("allocation failure")
@@ -187,8 +229,8 @@ class Monitor:
                 commit.commit_percent,
                 commit.commit_headroom_gb,
                 commit.physical_available_gb,
-                process.working_set_gb if process else 0,
-                process.private_usage_gb if process else 0,
+                tree["tree_working_set_gib"],
+                tree["tree_private_gib"],
                 gpu["used_mib"],
                 gpu["total_mib"],
                 device_loss=bool(DEVICE_LOSS.search(logs)),
@@ -199,7 +241,8 @@ class Monitor:
                 "sample": asdict(sample),
                 "gpu": gpu,
                 "system": asdict(commit),
-                "process": asdict(process) if process else None,
+                # per-process and summed working set / private commit, and the PID set of this sample
+                "process_tree": tree,
                 "owned_pid": pid,
             }
             self.last_sample = record
@@ -379,8 +422,6 @@ def main() -> int:
     if failures:
         write_new_json(root / "preflight-refusal.json", failures)
         raise SystemExit("Preflight refused; see preserved evidence")
-    import psutil
-
     from src.video.comfy_api_client import ComfyApiClient
     from src.video.comfy_process_manager import ComfyProcessConfig, ComfyProcessManager
 
@@ -411,13 +452,27 @@ def main() -> int:
         )
     )
     client = ComfyApiClient(base_url=plan["runtime"]["base_url"])
-    monitor = Monitor(manager, root, plan["safety_proposal"])
+    table = process_table()
+    # A malformed URL refuses here, before anything starts.
+    port = owned_port(plan["runtime"]["base_url"])
+    monitor = Monitor(manager, root, plan["safety_proposal"], table=table)
     verdict, completed, pid, children = "INCONCLUSIVE", 0, None, []
+    captured: list[OwnedProcess] = []
+
+    def capture(owned_pid: int | None) -> list[int]:
+        # Only a real manager PID is walked: psutil reads a missing PID as this harness process itself.
+        if not isinstance(owned_pid, int):
+            return []
+        found = [OwnedProcess(owned_pid, table.create_time(owned_pid))]
+        found += [OwnedProcess(p, table.create_time(p)) for p in table.children(owned_pid)]
+        captured.extend(found)
+        return [item.pid for item in found[1:]]
+
     try:
         monitor.start()
         with owned_session(manager):
             pid = manager.pid
-            children = [p.pid for p in psutil.Process(pid).children(recursive=True)]
+            children = capture(pid)
             if monitor.reason:
                 raise RuntimeError(monitor.reason)
             manager.check_health()
@@ -454,7 +509,7 @@ def main() -> int:
                 monitor.disarm()
                 completed += 1
             verdict = "PASS" if completed == 3 else "INCONCLUSIVE"
-            children = [p.pid for p in psutil.Process(pid).children(recursive=True)]
+            children = capture(pid)
     except BaseException as exc:
         message = type(exc).__name__ + ": " + str(exc)
         if isinstance(exc, AllocationFailure) or any(
@@ -473,17 +528,32 @@ def main() -> int:
             write_new_json(root / "monitor-close-failure.json", {"error": str(exc)})
         client.close()
         children = sorted(set(children) | getattr(monitor, "children", set()))
-        alive = [p for p in ([pid] if pid else []) + children if psutil.pid_exists(p)]
+        # Bounded, observation-only wait (QUAL-927) over every process recorded in the owned tree (sampled by the
+        # monitor or captured here, with creation times so a reused PID is never a survivor) and the owned port.
+        owned = merge_owned(
+            getattr(getattr(monitor, "tree", None), "recorded", ()),
+            captured,
+            [OwnedProcess(p) for p in children],
+            [OwnedProcess(pid)] if pid else [],
+        )
+        teardown = verify_teardown(
+            owned,
+            (port,),
+            deadline_seconds=TEARDOWN_DEADLINE_SECONDS,
+            poll_seconds=TEARDOWN_POLL_SECONDS,
+            table=table,
+        )
         write_new_json(
             root / "teardown.json",
             {
                 "owned_pid": pid,
                 "observed_children": children,
-                "surviving_pids": alive,
-                "verified": pid is not None and not alive,
+                "surviving_pids": list(teardown.survivors),
+                "verified": pid is not None and teardown.verified,
+                "bounded_wait": teardown.as_dict(),
             },
         )
-        if alive or pid is None:
+        if pid is None or not teardown.verified:
             verdict = "INCONCLUSIVE"
         try:
             write_new_json(root / "events-after.json", event_log(started))

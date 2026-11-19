@@ -34,6 +34,9 @@ REQUIRED_LIMITS = (
     "max_vram_used_mib",
     "min_free_disk_gb",
 )
+#: Optional: how long the post-run teardown verification waits for every StableNew-started process and owned port to
+#: be gone (QUAL-927). Absent means ``owned_tree.DEFAULT_TEARDOWN_DEADLINE_SECONDS``; the value used is in the evidence.
+OPTIONAL_TEARDOWN_LIMIT = "teardown_deadline_seconds"
 RUNTIME_KINDS = ("forge", "comfy")
 OWNERSHIP = ("managed", "external")
 _EXCLUDED_FROM_DIGEST = ("digest", "authorization", "generated_at")
@@ -148,6 +151,15 @@ def shape_problems(plan: dict[str, Any]) -> list[str]:
     ]
     if missing:
         problems.append(f"plan limits missing or not positive: {', '.join(missing)}")
+    deadline = limits.get(OPTIONAL_TEARDOWN_LIMIT)
+    if deadline is not None and (
+        isinstance(deadline, bool)
+        or not isinstance(deadline, (int, float))
+        or not 0 < deadline < float("inf")
+    ):
+        problems.append(
+            f"plan limit {OPTIONAL_TEARDOWN_LIMIT} must be a positive number of seconds"
+        )
     targets = plan.get("targets") or {}
     if not targets:
         problems.append("plan has no journey targets")
