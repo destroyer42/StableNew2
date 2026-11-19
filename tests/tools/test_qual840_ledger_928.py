@@ -27,7 +27,9 @@ def _json(relative: str) -> dict:
     return json.loads(Path(REPO_ROOT, relative).read_text(encoding="utf-8"))
 
 
-def test_controlnet_depth_identity_is_the_catalog_pinned_fp16_variant(ledger: Ledger) -> None:
+def test_controlnet_depth_identity_is_the_catalog_pinned_full_variant(ledger: Ledger) -> None:
+    # Production admission accepts only the full-precision Depth variant (the fp16 file is refused), so the ledger
+    # records the full variant at its catalog pin; the entry stays blocked until the owner installs that file.
     entry = ledger.get("IMG-Q2.controlnet-depth")
     assert entry is not None
     resource = next(
@@ -37,11 +39,12 @@ def test_controlnet_depth_identity_is_the_catalog_pinned_fp16_variant(ledger: Le
     )
     variants = [v for f in resource["files"] for v in f.get("variants", [])]
     pinned = next(
-        v for v in variants if v["suggested_filename"] == "diffusers_xl_depth_fp16.safetensors"
+        v for v in variants if v["suggested_filename"] == "diffusers_xl_depth_full.safetensors"
     )
-    assert entry.identity["controlnet"] == "diffusers_xl_depth_fp16"
+    assert entry.identity["controlnet"] == "diffusers_xl_depth_full"
     assert entry.identity["model_sha256"] == pinned["sha256"]
     assert entry.status == Status.NOT_TESTED and not applicable_physical(entry)
+    assert entry.data["next_test"]["admissible"] is False
 
 
 def test_visual_candidates_are_in_the_ledger_with_their_catalog_identity(ledger: Ledger) -> None:
