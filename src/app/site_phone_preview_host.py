@@ -14,7 +14,10 @@ from src.app.site_output_catalog import SiteOutputCatalog
 from src.app.site_pack_catalog import PreparePack, SitePackCatalog, pack_digest
 from src.app.site_phone_admission import PhonePreviewInput
 from src.contracts import PreviewRequest
-from src.controller.app_controller_services.pack_draft_service import build_pack_entries
+from src.controller.app_controller_services.pack_draft_service import (
+    build_pack_config,
+    build_pack_entries,
+)
 from src.controller.review_batch_service import prepare_review_batch
 from src.pipeline.job_models_v2 import SourceKind
 from src.queue.job_model import JobStatus
@@ -87,12 +90,14 @@ class PhonePreviewHost:
         prompts = read_prompt_pack(pack.path)
         if not stages.get("txt2img", True) or max(command.slots) >= len(prompts):
             raise SiteOutputError("image_preview_required")
+        config_snapshot = build_pack_config(
+            draft_config, deepcopy(saved_config), stages, randomizer
+        )
         entries = build_pack_entries(
             pack.name,
             pack,
             prompts,
-            draft_config,
-            deepcopy(saved_config),
+            config_snapshot,
             stages,
             randomizer,
             slots=command.slots,

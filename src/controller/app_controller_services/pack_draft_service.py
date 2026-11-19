@@ -26,18 +26,14 @@ class SitePackDraft:
     overrides: tuple[tuple[str, Choice], ...] = ()
 
 
-def build_pack_entries(
-    pack_id: str,
-    pack: PromptPackInfo,
-    prompts: list[dict[str, str]],
+def build_pack_config(
     draft_config: PackDraftConfig,
     pack_config: dict[str, Any],
     stage_flags: dict[str, bool],
     randomizer_metadata: dict[str, Any],
     *,
-    slots: tuple[int, ...] | None = None,
     overrides: tuple[tuple[str, Choice], ...] = (),
-) -> list[PackJobEntry]:
+) -> dict[str, Any]:
     config_snapshot = draft_config.merge(pack_config)
     if overrides:
         config_snapshot = apply_site_settings(config_snapshot, dict(overrides))
@@ -45,6 +41,19 @@ def build_pack_entries(
     for stage in ("adetailer", "upscale", "txt2img", "img2img"):
         pipeline_section[f"{stage}_enabled"] = stage_flags.get(stage, stage == "txt2img")
     config_snapshot.setdefault("randomization_enabled", randomizer_metadata["enabled"])
+    return config_snapshot
+
+
+def build_pack_entries(
+    pack_id: str,
+    pack: PromptPackInfo,
+    prompts: list[dict[str, str]],
+    config_snapshot: dict[str, Any],
+    stage_flags: dict[str, bool],
+    randomizer_metadata: dict[str, Any],
+    *,
+    slots: tuple[int, ...] | None = None,
+) -> list[PackJobEntry]:
     return [
         PackJobEntry(
             pack_id=pack_id,
@@ -109,6 +118,17 @@ def prepare_pack_draft(
                     pack_config = None
 
                 try:
+                    config_snapshot = build_pack_config(
+                        draft_config,
+                        pack_config or {},
+                        stage_flags,
+                        randomizer_metadata,
+                        overrides=selection.overrides if selection else (),
+                    )
+                except (TypeError, ValueError, AttributeError) as exc:
+                    raise ValueError(f"Could not merge settings for '{pack_id}'. {exc}") from exc
+
+                try:
                     prompts = read_rows(pack.path)
                 except Exception as exc:  # noqa: BLE001 - report the unreadable pack and continue with others
                     messages.append(f"Failed to read pack '{pack_id}': {exc}")
@@ -125,12 +145,10 @@ def prepare_pack_draft(
                         pack_id,
                         pack,
                         prompts,
-                        draft_config,
-                        pack_config or {},
+                        config_snapshot,
                         stage_flags,
                         randomizer_metadata,
                         slots=selection.slots if selection else None,
-                        overrides=selection.overrides if selection else (),
                     )
                 )
         except Exception as exc:  # noqa: BLE001 - report worker failure on the GUI thread
