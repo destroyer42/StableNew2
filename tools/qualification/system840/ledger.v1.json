@@ -995,6 +995,14 @@
           "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
           "date": "2026-11-19",
           "applies_to": {}
+        },
+        {
+          "id": "e4",
+          "kind": "offline_contract",
+          "claim": "Install verified 2026-11-19 on the host (read-only checks, no generation): diffusers_xl_depth_full.safetensors is 5,004,167,860 bytes with SHA-256 b760b1ed26970c7c60abbcef08e7238bb9428bee510a405aff239e06a1471945, equal to the catalog pin (diffusers/controlnet-depth-sdxl-1.0 revision 17bb97973f29801224cd66f192c5ffacf82648b4, diffusion_pytorch_model.safetensors); its safetensors header classifies as SDXL and production admission (model_problem for a depth unit) returns no problem. The previous file of that name (2,502,139,104 bytes, SHA-256 8ba4dfaa1958f1f68e5dc7f9839f9eef4e153aef0d330291e5cf966c925f97477, unknown provenance) was renamed aside, not deleted, and diffusers_xl_depth_fp16.safetensors is untouched. Nothing was generated, so this is installation evidence only and raises no dimension.",
+          "source": "config/curated_asset_catalog.json",
+          "date": "2026-11-19",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -1008,17 +1016,13 @@
         "source": "STATUS.md"
       },
       "holds": [],
-      "open_items": [
-        "BLOCKER: the catalog-pinned diffusers_xl_depth_full (SHA-256 b760b1ed26970c7c60abbcef08e7238bb9428bee510a405aff239e06a1471945) is not installed. The file of that name already on the host does not match the catalog hash and is not used for qualification; the installed diffusers_xl_depth_fp16 is not admitted by production (controlnet_identity_not_admitted). The owner installs the pinned file; nothing here downloads, moves or replaces any model file."
-      ],
+      "open_items": [],
       "next_test": {
-        "summary": "One Depth unit with an operator-created map, after OpenPose passes. Blocked until the catalog-pinned diffusers_xl_depth_full is installed.",
+        "summary": "One Depth unit with an operator-created map, after OpenPose passes.",
         "arm_id": "IMG-Q2",
         "stage": "canary",
         "needs_owner_authorization": true,
-        "admissible": false,
-        "blocked": true,
-        "blocked_reason": "the catalog-pinned diffusers_xl_depth_full is not installed (the file of that name on the host does not match the catalog hash); the owner installs it, then clears this block in a ledger edit"
+        "admissible": true
       },
       "confidence": "medium",
       "sources": [
