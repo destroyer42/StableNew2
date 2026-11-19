@@ -15,6 +15,7 @@ from typing import Any
 
 from tools.operator_journey.golden import SUITE_ID, SUITE_VERSION
 from tools.operator_journey.golden.host import HostProbes
+from tools.operator_journey.golden.offline import asset_listing, is_offline, offline_problems
 
 PLAN_SCHEMA = 1
 APPROVED = "approved"
@@ -70,6 +71,13 @@ def snapshot_environment(plan: dict[str, Any], probes: HostProbes) -> dict[str, 
             )
             for asset in target.get("source_assets") or []
         }
+        if is_offline(journey):
+            # An offline journey has no runtime or model: its converter and its asset folder are what must not change.
+            blender = target.get("blender") or {}
+            entry["blender"] = (
+                probes.blender(str(blender["executable"])) if blender.get("executable") else None
+            )
+            entry["asset_listing"] = asset_listing(target.get("asset_directory") or "")
         env["targets"][journey] = entry
     return env
 
@@ -99,7 +107,10 @@ def build_plan(
         "limits": limits,
         "job_count": sum(int(t.get("job_count", 0)) for t in targets.values()),
         "expected_artifacts": sum(int(t.get("expected_artifacts", 0)) for t in targets.values()),
-        "expected_endpoints": sorted({t["runtime"]["base_url"] for t in targets.values()}),
+        # An offline journey declares no runtime, so it contributes no endpoint.
+        "expected_endpoints": sorted(
+            {t["runtime"]["base_url"] for t in targets.values() if t.get("runtime")}
+        ),
         "evidence_dir": evidence_dir,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "authorization": {"state": "unauthorized"},
@@ -141,22 +152,12 @@ def shape_problems(plan: dict[str, Any]) -> list[str]:
         problems.append("plan digest does not match its content (edited after freezing)")
     jobs = 0
     for journey, target in sorted(targets.items()):
-        runtime = target.get("runtime") or {}
-        if runtime.get("kind") not in RUNTIME_KINDS or runtime.get("ownership") not in OWNERSHIP:
-            problems.append(f"{journey}: runtime kind/ownership is not declared")
-        if not runtime.get("base_url") or not runtime.get("identity"):
-            problems.append(f"{journey}: runtime base_url and pinned identity are required")
-        model = target.get("model") or {}
-        if journey != "video" and not (
-            model.get("name") and model.get("sha256") and model.get("path")
-        ):
-            problems.append(f"{journey}: an installed model with a SHA-256 identity is required")
-        if journey == "video":
-            workflow = target.get("workflow") or {}
-            if not (workflow.get("id") and workflow.get("version")):
-                problems.append("video: workflow id and version are required")
-            if not target.get("source_assets"):
-                problems.append("video: a source reference image identity is required")
+        if is_offline(journey):
+            # No model and no runtime to pin: the converter identity and the source-asset hashes are required instead.
+            # Only the journey's *definition* makes it offline; a GPU journey never reaches this branch.
+            problems += offline_problems(journey, target)
+        else:
+            problems += _gpu_target_problems(journey, target)
         from tools.operator_journey.golden.frozen import input_problems
 
         problems += input_problems(journey, target)
@@ -169,6 +170,17 @@ def shape_problems(plan: dict[str, Any]) -> list[str]:
         ):
             if key in settings and limits.get(limit) and settings[key] > limits[limit]:
                 problems.append(f"{journey}: {key} {settings[key]} exceeds {limit} {limits[limit]}")
+        if is_offline(journey):
+            # The conversion length is this lane's "frames": it obeys the plan's own limit.
+            frames = ((target.get("inputs") or {}).get("render_profile") or {}).get("frames")
+            if (
+                isinstance(frames, int)
+                and limits.get("max_frames")
+                and frames > limits["max_frames"]
+            ):
+                problems.append(
+                    f"{journey}: frames {frames} exceeds max_frames {limits['max_frames']}"
+                )
         jobs += int(target.get("job_count", 0))
     if limits.get("max_jobs") and jobs > limits["max_jobs"]:
         problems.append(f"planned jobs {jobs} exceed max_jobs {limits['max_jobs']}")
@@ -177,6 +189,27 @@ def shape_problems(plan: dict[str, Any]) -> list[str]:
         and int(plan.get("expected_artifacts", 0)) > limits["max_artifacts"]
     ):
         problems.append("expected artifacts exceed max_artifacts")
+    return problems
+
+
+def _gpu_target_problems(journey: str, target: dict[str, Any]) -> list[str]:
+    """Runtime, model and workflow identity required of every journey that generates (unchanged by the offline lane)."""
+
+    problems: list[str] = []
+    runtime = target.get("runtime") or {}
+    if runtime.get("kind") not in RUNTIME_KINDS or runtime.get("ownership") not in OWNERSHIP:
+        problems.append(f"{journey}: runtime kind/ownership is not declared")
+    if not runtime.get("base_url") or not runtime.get("identity"):
+        problems.append(f"{journey}: runtime base_url and pinned identity are required")
+    model = target.get("model") or {}
+    if journey != "video" and not (model.get("name") and model.get("sha256") and model.get("path")):
+        problems.append(f"{journey}: an installed model with a SHA-256 identity is required")
+    if journey == "video":
+        workflow = target.get("workflow") or {}
+        if not (workflow.get("id") and workflow.get("version")):
+            problems.append("video: workflow id and version are required")
+        if not target.get("source_assets"):
+            problems.append("video: a source reference image identity is required")
     return problems
 
 

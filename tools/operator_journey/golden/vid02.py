@@ -190,7 +190,9 @@ def _inspect_conversion(
         "reported_frames": result.frames,
         "media": media,
         "provenance_source_sha256": str(source.get("sha256", "")),
-        "original_sha256": originals.get(name, {}).get("sha256", ""),
+        "original_sha256": (
+            originals.get(str(result.relative_path).replace("\\", "/")) or originals.get(name) or {}
+        ).get("sha256", ""),
         "asset_id": result.asset_id,
         "asset_sha256": asset.sha256 if asset is not None else "",
         "asset_derivation_source_sha256": derivation.source_sha256
@@ -256,7 +258,11 @@ def run_vid02(
     from src.video.workflow_registry import build_default_workflow_registry
 
     if physical is not None:
-        raise JourneyAbort("VID-02 has no physical lane")
+        # The offline physical lane reads every operator-controlled value from the frozen target (QUAL-922).
+        from tools.operator_journey.golden.vid02_offline import run_vid02_offline
+
+        run_vid02_offline(run, physical)
+        return
     if not VideoCreator().ffmpeg_available:
         raise JourneyHold(
             "FFmpeg is not available on this host, so the pre-rendered clip cannot be produced"
@@ -594,8 +600,13 @@ def _convert_sample(
     originals: dict[str, dict[str, Any]],
     library_root: Path,
     panel: Any,
+    *,
+    synthetic: bool = True,
 ) -> list[dict[str, Any]]:
-    """Lane A with a verified Blender: confirm, convert the sample through the dialog, inspect what it published."""
+    """Lane A with a verified Blender: confirm, convert the sample through the dialog, inspect what it published.
+
+    ``synthetic`` is the simulated lane: the folder holds the two BVH animations this module writes, so their length and
+    count are known.  The offline physical lane converts the operator's own frozen assets, whose length and count are not."""
 
     d, ev = run.driver, run.ev
     session = dialog.session
@@ -608,9 +619,15 @@ def _convert_sample(
             "disposition": e.disposition,
             "route": e.route,
             "profile": e.profile,
-            "animation_frames": BVH_FRAMES,
-            "seconds_supplied": round((BVH_FRAMES - 1) * BVH_FRAME_TIME, 3),
             "frames_requested": frames,
+            **(
+                {
+                    "animation_frames": BVH_FRAMES,
+                    "seconds_supplied": round((BVH_FRAMES - 1) * BVH_FRAME_TIME, 3),
+                }
+                if synthetic
+                else {}
+            ),
         }
         for e in sample
     ]
@@ -618,9 +635,9 @@ def _convert_sample(
     run.check(
         "conversion",
         "sample_is_eligible_for_the_renderer",
-        len(sample) == 2
+        (len(sample) == 2 if synthetic else len(sample) >= 1)
         and all(e.disposition == bt.DISP_CONVERT and e.route and e.profile for e in sample)
-        and frames <= BVH_FRAMES,
+        and (frames <= BVH_FRAMES if synthetic else frames >= 1),
         f"{eligible}",
     )
     run.check(

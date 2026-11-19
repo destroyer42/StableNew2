@@ -27,6 +27,7 @@ from tools.operator_journey.evidence import FAIL, HOLD, NO_GO, PASS, JourneyEvid
 from tools.operator_journey.golden.definitions import JourneyDef
 from tools.operator_journey.golden.host import HostProbes
 from tools.operator_journey.golden.modes import PHYSICAL
+from tools.operator_journey.golden.offline import is_offline
 from tools.operator_journey.golden.plan import (
     authorization_problems,
     environment_diffs,
@@ -210,10 +211,18 @@ def real_executor(
         abort_check=lambda: monitor.tripped,
         target=target,
         journey_key=journey.key,
+        # What the monitor has seen so far; an offline journey reads it to prove no generative GPU work happened.
+        resource_peaks=lambda: dict(monitor.peaks),
     )
-    base_url = target["runtime"]["base_url"]
-    settings = _engine_settings(target)
-    if journey.key == "image":
+    offline = is_offline(journey.key)
+    # An offline journey has no runtime: the workspace points at a closed loopback port so nothing can be reached.
+    base_url = OFFLINE_BASE_URL if offline else target["runtime"]["base_url"]
+    settings = _offline_engine_settings() if offline else _engine_settings(target)
+    if journey.key == "motion-assets":
+        from tools.operator_journey.golden.vid02 import run_vid02
+
+        body = lambda run: run_vid02(run, simulated=False, physical=target)  # noqa: E731
+    elif journey.key == "image":
         from tools.operator_journey.golden.img01 import run_img01
 
         body = lambda run: run_img01(run, simulated=False, physical=target)  # noqa: E731
@@ -234,6 +243,25 @@ def real_executor(
         settings_extra=settings,
         execution_mode="physical",
     )
+
+
+#: Loopback port 9 (discard) is closed on a normal host: an offline journey can reach no backend, even by accident.
+OFFLINE_BASE_URL = "http://127.0.0.1:9"
+
+
+def _offline_engine_settings() -> dict[str, Any]:
+    """Engine settings of an offline journey's disposable workspace: no backend is configured, reachable or autostarted.
+
+    Unlike ``_engine_settings`` nothing is copied from the operator's real settings, so a Comfy or Forge address saved there
+    cannot be probed from this lane."""
+
+    return {
+        "webui_runtime_identity": "forge_webui",
+        "webui_base_url": OFFLINE_BASE_URL,
+        "webui_autostart_enabled": False,
+        "comfy_base_url": OFFLINE_BASE_URL,
+        "comfy_autostart_enabled": False,
+    }
 
 
 def _engine_settings(target: dict[str, Any]) -> dict[str, Any]:

@@ -10,11 +10,16 @@ class JourneyDef:
     key: str  # CLI name
     id: str  # evidence / plan id
     title: str
-    runtime_kind: str  # backend a physical run needs: "forge" or "comfy"
+    runtime_kind: (
+        str  # backend a physical run needs: "forge" or "comfy" ("none" for an offline lane)
+    )
     steps: tuple[str, ...]
     simulated_acceptance: tuple[str, ...]
     physical_acceptance: tuple[str, ...]
     physical: bool = True  # False: simulated lane only; a physical run is refused, not attempted
+    #: True: the physical lane runs no inference and starts no backend (no model, no runtime, no GPU work), so its plan
+    #: target carries no model or runtime (see ``golden.offline``).  Only the definition can make a journey offline.
+    offline: bool = False
 
 
 IMG_01 = JourneyDef(
@@ -128,8 +133,8 @@ LRN_01 = JourneyDef(
 )
 
 # --- advanced journeys (PR-TEST-JOURNEYS-832) --------------------------------------------------------------------------
-# Simulated lane only: no advanced journey has a physical lane, and ``physical`` stays False until a physical
-# qualification of that journey is separately planned, authorised and run.
+# Simulated lane only, except VID-02, whose offline physical lane (QUAL-922) is gated like any other physical run.  For the
+# rest ``physical`` stays False until a physical qualification of that journey is separately planned, authorised and run.
 
 IMG_02 = JourneyDef(
     key="prompt-model",
@@ -192,7 +197,7 @@ VID_02 = JourneyDef(
     key="motion-assets",
     id="VID-02",
     title="Motion assets to a usable driving video",
-    runtime_kind="comfy",
+    runtime_kind="none",  # offline: the simulated lane borrows a loopback Comfy fake; a physical run needs no backend
     steps=(
         "Open Video Workflow, Motion Library",
         "Launch Batch Convert Motion",
@@ -214,8 +219,17 @@ VID_02 = JourneyDef(
         "a missing or incompatible source refuses with an actionable message",
         "source and derivative identities survive restart",
     ),
-    physical_acceptance=(),
-    physical=False,
+    physical_acceptance=(
+        "originals byte-identical",
+        "Blender executable identity and version",
+        "converted MP4 hash and decode",
+        "library entries survive a restart",
+        "driving-clip SHA-256 recorded in the job record",
+        "Prepare Motion Source output content-addressed, with the frame window recorded",
+        "no generative GPU execution",
+    ),
+    physical=True,
+    offline=True,
 )
 
 VID_03 = JourneyDef(
@@ -318,6 +332,8 @@ ADVANCED_ORDER = (
 JOURNEYS = {
     j.key: j for j in (IMG_01, VID_01, LRN_01, IMG_02, IMG_03, VID_02, VID_03, LRN_02, OPS_01)
 }
+#: Journeys whose physical lane is offline: no model, no runtime and no generative GPU work.
+OFFLINE_KEYS = frozenset(j.key for j in JOURNEYS.values() if j.offline)
 ORDER = (
     "image",
     "video",
