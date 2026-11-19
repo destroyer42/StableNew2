@@ -169,7 +169,28 @@ messages truthful.
    the GPU arms, with a fixed corpus of about ten owner outputs as the quality reference.
 3. **Pace: accepted.** One sitting per wave; plans frozen and approved together; runs launched one at a time with each
    canary inspected before the next; at most about four GPU runs per sitting because of `HOLD-GPU-DEVICE-LOSS`.
-4. Out-of-scope list: under item-by-item review.
+4. **Out-of-scope list: decided item by item** (the section 2 table is the starting point; these decisions replace it).
+   Each decision authorizes planning and build work only. Every physical run still needs its own frozen plan and owner
+   approval, and every ledger change is an owner-accepted edit in a reviewed commit.
+   - **AI track (`AI-Q0`, `AI-Q1`, `AI-Q2`): resumes as its own track.** The owner will do the one-time elevated setup in
+     `docs/runbooks/ai_qualification_etw_capture.md` (a system-wide Python in Program Files, the protected
+     `ProgramData\StableNewCap` copy), then a fresh canary-2 capture, D12a/D12b authorization text and the firewall
+     attestation. Candidates kept: `qwen3.5-9b-q4_k_m-unsloth`, `qwen3.5-4b-q4_k_m-unsloth`, `lfm3-1.7b-q4_k_m-liquidai`,
+     `lfm3-1.7b-q8_0-liquidai`. Dropped: `qwen3.5-9b-q5_k_m-unsloth`, `qwen3.5-4b-q8_0-unsloth`. `AI-Q2` follows a
+     qualified runtime automatically.
+   - **`IMG-Q1.zimage-turbo-fp8`: back in scope.** Both its inconclusive result and A14B's come from a teardown check made once
+     with no bounded wait. After that harness fix, one new exact authorization and one run go into the Forge sitting.
+   - **`IMG-Q4.forge-vs-comfy-still`: in scope.** This needs a Comfy still-image backend package (architectural, design first).
+   - **`VID-Q4.wan-a14b-480p`: recommendation accepted.** After the teardown and worker-tree memory fix, A14B qualification
+     is re-targeted to the experimental A14B 4-step workflow, as a conditional wave after Wave 4, under a new owner budget.
+   - **`IMG-Q1.klein-base-9b`: stays NO-GO.** The owner asked for the cached third-party re-upload to be deleted.
+   - **`IMG-Q1.qwen-image`: in scope, tied to the Comfy still-image package.**
+   - **`IMG-Q1.other-generic-families`: generic FLUX families come into scope.** This needs a model-policy family and profile
+     package. SD1, SD2 and SD3 stay out.
+   - **`IMG-Q4.ideogram4-diffusers`: in scope.** The owner accepts the non-commercial licence for this non-commercial work and
+     authorizes the PR-IMG-120 Diffusers production slice. It is architectural, so design comes first; the GPU residency lease
+     and the JSON-caption mapping still need owner decisions in that design.
+   - **`VID-Q0.wan22-ti2v-5b-legacy-1.0.0-1.1.0`: stays out** (replay only).
 5. **ControlNet models: answered** (section 5). OpenPose matches the ledger; Canny full and Depth fp16 are installed from
    the catalog pins. The `IMG-Q2.controlnet-depth` identity is to move to `diffusers_xl_depth_fp16` by an owner-accepted
    ledger edit.
