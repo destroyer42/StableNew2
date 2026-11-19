@@ -22,6 +22,8 @@ from src.controller.video_workflow_controller import VideoWorkflowController
 from src.gui.presentation_actions import TkPresentationActions
 
 TI2V_ID = "wan22_ti2v_5b_i2v_v1"
+# The declared Make Video default (VID-CLIP-372: Wan2.2 I2V-A14B 4-step, `make_video_default`).
+RECOMMENDED_ID = "wan22_i2v_a14b_4step_v1"
 ANIMATE2_ID = "wan_animate2_drive_i2v_v1"
 
 
@@ -114,6 +116,7 @@ def admit_policy_is_default(policy: Any) -> bool:
 
 __all__ = [
     "ANIMATE2_ID",
+    "RECOMMENDED_ID",
     "TI2V_ID",
     "FakeNotebook",
     "HandoffApp",

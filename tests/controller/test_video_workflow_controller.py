@@ -55,6 +55,7 @@ def test_list_workflow_specs_offers_the_approved_a14b_and_ti2v_and_the_experimen
     assert [spec["workflow_id"] for spec in specs] == [
         "wan22_fun_control_5b_canny_i2v_v1",
         "wan22_i2v_a14b_4step_v1",
+        "wan22_ti2v_5b_i2v_720p_v1",
         "wan22_ti2v_5b_i2v_v1",
         "wan_animate2_drive_i2v_v1",
         "wan_animate2_prompt_i2v_v1",
@@ -62,6 +63,7 @@ def test_list_workflow_specs_offers_the_approved_a14b_and_ti2v_and_the_experimen
     assert {spec["workflow_id"]: spec["experimental"] for spec in specs} == {
         "wan22_fun_control_5b_canny_i2v_v1": True,
         "wan22_i2v_a14b_4step_v1": False,
+        "wan22_ti2v_5b_i2v_720p_v1": False,
         "wan22_ti2v_5b_i2v_v1": False,
         "wan_animate2_drive_i2v_v1": True,
         "wan_animate2_prompt_i2v_v1": True,

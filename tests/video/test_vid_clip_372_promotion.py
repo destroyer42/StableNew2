@@ -1,7 +1,7 @@
 """VID-CLIP-372: implementing the owner's recorded GO decision (2026-11-18) for the A14B / TI2V-5B engines.
 
 Deterministic and GPU-free; no ComfyUI, process or network. Covers: A14B approved and the Make Video default
-(graph unchanged), the 720p approval held with its history timeout raised, per-spec history timeouts,
+(graph unchanged), the 720p alternate approved under its own workflow id (1.4.0 stays experimental), per-spec history timeouts,
 the owned cold-start readiness window, the A14B launch flag (applied or blocked, never silently missing),
 and the warning for an approved workflow on a ComfyUI version it was not qualified on.
 """
@@ -33,6 +33,8 @@ from src.video.runtime_version_check import qualified_comfyui_version, runtime_v
 from src.video.workflow_catalog import (
     WAN22_720P_HISTORY_TIMEOUT_SECONDS,
     WAN22_720P_VERSION,
+    WAN22_720P_WORKFLOW_ID,
+    WAN22_720P_WORKFLOW_VERSION,
     WAN22_FRAMES_VERSION,
 )
 from src.video.workflow_catalog_wan_a14b import (
@@ -60,6 +62,7 @@ from tests.video.test_vid_clip_370_candidate_specs import (
     _a14b_backend,
     _a14b_info,
     _a14b_request,
+    _controller,
     _fake_export,
     _FramesFake,
 )
@@ -140,7 +143,7 @@ def test_the_default_is_declared_not_an_accident_of_catalog_order() -> None:
     assert recommended_workflow_id(records[2:]) == ""
 
 
-def test_the_ti2v_480p_version_is_still_the_one_the_picker_offers_while_720p_stays_experimental() -> (
+def test_the_ti2v_480p_version_is_still_the_one_the_picker_offers_and_old_720p_stays_experimental() -> (
     None
 ):
     registry = build_default_workflow_registry()
@@ -149,6 +152,55 @@ def test_the_ti2v_480p_version_is_still_the_one_the_picker_offers_while_720p_sta
     assert [s.workflow_version for s in latest_spec_per_workflow(ti2v)] == [WAN22_FRAMES_VERSION]
     assert _spec(WAN_ID, WAN22_720P_VERSION).governance_state == "experimental"
     assert _spec(WAN_ID, WAN22_FRAMES_VERSION).governance_state == "approved"
+
+
+def test_720p_is_its_own_approved_workflow_id_so_both_resolutions_are_picker_entries() -> None:
+    spec = build_default_workflow_registry().get(  # no experimental opt-in needed
+        WAN22_720P_WORKFLOW_ID, WAN22_720P_WORKFLOW_VERSION
+    )
+    assert spec.governance_state == "approved" and not spec.is_experimental and spec.is_runnable
+    assert spec.pinned_revision == f"catalog:{WAN22_720P_WORKFLOW_ID}@{WAN22_720P_WORKFLOW_VERSION}"
+    assert "720p" in spec.display_name and "xperimental" not in spec.display_name
+    assert spec.governance_notes.startswith("APPROVED")
+    assert "not QUALIFIED by the qualification ledger" in spec.governance_notes
+    assert spec.backend_defaults["runtime_policy"]["release_owned_runtime_after_job"] is True
+    assert "make_video_default" not in spec.backend_defaults  # an alternate, never the default
+
+    listed = _controller().list_workflow_specs()
+    records = {r["workflow_id"]: r for r in listed}
+    assert (records[WAN_ID]["workflow_version"], records[WAN_ID]["governance_state"]) == (
+        WAN22_FRAMES_VERSION,
+        "approved",
+    )
+    assert (
+        records[WAN22_720P_WORKFLOW_ID]["workflow_version"],
+        records[WAN22_720P_WORKFLOW_ID]["governance_state"],
+    ) == (WAN22_720P_WORKFLOW_VERSION, "approved")
+    assert records[WAN22_720P_WORKFLOW_ID]["experimental"] is False
+    assert recommended_workflow_id(listed) == WAN_A14B_ID  # 720p never displaces the default
+    form = _controller().build_default_form_state()
+    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
+
+
+def test_the_720p_workflow_is_the_1_3_0_graph_at_720p_targets_with_the_longer_timeout() -> None:
+    base = _spec(WAN_ID, WAN22_FRAMES_VERSION)
+    new = _spec(WAN22_720P_WORKFLOW_ID, WAN22_720P_WORKFLOW_VERSION)
+    old_720p = _spec(WAN_ID, WAN22_720P_VERSION)
+
+    # The same graph-defining content as the 1.4.0 eval candidate it supersedes for operators.
+    for key in ("source_preparation", "output_policy", "frame_count_policy", "resource_readiness"):
+        assert new.backend_defaults[key] == old_720p.backend_defaults[key]
+    assert new.input_bindings == old_720p.input_bindings
+    assert new.output_bindings == old_720p.output_bindings
+    assert new.dependency_specs == old_720p.dependency_specs
+    prep = new.backend_defaults["source_preparation"]
+    assert prep["portrait_target"] == {"width": 704, "height": 1280}
+    assert prep["landscape_target"] == {"width": 1280, "height": 704}
+    assert base.backend_defaults["source_preparation"]["portrait_target"] == {
+        "width": 480,
+        "height": 832,
+    }
+    assert new.backend_defaults["history_timeout_seconds"] == WAN22_720P_HISTORY_TIMEOUT_SECONDS
 
 
 def test_an_eval_arm_naming_only_another_workflow_gets_that_workflows_offered_version(
@@ -189,6 +241,9 @@ def test_each_spec_declares_the_history_timeout_its_eval_evidence_supports() -> 
     assert _spec(WAN_ID, WAN22_720P_VERSION).backend_defaults["history_timeout_seconds"] == (
         WAN22_720P_HISTORY_TIMEOUT_SECONDS
     )
+    assert _spec(WAN22_720P_WORKFLOW_ID, WAN22_720P_WORKFLOW_VERSION).backend_defaults[
+        "history_timeout_seconds"
+    ] == (WAN22_720P_HISTORY_TIMEOUT_SECONDS)
     assert WAN22_720P_HISTORY_TIMEOUT_SECONDS == 1200 > 622  # the slowest observed clip
     assert (
         _spec(WAN_A14B_ID, WAN_A14B_VERSION).backend_defaults["history_timeout_seconds"]
@@ -365,6 +420,9 @@ def test_the_warning_names_both_versions_and_only_fires_for_approved_workflows_o
     assert (
         runtime_version_warning(_spec(WAN_ID, WAN22_720P_VERSION), "0.37.0") is None
     )  # experimental
+    new_720p = _spec(WAN22_720P_WORKFLOW_ID, WAN22_720P_WORKFLOW_VERSION)
+    assert runtime_version_warning(new_720p, "0.37.0") is not None  # approved, qualified on 0.38.0
+    assert runtime_version_warning(new_720p, "0.38.0") is None
 
 
 def test_execution_records_the_warning_beside_the_actual_runtime_and_still_runs(

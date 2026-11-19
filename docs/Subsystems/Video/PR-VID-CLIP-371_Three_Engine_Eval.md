@@ -76,8 +76,9 @@ setting; implementing the decision is a separate package.
 Implementation (VID-CLIP-372): A14B 1.0.0 is approved and the Make Video default, the 720p history timeout is
 1200 s (per spec), an owned ComfyUI gets a 180 s cold-start readiness window, the A14B launch flag is applied or
 Queue is blocked, and an approved workflow on a ComfyUI other than 0.38.0 warns (`VIDEO_PIPELINE.md` sections 1.1
-and 4.4). **Held for an owner decision:** approving TI2V-5B 1.4.0 (720p) while keeping 1.3.0 (480p) selectable, because
-the picker offers one entry per workflow id and the newest approved version would hide 1.3.0.
+and 4.4). TI2V-5B 720p is approved as an alternate under its own workflow id, `wan22_ti2v_5b_i2v_720p_v1` 1.0.0 (the owner
+chose a separate id over per-version picker entries), so 1.3.0 (480p) stays selectable; 1.4.0 of the 480p id stays
+experimental.
 
 ## Recommended next actions (each a new package)
 

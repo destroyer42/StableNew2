@@ -596,6 +596,7 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
     expected = {
         "wan22_fun_control_5b_canny_i2v_v1@1.0.0": "8882daeda0571cc4cc00cf6d96e6a4fff25411a571f62626dd5bfc87389beac5",
         "wan22_i2v_a14b_4step_v1@1.0.0": "b41a7d90e663a008e7625fb17ca6e6ff32ae5d1df064a9cc75c97f4b9eb090f2",
+        "wan22_ti2v_5b_i2v_720p_v1@1.0.0": "00a676cfe01120df98e24d1ccebb5a14084a6cb5181f759cb0b84b5a15da766e",  # VID-CLIP-372
         "wan22_ti2v_5b_i2v_v1@1.0.0": "42dac69b34130c4db06ea5dc0e91dd7b35bba2ff0c960ab24b406437adb58332",
         "wan22_ti2v_5b_i2v_v1@1.1.0": "e5821b1cf6eadf0d93e666f4a606d7540d53298cf3bfc51402393f80388fe731",
         "wan22_ti2v_5b_i2v_v1@1.2.0": "5bce60b5e7d0b233a3ddbff2225546e41b7f4415af001a0da6de443757df0bec",

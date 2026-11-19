@@ -24,7 +24,12 @@ from src.video.video_backend_types import (
     CONTROL_PROMPT_TEXT,
     CONTROL_SOURCE_IMAGE,
 )
-from src.video.workflow_catalog import WAN22_720P_VERSION, WAN22_FRAMES_VERSION
+from src.video.workflow_catalog import (
+    WAN22_720P_VERSION,
+    WAN22_720P_WORKFLOW_ID,
+    WAN22_720P_WORKFLOW_VERSION,
+    WAN22_FRAMES_VERSION,
+)
 from src.video.workflow_catalog_wan_a14b import (
     WAN_A14B_ID,
     WAN_A14B_MODEL_FILES,
@@ -125,6 +130,9 @@ def test_the_picker_keeps_offering_the_approved_ti2v_1_3_0_and_recommends_the_pr
     labels = {c.workflow_id: c for c in workflow_choices(listed)}
     assert labels[WAN_A14B_ID].recommended and not labels[WAN_A14B_ID].experimental
     assert not labels[WAN_ID].recommended and not labels[WAN_ID].experimental
+    # The 720p alternate is its own approved entry beside 480p (VID-CLIP-372), never recommended.
+    assert records[WAN22_720P_WORKFLOW_ID]["governance_state"] == "approved"
+    assert not labels[WAN22_720P_WORKFLOW_ID].recommended
     form = controller.build_default_form_state()
     assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
 
@@ -572,14 +580,13 @@ def test_the_example_suite_is_synthetic_and_names_the_three_arms() -> None:
         "1.3.0",
     )
     assert "experimental_opt_in" not in arms["ti2v_480p"]
-    assert (arms["ti2v_720p"]["workflow_version"], arms["ti2v_720p"]["experimental_opt_in"]) == (
-        "1.4.0",
-        True,
+    assert (arms["ti2v_720p"]["workflow_id"], arms["ti2v_720p"]["workflow_version"]) == (
+        WAN22_720P_WORKFLOW_ID,
+        WAN22_720P_WORKFLOW_VERSION,
     )
-    assert (arms["a14b_480p"]["workflow_id"], arms["a14b_480p"]["experimental_opt_in"]) == (
-        WAN_A14B_ID,
-        True,
-    )
+    assert arms["a14b_480p"]["workflow_id"] == WAN_A14B_ID
+    # VID-CLIP-372: every arm is approved, so none declares the experimental opt-in.
+    assert all("experimental_opt_in" not in form for form in arms.values())
 
 
 def test_the_example_suite_builds_one_njr_per_case_per_arm_and_admits_once(tmp_path: Path) -> None:
@@ -595,13 +602,12 @@ def test_the_example_suite_builds_one_njr_per_case_per_arm_and_admits_once(tmp_p
 
     assert plan.eligible, plan.summary()
     assert len(plan.jobs) == 9 and job_service.calls == []  # a preview admits nothing
-    # The suite still declares the opt-in on the A14B arm; the approved spec ignores it and the NJR records False.
-    assert set(plan.experimental_arms) == {"ti2v_720p", "a14b_480p"}
+    assert set(plan.experimental_arms) == set()
     by_cell = {(job.case_id, job.arm_id): job.njr.config["video_workflow"] for job in plan.jobs}
     assert len(by_cell) == 9
     expected = {
         "ti2v_480p": (WAN_ID, "1.3.0", False, (480, 832)),
-        "ti2v_720p": (WAN_ID, "1.4.0", True, (704, 1280)),
+        "ti2v_720p": (WAN22_720P_WORKFLOW_ID, "1.0.0", False, (704, 1280)),
         "a14b_480p": (WAN_A14B_ID, "1.0.0", False, (480, 832)),
     }
     for (case_id, arm_id), config in by_cell.items():

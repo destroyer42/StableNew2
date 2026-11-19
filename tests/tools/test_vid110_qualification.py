@@ -194,7 +194,7 @@ def test_only_the_owner_promoted_qualification_candidate_is_an_approved_workflow
     superseded by tests/video/test_wan22_experimental_workflow.py.  Owner decision D1
     (2026-10-20, PR-VID-GOV-316) promoted Wan2.2 TI2V-5B 1.2.0, and the frames-out 1.3.0 was approved on
     2026-10-21 (PR-VID-WAN-324); the owner's GO of 2026-11-18 (VID-CLIP-372) promoted the
-    A14B 4-step 1.0.0: exactly those three are promoted.  What must
+    A14B 4-step 1.0.0 and the 720p TI2V-5B workflow 1.0.0: exactly those four are promoted.  What must
     still hold: the throwaway qualification harness is not imported by production code, every
     other candidate (older TI2V versions, both Wan-Animate-2 modes) stays experimental and
     non-default-runnable, and no candidate is a registered backend.
@@ -225,6 +225,7 @@ def test_only_the_owner_promoted_qualification_candidate_is_an_approved_workflow
     promoted = {
         ("wan22_ti2v_5b_i2v_v1", "1.2.0"),
         ("wan22_ti2v_5b_i2v_v1", "1.3.0"),
+        ("wan22_ti2v_5b_i2v_720p_v1", "1.0.0"),  # 720p alternate, its own id, approved by VID-CLIP-372
         ("wan22_i2v_a14b_4step_v1", "1.0.0"),
     }
     approved = {
