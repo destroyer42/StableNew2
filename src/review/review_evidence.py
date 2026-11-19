@@ -21,6 +21,7 @@ from typing import Any
 
 from src.learning.learning_record import (
     DISPOSITION_SOFT_SCORES,
+    SITE_REVIEW_RECEIPT,
     LearningRecord,
     LearningRecordWriter,
 )
@@ -31,7 +32,11 @@ from src.review.review_metadata_service import (
     ReviewMetadataService,
     ReviewMetadataStampResult,
 )
-from src.utils.image_metadata import extract_embedded_metadata, resolve_model_vae_fields
+from src.utils.image_metadata import (
+    extract_embedded_metadata,
+    resolve_model_vae_fields,
+    resolve_prompt_fields,
+)
 
 RATING_KIND = "review_tab_feedback"
 RATING_SOURCE = "review_tab"
@@ -201,6 +206,60 @@ def build_review_rating_record(
     )
 
 
+def revise_image_rating(
+    path: Path, digest: str, score: int, notes: str, previous: Mapping[str, Any]
+) -> LearningRecord:
+    """Keep native Review context and advanced scores when editing the basic rating fields."""
+    metadata = _section(previous.get("metadata"))
+    image_metadata = _image_metadata(path)
+    settings = _settings_from_image_metadata(image_metadata)
+    prompt, negative = resolve_prompt_fields(image_metadata)
+    subscores = _section(metadata.get("subscores"))
+    basic_only = metadata.get("site_review_basic_rating") is True or not subscores
+    feedback = {
+        "image_path": path,
+        "rating": score,
+        "notes": notes,
+        "source_job_id": metadata.get("source_job_id") or image_metadata.get("job_id"),
+        "model": previous.get("primary_model") or settings.get("model"),
+        "sampler": previous.get("primary_sampler") or settings.get("sampler"),
+        "scheduler": previous.get("primary_scheduler") or settings.get("scheduler"),
+        "steps": previous.get("primary_steps") or settings.get("steps"),
+        "cfg_scale": previous.get("primary_cfg_scale") or settings.get("cfg_scale"),
+        "stage": metadata.get("stage") or settings.get("stage"),
+        **{
+            field: metadata.get(field)
+            for field in (
+                "quality_label",
+                "prompt_delta",
+                "negative_prompt_delta",
+                "prompt_mode",
+                "negative_prompt_mode",
+                "stages",
+            )
+        },
+        "subscores": {} if basic_only else subscores,
+        "base_prompt": metadata.get("prompt_before", prompt),
+        "base_negative_prompt": metadata.get("negative_prompt_before", negative),
+        "after_prompt": metadata.get("prompt_after"),
+        "after_negative_prompt": metadata.get("negative_prompt_after"),
+        "context": _section(metadata.get("review_context")),
+    }
+    record = build_review_rating_record(feedback, artifact_sha256=digest)
+    if basic_only:
+        record.metadata["site_review_basic_rating"] = True
+    return record
+
+
+def image_source_job(path: Path) -> str:
+    return str(_image_metadata(path).get("job_id") or "").strip()
+
+
+def _image_metadata(path: Path) -> dict[str, Any]:
+    metadata = extract_embedded_metadata(path)
+    return _section(metadata.payload) if metadata.status == "ok" else {}
+
+
 def _section(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -218,10 +277,10 @@ def _generation_settings(path: str, digest: str, *, bytes_verified: bool) -> dic
 
     if not bytes_verified and file_sha256(path) != digest:
         return {}
-    result = extract_embedded_metadata(Path(path))
-    if result.status != "ok" or not isinstance(result.payload, dict):
-        return {}
-    payload = result.payload
+    return _settings_from_image_metadata(_image_metadata(Path(path)))
+
+
+def _settings_from_image_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     manifest = _section(payload.get("stage_manifest"))
     config = _section(manifest.get("config"))
     generation = _section(payload.get("generation"))
@@ -354,20 +413,21 @@ def _recorded_settings(records_path: Path, digest: str) -> dict[str, Any]:
     return found
 
 
-def save_disposition(writer: LearningRecordWriter, **kwargs: Any) -> LearningRecord:
-    """Append a disposition through the one writer; raises ``OSError`` when it was not confirmed saved.
-
-    The settings come from the image bytes. When the file cannot supply them (it was moved to the archive, or the path
-    now holds another file), the settings already recorded for the same bytes are carried over.
-    """
-
+def build_disposition_with_prior_settings(records_path: Path, **kwargs: Any) -> LearningRecord:
+    """Carry settings forward for the same digest when the image cannot supply them."""
     record = build_disposition_record(**kwargs)
     if record.metadata.get("review_disposition") in DISPOSITION_SOFT_SCORES and not _has_settings(
         record
     ):
-        known = _recorded_settings(writer.records_path, str(record.metadata["artifact_sha256"]))
+        known = _recorded_settings(records_path, str(record.metadata["artifact_sha256"]))
         if known:
             record = build_disposition_record(**kwargs, known_settings=known)
+    return record
+
+
+def save_disposition(writer: LearningRecordWriter, **kwargs: Any) -> LearningRecord:
+    """Append a disposition through the one writer; raises ``OSError`` when it was not confirmed saved."""
+    record = build_disposition_with_prior_settings(writer.records_path, **kwargs)
     if writer.append_record(record) is False:
         raise OSError("The review decision was not confirmed saved; see the log before retrying.")
     return record
@@ -719,7 +779,7 @@ def lookup_inspection(
     )
 
 
-def _iter_rows(records_path: Path) -> Iterator[dict[str, Any]]:
+def _iter_rows(records_path: Path, *, strict_io: bool = False) -> Iterator[dict[str, Any]]:
     try:
         with open(records_path, encoding="utf-8") as handle:
             for line in handle:
@@ -731,8 +791,11 @@ def _iter_rows(records_path: Path) -> Iterator[dict[str, Any]]:
                     continue
                 if isinstance(payload, dict) and isinstance(payload.get("metadata"), dict):
                     yield payload
-    except OSError:
+    except FileNotFoundError:
         return
+    except OSError:
+        if strict_io:
+            raise
 
 
 @dataclass(frozen=True)
@@ -852,16 +915,30 @@ class EvidenceIndex:
         }
         #: Inspection rows that name no readable digest: they cannot be bound to any bytes.
         self.unbound_inspections = 0
+        self.operation_receipts: list[dict[str, Any]] = []
 
     @classmethod
-    def read(cls, records_path: str | os.PathLike[str] | None) -> EvidenceIndex:
+    def read(
+        cls,
+        records_path: str | os.PathLike[str] | None,
+        *,
+        strict_io: bool = False,
+        operation: str | None = None,
+    ) -> EvidenceIndex:
         index = cls()
         if records_path is None:
             return index
-        for payload in _iter_rows(Path(records_path)):
+        for payload in _iter_rows(Path(records_path), strict_io=strict_io):
             metadata = payload["metadata"]
+            receipt = metadata.get(SITE_REVIEW_RECEIPT)
+            if (
+                operation is not None
+                and isinstance(receipt, dict)
+                and receipt.get("operation") == operation
+            ):
+                index.operation_receipts.append(receipt)
             source = metadata.get("source")
-            if source not in index._by_digest:
+            if not isinstance(source, str) or source not in index._by_digest:
                 continue
             recorded = normalize_digest(metadata.get("artifact_sha256"))
             if source == INSPECTION_SOURCE and not recorded:
@@ -886,6 +963,9 @@ class EvidenceIndex:
 
     def disposition(self, image_path: Any, artifact_sha256: str | None) -> DispositionLookup:
         return _disposition_of(self._find(DISPOSITION_SOURCE, image_path, artifact_sha256))
+
+    def disposition_evidence(self, image_path: Any, artifact_sha256: str | None) -> EvidenceLookup:
+        return self._find(DISPOSITION_SOURCE, image_path, artifact_sha256)
 
     def inspection(self, image_path: Any, artifact_sha256: str | None) -> InspectionLookup:
         return _inspection_of(self._find(INSPECTION_SOURCE, image_path, artifact_sha256))

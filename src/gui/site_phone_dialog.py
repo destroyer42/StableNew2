@@ -10,6 +10,18 @@ from tkinter import filedialog, messagebox, ttk
 
 from src.app.site_phone_connector import PhoneConnectorError, PhoneEnrollment, SitePhoneConnector
 
+DEFAULT_NATIVE_REVIEW = True
+
+
+def pairing_permissions(rating: bool, native_review: bool) -> str:
+    gallery = "Browse Output and save gallery and video ratings" if rating else "Browse Output"
+    review = (
+        "Write native Review evidence with ratings, Retain, and Mark for rework"
+        if native_review
+        else "Native Review evidence permission off"
+    )
+    return f"• {gallery}\n• {review}"
+
 
 class PhoneReviewDialog:
     def __init__(self, root: tk.Tk, connector: SitePhoneConnector) -> None:
@@ -38,7 +50,16 @@ class PhoneReviewDialog:
         code = ttk.Entry(panel, show="*", width=50)
         code.pack(fill="x", pady=(0, 8))
         rating = tk.BooleanVar(master=dialog)
-        ttk.Checkbutton(panel, text="Also allow saving ratings", variable=rating).pack(anchor="w")
+        ttk.Checkbutton(panel, text="Allow gallery and video ratings", variable=rating).pack(
+            anchor="w"
+        )
+        native_review = tk.BooleanVar(master=dialog, value=DEFAULT_NATIVE_REVIEW)
+        ttk.Checkbutton(
+            panel, text="Allow writing native Review evidence", variable=native_review
+        ).pack(anchor="w")
+        ttk.Label(
+            panel, text="Native Review ratings, Retain, and Mark for rework", wraplength=370
+        ).pack(anchor="w", padx=18)
         status = ttk.Label(panel, wraplength=370)
         status.pack(anchor="w", pady=(10, 4))
         feedback = ttk.Label(panel, wraplength=370)
@@ -55,16 +76,19 @@ class PhoneReviewDialog:
             if not folder:
                 return
             can_rate = rating.get()
-            access = "browse and rate" if can_rate else "browse"
+            can_review = native_review.get()
             if messagebox.askyesno(
                 "Approve phone review?",
-                f"Allow {enrollment.name} to {access} this folder for up to 30 days?\n\n{folder}",
+                f"Approve {enrollment.name} for up to 30 days?\n\n{folder}\n\n"
+                f"{pairing_permissions(can_rate, can_review)}",
                 parent=dialog,
                 default=messagebox.NO,
             ):
                 self._watch(
                     dialog,
-                    self._connector.enroll(enrollment, Path(folder), can_rate),
+                    self._connector.enroll(
+                        enrollment, Path(folder), can_rate, native_review=can_review
+                    ),
                     lambda _: feedback.configure(text="Pairing approved on this PC."),
                     feedback,
                 )

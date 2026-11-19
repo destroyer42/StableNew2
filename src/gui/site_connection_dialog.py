@@ -6,6 +6,7 @@ import logging
 import secrets
 import time
 import tkinter as tk
+from functools import partial
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
@@ -28,7 +29,9 @@ from src.controller.app_controller_services.run_submission_service import (
     same_preview,
 )
 from src.gui.site_phone_dialog import PhoneReviewDialog
+from src.learning.learning_paths import get_learning_records_path
 from src.pipeline.job_models_v2 import UnifiedJobSummary, WorkloadKind
+from src.review.review_lineage import repository_of, verified_review_outputs
 from src.state.output_routing import get_output_root
 
 log = logging.getLogger(__name__)
@@ -285,7 +288,12 @@ class SiteConnectionDialog:
         self._shared_output: Path | None = None
         self._omit_output = False
         self._startup_error = ""
-        self._phone = SitePhoneConnector()
+        repository = repository_of(app)
+        self._review_outputs = partial(verified_review_outputs, repository) if repository else None
+        self._phone = SitePhoneConnector(
+            review_outputs=self._review_outputs,
+            review_records=get_learning_records_path(create_parent=False),
+        )
         self._phone_dialog = PhoneReviewDialog(root, self._phone)
 
     def start_default(self) -> None:
@@ -319,6 +327,7 @@ class SiteConnectionDialog:
             self.app.job_service.history_store.get_job,
             allow_promptpack_queue=True,
             claim_ticket=self._tickets.consume,
+            review_outputs=self._review_outputs,
         )
         if not self._omit_output:
             try:

@@ -33,8 +33,11 @@ Wi-Fi or cellular while the PC's browser is closed.
    credential and the phone code. Check the displayed phone name, choose the
    exact Output folder, and approve browse access. Choose **Also allow saving
    ratings** to grant writes to the native video ratings CSV and gallery
-   rating records. Create, queue submission and album edits use the existing
-   browser workflow.
+   rating records. **Allow writing native Review evidence** is selected for a new enrollment.
+   The final Windows confirmation lists each selected permission. Clear the checkbox to grant
+   browse access without native Review writes. An existing phone can receive this scope by
+   revoking its current grant and approving a new pairing on Windows. Create, queue submission
+   and album edits use the browser workflow.
 3. Use **Output Library** or **Video Review** on the phone. After a lock or
    network switch, the Site resumes the paired browser. A 15-minute browser
    lease renews while the same pairing and Sites sign-in are valid. Pair
@@ -43,8 +46,8 @@ Wi-Fi or cellular while the PC's browser is closed.
 4. Choose **Revoke phone** in StableNew to stop new native work for this device
    immediately. StableNew saves the revocation locally and confirms it with
    the Site when reachable. On a disconnect, the hosted presence and result
-   access expire within 30 seconds. A prior native rating may already have
-   committed, so check the item before retrying. A browser that lost its
+   access expire within 30 seconds. Pending phone ratings can check their
+   native receipt when an authorized pairing is available again. A browser that lost its
    device cookie or a replacement PC must pair again after revoking the old
    grant on the original phone or PC.
 
@@ -54,6 +57,25 @@ replaces the Site service credential. The credential belongs to the whole
 Site. Keep it in the Windows control and provision it only after the guarded
 Worker is live. During rollout, the separate **Connect via PC browser tab**
 flow remains available.
+
+## Save ratings from a phone
+
+With the matching Site and desktop builds, **Save & next** saves a gallery score or video judgment to
+phone storage before moving on. An image or verified clip already open can be rated through a connection
+loss. Opening another item requires a connection. **Review** shows **Saved on phone**, **Synced**, and
+**Needs review**. The Site syncs when the phone reconnects or returns to the foreground. Use **Sync now**
+to retry, or **Export unsynced ratings** to save the pending judgments to a JSON file.
+
+StableNew resolves each pending rating under the current grant and checks the original media digest
+and, for video, the source digest. If the same field changed on the PC, Review shows both values.
+Independent changes can sync together. Gallery ratings belong to Output Library. To compare a
+source with its finished Review results, open the source from the phone Library and select
+**Find returned results**. Only verified results inside shared Output appear.
+
+With the native Review permission, an open image also has a **Native Review** panel. Its rating
+and **Retain** action write Review evidence that Learning can use. **Mark for rework** records
+the decision for later follow-up. The same phone storage and sync controls cover these judgments.
+Use the native Windows Review workspace to archive or restore images.
 
 ## Browse evals and submit PromptPacks
 

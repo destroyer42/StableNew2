@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-759 of 914 modules have a docstring.
+761 of 916 modules have a docstring.
 
 ## src/
 
@@ -58,6 +58,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `optional_dependency_probes.py`: (no docstring)
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
 - `site_media_files.py`: Filesystem operations for a revocable, approved Site output root
+- `site_native_review.py`: Project and reconcile a phone judgment using native Review evidence
 - `site_output_catalog.py`: Read-only projection of eval reports and exact media from an operator-approved output root
 - `site_output_library.py`: Browse Output and persist gallery records within one approved desktop grant
 - `site_output_routes.py`: Typed media operations behind the existing native Site authentication
@@ -66,6 +67,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `site_phone_connector.py`: App-owned outbound transport for a locally enrolled phone browser
 - `site_phone_credentials.py`: Windows-local persistence for a single Operator Site phone grant
 - `site_queue_bridge.py`: Loopback transport for the operator Site
+- `site_rating_sync.py`: Idempotent edits carried by the existing Site rating transports
 - `site_video_playback.py`: Bounded video snapshots for range playback over the existing Site relay
 
 ## src/assets/

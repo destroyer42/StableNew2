@@ -272,6 +272,15 @@ def find_review_children(
     )
 
 
+def verified_review_outputs(repository: JobRepository, digest: str) -> tuple[str, ...]:
+    """Return completed results whose recorded source claim matches these image bytes."""
+    source = LineageSource(digest, digest)
+    children = find_review_children(repository, (source,), limit=12).children_of(source.key)
+    return tuple(
+        dict.fromkeys(path for child in children if child.verified for path in child.outputs)
+    )
+
+
 __all__ = [
     "LineageResult",
     "LineageSource",

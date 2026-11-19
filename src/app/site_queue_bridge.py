@@ -7,7 +7,7 @@ import json
 import re
 import secrets
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from http import HTTPStatus
@@ -77,6 +77,7 @@ class SiteSession:
         *,
         allow_promptpack_queue: bool = False,
         claim_ticket: Callable[[str], bool] | None = None,
+        review_outputs: Callable[[str], Sequence[str]] | None = None,
     ) -> None:
         self.code = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + PAIR_SECONDS
@@ -89,6 +90,7 @@ class SiteSession:
         self._claimed = False
         self._catalog: SiteOutputCatalog | None = None
         self._get_job = get_job
+        self._review_outputs = review_outputs
         self._admitted: set[str] = set()
         self._packs: SitePackCatalog | None = None
         self._prepare: PreparePack | None = None
@@ -122,7 +124,9 @@ class SiteSession:
 
     def set_output_folder(self, folder: Path | None) -> None:
         catalog = (
-            SiteOutputCatalog(folder, active=lambda: not self.expired)
+            SiteOutputCatalog(
+                folder, active=lambda: not self.expired, review_outputs=self._review_outputs
+            )
             if folder is not None
             else None
         )
