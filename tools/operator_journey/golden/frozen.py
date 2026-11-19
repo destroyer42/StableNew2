@@ -34,6 +34,10 @@ def journey_inputs(key: str) -> dict[str, Any]:
         from tools.operator_journey.golden import vid01
 
         return {"motion_prompt": vid01.MOTION_PROMPT}
+    if key == "image-edit":
+        from tools.operator_journey.golden import img03_frozen as img03
+
+        return img03.default_inputs()
     from tools.operator_journey.journeys.learning_lora_strength import (
         _RATINGS,
         _STRENGTHS,
@@ -52,7 +56,13 @@ def input_problems(key: str, target: dict[str, Any]) -> list[str]:
     if not isinstance(inputs, dict) or not inputs:
         return [f"{key}: the plan does not bind the operator inputs (prompts / LoRA)"]
     missing = [name for name in journey_inputs(key) if inputs.get(name) in (None, "")]
-    return [f"{key}: plan inputs missing: {', '.join(missing)}"] if missing else []
+    if missing:
+        return [f"{key}: plan inputs missing: {', '.join(missing)}"]
+    if key == "image-edit":
+        from tools.operator_journey.golden import img03_frozen as img03
+
+        return [f"{key}: {problem}" for problem in img03.input_problems(target)]
+    return []
 
 
 def _dig(blob: Any, *path: str) -> Any:
@@ -86,6 +96,10 @@ def njr_mismatches(key: str, target: dict[str, Any], njr: dict[str, Any]) -> lis
         if wanted is not None and not _same(wanted, seen):
             problems.append(f"{name}: plan {wanted!r} != NJR {seen!r}")
 
+    if key == "image-edit":
+        from tools.operator_journey.golden import img03_frozen as img03
+
+        return img03.njr_mismatches(target, job)
     if key == "learning":
         # A Learning job carries its executed baseline in the frozen experiment provenance.
         config = (

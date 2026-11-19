@@ -209,7 +209,7 @@ def _rehearse(tmp_path: Path, journey: str, *extra: str) -> tuple[int, dict, str
     return result.returncode, evidence, result.stderr
 
 
-@pytest.mark.parametrize("journey", ["image", "video", "learning"])
+@pytest.mark.parametrize("journey", ["image", "image-edit", "video", "learning"])
 def test_the_physical_code_path_needs_no_fake_backend_object_and_submits_the_frozen_plan(
     tmp_path: Path, journey: str
 ) -> None:
@@ -229,7 +229,41 @@ def test_the_physical_code_path_needs_no_fake_backend_object_and_submits_the_fro
     assert (
         "fixture_backend" not in names and "comfy_runtime" not in names
     )  # nothing fake was handed to the journey
-    assert any(o["name"] == "settings_report" for o in evidence["observations"])
+    if journey == "image-edit":
+        _assert_img03_typed_the_frozen_inputs(evidence)
+    else:
+        assert any(o["name"] == "settings_report" for o in evidence["observations"])
+
+
+def _assert_img03_typed_the_frozen_inputs(evidence: dict) -> None:
+    """IMG-03's rehearsal plan differs from the journey defaults in every typed value; the evidence shows the plan's."""
+
+    from tools.operator_journey.golden.img03_frozen import default_inputs
+    from tools.operator_journey.golden.rehearsal import REHEARSAL_IMAGE_EDIT_INPUTS
+
+    observed = {o["name"]: o["value"] for o in evidence["observations"]}
+    frozen = observed["frozen_inputs"]
+    assert frozen["from"] == "frozen plan target"
+    for key, value in REHEARSAL_IMAGE_EDIT_INPUTS.items():
+        assert frozen[key] == value and value != default_inputs()[key], key
+    assert observed["optional_steps"] == {
+        "run": ["outpaint", "regenerate", "replay"],
+        "not_selected": [],
+    }
+    assert observed["regenerate_njr"]["seed"] == REHEARSAL_IMAGE_EDIT_INPUTS["regenerate_seed"]
+    checks = {c["name"] for c in evidence["checks"]}
+    assert {
+        "mask_geometry_frozen",
+        "edited_region_changed",
+        "original_pixels_preserved_at_the_frozen_bbox",
+        "frozen_extents_and_geometry",
+        "only_the_edited_fields_changed",
+        "replay_is_a_new_identity_with_parent_lineage",
+        "every_selected_step_submitted_exactly_one_job",
+    } <= checks
+    # Backend compositing is asserted only against a real Forge, never claimed from the loopback server.
+    assert "protected_region_byte_identical" not in checks
+    assert "protected_region_not_asserted" in observed
 
 
 @pytest.mark.parametrize(
@@ -258,6 +292,22 @@ def test_a_plan_that_disagrees_with_the_njr_is_no_go_before_anything_is_queued(
     assert "frozen plan" in reason, reason
     jobs = [o for o in evidence["observations"] if o["name"] == "job_row"]
     assert jobs == [], "a job reached the queue although the plan disagreed with the NJR"
+
+
+@pytest.mark.parametrize(
+    ("tamper", "queued_before_the_decline"),
+    [("steps", 0), ("edit_prompt", 1), ("outpaint_extents", 2), ("regenerate_seed", 3)],
+)
+def test_img03_declines_the_first_step_whose_njr_disagrees_with_the_plan(
+    tmp_path: Path, tamper: str, queued_before_the_decline: int
+) -> None:
+    """Each IMG-03 step is gated: the job whose NJR disagrees is declined (NO-GO) and nothing after it is queued."""
+
+    code, evidence, _ = _rehearse(tmp_path, "image-edit", "--tamper", tamper)
+    assert evidence["verdict"] == "NO-GO" and code == 3, evidence.get("abort_reason")
+    assert "frozen plan" in (evidence.get("no_go_reason") or "")
+    jobs = [o for o in evidence["observations"] if o["name"] == "job_row"]
+    assert len(jobs) == queued_before_the_decline, [j["value"]["job_id"] for j in jobs]
 
 
 needs_desktop = pytest.mark.skipif(
