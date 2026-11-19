@@ -19,6 +19,7 @@ Identity is judged by the operator, never inferred from these numbers.
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import threading
@@ -55,6 +56,7 @@ from src.video.video_eval_ratings_store import (
     load_ratings,
     merge_rows,
     output_header,
+    render_csv,
     row_key,
     write_ratings,
 )
@@ -106,6 +108,17 @@ class EvalReportError(ValueError):
 
 
 @dataclass(frozen=True)
+class EvalReportScope:
+    """File and lifecycle checks supplied by a scoped caller."""
+
+    manifest: dict[str, Any]
+    permits_media: Callable[[str], bool]
+    read_ratings: Callable[[Path], bytes | None]
+    require_active: Callable[[], None]
+    require_publishable: Callable[[], None]
+
+
+@dataclass(frozen=True)
 class EvalCell:
     case_id: str
     arm_id: str
@@ -139,6 +152,7 @@ class EvalReport:
     ratings: Mapping[tuple[str, str, str], Mapping[str, str]] = field(default_factory=dict)
     #: Where the pre-351 ratings.csv was copied if this build converted its layout.
     recovery_copy: Path | None = None
+    ratings_revision: str = ""
 
     @property
     def report_path(self) -> Path:
@@ -182,13 +196,16 @@ def _measure_cell(
     repository: Any,
     measure: Callable[..., ClipMeasurement],
     cancel: threading.Event | None,
+    is_file: Callable[[str], bool] | None = None,
 ) -> EvalCell:
     case_id, arm_id, job_id = str(job["case_id"]), str(job["arm_id"]), str(job["job_id"])
     entry = repository.get_job(job_id)
     if entry is None:
         return EvalCell(case_id, arm_id, job_id, "not_found", "The job is not in the job history.")
     facts = read_job_facts(getattr(entry, "snapshot", None))
-    state, message, path = classify_entry(entry)
+    state, message, path = (
+        classify_entry(entry, is_file=is_file) if is_file is not None else classify_entry(entry)
+    )
     if state is not ArmState.PLAYABLE or path is None:
         return EvalCell(case_id, arm_id, job_id, state.value, message, path, facts=facts)
     measurement = measure(path, cancel=cancel)
@@ -306,6 +323,7 @@ def build_eval_report(
     measure: Callable[..., ClipMeasurement] = measure_clip,
     cancel: threading.Event | None = None,
     show_prompts: bool = True,
+    scope: EvalReportScope | None = None,
 ) -> EvalReport:
     """Measure every finished clip of the run and write metrics, ratings and the contact sheet.
 
@@ -315,24 +333,44 @@ def build_eval_report(
     """
 
     folder = Path(run_dir).expanduser()
-    manifest = load_run_manifest(folder)
+    manifest = scope.manifest if scope is not None else load_run_manifest(folder)
+    reader = scope.read_ratings if scope is not None else None
+    before_publish = scope.require_publishable if scope is not None else None
     try:
-        loaded: LoadedRatings = load_ratings(folder / RATINGS_FILE)
+        loaded: LoadedRatings = load_ratings(folder / RATINGS_FILE, reader=reader)
     except RatingsFileError as exc:
         raise EvalReportError(str(exc)) from exc
     cancelled = EvalReportError("the report was cancelled")
     try:
         sources: dict[str, SourceReference] = {}
         for case in manifest.get("cases", []):
+            if scope is not None:
+                scope.require_active()
             if cancel is not None and cancel.is_set():
                 raise cancelled
             if isinstance(case, Mapping):
-                sources[str(case.get("case_id"))] = verify_source(case, cancel=cancel)
+                case_id = str(case.get("case_id"))
+                if scope is not None and not scope.permits_media(str(case.get("image") or "")):
+                    sources[case_id] = SourceReference(
+                        case_id, SourceStatus.MISSING, "The source is unavailable in shared Output."
+                    )
+                else:
+                    sources[case_id] = verify_source(case, cancel=cancel)
         cells: list[EvalCell] = []
         for job in manifest["jobs"]:
+            if scope is not None:
+                scope.require_active()
             if cancel is not None and cancel.is_set():
                 raise cancelled
-            cells.append(_measure_cell(job, repository, measure, cancel))
+            cells.append(
+                _measure_cell(
+                    job,
+                    repository,
+                    measure,
+                    cancel,
+                    scope.permits_media if scope is not None else None,
+                )
+            )
     except EvalCancelled as exc:
         raise cancelled from exc
     baseline_arm = str(manifest.get("suite", {}).get("baseline_arm") or "")
@@ -353,6 +391,12 @@ def build_eval_report(
     )
     ratings = {row_key(row): row for row in merged if row.get("job_id")}
     assessment = project_assessment(manifest, _cell_inputs(manifest, cells, sources), ratings)
+    header = output_header(loaded)
+    raw = (
+        loaded.raw
+        if header == loaded.header and tuple(merged) == (*loaded.rows, *loaded.keyless)
+        else render_csv(header, merged).encode("utf-8")
+    )
     report = EvalReport(
         run_dir=folder,
         manifest=manifest,
@@ -360,15 +404,22 @@ def build_eval_report(
         sources=sources,
         assessment=assessment,
         ratings=ratings,
+        ratings_revision=hashlib.sha256(raw or b"").hexdigest(),
     )
     metrics_text = json.dumps(report_payload(report), indent=2, sort_keys=True)
     page = render_html(report, show_prompts=show_prompts)
+    if before_publish is not None:
+        before_publish()
     try:
-        recovery = write_ratings(loaded, output_header(loaded), merged)
+        recovery = write_ratings(
+            loaded, header, merged, before_replace=before_publish, reader=reader
+        )
     except RatingsFileError as exc:
         raise EvalReportError(str(exc)) from exc
-    _publish(folder / METRICS_FILE, metrics_text, parse_json=True)
+    if before_publish is not None:
+        before_publish()
     _publish(folder / REPORT_FILE, page)
+    _publish(folder / METRICS_FILE, metrics_text, parse_json=True)
     return EvalReport(**{**report.__dict__, "recovery_copy": recovery})
 
 
@@ -385,6 +436,7 @@ def report_payload(report: EvalReport) -> dict[str, Any]:
         "schema": REPORT_SCHEMA,
         "run_id": report.manifest.get("run_id"),
         "generated_at": datetime.now(UTC).isoformat(),
+        "ratings_revision": report.ratings_revision,
         "baseline_arm": report.manifest.get("suite", {}).get("baseline_arm"),
         "cells": [
             {

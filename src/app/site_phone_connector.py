@@ -39,6 +39,7 @@ from src.app.site_phone_credentials import (
     PhoneGrant,
     PhoneGrantStore,
 )
+from src.app.site_phone_eval import PHONE_EVAL_REFRESH, PHONE_EVAL_RUNS, PhoneEvalReports
 from src.app.site_phone_queue import PHONE_QUEUE_PATH, PhoneQueueView
 from src.app.site_queue_bridge import SITE_ORIGIN
 from src.utils.thread_registry import get_thread_registry
@@ -154,6 +155,7 @@ def _desktop_call(
     rating: bool,
     *,
     phone_queue: PhoneQueueView | PhoneQueueAdmission | None = None,
+    phone_eval: PhoneEvalReports | None = None,
     grant: PhoneGrant | None = None,
 ) -> _Reply:
     if not isinstance(path, str):
@@ -173,6 +175,17 @@ def _desktop_call(
             except (AttributeError, KeyError, RuntimeError, TypeError):
                 log.exception("Phone queue request could not complete")
                 return _json_reply(503, {"error": "queue_unavailable"})
+        elif (
+            path == PHONE_EVAL_RUNS and method == "GET" and body is None and phone_eval is not None
+        ):
+            result = phone_eval.list(catalog)
+        elif (
+            (match := PHONE_EVAL_REFRESH.fullmatch(path))
+            and method == "POST"
+            and rating
+            and phone_eval is not None
+        ):
+            result = phone_eval.refresh(catalog, match[1], body)
         elif method == "GET" and body is None:
             if path == "/v1/output/runs":
                 result = {"runs": catalog.list_runs()}
@@ -241,12 +254,14 @@ class SitePhoneConnector:
         review_outputs: Callable[[str], Sequence[str]] | None = None,
         review_records: Path | None = None,
         phone_queue: PhoneQueueView | PhoneQueueAdmission | None = None,
+        phone_eval: PhoneEvalReports | None = None,
     ) -> None:
         self._store = store if store is not None else PhoneGrantStore()
         self._http = http if http is not None else PhoneHttp()
         self._review_outputs = review_outputs
         self._review_records = review_records
         self._phone_queue = phone_queue
+        self._phone_eval = phone_eval
         self._commands: Queue[Callable[[], None]] = Queue()
         self._stopping = Event()
         self._revoke_requested = Event()
@@ -568,6 +583,7 @@ class SitePhoneConnector:
                         call.get("body"),
                         grant.rating,
                         phone_queue=self._phone_queue,
+                        phone_eval=self._phone_eval,
                         grant=grant,
                     )
                 )

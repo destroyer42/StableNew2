@@ -64,7 +64,7 @@ class EvalArm:
 @dataclass(frozen=True)
 class EvalSuite:
     suite_id: str
-    path: Path
+    path: Path | None
     sha256: str
     description: str
     cases: tuple[EvalCase, ...]

@@ -207,6 +207,24 @@ def test_a_failed_admission_leaves_no_manifest(tmp_path) -> None:
     assert not (tmp_path / "output" / "video_eval" / plan.run_id / RUN_MANIFEST_NAME).exists()
 
 
+def test_scope_is_checked_again_before_the_reported_jobs_are_admitted(tmp_path) -> None:
+    suite = load_eval_suite(_suite(tmp_path))
+    service = VideoEvalRunService(builders={"svd_native": _fake_builder()})
+    plan = service.plan(suite)
+    job_service = _JobService()
+    output = tmp_path / "output"
+    manifest = output / "video_eval" / plan.run_id / RUN_MANIFEST_NAME
+
+    def require_active():
+        if manifest.exists():
+            raise RuntimeError("The fixture grant was revoked just before admission")
+
+    with pytest.raises(EvalRunRefused, match="grant was revoked"):
+        service.admit(plan, job_service, output_root=output, require_active=require_active)
+    assert not manifest.exists()
+    assert job_service.calls == []
+
+
 # ------------------------------------------------------------------ the production controller path
 
 

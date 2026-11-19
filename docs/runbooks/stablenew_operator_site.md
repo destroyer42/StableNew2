@@ -31,9 +31,10 @@ Wi-Fi or cellular while the PC's browser is closed.
    after five minutes.
 2. On Windows, open **Operator Site → Phone review**. Enter the Site service
    credential and the phone code. Check the displayed phone name, choose the
-   exact Output folder, and approve browse access. Choose **Also allow saving
-   ratings** to grant writes to the native video ratings CSV and gallery
-   rating records. **Allow writing native Review evidence** is selected for a new enrollment.
+   exact Output folder, and approve browse access. Choose **Allow ratings and eval report refresh**
+   to grant writes to the native video ratings CSV and gallery
+   rating records and to let the phone refresh native eval reports in shared Output.
+   **Allow writing native Review evidence** is selected for a new enrollment.
    The final Windows confirmation lists each selected permission. Clear the checkbox to grant
    browse access without native Review writes. An existing phone can receive this scope by
    revoking its current grant and approving a new pairing on Windows. **Allow phone Preview and queue submission** is
@@ -96,6 +97,21 @@ Use the native Windows Review workspace to archive or restore images.
 
 ## Browse evals and submit PromptPacks
 
+With matching Site and desktop builds, open a verified Library image or album and choose **Make Video or evaluate**.
+Select up to 16 images. **Make Video** uses one compatible image-to-video workflow. **Controlled evaluation** uses
+one baseline and up to three candidates on the same images, motion prompt, seed and frame count. Enter a shared
+negative prompt if the selected workflows have different defaults. Each experimental arm needs its own opt-in.
+Review the exact count, generation dimensions, catalog model files, graph revision, frame count and FPS before
+queueing. The phone uses the same queue receipt for these jobs. Prepared sources and run manifests live in shared
+Output. Workflow dependencies and runtime readiness are checked through the normal Windows execution path.
+
+Open **Compare evaluation pairs** from Video Review or follow **Review evaluation** from an admitted receipt.
+Choose **Refresh report on Windows** to build an unbuilt report or refresh outdated evidence after ratings sync.
+Use **Review next incomplete verified pair** to open matching A/B clips with shared playback controls. The
+pair view reveals arm identity after both judgments are saved to the phone. Individual clip Review can reopen
+a judgment bound to an older artifact. The report's comparisons and readiness follow the ratings revision
+used by the Windows builder. Playback uses the recorded clip stream, with the display sized for the screen.
+
 - Under **Evaluate runs**, select **Find shared runs**, choose a report, then browse its clips and source images. Build the eval report in
   StableNew first if the run is missing. The separate **Video review** screen takes local ratings.
 - Under **Create**, choose a saved pack and select its slots. Leave fields inherited or override txt2img model, VAE,
@@ -115,7 +131,8 @@ The native listener binds only IPv4 loopback port 49381 and requires the precise
 The owner-private hosted relay binds its short-lived remote code to the signed-in owner. It claims each relay request
 once and forwards a closed list of operations. Response data passes through private hosted storage and is removed after
 retrieval or by cleanup on subsequent relay activity. Responses expire for retrieval after 75 seconds. The relay allows
-32 MiB per transferred file. Output folder grants are read-only. Eval media must resolve under the granted folder and
+32 MiB per transferred file. Phone mutations require the approved ratings, native Review, or queue permission.
+Eval report refresh uses the ratings permission and can only open files in shared Output. Eval media must resolve under the granted folder and
 match the saved SHA-256. Job results are limited to jobs recorded in this session and to media in the granted folder.
 
 PromptPack requests resolve an opaque selection, validate typed overrides against the shared catalogs, require the saved
