@@ -36,8 +36,9 @@ Wi-Fi or cellular while the PC's browser is closed.
    rating records. **Allow writing native Review evidence** is selected for a new enrollment.
    The final Windows confirmation lists each selected permission. Clear the checkbox to grant
    browse access without native Review writes. An existing phone can receive this scope by
-   revoking its current grant and approving a new pairing on Windows. Create, queue submission
-   and album edits use the browser workflow.
+   revoking its current grant and approving a new pairing on Windows. **Allow phone Preview and queue submission** is
+   a separate, unchecked permission. Select it and confirm the new pairing on Windows to grant it. Album edits use
+   the browser workflow.
 3. Use **Output Library** or **Video Review** on the phone. After a lock or
    network switch, the Site resumes the paired browser. A 15-minute browser
    lease renews while the same pairing and Sites sign-in are valid. Pair
@@ -76,6 +77,22 @@ With the native Review permission, an open image also has a **Native Review** pa
 and **Retain** action write Review evidence that Learning can use. **Mark for rework** records
 the decision for later follow-up. The same phone storage and sync controls cover these judgments.
 Use the native Windows Review workspace to archive or restore images.
+
+## Preview and submit from the phone
+
+- Open **Queue** and choose a saved PromptPack and up to 16 slots. **Build PromptPack Preview** compiles the selected
+  slots using the saved pack and the native pipeline settings. The phone and Windows desktop drafts can be open at the
+  same time.
+- To rework an image, sync **Mark for rework** or mark it in Windows Review. Open the exact image from the phone
+  Library, choose **Preview marked rework**, and select a stage. StableNew checks the saved decision and the source
+  digest before building the Preview and again before admission.
+- Review the job count and effective settings, confirm the displayed jobs, then select **Submit reviewed Preview**.
+  Source or setting changes require a fresh Preview. The normal queue dispatch policy applies.
+- **Queue** shows jobs and receipts for the current phone pairing. A pending receipt survives a browser reopen.
+  After a disconnect, refresh Queue or select **Check receipt**. An unconfirmed receipt blocks another phone
+  submission. Check the exact receipt and the native queue on Windows. Completed Queue jobs can open results in
+  shared Output. To compare a rework result with its source, open the source in Library and choose **Find returned
+  results**.
 
 ## Browse evals and submit PromptPacks
 

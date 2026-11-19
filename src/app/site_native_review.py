@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +108,22 @@ class NativeImageReview:
             section: {**_view(section, row), "revision": fingerprint(row)}
             for section, row in rows.items()
         }
+
+    def rework_mark(self, identifier: str, digest: str) -> tuple[Path, str, datetime]:
+        _item, path, _digest = self._target(identifier, digest)
+        with evidence_file_lock(self._records_path):
+            index = EvidenceIndex.read(self._records_path, strict_io=True)
+        row = _row(index.disposition_evidence(path, digest))
+        if _view("decision", row)["decision"] != "rework":
+            raise SiteOutputError("rework_mark_required")
+        stamp = row["metadata"].get("decided_at") or row.get("timestamp", "")
+        try:
+            decided = datetime.fromisoformat(stamp)
+        except (ValueError, TypeError) as exc:
+            raise SiteOutputError("rework_mark_required") from exc
+        if decided.tzinfo is not None:
+            decided = decided.astimezone(UTC).replace(tzinfo=None)
+        return path, fingerprint(row), decided
 
     def sync(self, body: dict[str, Any]) -> dict[str, Any]:
         if body["root"] != root_identity(self._library.root):

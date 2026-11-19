@@ -60,12 +60,35 @@ def test_protected_legacy_grant_does_not_gain_native_review(tmp_path, monkeypatc
     store = PhoneGrantStore(tmp_path / "phone.dpapi")
     record = asdict(_grant(tmp_path))
     del record["native_review"]
+    del record["queue_submit"]
     store.path.write_text(json.dumps(record))
     grant = store.load()
-    assert grant is not None and grant.rating and not grant.native_review
+    assert grant is not None and grant.rating and not grant.native_review and not grant.queue_submit
     store.path.write_text(json.dumps({**record, "native_review": 1}))
     with pytest.raises(ValueError, match="Invalid phone pairing"):
         store.load()
+    store.path.write_text(json.dumps({**record, "queue_submit": 1}))
+    with pytest.raises(ValueError, match="Invalid phone pairing"):
+        store.load()
+
+
+def test_phone_queue_permission_is_explicit_and_independent(tmp_path):
+    assert "Phone queue submission permission off" in pairing_permissions(True, True)
+    assert "Preview and submit saved PromptPacks" in pairing_permissions(False, False, True)
+    store = _MemoryStore()
+    http = _FakePhone(rating=False)
+    connector = SitePhoneConnector(store, http)
+    connector.start()
+    try:
+        enrollment = connector.inspect(_SITE, _CHALLENGE).result(timeout=3)
+        connector.enroll(enrollment, tmp_path, False, queue_submit=True).result(timeout=3)
+        assert http.delivered.wait(4)
+        assert store.grant.queue_submit is True
+        assert store.grant.native_review is False
+        assert http.enrollment["queue_submit"] is True
+        assert "native_review" not in http.enrollment
+    finally:
+        connector.close()
 
 
 @pytest.mark.parametrize("native_review", [DEFAULT_NATIVE_REVIEW, False])
