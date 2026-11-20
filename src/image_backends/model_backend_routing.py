@@ -11,7 +11,10 @@ resolver to ``_RESOLVERS``. Resolvers are pure, cheap name matches and import no
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
 
 
 def _ideogram4(model_name: str) -> str | None:
@@ -63,7 +66,10 @@ def _ideogram4_offers() -> tuple[tuple[str, str], ...]:
 
 #: Models offered in the model list because their own runtime is installed: each entry returns its installed
 #: (display name, model identity) pairs (a family with several exact variants returns several).
-_OFFERS: tuple[Callable[[], tuple[tuple[str, str], ...]], ...] = (_ideogram4_offers, _qwen_image_offers)
+_OFFERS: tuple[Callable[[], tuple[tuple[str, str], ...]], ...] = (
+    _ideogram4_offers,
+    _qwen_image_offers,
+)
 
 
 def offered_backend_models() -> tuple[tuple[str, str], ...]:
@@ -74,7 +80,9 @@ def offered_backend_models() -> tuple[tuple[str, str], ...]:
         try:
             offers.extend(offer())
         except Exception:  # noqa: BLE001 - an unreadable install is simply not offered; the backend re-checks
-            continue
+            logger.debug(
+                "Not offering %s: its installation could not be read", offer.__name__, exc_info=True
+            )
     return tuple(offers)
 
 
