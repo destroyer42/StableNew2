@@ -347,4 +347,3 @@ Differences from sections 3 to 7, each smaller than or equal to the accepted des
 
 Not done here (owner-gated): the FLUX.1 [dev] downloads, the first physical run and its qualification, any Model Comparison
 eligibility, and the backlog `img151` read-only feasibility package for Klein 9B Q6_K + Qwen3-8B fp8mixed (owner answer Q2).
-
