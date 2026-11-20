@@ -16,8 +16,15 @@ GGML_F32, GGML_F16, GGML_Q4_K, GGML_Q6_K, GGML_Q8_0, GGML_BF16 = 0, 1, 12, 14, 8
 FTYPE_Q4_K_S, FTYPE_Q6_K, FTYPE_Q8_0, FTYPE_F16 = 14, 18, 7, 1
 
 
-def flux1_table(*, guidance: bool = True, prefix: str = "", hidden: int = 3072, doubles: int = 19,
-                singles: int = 38, bundled: bool = False) -> dict[str, list[int]]:
+def flux1_table(
+    *,
+    guidance: bool = True,
+    prefix: str = "",
+    hidden: int = 3072,
+    doubles: int = 19,
+    singles: int = 38,
+    bundled: bool = False,
+) -> dict[str, list[int]]:
     """The FLUX.1 12B transformer layout (dev when ``guidance``; schnell without the guidance embedding)."""
 
     table: dict[str, list[int]] = {
@@ -35,7 +42,10 @@ def flux1_table(*, guidance: bool = True, prefix: str = "", hidden: int = 3072, 
         table[f"single_blocks.{index}.linear1.weight"] = [hidden * 7, hidden]
     table = {prefix + name: shape for name, shape in table.items()}
     if bundled:
-        table["text_encoders.clip_l.transformer.text_model.embeddings.token_embedding.weight"] = [49408, 768]
+        table["text_encoders.clip_l.transformer.text_model.embeddings.token_embedding.weight"] = [
+            49408,
+            768,
+        ]
         table["vae.decoder.conv_in.weight"] = [512, 16, 3, 3]
     return table
 
@@ -102,21 +112,33 @@ def _string(text: str) -> bytes:
     return struct.pack("<Q", len(raw)) + raw
 
 
-def write_gguf(path: Path, table: dict[str, list[int]], *, tensor_type: int = GGML_Q4_K,
-               file_type: int | None = FTYPE_Q4_K_S, architecture: str = "flux") -> Path:
+def write_gguf(
+    path: Path,
+    table: dict[str, list[int]],
+    *,
+    tensor_type: int = GGML_Q4_K,
+    file_type: int | None = FTYPE_Q4_K_S,
+    architecture: str = "flux",
+) -> Path:
     """A GGUF v3 header + tensor-info table (dims stored fastest first) with no tensor data."""
 
     pairs = [_string("general.architecture") + struct.pack("<I", 8) + _string(architecture)]
     if file_type is not None:
-        pairs.append(_string("general.file_type") + struct.pack("<I", 4) + struct.pack("<I", file_type))
+        pairs.append(
+            _string("general.file_type") + struct.pack("<I", 4) + struct.pack("<I", file_type)
+        )
     infos = []
     for offset, (name, shape) in enumerate(table.items()):
         dims = list(reversed(shape))
         infos.append(
-            _string(name) + struct.pack("<I", len(dims)) + b"".join(struct.pack("<Q", d) for d in dims)
+            _string(name)
+            + struct.pack("<I", len(dims))
+            + b"".join(struct.pack("<Q", d) for d in dims)
             + struct.pack("<IQ", tensor_type, offset * 32)
         )
-    data = b"GGUF" + struct.pack("<IQQ", 3, len(table), len(pairs)) + b"".join(pairs) + b"".join(infos)
+    data = (
+        b"GGUF" + struct.pack("<IQQ", 3, len(table), len(pairs)) + b"".join(pairs) + b"".join(infos)
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return path

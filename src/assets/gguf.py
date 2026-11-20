@@ -29,8 +29,26 @@ MAX_TENSOR_DIMS = 8
 
 #: ggml tensor type ids -> names (per-tensor storage type, distinct from the file type above).
 TENSOR_TYPES = {
-    0: "F32", 1: "F16", 2: "Q4_0", 3: "Q4_1", 6: "Q5_0", 7: "Q5_1", 8: "Q8_0", 9: "Q8_1", 10: "Q2_K", 11: "Q3_K",
-    12: "Q4_K", 13: "Q5_K", 14: "Q6_K", 15: "Q8_K", 24: "I8", 25: "I16", 26: "I32", 27: "I64", 28: "F64", 30: "BF16",
+    0: "F32",
+    1: "F16",
+    2: "Q4_0",
+    3: "Q4_1",
+    6: "Q5_0",
+    7: "Q5_1",
+    8: "Q8_0",
+    9: "Q8_1",
+    10: "Q2_K",
+    11: "Q3_K",
+    12: "Q4_K",
+    13: "Q5_K",
+    14: "Q6_K",
+    15: "Q8_K",
+    24: "I8",
+    25: "I16",
+    26: "I32",
+    27: "I64",
+    28: "F64",
+    30: "BF16",
 }
 
 #: llama.cpp ``LLAMA_FTYPE`` values that name a quantization (container-declared ``general.file_type``).

@@ -98,25 +98,41 @@ FLUX1_DEV_PROFILE_V1 = Flux1Profile(
     transformer_precisions=("Q4_K_S", "Q5_K_S", "Q6_K", "Q8_0", "fp8_scaled"),
     # SHA-256 as published on the Hugging Face file page on 2026-11-20 (LFS); size from the repository metadata.
     recommended_transformer=KleinAsset(
-        "transformer", "flux1-dev-Q4_K_S.gguf", 6_805_988_640,
+        "transformer",
+        "flux1-dev-Q4_K_S.gguf",
+        6_805_988_640,
         "75bb19459b5240c9f373b5af527584af15b675867fa142efadf7478d6abbf62b",
-        "Stable-diffusion", "city96/FLUX.1-dev-gguf", "7e7853bc830591271db10c7aed520321d45c070e",
+        "Stable-diffusion",
+        "city96/FLUX.1-dev-gguf",
+        "7e7853bc830591271db10c7aed520321d45c070e",
     ),
     clip_l=KleinAsset(
-        "text_encoder", "clip_l.safetensors", 246_144_152,
+        "text_encoder",
+        "clip_l.safetensors",
+        246_144_152,
         "660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd",
-        "text_encoder", _COMFY_ENCODERS, "168aff54c7de740a8946f19cf87b2eda743c6342",
+        "text_encoder",
+        _COMFY_ENCODERS,
+        "168aff54c7de740a8946f19cf87b2eda743c6342",
     ),
     t5xxl=KleinAsset(
-        "text_encoder_2", "t5xxl_fp8_e4m3fn.safetensors", 4_893_934_904,
+        "text_encoder_2",
+        "t5xxl_fp8_e4m3fn.safetensors",
+        4_893_934_904,
         "7d330da4816157540d6bb7838bf63a0f02f573fc48ca4d8de34bb0cbfd514f09",
-        "text_encoder", _COMFY_ENCODERS, "2f74b39c0606dae3b2196d79c18c2a40b71f3250",
+        "text_encoder",
+        _COMFY_ENCODERS,
+        "2f74b39c0606dae3b2196d79c18c2a40b71f3250",
     ),
     # The installed FLUX.1 autoencoder, byte-identical to the asset the Z-Image profile already pins.
     vae=KleinAsset(
-        "vae", "flux1AE_v10.safetensors", 335_304_388,
+        "vae",
+        "flux1AE_v10.safetensors",
+        335_304_388,
         "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38",
-        "VAE", "", "",
+        "VAE",
+        "",
+        "",
     ),
     sampler="Euler",
     scheduler="Simple",
@@ -257,8 +273,10 @@ def validate_flux1_intent(
         )
     stages = tuple(str(stage) for stage in stage_names)
     if stages != T2I_STAGE_CHAIN:
-        problems.append(f"stage chain {list(stages)} is not supported (only {list(T2I_STAGE_CHAIN)}; no img2img, "
-                        "ADetailer, upscale, hires or ControlNet)")
+        problems.append(
+            f"stage chain {list(stages)} is not supported (only {list(T2I_STAGE_CHAIN)}; no img2img, "
+            "ADetailer, upscale, hires or ControlNet)"
+        )
     if not str(model_name or "").strip():
         problems.append("a checkpoint must be selected")
     if str(sampler or "") != profile.sampler:
@@ -277,7 +295,8 @@ def validate_flux1_intent(
     problems.extend(f"{feature} is not supported" for feature in unsupported_features)
     if problems:
         raise Flux1ProfileError(
-            f"{profile.display_name} (profile v{profile.version}) cannot run this work: " + "; ".join(problems)
+            f"{profile.display_name} (profile v{profile.version}) cannot run this work: "
+            + "; ".join(problems)
         )
     return MODE_TXT2IMG
 
@@ -290,7 +309,9 @@ def distilled_cfg_conflicts(config: Mapping[str, Any] | None, profile: Flux1Prof
     for source in (data, _mapping(data.get("txt2img"))):
         value = source.get("distilled_cfg_scale")
         if value is not None and float(value) != profile.distilled_cfg_scale:
-            found.append(f"distilled CFG {value} (the profile fixes {profile.distilled_cfg_scale:g})")
+            found.append(
+                f"distilled CFG {value} (the profile fixes {profile.distilled_cfg_scale:g})"
+            )
     return found
 
 
@@ -309,7 +330,8 @@ def apply_flux1_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
     image = dict(_mapping(options.get("image")))
     reference = image.get("model_profile")
     profile = (
-        resolve_flux1_reference(reference) if isinstance(reference, Mapping) and reference.get("id") == FLUX1_PROFILE_ID
+        resolve_flux1_reference(reference)
+        if isinstance(reference, Mapping) and reference.get("id") == FLUX1_PROFILE_ID
         else latest_flux1_profile()
     )
     if isinstance(reference, Mapping) and reference.get("id") not in (None, FLUX1_PROFILE_ID):
@@ -365,7 +387,9 @@ def apply_flux1_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
 # -- wire seam and evidence ------------------------------------------------------------------------------------------
 
 
-def project_flux1_wire_payload(config: Mapping[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+def project_flux1_wire_payload(
+    config: Mapping[str, Any], payload: dict[str, Any]
+) -> dict[str, Any]:
     """At the real executor boundary: send the profile's distilled guidance; ordinary payloads are untouched."""
 
     from src.image_backends.exact_model_profile import resolve_model_profile
@@ -373,7 +397,9 @@ def project_flux1_wire_payload(config: Mapping[str, Any], payload: dict[str, Any
     profile = resolve_model_profile(config.get("backend_options"))
     if not isinstance(profile, Flux1Profile):
         return payload
-    if float(payload.get("cfg_scale", profile.cfg_scale)) != profile.cfg_scale or str(payload.get("negative_prompt") or ""):
+    if float(payload.get("cfg_scale", profile.cfg_scale)) != profile.cfg_scale or str(
+        payload.get("negative_prompt") or ""
+    ):
         raise Flux1ProfileError("FLUX.1 [dev] CFG or negative text changed after admission")
     payload["distilled_cfg_scale"] = profile.distilled_cfg_scale
     return payload
@@ -390,7 +416,9 @@ def flux1_provenance(profile: Flux1Profile, *, model_name: str) -> dict[str, Any
         "forge_revision": profile.forge_revision,
         "identity_rule": "transformer by structural layout; encoders and VAE by size and SHA-256",
         "transformer": {"name": model_name, "required_variant": profile.transformer_variant},
-        "modules": [{"name": a.filename, "size": a.size, "sha256": a.sha256} for a in profile.modules],
+        "modules": [
+            {"name": a.filename, "size": a.size, "sha256": a.sha256} for a in profile.modules
+        ],
         "sampler": profile.sampler,
         "scheduler": profile.scheduler,
         "steps": profile.steps,

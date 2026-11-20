@@ -69,7 +69,9 @@ class FluxVariant:
     variant: str
     bundled: bool
     container: str  # "safetensors" | "gguf"
-    precision: str  # bf16 / fp16 / fp32 / fp8_scaled / int8_scaled / the GGUF quantization / unknown
+    precision: (
+        str  # bf16 / fp16 / fp32 / fp8_scaled / int8_scaled / the GGUF quantization / unknown
+    )
     #: Never True from structure alone; only a byte comparison with a pinned digest establishes identity.
     identity_pinned: bool = False
 
@@ -99,7 +101,11 @@ def _precision(facts: Any) -> str:
     if layout == "mixed_scaled" and any(dtype in ("I8", "U8") for dtype in quantized):
         return "int8_scaled"
     dominant = str(facts.get("dominant_dtype_by_bytes") or "")
-    return {"BF16": "bf16", "F16": "fp16", "F32": "fp32"}.get(dominant, "unknown") if not quantized else "unknown"
+    return (
+        {"BF16": "bf16", "F16": "fp16", "F32": "fp32"}.get(dominant, "unknown")
+        if not quantized
+        else "unknown"
+    )
 
 
 def _variant(evidence: ComponentEvidence) -> str:

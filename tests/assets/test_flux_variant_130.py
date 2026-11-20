@@ -87,7 +87,11 @@ def test_too_many_tensor_dims_is_a_table_error(tmp_path):
         raw = text.encode()
         return struct.pack("<Q", len(raw)) + raw
 
-    info = string("img_in.weight") + struct.pack("<I", MAX_TENSOR_DIMS + 1) + struct.pack("<Q", 1) * (MAX_TENSOR_DIMS + 1)
+    info = (
+        string("img_in.weight")
+        + struct.pack("<I", MAX_TENSOR_DIMS + 1)
+        + struct.pack("<Q", 1) * (MAX_TENSOR_DIMS + 1)
+    )
     data = b"GGUF" + struct.pack("<IQQ", 3, 1, 0) + info + struct.pack("<IQ", 0, 0)
     path = tmp_path / "bad.gguf"
     path.write_bytes(data)
@@ -96,7 +100,9 @@ def test_too_many_tensor_dims_is_a_table_error(tmp_path):
 
 
 def test_a_non_flux_gguf_without_a_recognised_table_is_not_a_flux_transformer(tmp_path):
-    path = write_gguf(tmp_path / "llm.gguf", {"token_embd.weight": [32000, 4096]}, architecture="llama")
+    path = write_gguf(
+        tmp_path / "llm.gguf", {"token_embd.weight": [32000, 4096]}, architecture="llama"
+    )
     component = inspect_component_file(path)
     assert component.architecture == "unrecognized" and classify_flux_variant(component) is None
 
@@ -126,13 +132,23 @@ def test_each_layout_class_is_recognised_from_safetensors_structure(table, varia
 def test_the_same_layouts_are_recognised_from_a_gguf_tensor_table(tmp_path):
     cases = {
         "flux1-dev-Q4_K_S.gguf": (flux1_table(), {}, VARIANT_FLUX1_DEV, "Q4_K_S"),
-        "flux1-schnell-Q6_K.gguf": (flux1_table(guidance=False), {"tensor_type": GGML_Q6_K, "file_type": FTYPE_Q6_K},
-                                    VARIANT_FLUX1_SCHNELL, "Q6_K"),
-        "flux-2-klein-base-9b-Q8_0.gguf": (klein_table("9b"), {"tensor_type": GGML_Q8_0, "file_type": FTYPE_Q8_0},
-                                           VARIANT_FLUX2_KLEIN_9B, "Q8_0"),
+        "flux1-schnell-Q6_K.gguf": (
+            flux1_table(guidance=False),
+            {"tensor_type": GGML_Q6_K, "file_type": FTYPE_Q6_K},
+            VARIANT_FLUX1_SCHNELL,
+            "Q6_K",
+        ),
+        "flux-2-klein-base-9b-Q8_0.gguf": (
+            klein_table("9b"),
+            {"tensor_type": GGML_Q8_0, "file_type": FTYPE_Q8_0},
+            VARIANT_FLUX2_KLEIN_9B,
+            "Q8_0",
+        ),
     }
     for name, (table, kwargs, variant, precision) in cases.items():
-        found = classify_flux_variant(inspect_component_file(write_gguf(tmp_path / name, table, **kwargs)))
+        found = classify_flux_variant(
+            inspect_component_file(write_gguf(tmp_path / name, table, **kwargs))
+        )
         assert found == FluxVariant(variant, False, "gguf", precision), name
         assert f"GGUF {precision}" in found.label
 
@@ -140,7 +156,11 @@ def test_the_same_layouts_are_recognised_from_a_gguf_tensor_table(tmp_path):
 def test_fp8_scaled_precision_and_the_bundled_form_are_orthogonal_facts():
     shapes, dtypes = fp8_scaled(klein_table("9b"))
     found = classify_flux_variant(classify_tensor_table(shapes, dtypes))
-    assert found is not None and found.variant == VARIANT_FLUX2_KLEIN_9B and found.precision == "fp8_scaled"
+    assert (
+        found is not None
+        and found.variant == VARIANT_FLUX2_KLEIN_9B
+        and found.precision == "fp8_scaled"
+    )
     assert found.label == "FLUX.2 Klein 9B-class, fp8_scaled, identity not pinned"
 
     bundled_table = flux1_table(bundled=True)
@@ -154,7 +174,9 @@ def test_fp8_scaled_precision_and_the_bundled_form_are_orthogonal_facts():
 def test_flux1_discriminators_are_recorded_as_facts():
     evidence = classify_tensor_table(flux1_table(), dtypes_of(flux1_table()))
     assert evidence.architecture == ARCH_FLUX_DIT
-    assert evidence.facts["guidance_embedding"] is True and evidence.facts["vector_input_dim"] == 768
+    assert (
+        evidence.facts["guidance_embedding"] is True and evidence.facts["vector_input_dim"] == 768
+    )
     klein = classify_tensor_table(klein_table("4b"), dtypes_of(klein_table("4b")))
     assert klein.architecture == ARCH_FLUX2_DIT and klein.facts["guidance_embedding"] is False
 
@@ -189,14 +211,22 @@ def test_architecture_ids_round_trip():
 def test_header_evidence_contract_two_records_the_flux_layout(tmp_path, monkeypatch):
     assert STRUCTURE_CONTRACT == "checkpoint_structure/2"
     gguf = checkpoint_header_evidence(write_gguf(tmp_path / "flux1-dev-Q4_K_S.gguf", flux1_table()))
-    assert gguf["structure"] == {"contract": STRUCTURE_CONTRACT, "architecture": "flux1_dev", "error": None}
-    plain = checkpoint_header_evidence(write_gguf(tmp_path / "llm.gguf", {"t.weight": [2, 2]}, architecture="llama"))
+    assert gguf["structure"] == {
+        "contract": STRUCTURE_CONTRACT,
+        "architecture": "flux1_dev",
+        "error": None,
+    }
+    plain = checkpoint_header_evidence(
+        write_gguf(tmp_path / "llm.gguf", {"t.weight": [2, 2]}, architecture="llama")
+    )
     assert plain["structure"]["architecture"] == "unrecognized" and plain["structure"]["error"]
 
     # Real-size FLUX safetensors are gigabytes: hand the reader the table a valid tiny file would carry.
     path = tensor_checkpoint(tmp_path / "flux1-dev-fp8.safetensors")
     shapes, dtypes = fp8_scaled(flux1_table())
-    monkeypatch.setattr("src.assets.checkpoint_structure.read_tensor_table", lambda _p: (shapes, dtypes, {}))
+    monkeypatch.setattr(
+        "src.assets.checkpoint_structure.read_tensor_table", lambda _p: (shapes, dtypes, {})
+    )
     assert checkpoint_header_evidence(path)["structure"]["architecture"] == "flux1_dev"
 
 
@@ -207,15 +237,26 @@ def test_registry_records_a_gguf_flux_transformer_as_structural_flux_evidence(tm
     assert inspection.compatibility.status is CompatibilityStatus.RESOLVED
     assert inspection.compatibility.family is ModelFamily.FLUX
     assert inspection.compatibility.checkpoint_architecture == "flux1_dev"
-    assert any(item.confidence is EvidenceConfidence.STRUCTURAL for item in inspection.compatibility.evidence)
+    assert any(
+        item.confidence is EvidenceConfidence.STRUCTURAL
+        for item in inspection.compatibility.evidence
+    )
     assert not registry.cache_path.exists()
 
 
 def test_a_structural_flux_layout_conflicts_with_an_sdxl_metadata_claim(tmp_path, monkeypatch):
-    path = tensor_checkpoint(tmp_path / "mislabelled.safetensors", metadata={"ss_base_model_version": "sdxl_base_v1-0"})
+    path = tensor_checkpoint(
+        tmp_path / "mislabelled.safetensors", metadata={"ss_base_model_version": "sdxl_base_v1-0"}
+    )
     monkeypatch.setattr(
         "src.assets.checkpoint_structure.read_tensor_table",
-        lambda _p: (flux1_table(), dtypes_of(flux1_table()), {"ss_base_model_version": "sdxl_base_v1-0"}),
+        lambda _p: (
+            flux1_table(),
+            dtypes_of(flux1_table()),
+            {"ss_base_model_version": "sdxl_base_v1-0"},
+        ),
     )
-    inspection = AssetRegistry(tmp_path, cache_path=tmp_path / "cache.json").inspect_checkpoint(path)
+    inspection = AssetRegistry(tmp_path, cache_path=tmp_path / "cache.json").inspect_checkpoint(
+        path
+    )
     assert inspection.compatibility.status is CompatibilityStatus.CONFLICTING
