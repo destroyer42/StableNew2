@@ -5,14 +5,17 @@ its ``name==version`` pins and compares them with the installed distributions th
 ``importlib.metadata``. It does not import any ML package, so it is cheap and GPU-free.
 Packages that are installed but not pinned are ignored.
 
-The file has two profiles. Pins are *core* until a ``# profile: postprocess`` directive starts
+The file has three profiles. Pins are *core* until a ``# profile: postprocess`` directive starts
 the optional local restoration/upscale profile (``# profile-marker: a, b`` names the packages
-whose presence means that profile is installed):
+whose presence means that profile is installed); ``# profile: ideogram`` starts the optional
+Ideogram 4 runtime (PR-IMG-120):
 
 - core pins must all be installed at their pin;
 - the postprocess profile is required when requested (``--with-postprocess``) or when a marker
   package is installed; otherwise it is absent by design, and any of its packages that happen to
-  be installed must still match their pin.
+  be installed must still match their pin;
+- the ideogram profile is never required (the owner installs it explicitly); any of its packages
+  that are installed must match their pin.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ _PIN = re.compile(r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)==(?P<version>[A-Za-z0-
 _DIRECTIVE = re.compile(r"^#\s*(?P<key>profile|profile-marker)\s*:\s*(?P<value>.+?)\s*$")
 CORE = "core"
 POSTPROCESS = "postprocess"
+IDEOGRAM = "ideogram"
 
 
 class ConstraintsError(ValueError):
@@ -39,15 +43,16 @@ class ConstraintsError(ValueError):
 
 @dataclass(frozen=True)
 class RuntimeProfiles:
-    """Exact pins split into the core profile and the optional postprocess profile."""
+    """Exact pins split into the core profile and the optional postprocess and ideogram profiles."""
 
     core: dict[str, str]
     postprocess: dict[str, str] = field(default_factory=dict)
     postprocess_markers: tuple[str, ...] = ()
+    ideogram: dict[str, str] = field(default_factory=dict)
 
     @property
     def all_pins(self) -> dict[str, str]:
-        return {**self.core, **self.postprocess}
+        return {**self.core, **self.postprocess, **self.ideogram}
 
 
 def normalize_name(name: str) -> str:
@@ -61,6 +66,7 @@ def parse_profiles(text: str) -> RuntimeProfiles:
 
     core: dict[str, str] = {}
     postprocess: dict[str, str] = {}
+    ideogram: dict[str, str] = {}
     markers: list[str] = []
     seen: set[str] = set()
     profile = CORE
@@ -69,10 +75,12 @@ def parse_profiles(text: str) -> RuntimeProfiles:
         if directive is not None:
             if directive["key"] == "profile":
                 value = directive["value"].lower()
-                if value not in (CORE, POSTPROCESS):
+                if value not in (CORE, POSTPROCESS, IDEOGRAM):
                     raise ConstraintsError(f"line {number}: unknown profile {value!r}")
                 profile = value
             else:
+                if profile != POSTPROCESS:
+                    raise ConstraintsError(f"line {number}: profile markers belong to the postprocess profile")
                 markers.extend(
                     normalize_name(item.strip()) for item in directive["value"].split(",") if item.strip()
                 )
@@ -87,8 +95,8 @@ def parse_profiles(text: str) -> RuntimeProfiles:
         if name in seen:
             raise ConstraintsError(f"line {number}: duplicate pin for {name!r}")
         seen.add(name)
-        (core if profile == CORE else postprocess)[name] = match["version"]
-    return RuntimeProfiles(core, postprocess, tuple(markers))
+        {CORE: core, POSTPROCESS: postprocess, IDEOGRAM: ideogram}[profile][name] = match["version"]
+    return RuntimeProfiles(core, postprocess, tuple(markers), ideogram)
 
 
 def parse_constraints(text: str) -> dict[str, str]:
@@ -145,6 +153,9 @@ def evaluate(
     """Return ``(problems, postprocess state)``; state is ``complete``, ``absent`` or ``incomplete``."""
 
     problems = [f"[core] {item}" for item in find_mismatches(profiles.core, installed)]
+    # The ideogram profile is optional and never required; whatever of it is installed must match its pin.
+    present_ideogram = {name: pin for name, pin in profiles.ideogram.items() if name in installed}
+    problems += [f"[ideogram] {item}" for item in find_mismatches(present_ideogram, installed)]
     if postprocess_required(profiles, installed, requested=with_postprocess):
         optional = find_mismatches(profiles.postprocess, installed)
         problems += [f"[postprocess] {item}" for item in optional]

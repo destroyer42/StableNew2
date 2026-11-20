@@ -108,7 +108,7 @@ of the roadmap; where they conflict with this file, this file and the repository
    enabled stage is refused; disabled placeholders and history stay readable), the disabled LTX specs (future LTX support is not ruled
    out and needs bridge implementations plus accepted runtime evidence), the dormant story-plan/continuity authoring code, the AI
    settings-suggestion stub (external scripts importing `src.ai` would break, unverified) and the cluster scaffolding.
-7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
+7. Decided 2026-11-18: `PR-IMG-120` (Ideogram 4 NF4 on a Diffusers backend) is authorized and its licence accepted; implemented on a branch, not physically qualified (`docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md`).
 8. Product order after the safety work: inpainting/ControlNet (the local LoRA browser, history browser, Iterate from History, parent/child compare and Learning payoff are in).
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments). Decided: store it
    once per experiment by hash, forward-only; implemented forward-only; backfill/prune still open (LEARN-SNAPSHOT-914: new Learning jobs and ratings carry `snapshot_sha256`, the body lives once in the job repository's `experiment_snapshots` table).

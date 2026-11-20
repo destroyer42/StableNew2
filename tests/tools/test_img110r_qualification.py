@@ -245,9 +245,13 @@ def test_runtimes_map_to_the_right_environment_and_run_ids_increment(tmp_path: P
 
 
 def test_qualification_code_never_reaches_production_source() -> None:
-    """No production Diffusers/Ideogram backend: ``src/`` must not know these tools or models."""
+    """``src/`` never imports or names the 110R qualification harness.
 
-    pattern = re.compile(r"ideogram4|Ideogram4Pipeline|img110r|ideogram-4", re.IGNORECASE)
+    PR-IMG-120 (owner-authorized 2026-11-18) is the production Ideogram 4 backend; it re-implements what it needs
+    under ``src/image_backends`` and must stay independent of ``tools/qualification/img110r``.
+    """
+
+    pattern = re.compile(r"img110r|tools\.qualification", re.IGNORECASE)
     offenders = [
         str(path.relative_to(REPO_ROOT))
         for path in (REPO_ROOT / "src").rglob("*.py")

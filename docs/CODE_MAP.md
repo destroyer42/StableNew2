@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-766 of 921 modules have a docstring.
+773 of 928 modules have a docstring.
 
 ## src/
 
@@ -555,6 +555,11 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: StableNew-owned still-image backend contracts and implementations
 - `a1111_webui_backend.py`: A1111 adapter that preserves the existing StableNew image executor behavior
 - `backend_capabilities.py`: Backend-owned capability facts that presentation layers consult (PR-IMG-FORGE-120)
+- `diffusers_backend.py`: The Diffusers image backend (PR-IMG-120): Ideogram 4 NF4 txt2img in a contained child per job
+- `diffusers_ideogram4_profile.py`: PR-IMG-120: the one immutable Ideogram 4 NF4 (Diffusers) profile; pure intent contracts
+- `diffusers_ideogram4_worker.py`: Contained child that runs one Ideogram 4 NF4 job through Diffusers (PR-IMG-120)
+- `diffusers_readiness.py`: Offline readiness and resource floors for the Diffusers Ideogram 4 backend (PR-IMG-120)
+- `diffusers_residency.py`: The PR-IMG-110R Ideogram 4 residency policy as product code (PR-IMG-120, section 7)
 - `exact_model_profile.py`: Small dispatch seam for two independent immutable model contracts, not a new registry
 - `forge_controlnet.py`: Forge ControlNet execution contract for one pre-rendered OpenPose unit (PR-IMG-CNET-210)
 - `forge_controlnet_units.py`: All-or-nothing admission and wire projection for ordered pre-rendered units
@@ -564,9 +569,11 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `forge_klein_readiness.py`: Conservative host-memory readiness for the FLUX.2 Klein profile (PR-IMG-116)
 - `forge_webui_backend.py`: Forge WebUI image backend (PR-IMG-FORGE-100): the ``forge_webui`` identity, the new-work default (PR-IMG-FORG…
 - `forge_zimage_profile.py`: PR-IMG-MODELS-155: one immutable Z-Image bundle; pure intent and wire contracts
+- `ideogram4_caption.py`: Ideogram 4 structured-caption verification and prompt mapping (PR-IMG-120, owner decision 2)
 - `image_backend_registry.py`: Registry and capability validation for one image backend per NJR
 - `image_backend_types.py`: Typed, StableNew-owned contracts for still-image execution backends
 - `masked_inpaint.py`: Capability projection for bounded Review mask edits; ModelPolicy remains authoritative
+- `model_backend_routing.py`: Which image backend a model *requires*, when it is not a WebUI-family checkpoint (PR-IMG-120)
 - `model_inventory_reconcile.py`: Explicit, GET-only reconciliation of the offline inventory with one already-running WebUI endpoint (PR-IMG-MO…
 - `model_policy.py`: Model-family capability / operator-policy registry (PR-IMG-130A)
 - `model_policy_lora.py`: One LoRA-selection assessment against a model policy (PR-IMG-130B; extracted from the PR-IMG-130A projection)
