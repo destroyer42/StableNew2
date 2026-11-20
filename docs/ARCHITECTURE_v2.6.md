@@ -378,9 +378,10 @@ action and external runtimes are never adopted, killed or restarted. Backend cap
 (`ImageBackendCapabilities`): Forge declares no Hypernetwork support, so such work is refused before dispatch and the
 UI does not present it, while the A1111 backend keeps it.
 
-A future `diffusers` image backend may host multiple model families. Ideogram 4
-is the first planned qualification target after PR-IMG-100, but Ideogram is a
-model family, not the public backend architecture. Backend/runtime, model family,
+The `diffusers` image backend (PR-IMG-120) may host multiple model families.
+Ideogram 4 NF4 is its first, selected by an exact immutable profile and run in a
+contained child per job; Ideogram is a model family, not the public backend
+architecture. Backend/runtime, model family,
 and model identity must remain separate concepts.
 
 An image NJR whose selected backend does not support every requested image stage

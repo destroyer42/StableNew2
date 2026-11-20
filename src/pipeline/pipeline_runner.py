@@ -18,6 +18,7 @@ from src.image_backends import (
     build_default_image_backend_registry,
     resolve_image_backend_id,
 )
+from src.image_backends.image_backend_types import RUNTIME_FAMILY_WEBUI
 from src.image_backends.model_policy import resolve_model_policy
 from src.learning.experiment_naming import (
     build_learning_folder_label,
@@ -870,7 +871,7 @@ class PipelineRunner:
             self._pipeline._begin_run_metrics()
         trace = getattr(self._pipeline, "_image_performance", None)
         trace = trace if isinstance(trace, ImagePerformanceTrace) else None
-        self._cleanup_at_job_start(trace)
+        self._cleanup_at_job_start(trace, image_backend_id)
         if any(job.stage_name == StageTypeEnum.TRAIN_LORA.value for job in plan.jobs):
             if len(plan.jobs) != 1 or plan.jobs[0].stage_name != StageTypeEnum.TRAIN_LORA.value:
                 raise ValueError("train_lora must be the only enabled stage in an NJR run plan.")
@@ -975,8 +976,11 @@ class PipelineRunner:
         self._last_run_result = result
         return result
 
-    def _cleanup_at_job_start(self, trace: ImagePerformanceTrace | None) -> None:
-        # Best-effort local cleanup. Refresh is reserved for explicitly requested maintenance.
+    def _cleanup_at_job_start(self, trace: ImagePerformanceTrace | None, image_backend_id: str = "") -> None:
+        # Best-effort local cleanup. Refresh is reserved for explicitly requested maintenance. A backend that does not
+        # use the WebUI client (PR-IMG-120 Diffusers) owns its runtime entirely; no WebUI request is made for it.
+        if image_backend_id and not self._backend_uses_webui_client(image_backend_id):
+            return
         try:
             client = getattr(self._pipeline, "client", None)
             if client and hasattr(client, "free_vram"):
@@ -986,6 +990,13 @@ class PipelineRunner:
                 )
         except Exception:
             pass
+
+    def _backend_uses_webui_client(self, backend_id: str) -> bool:
+        try:
+            family = self._image_backends.get(backend_id).capabilities.runtime_family
+        except Exception:  # noqa: BLE001 - an unknown backend keeps the historical behavior
+            return True
+        return family == RUNTIME_FAMILY_WEBUI
 
     def _no_output_reason(self) -> str:
         """Why a run produced nothing: a verified checkpoint mismatch if the executor recorded one, else the generic text."""

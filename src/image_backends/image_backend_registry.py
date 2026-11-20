@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from src.image_backends.a1111_webui_backend import A1111WebUIImageBackend
+from src.image_backends.diffusers_backend import DiffusersImageBackend
 from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
 from src.image_backends.image_backend_types import ImageBackendInterface
 
@@ -49,4 +50,6 @@ def build_default_image_backend_registry() -> ImageBackendRegistry:
     # persisted identity still resolves to A1111 (LEGACY_MISSING_IMAGE_BACKEND_ID); the runner never falls back
     # between them.
     registry.register(ForgeWebUIImageBackend())
+    # Selected only by a model that requires it (PR-IMG-120, ``model_backend_routing``); never a fallback target.
+    registry.register(DiffusersImageBackend())
     return registry

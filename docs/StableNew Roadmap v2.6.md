@@ -294,7 +294,7 @@ This sequence records the post-v2.6 architecture line. PR-IMG-100 is complete /
 accepted / integrated on `main`.
 PR-IMG-110 completed its separate qualification; its Ideogram 4 target-hardware
 no-go was corrected by PR-IMG-110R (PASS — CONSTRAINED, explicit residency policy).
-Do not begin PR-IMG-120 from either result.
+PR-IMG-120 was authorized separately by the owner on 2026-11-18 (licence accepted for non-commercial use).
 
 | Order | Work | Status | Outcome |
 |---:|---|---|---|
@@ -302,7 +302,7 @@ Do not begin PR-IMG-120 from either result.
 | P1a | `PR-SVD-100` | Complete / Accepted / Integrated | Non-recursive SVD folder batch submission through ordinary per-source NJRs and one existing JobService batch call |
 | P2 | `PR-IMG-110` | Complete / Ideogram 4 verdict superseded | Generic Diffusers substrate passed; the Ideogram 4 "hardware no-go" was not supported (see P2a); no production backend added |
 | P2a | `PR-IMG-110R` | Complete / Accepted / Integrated | Ideogram 4 NF4 PASS — CONSTRAINED on RTX 4070 Ti 12GB up to 1024x1024 `V4_QUALITY_48` with an explicit residency policy (two independent implementations, bit-identical repeats); shipped all-resident and documented offload paths impractical |
-| P3 | `PR-IMG-120` | Not authorized; eligible for a separate owner decision | Any Diffusers production slice needs an explicit product-owner decision (custom GPU residency lifecycle/lease, structured-JSON prompt mapping, Ideogram 4 non-commercial license) |
+| P3 | `PR-IMG-120` | Authorized 2026-11-18; implemented on a feature branch, not physically qualified | Diffusers backend running Ideogram 4 NF4 in a contained child per job behind the runtime-transition lease, 110R residency, deterministic JSON caption mapping, optional pinned bitsandbytes extra (`docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md`) |
 | P4 | `PR-IMG-130` | Conditional | Capability-aware image backend/model UI and compiler projections |
 
 ### PR-IMG-100 — backend-neutral image execution (complete / accepted / integrated)
@@ -359,16 +359,14 @@ time. Latency after load: about 60 s (768x1024 Turbo), 116-130 s (1024x1024 Defa
 all-resident and documented offload paths give ~60 s per step (spill). Full evidence:
 `docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md`.
 
-PR-IMG-120 is not authorized by either result; it is eligible for a separate
-product-owner decision.
+PR-IMG-120 was authorized by a separate owner decision on 2026-11-18.
 
 ### PR-IMG-120 — conditional Diffusers production slice
 
-Not authorized. PR-IMG-110 established that generic Diffusers is viable and
-PR-IMG-110R that Ideogram 4 NF4 is constrained-viable on the supported target
-(explicit residency policy, exclusive GPU). A separate product-owner decision on the
-residency lifecycle, prompt mapping and license is required before this production
-slice can be proposed.
+Authorized by the owner on 2026-11-18, who accepted the non-commercial licence and
+the four design decisions (per-job contained child, both caption modes, optional
+pinned bitsandbytes extra, one Base Generation model entry). Design and as-built
+record: `docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md`. Physical qualification is a separate, owner-authorized step.
 
 ### PR-IMG-130 — conditional capability-aware UX/compiler
 

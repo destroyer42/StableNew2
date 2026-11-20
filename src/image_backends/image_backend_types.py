@@ -18,6 +18,11 @@ from src.pipeline.artifact_contract import (
 #: share one WebUI-family runtime slot (one endpoint, one ``WebUIProcessManager``).
 A1111_IMAGE_BACKEND_ID = "a1111_webui"
 FORGE_IMAGE_BACKEND_ID = "forge_webui"
+#: The Diffusers runtime family (PR-IMG-120): a contained child per job, selected only by a model that requires it.
+DIFFUSERS_IMAGE_BACKEND_ID = "diffusers"
+#: ``ImageBackendCapabilities.runtime_family`` values.
+RUNTIME_FAMILY_WEBUI = "webui"
+RUNTIME_FAMILY_DIFFUSERS = "diffusers"
 
 #: The product default for NEW still-image work when no explicit runtime identity is configured (PR-IMG-FORGE-120).
 NEW_IMAGE_BACKEND_DEFAULT_ID = FORGE_IMAGE_BACKEND_ID
@@ -76,6 +81,11 @@ def normalize_image_backend_options(
     else:
         raise ValueError("backend_options.image must be a mapping")
 
+    if backend_id is None and "backend_id" not in image and model_name:
+        # A model that exists only behind a non-WebUI runtime (PR-IMG-120) names that runtime for new work.
+        from src.image_backends.model_backend_routing import required_backend_for_model
+
+        backend_id = required_backend_for_model(model_name)
     if backend_id is None:
         # Only a construction with no explicit identity consults the configured default; an explicit identity in the
         # options (including a replay or reprocess source) is kept and never rewritten.
@@ -129,6 +139,9 @@ class ImageBackendCapabilities:
     #: masks it used (the StableNew companion extension in the managed Forge runtime). A ``localized_only`` ADetailer
     #: stage is refused everywhere else; it never degrades to the whole-image request.
     supports_localized_adetailer: bool = False
+    #: The runtime family behind the backend. Only ``webui`` backends use the shared WebUI client (for example the
+    #: runner's pre-job WebUI memory cleanup); other families own their runtime entirely inside ``execute``.
+    runtime_family: str = RUNTIME_FAMILY_WEBUI
 
 
 @dataclass(slots=True)

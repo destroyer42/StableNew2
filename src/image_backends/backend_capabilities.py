@@ -8,8 +8,11 @@ dispatch, and an invalid backend configuration stops selection altogether.
 
 from __future__ import annotations
 
+from typing import Any
+
 from src.image_backends.image_backend_types import (
     A1111_IMAGE_BACKEND_ID,
+    DIFFUSERS_IMAGE_BACKEND_ID,
     FORGE_IMAGE_BACKEND_ID,
     ImageBackendCapabilities,
     configured_image_backend_id,
@@ -20,9 +23,14 @@ def capabilities_for(backend_id: str) -> ImageBackendCapabilities:
     """The declared capabilities of a registered image backend (class-level; nothing is instantiated)."""
 
     from src.image_backends.a1111_webui_backend import A1111WebUIImageBackend
+    from src.image_backends.diffusers_backend import DiffusersImageBackend
     from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
 
-    backends = {A1111_IMAGE_BACKEND_ID: A1111WebUIImageBackend, FORGE_IMAGE_BACKEND_ID: ForgeWebUIImageBackend}
+    backends: dict[str, Any] = {
+        A1111_IMAGE_BACKEND_ID: A1111WebUIImageBackend,
+        FORGE_IMAGE_BACKEND_ID: ForgeWebUIImageBackend,
+        DIFFUSERS_IMAGE_BACKEND_ID: DiffusersImageBackend,
+    }
     return backends[backend_id].capabilities
 
 
