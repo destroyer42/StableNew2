@@ -443,7 +443,9 @@ def test_the_registered_comfy_owner_wins_and_construction_stays_in_the_video_mod
     remembered, live, constructed = FakeManager(), FakeManager(), FakeManager()
     built: list[str] = []
     monkeypatch.setattr(manager_module, "get_global_comfy_process_manager", lambda: None)
-    monkeypatch.setattr(video_backend, "shared_comfy_process_manager", lambda: built.append("x") or constructed)
+    monkeypatch.setattr(
+        video_backend, "shared_comfy_process_manager", lambda: built.append("x") or constructed
+    )
     backend = ComfyImageBackend(transition=FakeTransition())
     assert backend._resolve_process_manager() is constructed and built == ["x"]
     backend._process_manager = remembered
