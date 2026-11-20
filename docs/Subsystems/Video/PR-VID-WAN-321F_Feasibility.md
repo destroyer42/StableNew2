@@ -198,6 +198,10 @@ Adapter defects found (not fixed after execution, to keep the evidence tied to t
    sample). The Comfy worker's working set and private commit were never measured. System-level commit, RAM and VRAM
    figures are unaffected and are the evidence above.
 
+**Both defects are fixed by QUAL-927** (`tools/qualification/owned_tree.py`, used by `wan321f/physical.py` and the
+golden-path physical lane): a bounded teardown wait over every recorded process and the owned port, and whole-tree memory
+sampling; the 2026-10-23 verdict above is unchanged.
+
 What this does and does not show: on the frozen stock-node plan the A14B pair ran three times to completion on the
 target host with the memory guard never near a limit. It does not establish motion or identity quality, does not qualify
 720p or the dynamic arm, and does not authorize catalog registration or promotion. A teardown-verified repeat needs

@@ -53,7 +53,8 @@ def classify_attempt(
     """Return the six dimension verdicts, the overall automated verdict and the reasons.
 
     ``observations`` keys: ``jobs_admitted``, ``artifacts``, ``stop`` (a stop-condition name or ``None``),
-    ``teardown_clean`` (bool or ``None`` when unproven), ``identity_verified``, ``telemetry`` (the
+    ``teardown_clean`` (bool or ``None`` when unproven; a physical adapter takes it from the bounded
+    ``verify_teardown(...).verified`` in ``tools/qualification/owned_tree.py``, QUAL-927), ``identity_verified``, ``telemetry`` (the
     ``safety.evaluate_telemetry`` result), ``provenance_complete`` and optional ``automated_measures``.
     ``human_ratings`` carries ``quality`` and ``usability`` as ``{"verdict": "PASS"|"FAIL", "rated_by": ...}``.
     """

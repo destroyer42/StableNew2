@@ -81,7 +81,7 @@
     "src/gui/views/photo_optimize_editors.py": 19,
     "src/gui/views/photo_optimize_layout.py": 65,
     "src/gui/views/photo_optimize_results.py": 75,
-    "src/gui/views/photo_optimize_scope.py": 55,
+    "src/gui/views/photo_optimize_scope.py": 53,
     "src/gui/views/photo_optimize_tab_frame_v2.py": 31,
     "src/gui/views/pipeline_tab_frame_v2.py": 3,
     "src/gui/views/prompt_tab_frame_v2.py": 52,

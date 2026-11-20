@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from tests.tools.test_golden_path_contracts import FakeProcesses
 from tools.operator_journey import control
 from tools.operator_journey.control import JourneyAbort, JourneyControl, JourneyHold, JourneyNoGo
 from tools.operator_journey.evidence import NO_GO, JourneyEvidence
@@ -187,7 +188,12 @@ def _tripped_monitor(tmp_path: Path) -> ResourceMonitor:
     }
     monitor = ResourceMonitor(
         limits,
-        HostProbes(gpu=lambda: dict(gpu), memory=lambda: dict(memory)),
+        HostProbes(
+            gpu=lambda: dict(gpu),
+            memory=lambda: dict(memory),
+            process_table=FakeProcesses(),
+            process_memory=lambda _pid: None,
+        ),
         tmp_path / "telemetry.jsonl",
         clock=lambda: 82.76,
     )

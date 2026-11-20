@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from tests.tools.test_golden_path_contracts import FakeProcesses
 from tools.operator_journey.control import JourneyAbort, JourneyHold
 from tools.operator_journey.evidence import HOLD, NO_GO, PASS, JourneyEvidence
 from tools.operator_journey.golden import definitions, offline, physical
@@ -80,6 +81,9 @@ def make_probes(**over: Any) -> HostProbes:
         "python": lambda: "3.14.2",
         "hostname": lambda: "testhost",
         "os_name": lambda: "TestOS 1",
+        # never the real process table: other processes under the test runner must not become "owned" (QUAL-927)
+        "process_table": FakeProcesses(),
+        "process_memory": lambda _pid: None,
     }
     values.update(over)
     return HostProbes(**values)

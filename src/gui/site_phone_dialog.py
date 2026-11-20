@@ -14,14 +14,18 @@ DEFAULT_NATIVE_REVIEW = True
 
 
 def pairing_permissions(rating: bool, native_review: bool, queue_submit: bool = False) -> str:
-    gallery = "Browse Output and save gallery and video ratings" if rating else "Browse Output"
+    gallery = (
+        "Browse Output, save gallery and video ratings, and refresh eval reports in shared Output"
+        if rating
+        else "Browse Output"
+    )
     review = (
         "Write native Review evidence with ratings, Retain, and Mark for rework"
         if native_review
         else "Native Review evidence permission off"
     )
     queue = (
-        "Preview and submit saved PromptPacks and images marked for rework"
+        "Preview and submit saved PromptPacks, images marked for rework, video jobs, and video evaluations"
         if queue_submit
         else "Phone queue submission permission off"
     )
@@ -55,7 +59,7 @@ class PhoneReviewDialog:
         code = ttk.Entry(panel, show="*", width=50)
         code.pack(fill="x", pady=(0, 8))
         rating = tk.BooleanVar(master=dialog)
-        ttk.Checkbutton(panel, text="Allow gallery and video ratings", variable=rating).pack(
+        ttk.Checkbutton(panel, text="Allow ratings and eval report refresh", variable=rating).pack(
             anchor="w"
         )
         native_review = tk.BooleanVar(master=dialog, value=DEFAULT_NATIVE_REVIEW)
@@ -70,7 +74,7 @@ class PhoneReviewDialog:
             panel, text="Allow phone Preview and queue submission", variable=queue_submit
         ).pack(anchor="w")
         ttk.Label(
-            panel, text="Saved PromptPacks and images marked for rework", wraplength=370
+            panel, text="Saved PromptPacks, marked rework, and video plans", wraplength=370
         ).pack(anchor="w", padx=18)
         status = ttk.Label(panel, wraplength=370)
         status.pack(anchor="w", pady=(10, 4))

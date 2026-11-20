@@ -125,6 +125,9 @@ class PhotoBatchEditor(ttk.Frame):
             if not self.masks[key].get():
                 variable.set("" if value.mixed else str(value.value))
 
+    def has_checked_fields(self) -> bool:
+        return any(mask.get() for mask in self.masks.values())
+
     def collect_mask(self):
         mask = {}
         for key, default in field_defaults().items():

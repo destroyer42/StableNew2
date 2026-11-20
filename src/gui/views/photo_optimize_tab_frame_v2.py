@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
 from tkinter import filedialog, messagebox, ttk
-from typing import Any
+from typing import Any, cast
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
@@ -82,6 +82,7 @@ class PhotoOptimizeTabFrameV2(
         )
         self._baseline_debounce_id: str | None = None
         self._asset_load_seq = 0
+        self._asset_list_pick: int | str | None = None
         manager = getattr(app_controller, "_config_manager", None)
         loader = getattr(manager, "load_settings", None)
         settings = loader() if callable(loader) else {}
@@ -456,13 +457,41 @@ class PhotoOptimizeTabFrameV2(
         self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
 
+    def _note_asset_list_pick(self, event: tk.Event) -> None:
+        """Remember the row the operator is clicking (or moving to) before Tk's Listbox bindings select it.
+
+        Widget bindings run before the Listbox class bindings that change the selection and send
+        ``<<ListboxSelect>>``, so ``_on_asset_select`` can tell a click on a row from a bare selection notification.
+        """
+
+        if getattr(event, "type", None) == tk.EventType.KeyPress:
+            self._asset_list_pick = "active"  # the class binding moves the active row, then notifies
+        else:
+            row = int(cast(Any, self.assets_list).nearest(event.y))
+            self._asset_list_pick = row if row >= 0 else None
+
+    def _forget_asset_list_pick(self, _event: tk.Event | None = None) -> None:
+        self._asset_list_pick = None
+
+    def _picked_asset_row(self) -> int | None:
+        pick, self._asset_list_pick = self.__dict__.get("_asset_list_pick"), None
+        if pick == "active":
+            return int(self.assets_list.index("active"))
+        return pick if isinstance(pick, int) else None
+
     def _on_asset_select(self, _event: tk.Event) -> None:
+        picked = self._picked_asset_row()
         idxs = list(self.assets_list.curselection())
         if not idxs:
             self._refresh_scope_selection()
             if self._current_asset is not None:
                 self._refresh_preview(self._current_asset)
             return
+        if picked is not None and picked in {int(i) for i in idxs} and picked < len(self._asset_index_by_row):
+            # The operator clicked (or moved to) this photo: show it and make it the active photo.
+            self._show_asset(self._asset_index_by_row[picked])
+            return
+        # A highlight was removed, or the selection changed without a click: keep the active photo.
         idx = int(idxs[0])
         if self._current_asset_id in self._asset_index_by_row:
             idx = self._asset_index_by_row.index(self._current_asset_id)
