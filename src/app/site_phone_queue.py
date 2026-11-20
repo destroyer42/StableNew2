@@ -18,12 +18,14 @@ from src.queue.job_history_store import (
 )
 from src.queue.job_model import JobStatus
 from src.queue.job_repository import JobRepository
+from src.video.video_review_group import ArmState, classify_entry
 
 PHONE_QUEUE_PATH = "/v1/phone-queue"
 PHONE_SUBMISSION = "phone_submission"
 MAX_PHONE_JOBS = 250
 _READ = re.compile(r"(list|receipt|result)(?:/([a-f0-9]{16}|[a-f0-9]{32}))?")
-_KINDS = frozenset({"rework", "promptpack"})
+_KINDS = frozenset({"rework", "promptpack", "video", "video_eval"})
+_EVAL_RUN_ID = re.compile(r"\d{8}_\d{6}_[A-Za-z0-9_-]{1,150}")
 _PUBLIC_CAUSES = {
     INTERRUPTED_RESTART_ACTION_REQUIRED: "restart_action_required",
     CANCEL_RETURN_REFUSED_DISPATCH_UNCERTAIN: "dispatch_uncertain",
@@ -54,11 +56,17 @@ def _claim(job: JobHistoryEntry | None, owner: str) -> dict[str, Any] | None:
     if not isinstance(claim, dict) or claim.get("owner") != owner:
         return None
     receipt, kind, index, count = (claim.get(key) for key in ("receipt", "kind", "index", "count"))
+    eval_run = claim.get("eval_run")
     if (
         isinstance(receipt, str)
         and IDENTIFIER.fullmatch(receipt)
         and isinstance(kind, str)
         and kind in _KINDS
+        and (
+            isinstance(eval_run, str) and _EVAL_RUN_ID.fullmatch(eval_run)
+            if kind == "video_eval"
+            else eval_run is None
+        )
         and type(index) is int
         and type(count) is int
         and 0 <= index < count <= MAX_PHONE_JOBS
@@ -100,6 +108,7 @@ class PhoneQueueView:
             "status": "blocked" if job.status is JobStatus.QUEUED and cause else job.status.value,
             "cause": cause,
             "created_at": job.created_at.isoformat(),
+            **({"eval_run": claim["eval_run"]} if "eval_run" in claim else {}),
         }
 
     def receipt(self, owner: str, receipt_id: str) -> dict[str, Any]:
@@ -117,6 +126,7 @@ class PhoneQueueView:
             "state": "admitted",
             "job_ids": job_ids,
             "jobs": [self._project(jobs[job_id], claim) for job_id in job_ids],
+            **({"eval_run": claim["eval_run"]} if "eval_run" in claim else {}),
         }
 
     def handle(
@@ -158,7 +168,15 @@ class PhoneQueueView:
             claim = _claim(job, owner)
             if job is None or claim is None:
                 raise SiteOutputError("unknown_job")
-            paths = extract_reprocess_output_paths(None, job.result)
+            if claim["kind"] in {"video", "video_eval"}:
+                state, _message, artifact_path = classify_entry(job)
+                paths = (
+                    [artifact_path]
+                    if state is ArmState.PLAYABLE and artifact_path is not None
+                    else []
+                )
+            else:
+                paths = extract_reprocess_output_paths(None, job.result)
             media = catalog.results(paths) if job.status is JobStatus.COMPLETED else []
             return {**self._project(job, claim), "media": media}
         raise SiteOutputError("unknown_route")

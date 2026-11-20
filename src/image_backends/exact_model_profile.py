@@ -5,6 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from src.image_backends.diffusers_ideogram4_profile import (
+    IDEOGRAM4_PROFILE_V1,
+    Ideogram4Profile,
+    Ideogram4ProfileError,
+    is_ideogram4_model_name,
+    validate_ideogram4_config,
+    validate_ideogram4_njr,
+)
 from src.image_backends.forge_klein_profile import (
     KleinProfile,
     validate_klein_intent,
@@ -24,10 +32,15 @@ from src.image_backends.forge_zimage_profile import (
     validate_zimage_njr,
 )
 
-ExactModelProfile = KleinProfile | ZImageProfile
+#: Profiles that run on the WebUI-family Forge backend (the Forge code paths are typed against exactly these).
+ForgeExactModelProfile = KleinProfile | ZImageProfile
+#: Every exact profile, on any backend (PR-IMG-120 adds Ideogram 4 on Diffusers).
+ExactModelProfile = ForgeExactModelProfile | Ideogram4Profile
 
 
 def model_profile_for_model(name: str | None) -> dict[str, Any] | None:
+    if is_ideogram4_model_name(name):
+        return IDEOGRAM4_PROFILE_V1.reference()
     return ZIMAGE_PROFILE_V1.reference() if is_zimage_transformer_name(name) else klein_reference(name)
 
 
@@ -38,6 +51,10 @@ def resolve_model_profile(options: Any) -> ExactModelProfile | None:
         if type(reference.get("version")) is not int or reference != ZIMAGE_PROFILE_V1.reference():
             raise ZImageProfileError("Unsupported Z-Image profile reference; only immutable v1 is supported")
         return ZIMAGE_PROFILE_V1
+    if isinstance(reference, Mapping) and reference.get("id") == IDEOGRAM4_PROFILE_V1.profile_id:
+        if type(reference.get("version")) is not int or reference != IDEOGRAM4_PROFILE_V1.reference():
+            raise Ideogram4ProfileError("Unsupported Ideogram 4 profile reference; only immutable v1 is supported")
+        return IDEOGRAM4_PROFILE_V1
     return resolve_klein(options)
 
 
@@ -48,6 +65,7 @@ def validate_profile_njr(njr: Any) -> None:
     before JobService admission. Klein's NJR validation needs live backend evidence and stays with the backend.
     """
     validate_zimage_njr(njr)
+    validate_ideogram4_njr(njr)
 
 
 def profile_prompt_refusal(profile: ExactModelProfile | None, text: str) -> str | None:
@@ -56,6 +74,12 @@ def profile_prompt_refusal(profile: ExactModelProfile | None, text: str) -> str 
     Reuses the profile validator the compiler applies (never a second parser). Only Z-Image validates prompt text
     purely; Klein's inline-token decisions need LoRA evidence and stay with the compiler/backend.
     """
+    if isinstance(profile, Ideogram4Profile):
+        try:
+            validate_ideogram4_config({}, prompt=text)
+        except Ideogram4ProfileError as exc:
+            return str(exc)
+        return None
     if not isinstance(profile, ZImageProfile):
         return None
     try:
@@ -68,6 +92,16 @@ def profile_prompt_refusal(profile: ExactModelProfile | None, text: str) -> str 
 def validate_profile_intent(profile: ExactModelProfile, **intent: Any) -> str:
     if isinstance(profile, KleinProfile):
         return validate_klein_intent(profile, **intent)
+    if isinstance(profile, Ideogram4Profile):
+        if intent["backend_id"] != profile.backend_id or tuple(intent["stage_names"]) != profile.modes:
+            raise Ideogram4ProfileError(f"{profile.display_name} supports only txt2img on the '{profile.backend_id}' backend")
+        if intent.get("unsupported_features"):
+            raise Ideogram4ProfileError(
+                f"{profile.display_name} unsupported features: " + "; ".join(intent["unsupported_features"])
+            )
+        validate_ideogram4_config({"model": intent["model_name"], "steps": intent["steps"], "width": intent["width"],
+                                   "height": intent["height"]}, negative=str(intent.get("negative_prompt") or ""))
+        return "txt2img"
     if intent["backend_id"] != profile.backend_id or tuple(intent["stage_names"]) != profile.modes:
         raise ZImageProfileError("Z-Image supports only Forge txt2img")
     if intent.get("unsupported_features"):

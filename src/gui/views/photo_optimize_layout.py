@@ -376,6 +376,17 @@ class PhotoOptimizeLayoutMixin:
         )
         self.assets_list.grid(row=0, column=0, sticky="nsew")
         self.assets_list.bind("<<ListboxSelect>>", self._on_asset_select)
+        # Clicking (or arrowing to) a photo shows it; a bare selection change keeps the active photo.
+        host = cast(Any, self)  # the tab supplies the pick handlers
+        for sequence, handler in (
+            ("<ButtonPress-1>", host._note_asset_list_pick),
+            ("<ButtonRelease-1>", host._forget_asset_list_pick),
+            ("<KeyPress-Up>", host._note_asset_list_pick),
+            ("<KeyRelease-Up>", host._forget_asset_list_pick),
+            ("<KeyPress-Down>", host._note_asset_list_pick),
+            ("<KeyRelease-Down>", host._forget_asset_list_pick),
+        ):
+            host.assets_list.bind(sequence, handler, add="+")
         assets_scroll = ttk.Scrollbar(
             assets_frame, orient="vertical", command=self.assets_list.yview
         )

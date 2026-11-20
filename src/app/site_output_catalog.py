@@ -18,7 +18,7 @@ from src.app.site_media_files import SiteOutputError as SiteOutputError
 from src.app.site_native_review import NativeImageReview
 from src.app.site_output_library import OutputLibrary
 from src.app.site_rating_sync import edit_stamp, field_conflicts, root_identity, was_applied
-from src.app.site_video_playback import VideoPlayback
+from src.app.site_video_playback import VIDEO_LIMIT, VideoPlayback
 from src.video.video_eval_ratings_store import (
     ARTIFACT_COLUMN,
     KEY_COLUMNS,
@@ -134,7 +134,7 @@ class SiteOutputCatalog:
             self._inside(directory / "metrics.json"),
         )
 
-    def list_runs(self) -> list[str]:
+    def list_runs(self, *, include_unbuilt: bool = False) -> list[str]:
         try:
             root = self._inside(self._root / EVAL_OUTPUT_FOLDER)
             candidates = sorted(
@@ -146,14 +146,28 @@ class SiteOutputCatalog:
         runs = []
         for name in candidates:
             try:
-                manifest, metrics = self._report_paths(name)
-                if manifest.is_file() and metrics.is_file():
-                    runs.append(name)
+                if include_unbuilt:
+                    directory = self._inside(root / name)
+                    if self._inside(directory / RUN_MANIFEST_NAME).is_file():
+                        runs.append(name)
+                else:
+                    manifest, metrics = self._report_paths(name)
+                    if manifest.is_file() and metrics.is_file():
+                        runs.append(name)
             except (OSError, SiteOutputError):
                 continue
             if len(runs) == _MAX_RUNS:
                 break
         return runs
+
+    def eval_manifest(self, run_id: str) -> tuple[Path, dict[str, Any]]:
+        if not _RUN_ID.fullmatch(run_id):
+            raise SiteOutputError("unknown_run")
+        directory = self._inside(self._root / EVAL_OUTPUT_FOLDER / run_id)
+        manifest = _bounded_json(self._root, directory / RUN_MANIFEST_NAME)
+        if manifest.get("schema") != RUN_SCHEMA or manifest.get("run_id") != run_id:
+            raise SiteOutputError("invalid_report")
+        return directory, manifest
 
     def _register(
         self,
@@ -253,6 +267,14 @@ class SiteOutputCatalog:
                 )
                 row.update(
                     arm_id=arm_id,
+                    workflow={
+                        key: _text(overrides.get(key))
+                        for key in ("workflow_id", "workflow_version")
+                    }
+                    if isinstance(overrides := arms[arm_id].get("overrides"), dict)
+                    else {},
+                    seed=job.get("seed") if type(job.get("seed")) is int else None,
+                    frames=job.get("frame_count") if type(job.get("frame_count")) is int else None,
                     prompt=_text(case.get("prompt"), limit=8000),
                     source_sha256=_text(source_hash).lower(),
                     artifact_sha256=_text(cell.get("artifact_sha256")).lower(),
@@ -270,18 +292,53 @@ class SiteOutputCatalog:
                 self._media = dict(list(self._media.items())[-3000:])
         result: dict[str, Any] = {"run_id": run_id, "clips": rows}
         if loaded is not None:
+            revision = hashlib.sha256(loaded.raw or b"").hexdigest()
+            measured_revision = _text(metrics.get("ratings_revision"))
             result.update(
                 scope=self.scope,
                 rating_root=root_identity(self._root),
-                revision=hashlib.sha256(loaded.raw or b"").hexdigest(),
+                revision=revision,
                 built_at=_text(metrics.get("generated_at")),
-                report_stale=loaded.path.stat().st_mtime_ns
+                report_revision=measured_revision,
+                report_stale=measured_revision != revision
+                if _DIGEST.fullmatch(measured_revision)
+                else loaded.path.stat().st_mtime_ns
                 > self._report_paths(run_id)[1].stat().st_mtime_ns,
                 report_status=_text(assessment.get("readiness"))
                 if isinstance(assessment, dict)
                 else "",
+                pairs=self._verified_pairs(assessment, rows, media),
             )
         return result
+
+    @staticmethod
+    def _verified_pairs(
+        assessment: object, rows: list[dict[str, Any]], media: dict[str, _Asset]
+    ) -> list[dict[str, str]]:
+        if not isinstance(assessment, dict) or not isinstance(assessment.get("comparisons"), list):
+            return []
+        playable = {
+            (row["case"], row["arm_id"])
+            for row in rows
+            if row["clip"]
+            and row["source"]
+            and media[row["clip"]].mime in {"video/mp4", "video/webm"}
+        }
+        pairs = []
+        for item in assessment["comparisons"][:_MAX_CELLS]:
+            if not isinstance(item, dict) or item.get("comparability") != "verified":
+                continue
+            case_id, baseline, candidate = (
+                _text(item.get(key)) for key in ("case_id", "baseline_arm", "candidate_arm")
+            )
+            if (
+                baseline != candidate
+                and baseline == assessment.get("baseline_arm")
+                and (case_id, baseline) in playable
+                and (case_id, candidate) in playable
+            ):
+                pairs.append({"case": case_id, "baseline": baseline, "candidate": candidate})
+        return pairs
 
     def _ratings(self, run_id: str) -> LoadedRatings:
         try:
@@ -520,11 +577,12 @@ class SiteOutputCatalog:
                 if mime is None or not path.is_file():
                     continue
                 with open_scoped(self._root, path) as stream:
-                    raw = stream.read(_MAX_MEDIA + 1)
-                if len(raw) <= _MAX_MEDIA:
-                    results[secrets.token_hex(16)] = _Asset(
-                        path, hashlib.sha256(raw).hexdigest(), mime
-                    )
+                    limit = VIDEO_LIMIT if mime in ("video/mp4", "video/webm") else _MAX_MEDIA
+                    if not 0 < stream.seek(0, 2) <= limit:
+                        continue
+                    stream.seek(0)
+                    digest = checked_digest(stream, size_limit=limit)
+                results[secrets.token_hex(16)] = _Asset(path, digest, mime)
             except (OSError, SiteOutputError):
                 continue
         with self._lock:

@@ -93,7 +93,8 @@ def project_model_controls(
     presets = tuple((_preset_label(w, h), w, h) for w, h in geometry.allowed)
     blocking = ""
     required = policy.required_backend
-    if required and str(backend_id or "") != required:
+    # Only a WebUI-family identity is an operator setting; a model-routed backend (Diffusers) is stamped with the work.
+    if required in _BACKEND_LABELS and str(backend_id or "") != required:
         label = _BACKEND_LABELS.get(required, required)
         blocking = (
             f"{policy.display_name} runs only on the {label} backend, but the configured backend "

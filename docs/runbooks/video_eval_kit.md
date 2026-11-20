@@ -176,9 +176,10 @@ Active use or video playback in the Windows Site tab renews its pairing. The lib
 interruptions while that pairing is valid. After a StableNew restart or an expired pairing, choose
 **Reconnect StableNew** and approve the Windows link if prompted.
 
-For a phone, leave the connected Site tab open on Windows, and choose **Connect StableNew** on the phone while
-signed in to the same Site account. If the Site reports no active Windows relay, reconnect from the PC. A remote
-device can find an active relay and a Windows browser on the PC starts the desktop application.
+For a paired phone, use **Compare evaluation pairs** to review a case with synchronized A/B playback and reveal
+the workflows after saving both judgments. **Refresh report on Windows** uses the same builder described in
+section 3. See the [Operator Site guide](stablenew_operator_site.md) for phone enrollment, video Preview and
+queue receipts. When using **Connect via PC browser tab**, keep the connected Site tab open on Windows.
 
 Open **Video Review** on the Site. It selects the newest usable report and opens the first clip that still needs
 review. The run dropdown opens earlier reports. **Save & next** writes the judgment into the run’s existing

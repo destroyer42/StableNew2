@@ -9,19 +9,27 @@ Windows desktop, under a telemetry monitor that trips on the plan's own limits.
 The harness never starts, stops, adopts or restarts a runtime: a Forge endpoint is external (API only); managed Comfy is
 launched, owned and released by the production backend and its process manager.  An ambiguous or failed dispatch is
 reported and never retried.
+
+Owned worker tree and teardown (QUAL-927): the application runs inside this process, so every descendant of it was
+started by StableNew during the run.  The monitor samples that tree (working set, private commit and the PID set of each
+sample) beside the host figures, and after the journeys a bounded, observation-only wait verifies that every recorded
+process and every managed target's port is gone (``tools/qualification/owned_tree.py``).  An unverified teardown keeps
+the run from PASS; nothing is ever stopped by the harness.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from tools.operator_journey.evidence import FAIL, HOLD, NO_GO, PASS, JourneyEvidence
 from tools.operator_journey.golden.definitions import JourneyDef
@@ -29,12 +37,18 @@ from tools.operator_journey.golden.host import HostProbes
 from tools.operator_journey.golden.modes import PHYSICAL
 from tools.operator_journey.golden.offline import is_offline
 from tools.operator_journey.golden.plan import (
+    OPTIONAL_TEARDOWN_LIMIT,
     authorization_problems,
     environment_diffs,
     load_plan,
     shape_problems,
 )
 from tools.operator_journey.golden.readiness import ReadinessContext, evaluate_readiness
+from tools.qualification.owned_tree import (
+    DEFAULT_TEARDOWN_DEADLINE_SECONDS,
+    OwnedTreeSampler,
+    verify_teardown,
+)
 
 QUALITY_PENDING = "PENDING_OPERATOR_REVIEW"
 _FAILURE_CLASSES = (
@@ -133,7 +147,22 @@ class ResourceMonitor:
             clock,
         )
         self.tripped: str | None = None
-        self.peaks = {"vram_used_mib": 0.0, "commit_gb": 0.0, "min_available_ram_gb": float("inf")}
+        self.peaks = {
+            "vram_used_mib": 0.0,
+            "commit_gb": 0.0,
+            "min_available_ram_gb": float("inf"),
+            "tree_working_set_gib": 0.0,
+            "tree_private_gib": 0.0,
+            "max_owned_processes": 0,
+        }
+        # Every descendant of this process: the application runs here, so each one was started by StableNew.
+        self.tree = OwnedTreeSampler(
+            os.getpid,
+            include_root=False,
+            table=probes.process_table,
+            memory=probes.process_memory,
+            clock=clock,
+        )
         self.samples = 0
         self._t0 = clock()
         self._stop = threading.Event()
@@ -143,6 +172,13 @@ class ResourceMonitor:
         gpu, memory = self.probes.gpu(), self.probes.memory()
         elapsed = self._clock() - self._t0
         record: dict[str, Any] = {"t": round(elapsed, 2), "gpu": gpu, "memory": memory}
+        try:
+            record["owned_tree"] = self.tree.sample(host=memory)
+        except Exception as exc:  # noqa: BLE001 - a tree-telemetry gap is recorded evidence, not a crash of the monitor
+            record["owned_tree"] = {"error": f"{type(exc).__name__}: {exc}"}
+        self.peaks["tree_working_set_gib"] = self.tree.peaks["tree_working_set_gib"]
+        self.peaks["tree_private_gib"] = self.tree.peaks["tree_private_gib"]
+        self.peaks["max_owned_processes"] = self.tree.peaks["max_process_count"]
         reason = None
         if gpu is None:
             reason = "GPU telemetry became unavailable"
@@ -185,6 +221,51 @@ class ResourceMonitor:
         self._stop.set()
         self._thread.join(timeout=5)
         self.sample_once()
+
+
+def owned_ports(plan: dict[str, Any], journeys: Sequence[JourneyDef]) -> list[int]:
+    """The ports of the run's StableNew-managed targets; an external endpoint's port is never claimed."""
+
+    ports: set[int] = set()
+    for journey in journeys:
+        runtime = (plan["targets"].get(journey.key) or {}).get("runtime") or {}
+        if runtime.get("ownership") == "managed":
+            port = urlsplit(str(runtime.get("base_url") or "")).port
+            if port is not None:
+                ports.add(port)
+    return sorted(ports)
+
+
+def verify_owned_teardown(
+    plan: dict[str, Any],
+    journeys: Sequence[JourneyDef],
+    monitor: ResourceMonitor,
+    probes: HostProbes,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Bounded, observation-only teardown evidence for the run (QUAL-927). Never signals or stops anything.
+
+    ``verified`` is ``True`` when every recorded StableNew-started process and managed port was gone within the deadline,
+    ``False`` with the survivors named otherwise, and ``None`` only when nothing is owned: no target is managed and no
+    StableNew-started process was ever observed.
+    """
+
+    deadline = float(
+        plan["limits"].get(OPTIONAL_TEARDOWN_LIMIT) or DEFAULT_TEARDOWN_DEADLINE_SECONDS
+    )
+    ports = owned_ports(plan, journeys)
+    recorded = monitor.tree.recorded
+    if not recorded and not ports:
+        return {
+            "verified": None,
+            "outcome": "not_applicable",
+            "deadline_seconds": deadline,
+            "detail": "no target is StableNew-managed and no StableNew-started process was observed",
+        }
+    return verify_teardown(
+        recorded, ports, deadline_seconds=deadline, table=probes.process_table, sleep=sleep
+    ).as_dict()
 
 
 def default_confirm(prompt: str) -> str:
@@ -413,14 +494,14 @@ def run_physical(
     results: list[JourneyEvidence] = []
     run_executor = executor or real_executor
     outcome["physical_execution"] = "RAN"
+    early: tuple[str, str] | None = None
     with ResourceMonitor(plan["limits"], probes, run_dir / "resource_telemetry.jsonl") as monitor:
         for journey in journeys:
             if monitor.tripped:
                 break
             if environment_diffs(plan, probes):  # immediately before each journey
-                return finish(
-                    HOLD, "the environment changed during the run; stopped", plan, results
-                )
+                early = (HOLD, "the environment changed during the run; stopped")
+                break
             try:
                 ev = run_executor(journey, plan["targets"][journey.key], monitor, run_dir)
             except (
@@ -428,21 +509,33 @@ def run_physical(
             ) as exc:  # an executor crash is a NO-GO with evidence, never a lost run directory
                 outcome["functional"] = FAIL
                 outcome["safety"] = NO_GO
-                return finish(
+                early = (
                     NO_GO,
                     f"the executor raised during {journey.key}: {type(exc).__name__}: {exc} (never retried)",
-                    plan,
-                    results,
                 )
+                break
             results.append(ev)
             stop = next((c for c in (classify_job_failure(r) for r in _job_rows(ev)) if c), None)
             if stop:
                 monitor.tripped = monitor.tripped or f"stop condition: {stop} (never retried)"
     outcome["peaks"] = monitor.peaks
+    # Every path that ran anything records its teardown evidence (the application shut down at the end of each journey).
+    teardown = verify_owned_teardown(plan, journeys, monitor, probes)
+    outcome["teardown"] = teardown
+    if early is not None:
+        return finish(early[0], early[1], plan, results)
     outcome["functional"] = PASS if results and all(r.verdict == PASS for r in results) else FAIL
-    outcome["safety"] = NO_GO if monitor.tripped else PASS
+    teardown_ok = teardown.get("verified") is not False
+    outcome["safety"] = NO_GO if monitor.tripped else PASS if teardown_ok else HOLD
     if monitor.tripped:
         return finish(NO_GO, monitor.tripped, plan, results)
+    if not teardown_ok:
+        return finish(
+            FAIL if outcome["functional"] == FAIL else HOLD,
+            f"runtime teardown is not verified: {teardown.get('detail')} (observed only; the harness stopped nothing)",
+            plan,
+            results,
+        )
     verdict = PASS if outcome["functional"] == PASS else FAIL
     return finish(
         verdict,
@@ -463,7 +556,9 @@ def _job_rows(ev: JourneyEvidence) -> list[dict[str, Any]]:
 __all__ = [
     "classify_job_failure",
     "confirmation_phrase",
+    "owned_ports",
     "run_physical",
     "ResourceMonitor",
     "nullcontext",
+    "verify_owned_teardown",
 ]

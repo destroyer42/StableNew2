@@ -6,8 +6,10 @@ Pure logic over injected probes: no display, no model runtime, no GPU, no networ
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -58,6 +60,41 @@ GPU = {
 MEM = {"available_gb": 30.0, "total_gb": 64.0, "commit_used_gb": 20.0, "commit_limit_gb": 100.0}
 
 
+@dataclass(frozen=True)
+class Mem:
+    working_set_gb: float
+    private_usage_gb: float
+
+
+class FakeProcesses:
+    """A scripted process table for the owned worker tree (QUAL-927): the harness process is the root."""
+
+    def __init__(self, children=(), listeners=None, memory=None) -> None:
+        self.root = os.getpid()
+        self.alive = {int(pid): float(pid) for pid in children}
+        self.listeners = {int(k): list(v) for k, v in (listeners or {}).items()}
+        self.mem = dict(memory or {})
+
+    def exists(self, pid: int) -> bool:
+        return pid == self.root or pid in self.alive
+
+    def create_time(self, pid: int) -> float | None:
+        return self.alive.get(pid)
+
+    def children(self, pid: int) -> list[int]:
+        return sorted(self.alive) if pid == self.root else []
+
+    def listening_pids(self, port: int) -> list[int]:
+        return list(self.listeners.get(port, ()))
+
+    def memory(self, pid: int) -> Mem | None:
+        return self.mem.get(pid) if pid in self.alive else None
+
+    def stop_everything(self) -> None:  # what the application's own shutdown does in these fakes
+        self.alive.clear()
+        self.listeners.clear()
+
+
 def make_probes(tmp_path: Path, **over: Any) -> HostProbes:
     values: dict[str, Any] = {
         "repo_sha": lambda: "a" * 40,
@@ -70,6 +107,8 @@ def make_probes(tmp_path: Path, **over: Any) -> HostProbes:
         "python": lambda: "3.14.2",
         "hostname": lambda: "testhost",
         "os_name": lambda: "TestOS 1",
+        "process_table": FakeProcesses(),
+        "process_memory": lambda _pid: None,
     }
     values.update(over)
     return HostProbes(**values)
@@ -766,6 +805,134 @@ def test_monitor_trips_on_vram_ram_commit_timeout_and_blind_telemetry(tmp_path) 
     assert "timeout" in ok.tripped
     lines = (tmp_path / "ok.jsonl").read_text().splitlines()
     assert json.loads(lines[-1])["tripped"].startswith("execution exceeded")
+
+
+# --- QUAL-927: owned worker-tree memory and bounded teardown in the physical lane ---------------------------------------
+
+
+def test_monitor_samples_every_process_the_application_started_with_tree_peaks(tmp_path) -> None:
+    table = FakeProcesses(
+        children=(501, 502), memory={501: Mem(0.0044, 0.0009), 502: Mem(9.0, 11.0)}
+    )
+    probes = make_probes(tmp_path, process_table=table, process_memory=table.memory)
+    monitor = ResourceMonitor(LIMITS, probes, tmp_path / "tree.jsonl", clock=lambda: 0.0)
+    monitor.sample_once()
+    table.mem[502] = Mem(10.0, 12.5)
+    monitor.sample_once()
+
+    record = json.loads((tmp_path / "tree.jsonl").read_text().splitlines()[0])["owned_tree"]
+    assert (
+        record["pids"] == [501, 502] and os.getpid() not in record["pids"]
+    )  # the harness is not a worker
+    assert record["tree_private_gib"] == pytest.approx(11.0009)
+    assert record["host"] == MEM  # host available RAM and commit, from the same instant
+    assert monitor.peaks["tree_private_gib"] == pytest.approx(12.5009)
+    assert monitor.peaks["tree_working_set_gib"] == pytest.approx(10.0044)
+    assert monitor.peaks["max_owned_processes"] == 2
+    assert monitor.tripped is None  # no process-memory limit is invented
+
+
+def run_managed_video(
+    tmp_path, model_file, source_file, monkeypatch, table, *, limits=None, shutdown=True
+):
+    probes = make_probes(tmp_path, process_table=table, process_memory=table.memory)
+    all_targets = targets(model_file, source_file)
+    plan = build_plan(
+        targets={"video": all_targets["video"]},
+        limits={**LIMITS, **(limits or {})},
+        evidence_dir=str(tmp_path),
+        probes=probes,
+    )
+    approved = authorize(plan, journeys=("video",))
+    monkeypatch.setattr(physical, "evaluate_readiness", lambda *_: {"verdict": PASS})
+
+    def executor(journey, target, monitor, run_dir):
+        monitor.sample_once()  # the managed Comfy worker is running under the application
+        if shutdown:
+            table.stop_everything()  # the application's shutdown released it
+        return JourneyEvidence(journey_id=journey.id, backend_mode="physical")
+
+    verdict, run_dir = run_gate(
+        tmp_path,
+        approved,
+        probes,
+        ctx_for(probes),
+        executor=executor,
+        confirm=lambda _p: confirmation_phrase(plan),
+        journeys=("video",),
+    )
+    return verdict, json.loads((run_dir / "evidence.json").read_text())["outcomes"], run_dir
+
+
+def test_a_managed_runtime_gone_after_the_run_has_verified_teardown(
+    tmp_path, model_file, source_file, monkeypatch
+) -> None:
+    table = FakeProcesses(
+        children=(601, 602), listeners={8188: [602]}, memory={602: Mem(8.0, 12.0)}
+    )
+    verdict, outcomes, _ = run_managed_video(tmp_path, model_file, source_file, monkeypatch, table)
+
+    assert verdict == PASS and outcomes["safety"] == PASS
+    teardown = outcomes["teardown"]
+    assert teardown["verified"] is True and teardown["ports"] == [8188]
+    assert {item["pid"] for item in teardown["owned"]} == {601, 602}
+    assert teardown["deadline_seconds"] == 60.0  # the default, recorded because the plan sets none
+    assert outcomes["peaks"]["tree_private_gib"] == pytest.approx(12.0)
+
+
+def test_a_process_that_outlives_the_teardown_deadline_holds_the_run_and_is_named(
+    tmp_path, model_file, source_file, monkeypatch
+) -> None:
+    table = FakeProcesses(children=(601,), listeners={8188: [601]}, memory={601: Mem(8.0, 12.0)})
+    verdict, outcomes, run_dir = run_managed_video(
+        tmp_path,
+        model_file,
+        source_file,
+        monkeypatch,
+        table,
+        limits={"teardown_deadline_seconds": 0.05},
+        shutdown=False,
+    )
+
+    assert verdict == HOLD and outcomes["safety"] == HOLD and outcomes["functional"] == PASS
+    teardown = outcomes["teardown"]
+    assert teardown["verified"] is False and teardown["survivors"] == [601]
+    assert teardown["held_ports"] == {"8188": [601]} and teardown["deadline_seconds"] == 0.05
+    assert len(teardown["observations"]) >= 2  # it waited, bounded by the plan's deadline
+    assert "601" in outcomes["reason"] and "stopped nothing" in outcomes["reason"]
+    assert 601 in table.alive  # observed only: the survivor was left alone
+    assert "teardown is not verified" in (run_dir / "summary.md").read_text()
+
+
+def test_an_external_runtime_with_nothing_started_records_teardown_as_not_applicable(
+    tmp_path, model_file, source_file
+) -> None:
+    plan, probes = frozen(tmp_path, model_file, source_file)
+    verdict, run_dir = run_gate(
+        tmp_path,
+        authorize(plan),
+        probes,
+        ctx_for(probes),
+        executor=ok_executor,
+        confirm=lambda _p: confirmation_phrase(plan),
+    )
+    teardown = json.loads((run_dir / "evidence.json").read_text())["outcomes"]["teardown"]
+    assert (
+        verdict == PASS and teardown["verified"] is None and teardown["outcome"] == "not_applicable"
+    )
+
+
+@pytest.mark.parametrize("bad", [0, -1, "30", True, float("inf")])
+def test_a_teardown_deadline_in_the_plan_must_be_a_positive_number(
+    tmp_path, model_file, source_file, bad
+) -> None:
+    plan, _ = frozen(tmp_path, model_file, source_file)
+    plan["limits"]["teardown_deadline_seconds"] = bad
+    plan["digest"] = plan_digest(plan)
+    assert any("teardown_deadline_seconds" in p for p in shape_problems(plan))
+    plan["limits"]["teardown_deadline_seconds"] = 30
+    plan["digest"] = plan_digest(plan)
+    assert not any("teardown_deadline_seconds" in p for p in shape_problems(plan))
 
 
 # --- 25 reports --------------------------------------------------------------------------------------------------

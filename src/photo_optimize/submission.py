@@ -52,6 +52,45 @@ def pipeline_defaults(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _raw_baseline(asset: dict[str, Any]) -> dict[str, Any]:
+    raw = asset.get("baseline") or {}
+    return raw.to_dict() if hasattr(raw, "to_dict") else raw
+
+
+def _requested_stages(asset: dict[str, Any], stages: list[str]) -> list[str]:
+    """An explicit per-photo list wins, then the photo's saved stage choices, then the run's stages."""
+
+    requested = asset.get("stages")
+    if requested is not None:
+        return list(requested)
+    raw = _raw_baseline(asset)
+    if "stage_defaults" not in raw:
+        return list(stages)
+    saved = PhotoOptimizeBaseline.from_dict(raw).stage_defaults
+    return [stage for stage in STAGES if saved.get(stage, False)]
+
+
+def _refuse_photos_without_a_stage(assets: list[dict[str, Any]], stages: list[str]) -> None:
+    """Name every photo that cannot run, and how to fix it, before any of them is compiled."""
+
+    stageless: list[str] = []
+    for asset in assets:
+        requested = _requested_stages(asset, stages)
+        unknown = sorted(set(requested) - set(STAGES))
+        name = str(asset.get("source_filename") or asset.get("asset_id") or "photo")
+        if unknown:
+            raise ValueError(f"Photo {name} requests an unsupported stage: {', '.join(unknown)}")
+        if not requested:
+            stageless.append(name)
+    if stageless:
+        raise ValueError(
+            f"{len(stageless)} photo(s) have no stage turned on, so there is nothing to run:\n"
+            + "\n".join(f"  {name}" for name in stageless)
+            + "\n\nTurn on img2img, ADetailer or Upscale for them: in Single Photo for the active photo, "
+            "or in Batch Edit check stage.img2img, choose True and review the selection again."
+        )
+
+
 def prepare_photo_plan(
     *,
     assets: list[dict[str, Any]],
@@ -74,6 +113,7 @@ def prepare_photo_plan(
         raise ValueError("Prompt modes must be append, replace, or modify")
     if isinstance(batch_size, bool) or not 1 <= batch_size <= 64:
         raise ValueError("Batch size must be between 1 and 64")
+    _refuse_photos_without_a_stage(assets, stages)
     builder = ReprocessJobBuilder()
     partitions: dict[tuple[str, ...], list[ReprocessSourceItem]] = {}
     seen = set()
@@ -84,20 +124,9 @@ def prepare_photo_plan(
         seen.add(asset_id)
         if asset.get("archived"):
             raise ValueError(f"Restore archived photo {asset_id} before optimizing")
-        raw = asset.get("baseline") or {}
-        if hasattr(raw, "to_dict"):
-            raw = raw.to_dict()
+        raw = _raw_baseline(asset)
         baseline = PhotoOptimizeBaseline.from_dict(raw)
-        requested = asset.get("stages")
-        if requested is None:
-            requested = (
-                [stage for stage in STAGES if baseline.stage_defaults.get(stage, False)]
-                if "stage_defaults" in raw
-                else stages
-            )
-        if not requested or set(requested) - set(STAGES):
-            raise ValueError(f"Photo {asset_id} requires at least one valid stage")
-        stage_plan = tuple(stage for stage in STAGES if stage in requested)
+        stage_plan = tuple(stage for stage in STAGES if stage in _requested_stages(asset, stages))
         path = str(
             asset.get("input_image_path")
             or baseline.working_image_path

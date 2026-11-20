@@ -107,6 +107,21 @@ def test_new_video_candidates_carry_the_pinned_workflow_files(
     assert entry.dimension("integration") == Status.NOT_TESTED
 
 
+def test_ideogram4_records_the_merged_slice_without_raising_anything(ledger: Ledger) -> None:
+    # PR-IMG-120 (PR #360) built the production slice with deterministic tests only; the owner-accepted ledger edit
+    # records that without a physical run, so the standalone 110R evidence stays the only physical evidence.
+    entry = ledger.get("IMG-Q4.ideogram4-diffusers")
+    assert entry is not None
+    assert entry.data["reachability"]["implemented"] is True
+    for module in entry.data["reachability"]["modules"]:
+        assert Path(REPO_ROOT, module).exists(), module
+    assert entry.status == Status.FEASIBLE
+    assert entry.dimension("quality") == Status.NOT_TESTED
+    assert entry.dimension("integration") == Status.NOT_TESTED
+    assert [e["id"] for e in entry.evidence if e["kind"] == "standalone_feasibility"] == ["e1"]
+    assert entry.data["next_test"]["admissible"] is False
+
+
 def test_the_two_dropped_qwen_candidates_are_kept_and_recorded_not_pursued(ledger: Ledger) -> None:
     registry = {m["model_id"] for m in _json("config/ai_model_registry.json")["models"]}
     for model_id in ("qwen3.5-9b-q5_k_m-unsloth", "qwen3.5-4b-q8_0-unsloth"):

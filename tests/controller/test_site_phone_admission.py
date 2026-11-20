@@ -7,13 +7,16 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from PIL import Image
 
 from src.app.site_output_catalog import SiteOutputCatalog
 from src.app.site_phone_admission import PhoneQueueAdmission
 from src.app.site_phone_connector import _desktop_call
 from src.app.site_phone_credentials import PhoneFolder, PhoneGrant
+from src.app.site_phone_eval import PhoneEvalReports
 from src.app.site_phone_preview_host import PhonePreviewHost
 from src.app.site_phone_queue import PHONE_QUEUE_PATH, PhoneQueueView
+from src.app.site_phone_video import PhoneVideo
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
@@ -28,8 +31,11 @@ from src.review.review_evidence import save_disposition
 from src.review.review_lineage import verified_review_outputs
 from src.utils.config import ConfigManager
 from src.utils.prompt_packs import PromptPackInfo
+from src.video.video_eval_metrics import ClipMeasurement
+from src.video.video_eval_report import build_eval_report
 from tests.controller.test_site_output_library import _library, _search
 from tests.gui_v2.test_review_batch_200 import images
+from tests.video.test_pr_vid_eval_320_report import _metrics
 
 
 @pytest.fixture
@@ -76,16 +82,19 @@ def native(tmp_path):
         packs=host.packs,
         compile_pack=host.compile_pack,
         compile_rework=host.compile_rework,
+        video=PhoneVideo(jobs),
     )
+    reports = PhoneEvalReports(repository)
 
-    def call(route, body=None, *, device=grant, source=catalog):
+    def call(route, body=None, *, device=grant, source=catalog, prefix=PHONE_QUEUE_PATH):
         reply = _desktop_call(
             source,
             "GET" if body is None else "POST",
-            PHONE_QUEUE_PATH + "/" + route,
+            prefix + "/" + route,
             body,
             device.rating,
             phone_queue=admission,
+            phone_eval=reports,
             grant=device,
         )
         return reply.status, json.loads(reply.data)
@@ -239,3 +248,189 @@ def test_phone_rework_rechecks_mark_and_bytes_and_returns_native_lineage(native)
     )
     returned = _library(native.catalog, "review_results", id=target, digest=digest)["results"]
     assert [result["item"]["id"] for result in returned] == [ids[child.name]]
+
+
+def _arm(workflow, version, opt_in=False):
+    return {
+        "workflow_id": workflow,
+        "workflow_version": version,
+        "experimental_opt_in": opt_in,
+    }
+
+
+BASE = _arm("wan22_ti2v_5b_i2v_v1", "1.3.0")
+ALTERNATE = _arm("wan22_ti2v_5b_i2v_720p_v1", "1.0.0")
+CANDIDATE = _arm("wan22_i2v_a14b_4step_v1", "1.0.0")
+
+
+def _video_request(native, arms, *, kind="video_eval"):
+    Image.new("RGB", (96, 64), "red").save(native.root / "landscape.png")
+    Image.new("RGB", (64, 96), "blue").save(native.root / "portrait.png")
+    sources = [
+        {"id": item["id"], "digest": _library(native.catalog, "inspect", id=item["id"])["digest"]}
+        for item in _search(native.catalog)["items"]
+    ]
+    assert len(sources) == 2
+    return {
+        "kind": kind,
+        "scope": native.catalog.scope,
+        "sources": sources,
+        "arms": arms,
+        "prompt": "Pan slowly as the subject turns.",
+        "negative_prompt": "flicker",
+        "seed": 1234,
+        "frames": 81,
+    }
+
+
+def test_phone_video_workflow_catalog_and_frozen_admission(native):
+    not_allowed = replace(native.grant, queue_submit=False)
+    assert native.call("video-options", device=not_allowed)[0] == 403
+    status, options = native.call("video-options")
+    assert status == 200 and options["default"] == [CANDIDATE["workflow_id"], "1.0.0"]
+    assert all("drive_i2v" not in item["workflow_id"] for item in options["workflows"])
+    command = _video_request(native, [BASE], kind="video")
+    command["sources"] = command["sources"][:1]
+    status, preview = native.call("preview", command)
+    assert status == 200, preview
+    assert len(preview["jobs"]) == 1 and not native.repository.list_jobs()
+    assert sorted((preview["jobs"][0]["width"], preview["jobs"][0]["height"])) == [480, 832]
+    assert str(native.root) not in json.dumps(preview)
+    (native.root / preview["jobs"][0]["source"]).write_bytes(b"changed")
+    request = {"preview_id": preview["preview_id"], "confirmed": True}
+    assert native.call("submit", request)[1]["state"] == "refused"
+    assert not native.repository.list_jobs()
+
+
+def test_phone_eval_opt_in_is_per_arm_and_invalid_matrix_is_not_admitted(native, monkeypatch):
+    experimental = _arm(BASE["workflow_id"], "1.4.0")
+    command = _video_request(native, [BASE, experimental, CANDIDATE])
+    assert native.call("preview", command)[1]["error"] == "experimental_opt_in_required"
+    command["arms"][1] = {**experimental, "experimental_opt_in": True}
+    assert (
+        native.call("preview", {**command, "frames": 82})[1]["error"] == "invalid_video_frame_count"
+    )
+    status, preview = native.call("preview", command)
+    assert status == 200, preview
+    assert {row["arm"] for row in preview["jobs"] if row["experimental"]} == {"arm-2"}
+    assert not native.repository.list_jobs()
+
+    from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
+
+    build = VideoWorkflowNjrBuilder.build_job
+
+    def fail_one_case(builder, form, frozen, **kwargs):
+        if form["workflow_version"] == "1.4.0" and frozen.source_image_path.endswith(
+            "portrait.png"
+        ):
+            raise ValueError("The experimental arm cannot use this synthetic case")
+        return build(builder, form, frozen, **kwargs)
+
+    monkeypatch.setattr(VideoWorkflowNjrBuilder, "build_job", fail_one_case)
+    assert native.call("preview", command)[1]["error"] == "video_preview_failed"
+    submit = {"preview_id": preview["preview_id"], "confirmed": True}
+    assert native.call("submit", submit)[1]["state"] == "unconfirmed"
+    assert not native.repository.list_jobs()
+
+
+def test_phone_eval_480p_720p_alternate_receipt_and_report_refresh(native, monkeypatch):
+    command = _video_request(native, [BASE, ALTERNATE, CANDIDATE])
+    status, preview = native.call("preview", command)
+    assert status == 200, preview
+    assert len(preview["jobs"]) == 6 and not native.repository.list_jobs()
+    assert {row["frames"] for row in preview["jobs"]} == {81}
+    assert {row["seed"] for row in preview["jobs"]} == {1234}
+    assert {(row["width"], row["height"], row["fps"]) for row in preview["jobs"]} == {
+        (832, 480, 24),
+        (480, 832, 24),
+        (1280, 704, 24),
+        (704, 1280, 24),
+        (832, 480, 16),
+        (480, 832, 16),
+    }
+    assert all(row["models"] and row["graph_revision"] for row in preview["jobs"])
+    caller = {"preview_id": preview["preview_id"], "confirmed": True}
+
+    def notify_failed():
+        raise RuntimeError("Synthetic notification interruption after native commit")
+
+    monkeypatch.setattr(native.jobs, "_on_queue_activity", notify_failed, raising=False)
+    _, receipt = native.call("submit", caller)
+    assert receipt["state"] == "admitted"
+    assert native.call("submit", caller)[1] == receipt
+    run_id = receipt["eval_run"]
+    directory = native.root / "video_eval" / run_id
+    manifest = json.loads((directory / "run.json").read_bytes())
+    assert [job["job_id"] for job in manifest["jobs"]] == receipt["job_ids"]
+    assert len(native.repository.list_jobs()) == 6
+    assert native.call("runs", prefix="/v1/phone-eval")[1]["runs"] == [
+        {"id": run_id, "built": False, "refresh": None}
+    ]
+    for job_id in receipt["job_ids"]:
+        job = native.repository.get_job_model(job_id)
+        clip = native.root / (job_id + ".mp4")
+        clip.write_bytes(b"\x00\x00\x00\x16ftypmp42" + job_id.encode())
+        running = native.repository.transition_job(job, JobStatus.RUNNING)
+        native.repository.transition_job(
+            running, JobStatus.COMPLETED, result={"video_bundle": {"primary_path": str(clip)}}
+        )
+    job_id = receipt["job_ids"][0]
+    assert native.call("result/" + job_id)[1]["media"][0]["type"] == "video/mp4"
+    monkeypatch.setattr(
+        "src.app.site_phone_eval.build_eval_report",
+        lambda *args, **kwargs: build_eval_report(
+            *args,
+            measure=lambda path, **_kwargs: ClipMeasurement(str(path), True, _metrics(3.0)),
+            **kwargs,
+        ),
+    )
+    monkeypatch.setattr(
+        "src.app.site_phone_eval.get_thread_registry",
+        lambda: SimpleNamespace(spawn=lambda *, target, **_kwargs: target()),
+    )
+    refresh = "refresh/" + run_id
+    body = {"scope": native.catalog.scope}
+    assert native.call(refresh, body, prefix="/v1/phone-eval")[0] == 403
+    rater = replace(native.grant, rating=True, queue_submit=False)
+    assert native.call(refresh, body, prefix="/v1/phone-eval", device=rater)[0] == 200
+    result = native.catalog.get_run(run_id, review=True)
+    assert result["report_revision"] == result["revision"] and not result["report_stale"]
+    assert len(result["pairs"]) == 4
+    clip = result["clips"][0]
+    native.catalog.save_rating(
+        run_id,
+        {
+            **body,
+            "revision": result["revision"],
+            "case_id": clip["case"],
+            "arm_id": clip["arm_id"],
+            "job_id": clip["job_id"],
+            "artifact_sha256": clip["artifact_sha256"],
+            "source_sha256": clip["source_sha256"],
+            "rebind": False,
+            "judgments": {"notes": "Synthetic review"},
+        },
+    )
+    stale = native.catalog.get_run(run_id, review=True)
+    assert stale["report_stale"] and stale["report_revision"] != stale["revision"]
+    assert native.call(refresh, body, prefix="/v1/phone-eval", device=rater)[0] == 200
+    refreshed = native.catalog.get_run(run_id, review=True)
+    assert refreshed["report_revision"] == refreshed["revision"] and not refreshed["report_stale"]
+    assert refreshed["clips"][0]["rating"]["notes"] == "Synthetic review"
+
+
+def test_phone_report_refresh_refuses_source_outside_share(native, tmp_path):
+    request = _video_request(native, [BASE, ALTERNATE])
+    _, preview = native.call("preview", request)
+    _, receipt = native.call("submit", {"preview_id": preview["preview_id"], "confirmed": True})
+    run_id = receipt["eval_run"]
+    manifest_path = native.root / "video_eval" / run_id / "run.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    private = tmp_path / "private.png"
+    Image.new("RGB", (20, 12), "green").save(private)
+    manifest["cases"][0]["image"] = str(private)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="outside shared Output"):
+        PhoneEvalReports(native.repository)._build(native.catalog, run_id)
+    assert not (manifest_path.parent / "ratings.csv").exists()
+    assert not (manifest_path.parent / "metrics.json").exists()

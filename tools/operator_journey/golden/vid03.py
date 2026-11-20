@@ -111,7 +111,9 @@ def _open_workflow_tab(run: GoldenRun, source_image: Path, form_prompt: str = ""
         d.invoke(tab.suggested_line.change_button, label="Settings: Change")
         d.pump(0.5)
     labels = [str(v) for v in tab.workflow_combo.cget("values")]
-    wanted = next((v for v in labels if "TI2V-5B" in v), None)
+    # Choose the visible label the tab maps to the expected workflow id: several engines share "TI2V-5B" in
+    # their label (480p and the separate 720p id), so a name match alone can pick the wrong one.
+    wanted = next((v for v in labels if tab._workflow_label_to_id.get(v) == WORKFLOW_ID), None)
     if wanted is None:
         raise JourneyHold(f"the picker does not offer {WORKFLOW_ID} {WORKFLOW_VERSION}: {labels}")
     d.select_combobox(tab.workflow_combo, wanted, label="Engine")

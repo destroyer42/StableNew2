@@ -16,7 +16,8 @@ readiness for the requested target, this service reports ``ACTION_REQUIRED`` wit
 guidance and takes no OS action; it does not wait for the external process to disappear.
 
 Target runtime identities are StableNew execution runtimes, never model names:
-``RUNTIME_A1111_WEBUI``, ``RUNTIME_FORGE_WEBUI``, ``RUNTIME_COMFY``, ``RUNTIME_SVD_NATIVE``.
+``RUNTIME_A1111_WEBUI``, ``RUNTIME_FORGE_WEBUI``, ``RUNTIME_COMFY``, ``RUNTIME_SVD_NATIVE``,
+``RUNTIME_DIFFUSERS``.
 
 A1111 and Forge are two identities occupying ONE WebUI-family runtime slot (one configured endpoint,
 one ``WebUIProcessManager``); there is no second managed owner. The manager declares which identity
@@ -32,7 +33,11 @@ a1111_webui   owned Forge (if the slot holds one), owned Comfy, SVD cache
 forge_webui   owned A1111 (if the slot holds one), owned Comfy, SVD cache
 comfy         whichever owned WebUI-family runtime, SVD cache
 svd_native    whichever owned WebUI-family runtime, owned Comfy
+diffusers     whichever owned WebUI-family runtime, owned Comfy, SVD cache
 ============  ==========================================================
+
+``diffusers`` (PR-IMG-120) is a contained child that one image job's backend launches and that exits with that job, so
+no target ever needs to release it: when any other target is prepared, no Diffusers child exists.
 
 External runtimes are immutable: a target external runtime is simply used; a *conflicting* external
 runtime (including an external Forge/A1111 occupying the slot of the other identity, or an
@@ -68,10 +73,11 @@ RUNTIME_A1111_WEBUI = "a1111_webui"
 RUNTIME_FORGE_WEBUI = "forge_webui"
 RUNTIME_COMFY = "comfy"
 RUNTIME_SVD_NATIVE = "svd_native"
+RUNTIME_DIFFUSERS = "diffusers"
 _SVD_CACHE_RUNTIME = "svd_native_cache"
 
 KNOWN_TRANSITION_TARGETS = frozenset(
-    {RUNTIME_A1111_WEBUI, RUNTIME_FORGE_WEBUI, RUNTIME_COMFY, RUNTIME_SVD_NATIVE}
+    {RUNTIME_A1111_WEBUI, RUNTIME_FORGE_WEBUI, RUNTIME_COMFY, RUNTIME_SVD_NATIVE, RUNTIME_DIFFUSERS}
 )
 
 # The WebUI-family slot is shared by these two identities (one managed owner, one endpoint).
@@ -83,13 +89,14 @@ _OTHER_WEBUI_IDENTITY = {
 
 # target -> managed process runtimes it must release before dispatch (SVD cache release is
 # separate: every non-SVD target also clears it, see prepare_for).  For the WebUI-family targets the
-# listed WebUI id is the *other* identity in the shared slot; for comfy/svd_native the A1111 entry
-# stands for whichever WebUI-family runtime StableNew owns.
+# listed WebUI id is the *other* identity in the shared slot; for comfy/svd_native/diffusers the A1111
+# entry stands for whichever WebUI-family runtime StableNew owns.
 _CONFLICTING_MANAGED_RUNTIMES: dict[str, tuple[str, ...]] = {
     RUNTIME_A1111_WEBUI: (RUNTIME_COMFY, RUNTIME_FORGE_WEBUI),
     RUNTIME_FORGE_WEBUI: (RUNTIME_COMFY, RUNTIME_A1111_WEBUI),
     RUNTIME_COMFY: (RUNTIME_A1111_WEBUI,),
     RUNTIME_SVD_NATIVE: (RUNTIME_A1111_WEBUI, RUNTIME_COMFY),
+    RUNTIME_DIFFUSERS: (RUNTIME_A1111_WEBUI, RUNTIME_COMFY),
 }
 
 
@@ -506,6 +513,7 @@ __all__ = [
     "KNOWN_TRANSITION_TARGETS",
     "RUNTIME_A1111_WEBUI",
     "RUNTIME_COMFY",
+    "RUNTIME_DIFFUSERS",
     "RUNTIME_FORGE_WEBUI",
     "RUNTIME_SVD_NATIVE",
     "RuntimeOwnershipState",

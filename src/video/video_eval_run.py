@@ -135,7 +135,12 @@ class VideoEvalRunService:
         return EvalRunPlan(run_id=run_id, suite=suite, jobs=tuple(jobs), errors=tuple(errors))
 
     def admit(
-        self, plan: EvalRunPlan, job_service: Any, *, output_root: str | Path
+        self,
+        plan: EvalRunPlan,
+        job_service: Any,
+        *,
+        output_root: str | Path,
+        require_active: Callable[[], None] | None = None,
     ) -> EvalAdmission:
         """Re-verify the source images, write the run manifest, then submit every job once."""
 
@@ -163,16 +168,26 @@ class VideoEvalRunService:
         manifest_path = run_dir / RUN_MANIFEST_NAME
         # The manifest is written first so an admitted run can always be reported; it is removed
         # again if admission fails before any job exists.
+        if require_active is not None:
+            require_active()
         atomic_write_json(manifest_path, build_run_manifest(plan), indent=2, sort_keys=True)
         expected = [job.job_id for job in plan.jobs]
         try:
+            if require_active is not None:
+                require_active()
             submitted = [
                 str(job_id)
                 for job_id in (submit([job.njr for job in plan.jobs], SubmissionPolicy()) or [])
             ]
         except Exception as exc:
-            manifest_path.unlink(missing_ok=True)
-            raise EvalRunRefused(f"Queue admission failed; nothing was queued: {exc}") from exc
+            # Native admission is atomic. A notification can still fail after the commit.
+            # Keep the manifest whenever the repository confirms admission or is unavailable.
+            lookup = getattr(getattr(job_service, "history_store", None), "get_job_entries", None)
+            admitted = lookup(expected) if callable(lookup) else {}
+            if not admitted:
+                manifest_path.unlink(missing_ok=True)
+                raise EvalRunRefused(f"Queue admission failed; nothing was queued: {exc}") from exc
+            submitted = [job_id for job_id in expected if job_id in admitted]
         if submitted != expected:
             raise EvalRunRefused(
                 f"Admission returned {len(submitted)} job id(s) for {len(expected)} eval jobs; "
@@ -194,7 +209,7 @@ def build_run_manifest(plan: EvalRunPlan) -> dict[str, Any]:
         "created_at": datetime.now(UTC).isoformat(),
         "suite": {
             "suite_id": suite.suite_id,
-            "path": str(suite.path),
+            "path": str(suite.path) if suite.path is not None else None,
             "sha256": suite.sha256,
             "description": suite.description,
             "seed": suite.seed,

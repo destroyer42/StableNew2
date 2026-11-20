@@ -468,6 +468,24 @@ class ReviewTabFrame(ttk.Frame):
             "Learning: record the highlighted images as evidence candidates (nothing is queued). Photo Optimize: "
             "offer them to the Managed Photo Set (nothing is copied until you confirm there).",
         )
+        # Inpaint / outpaint the image shown without first marking it for Re-work (the Re-work region keeps its own
+        # buttons for the one marked image).
+        self.edit_image_button = ttk.Menubutton(preview_actions, text="Edit image...")
+        self.edit_image_menu = tk.Menu(self.edit_image_button, tearoff=False)
+        self.edit_image_menu.add_command(
+            label="Inpaint (Edit Mask)...", command=lambda: self._open_mask_editor(shown=True)
+        )
+        self.edit_image_menu.add_command(
+            label="Outpaint (Extend Canvas)...",
+            command=lambda: self._open_outpaint_editor(shown=True),
+        )
+        self.edit_image_button.configure(menu=self.edit_image_menu)
+        preview_actions.add(self.edit_image_button)
+        attach_tooltip(
+            self.edit_image_button,
+            "Inpaint part of the image shown (paint a mask) or extend its canvas (outpaint). Each opens an editor "
+            "with its own frozen preview; nothing is queued until you add the prepared job there.",
+        )
 
         self._build_decision_bar(right, row=1)
 
@@ -2212,11 +2230,11 @@ class ReviewTabFrame(ttk.Frame):
             inspection_saved=self._inspection_saved,
         )
 
-    def _open_mask_editor(self) -> None:
+    def _open_mask_editor(self, *, shown: bool = False) -> None:
         from src.controller.masked_edit_service import history_lineage_for
         from src.gui.mask_editor_dialog import MaskEditorDialog
 
-        path = self._single_tool_path("Edit Mask")
+        path = self._shown_tool_path("Edit Mask") if shown else self._single_tool_path("Edit Mask")
         if path is None:
             return
         if self.app_controller is None:
@@ -2257,11 +2275,15 @@ class ReviewTabFrame(ttk.Frame):
             draft_current=lambda: self._single_target_path() == path,
         )
 
-    def _open_outpaint_editor(self) -> None:
+    def _open_outpaint_editor(self, *, shown: bool = False) -> None:
         from src.controller.masked_edit_service import history_lineage_for
         from src.gui.outpaint_dialog import OutpaintDialog
 
-        path = self._single_tool_path("Extend Canvas")
+        path = (
+            self._shown_tool_path("Extend Canvas")
+            if shown
+            else self._single_tool_path("Extend Canvas")
+        )
         if path is None:
             return
         if self.app_controller is None:
@@ -2804,6 +2826,20 @@ class ReviewTabFrame(ttk.Frame):
     def _single_target_path(self) -> Path | None:
         target = self._session.single_target(self._current_key())
         return target.path if target is not None else None
+
+    def _shown_tool_path(self, title: str) -> Path | None:
+        """The image shown in Review, for the always-visible Edit image menu, or ``None`` after saying why not."""
+
+        item = self._session.item(self._current_key())
+        if item is None:
+            messagebox.showwarning(title, "Select an image first.", parent=self)
+            return None
+        if item.path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            messagebox.showwarning(
+                title, "Select exactly one PNG, JPEG or WebP still image.", parent=self
+            )
+            return None
+        return item.path
 
     def _single_tool_path(self, title: str) -> Path | None:
         """The one image a single-image tool edits, or ``None`` after saying why not."""

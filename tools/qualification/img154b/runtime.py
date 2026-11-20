@@ -8,6 +8,9 @@
 * The lifecycle authority is ``WebUIProcessManager`` through PR-IMG-115's ``OwnedForge``. This module adds NO process control:
   no signal, no kill, no taskkill and no PID acted upon outside the manager. A stop that cannot be completed by the manager
   is reported, with operator instructions, and the automation ends.
+* After the manager's stop returns, the owned tree recorded before the stop and the qualification port are verified gone
+  by a bounded, observation-only poll (QUAL-927, ``tools/qualification/owned_tree.py``); case 2's one immediate check
+  reported 20 survivors that a later observation found gone.
 """
 
 from __future__ import annotations
@@ -31,6 +34,12 @@ from tools.qualification.img154.manifest import (
     QualificationManifest,
     build_manifest,
     verify_served_files,
+)
+from tools.qualification.owned_tree import (
+    DEFAULT_TEARDOWN_DEADLINE_SECONDS,
+    DEFAULT_TEARDOWN_POLL_SECONDS,
+    OwnedProcess,
+    verify_teardown,
 )
 
 CONFIG_VERSION_UID = (
@@ -785,6 +794,8 @@ class ShutdownResult:
     verified: bool
     survivors: tuple[int, ...] = ()
     detail: str = ""
+    #: The bounded teardown verification record (deadline, every timestamped observation, survivors), when one ran.
+    teardown: Mapping[str, Any] | None = None
 
     @property
     def outcome(self) -> str:
@@ -805,6 +816,7 @@ class ShutdownResult:
             "survivors": list(self.survivors),
             "outcome": self.outcome,
             "detail": self.detail,
+            "teardown": dict(self.teardown) if self.teardown is not None else None,
         }
 
 
@@ -830,12 +842,18 @@ class OwnedRuntime:
         process_facts: ProcessFacts | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         stop_timeout_s: float = 90.0,
+        teardown_deadline_s: float = DEFAULT_TEARDOWN_DEADLINE_SECONDS,
+        teardown_poll_s: float = DEFAULT_TEARDOWN_POLL_SECONDS,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.profile = profile
         self._forge_factory = forge_factory
         self.facts = process_facts or PsutilProcessFacts()
         self._monotonic = monotonic
         self._stop_timeout_s = stop_timeout_s
+        self._teardown_deadline_s = teardown_deadline_s
+        self._teardown_poll_s = teardown_poll_s
+        self._sleep = sleep
         self._forge: Any = None
         self._root_pid: int | None = None
         self._root_created: float | None = None
@@ -920,6 +938,9 @@ class OwnedRuntime:
         before: tuple[int, ...] = ()
         if root is not None and self.facts.exists(root):
             before = (root, *self.facts.children(root))
+        created = {pid: self.facts.create_time(pid) for pid in before}
+        if root is not None:
+            created[root] = self._root_created
         outcome: dict[str, Any] = {}
 
         def run() -> None:
@@ -943,9 +964,27 @@ class OwnedRuntime:
         candidates = {
             *before,
             *(int(p) for p in reported.get("survivors", ()) if isinstance(p, int)),
+            *((root,) if root is not None else ()),
         }
-        survivors = tuple(sorted(pid for pid in candidates if self.facts.exists(pid)))
-        # Verification needs an observation of the tree before the stop or of the root being gone afterwards.
-        observed_gone = root is not None and not self.facts.exists(root)
-        verified = (bool(before) or observed_gone) and not survivors
-        return ShutdownResult(True, True, False, verified, survivors, "manager-owned stop returned")
+        # Bounded, observation-only wait (QUAL-927): the tree recorded before the stop (with creation times, so a reused
+        # PID is never mistaken for a survivor), the manager's reported survivors and the root must all be gone, and the
+        # qualification port free, within the deadline. Nothing recorded (no tree before the stop and no known root) is
+        # never verified: the absence of an observation is not a clean shutdown.
+        teardown = verify_teardown(
+            [OwnedProcess(pid, created.get(pid)) for pid in sorted(candidates)],
+            (self.profile.port,),
+            deadline_seconds=self._teardown_deadline_s,
+            poll_seconds=self._teardown_poll_s,
+            table=self.facts,
+            clock=self._monotonic,
+            sleep=self._sleep,
+        )
+        return ShutdownResult(
+            True,
+            True,
+            False,
+            teardown.verified,
+            teardown.survivors,
+            "manager-owned stop returned; " + teardown.detail,
+            teardown.as_dict(),
+        )

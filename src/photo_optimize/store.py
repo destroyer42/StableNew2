@@ -23,6 +23,7 @@ from .models import (
     PhotoOptimizeBaselineSnapshot,
     PhotoOptimizeHistoryEntry,
     default_stage_defaults,
+    runnable_stage_defaults,
 )
 from .paths import io_path
 from .results import digest, list_candidates, prepare_promotion
@@ -199,7 +200,9 @@ class PhotoOptimizeStore:
 
         defaults = baseline_defaults or {}
         config = deepcopy(defaults.get("config") or {})
-        stage_defaults = dict(defaults.get("stage_defaults") or default_stage_defaults())
+        stage_defaults = runnable_stage_defaults(
+            defaults.get("stage_defaults") or default_stage_defaults()
+        )
         baseline = PhotoOptimizeBaseline(
             prompt=str(defaults.get("prompt") or ""),
             negative_prompt=str(defaults.get("negative_prompt") or ""),

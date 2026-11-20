@@ -37,13 +37,14 @@ Replay and reprocess create a new NJR with lineage on the same path. Nothing in 
 |---|---|---|
 | `forge_webui` | `ForgeWebUIImageBackend` (`src/image_backends/forge_webui_backend.py`) | Default for new work (`NEW_IMAGE_BACKEND_DEFAULT_ID`). Managed Forge Neo, pinned in `config/managed_forge_runtime.json`. Declares no Hypernetwork support and does declare OpenPose conditioning. |
 | `a1111_webui` | `A1111WebUIImageBackend` (`src/image_backends/a1111_webui_backend.py`) | Rollback/compatibility. Selected only by explicit `webui_runtime_identity = a1111_webui` (or `STABLENEW_WEBUI_RUNTIME_IDENTITY`). |
+| `diffusers` | `DiffusersImageBackend` (`src/image_backends/diffusers_backend.py`) | PR-IMG-120, not physically qualified. Runs only the exact Ideogram 4 NF4 profile, txt2img, in a contained child per job (`diffusers_ideogram4_worker.py`, `run_bounded`) after `prepare_for("diffusers")` releases StableNew's own WebUI, Comfy and SVD runtimes. Stamped on new work only by the model (`model_backend_routing.required_backend_for_model`), never by the WebUI identity setting; an explicit persisted id is never rewritten. `docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md`. |
 
 Both are registered by `build_default_image_backend_registry` and both share ONE WebUI-family runtime slot (one endpoint, one `WebUIProcessManager`). Selection rules, all in `src/image_backends/image_backend_types.py` and `src/api/webui_runtime_identity.py`:
 
 - New work: `configured_image_backend_id()` -> configured identity, default `forge_webui`. An unrecognized value raises `WebUIRuntimeConfigurationError`; nothing falls back to the other backend.
 - Persisted record with no `backend_options.image.backend_id`: `resolve_image_backend_id` returns `a1111_webui` (`LEGACY_MISSING_IMAGE_BACKEND_ID`). This is deliberately not the new-work default, so old work is never reinterpreted.
 - An explicit id in a replay/reprocess source is kept, never rewritten. Replaying A1111-created work while configured for Forge fails closed with `WebUIRuntimeIdentityMismatch` before dispatch (the message tells the operator to switch the setting) [V].
-- Backend identity is configuration. It is never inferred from a model name or install folder.
+- WebUI-family backend identity is configuration. It is never inferred from a model name or install folder. The one exception is a model that exists only behind a non-WebUI runtime (Ideogram 4 -> `diffusers`, PR-IMG-120): `normalize_image_backend_options` stamps that runtime for new work with no explicit id, and the model's profile refuses any other explicit id; nothing falls back.
 
 ### 2.2 Where things actually live
 

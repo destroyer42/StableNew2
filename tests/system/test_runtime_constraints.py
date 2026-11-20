@@ -80,6 +80,7 @@ def test_constraints_pin_every_direct_dependency_in_its_own_profile(profiles) ->
         "requirements.txt": profiles.core,
         "requirements-svd.txt": profiles.core,
         "requirements-postprocess.txt": profiles.postprocess,
+        "requirements-ideogram.txt": profiles.ideogram,
     }
     for rel_path, profile in expected.items():
         for line in _requirement_lines(rel_path):
@@ -96,6 +97,7 @@ def test_pyproject_extras_match_the_requirement_files() -> None:
 
     assert sorted(extras["svd"]) == sorted(_requirement_lines("requirements-svd.txt"))
     assert sorted(extras["postprocess"]) == sorted(_requirement_lines("requirements-postprocess.txt"))
+    assert sorted(extras["ideogram"]) == sorted(_requirement_lines("requirements-ideogram.txt"))
 
 
 def test_profiles_do_not_overlap_and_core_excludes_restoration_only_packages(profiles) -> None:
@@ -103,6 +105,7 @@ def test_profiles_do_not_overlap_and_core_excludes_restoration_only_packages(pro
     retired = {"basicsr", "gfpgan", "facexlib", "filterpy"}  # not in any supported profile
 
     assert not set(profiles.core) & set(profiles.postprocess)
+    assert not set(profiles.ideogram) & (set(profiles.core) | set(profiles.postprocess))
     assert not restoration_only & set(profiles.core)  # core SVD never needs the restoration stack
     assert restoration_only <= set(profiles.postprocess)
     assert not retired & set(profiles.all_pins)  # the legacy stack is not in any profile
@@ -370,3 +373,17 @@ def test_unsupported_python_is_still_rejected_before_any_install() -> None:
 def test_linux_github_ci_is_not_coupled_to_the_windows_cuda_resolution() -> None:
     assert "constraints/" not in _read(".github/workflows/ci.yml")
     assert "windows-py314-cu130" not in _read(".github/workflows/ci.yml")
+
+
+def test_ideogram_profile_is_optional_exact_and_only_the_qualified_bitsandbytes() -> None:
+    """PR-IMG-120: the owner-accepted optional extra; never installed by CI or the core bootstrap."""
+
+    from src.image_backends.diffusers_readiness import QUALIFIED_BITSANDBYTES_VERSION
+
+    parsed = verifier.parse_profiles(CONSTRAINTS.read_text(encoding="utf-8"))
+    assert parsed.ideogram == {"bitsandbytes": QUALIFIED_BITSANDBYTES_VERSION}
+    assert "bitsandbytes" not in parsed.core
+    problems, _state = verifier.evaluate(parsed, {**parsed.core, "bitsandbytes": "0.49.0"})
+    assert problems == ["[ideogram] bitsandbytes: installed 0.49.0, expected 0.50.2"]
+    problems, _state = verifier.evaluate(parsed, dict(parsed.core))
+    assert problems == []

@@ -24,7 +24,7 @@
   "standing_holds": [
     {
       "id": "HOLD-ZIMAGE-STABILITY",
-      "reason": "Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized. Owner decision 2026-11-18: back in scope once QUAL-927 (bounded teardown wait) lands, then one new exact authorization and one run in the Forge sitting. The hold stays until then.",
+      "reason": "Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized. Owner decision 2026-11-18: back in scope. QUAL-927 (bounded teardown wait) landed 2026-11-19 (PR #357). The hold stays until the owner grants one new exact authorization and one run goes into the Forge sitting.",
       "source": "STATUS.md"
     },
     {
@@ -34,7 +34,7 @@
     },
     {
       "id": "HOLD-A14B-NEW-BUDGET",
-      "reason": "Wan A14B is INCONCLUSIVE; teardown and worker-memory defects unresolved; the three-attempt authorization is exhausted. Owner decision 2026-11-18: after QUAL-927 (bounded teardown wait and worker-tree memory sampling), qualification is re-targeted to the experimental A14B 4-step workflow as a conditional wave after Wave 4, under a new owner budget. The hold stays until then.",
+      "reason": "Wan A14B is INCONCLUSIVE; teardown and worker-memory defects unresolved; the three-attempt authorization is exhausted. Owner decision 2026-11-18: qualification is re-targeted to the experimental A14B 4-step workflow as a conditional wave after Wave 4, under a new owner budget. QUAL-927 (bounded teardown wait and worker-tree memory sampling) landed 2026-11-19 (PR #357). The hold stays until the owner grants that budget.",
       "source": "tools/qualification/README.md"
     },
     {
@@ -493,17 +493,17 @@
       },
       "status": "HOLD",
       "governance": {
-        "state": "hold: back in scope (owner decision 2026-11-18) after QUAL-927; no repeat physical attempt authorized yet",
+        "state": "hold: back in scope (owner decision 2026-11-18); QUAL-927 landed 2026-11-19 (PR #357); no repeat physical attempt authorized yet",
         "source": "STATUS.md"
       },
       "holds": [
         "HOLD-ZIMAGE-STABILITY"
       ],
       "open_items": [
-        "Teardown is checked once with no bounded wait; QUAL-927 fixes the harness before any new attempt."
+        "The recorded run checked teardown once with no bounded wait. QUAL-927 (PR #357, 2026-11-19) now applies a bounded wait and owned-tree sampling in the 154B harness; it has not been exercised on a physical run."
       ],
       "next_test": {
-        "summary": "After QUAL-927 lands: one new exact owner authorization and one canary run in the Forge sitting (Wave 2). None before that.",
+        "summary": "QUAL-927 has landed: one new exact owner authorization and one canary run in the Forge sitting (Wave 2). None is authorized yet.",
         "arm_id": "IMG-Q1",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -1467,17 +1467,23 @@
       "id": "IMG-Q4.ideogram4-diffusers",
       "version": "1",
       "arm_id": "IMG-Q4",
-      "title": "Ideogram 4 NF4 via Diffusers (qualification only, no production code)",
+      "title": "Ideogram 4 NF4 via Diffusers (PR-IMG-120 production slice; standalone qualification harness)",
       "identity": {
         "backend": "diffusers",
         "model": "ideogram-ai/ideogram-4-nf4-diffusers@1874bc70267ba2c823a7239e1d70dd308c8d64dc"
       },
       "reachability": {
-        "implemented": false,
+        "implemented": true,
         "operator_reachable": false,
-        "surface": "Isolated qualification harness; the PR-IMG-120 production slice is authorized (design first) and not built",
+        "surface": "PR-IMG-120 production slice merged to main (PR #360, 2026-11-20): DiffusersImageBackend with a per-job contained child and one Base Generation model-list entry that appears only when the offline readiness check passes. The owner installs the optional bitsandbytes extra explicitly; without it the model is hidden. Not physically qualified. The img110r harness remains the standalone evidence.",
         "modules": [
-          "tools/qualification/img110r/"
+          "tools/qualification/img110r/",
+          "src/image_backends/diffusers_backend.py",
+          "src/image_backends/diffusers_ideogram4_worker.py",
+          "src/image_backends/diffusers_ideogram4_profile.py",
+          "src/image_backends/diffusers_readiness.py",
+          "src/image_backends/diffusers_residency.py",
+          "src/image_backends/ideogram4_caption.py"
         ]
       },
       "evidence": [
@@ -1500,6 +1506,14 @@
           "source": "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
           "date": "2026-11-18",
           "applies_to": {}
+        },
+        {
+          "id": "e3",
+          "kind": "offline_contract",
+          "claim": "PR-IMG-120 merged to main as PR #360 (2026-11-20, merge fefc7aae). Design accepted with four owner decisions on 2026-11-18: a per-job contained child; JSON-caption mapping by prompt content; bitsandbytes as an optional pinned extra the owner installs; one Base Generation model-list entry shown only when offline readiness passes. Deterministic tests only: no physical run, no backend start, no GPU use, no weight download. Not qualified.",
+          "source": "docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md",
+          "date": "2026-11-20",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -1509,25 +1523,29 @@
       },
       "status": "FEASIBLE",
       "governance": {
-        "state": "qualification-only; PR-IMG-120 authorized 2026-11-18, design first, not built; non-commercial licence accepted",
+        "state": "implemented on main (PR-IMG-120, PR #360, 2026-11-20); design accepted; not physically qualified; non-commercial licence accepted",
         "source": "STATUS.md"
       },
       "holds": [],
       "open_items": [
-        "The GPU residency lease and the JSON-caption mapping still need owner decisions in the PR-IMG-120 design."
+        "The optional bitsandbytes==0.50.2 extra is installed explicitly by the owner; CI never installs it, and without it the model is hidden and queued work is refused with a reason.",
+        "The licence is non-commercial only; commercial use is not covered by the owner's decision."
       ],
       "next_test": {
-        "summary": "None in StableNew until the PR-IMG-120 design is approved and its production slice is built.",
+        "summary": "A gated canary of the integrated slice on the production 3.14 interpreter after the bitsandbytes install: one 768x1024 V4_TURBO_12 job and one 1024x1024 V4_DEFAULT_20 job queued from the GUI with an authored caption, a repeat for bit-identical output, a cancel mid-denoise, and a Forge job immediately after, recording peak VRAM, host commit, teardown evidence and the coordinator results (PR-IMG-120 section 17).",
         "arm_id": "IMG-Q4",
         "stage": "canary",
         "needs_owner_authorization": true,
-        "admissible": false
+        "admissible": false,
+        "blocked": true,
+        "blocked_reason": "IMG-Q4 is an offline arm with no physical plan yet, the owner has not installed the optional bitsandbytes extra, and the exact plan needs the owner's authorization"
       },
       "confidence": "medium",
       "sources": [
         "docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md",
         "STATUS.md",
-        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md"
+        "docs/Subsystems/Testing/QUAL-CAMPAIGN-920_Wave0_Capability_Campaign_Plan.md",
+        "docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md"
       ]
     },
     {
@@ -2362,7 +2380,7 @@
       },
       "status": "INCONCLUSIVE",
       "governance": {
-        "state": "research closed; harness identity only (the A14B 4-step catalog workflow is VID-Q4.wan22-i2v-a14b-4step-1.0.0); 3-attempt authorization exhausted; qualification re-targeted to that workflow after QUAL-927 (owner decision 2026-11-18)",
+        "state": "research closed; harness identity only (the A14B 4-step catalog workflow is VID-Q4.wan22-i2v-a14b-4step-1.0.0); 3-attempt authorization exhausted; qualification re-targeted to that workflow (owner decision 2026-11-18); QUAL-927 landed 2026-11-19 (PR #357)",
         "source": "docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md"
       },
       "holds": [
@@ -2373,7 +2391,7 @@
         "Defect 2: memory sampled only on the launcher stub, not the Comfy worker tree"
       ],
       "next_test": {
-        "summary": "None for this harness identity. After QUAL-927 (teardown wait and worker-tree memory sampling) qualification is re-targeted to VID-Q4.wan22-i2v-a14b-4step-1.0.0 under a new owner budget.",
+        "summary": "None for this harness identity. QUAL-927 (teardown wait and worker-tree memory sampling) landed 2026-11-19 (PR #357); qualification is re-targeted to VID-Q4.wan22-i2v-a14b-4step-1.0.0 under a new owner budget.",
         "arm_id": "VID-Q4",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -2470,11 +2488,11 @@
       ],
       "open_items": [
         "The PR-VID-WAN-321F session (VID-Q4.wan-a14b-480p e1, INCONCLUSIVE, teardown unverified) ran the same frozen graph under the harness identity; it is recorded there and does not apply to this production-workflow identity.",
-        "Defect 1: teardown is checked once with no bounded wait. Defect 2: memory is sampled on the launcher stub, not the Comfy worker tree. QUAL-927 addresses both before any new budget.",
+        "In the recorded 321F run, teardown was checked once with no bounded wait and memory was sampled on the launcher stub, not the Comfy worker tree. QUAL-927 (PR #357, 2026-11-19) addresses both in the harness; not yet exercised on a physical run.",
         "The eval ratings are the owner's 1-5 scale (saturated), not the Wave 0 rubric, and carry no resource telemetry, so all three dimensions stay NOT TESTED. Accepting them as the quality dimension is a dimension edit for the owner to make in this file; none is made here."
       ],
       "next_test": {
-        "summary": "None until QUAL-927 lands and the owner grants a new exact budget; then a conditional wave after Wave 4 re-targets A14B qualification to this workflow with the smallest meaningful canary.",
+        "summary": "None until the owner grants a new exact budget (QUAL-927 landed 2026-11-19, PR #357); then a conditional wave after Wave 4 re-targets A14B qualification to this workflow with the smallest meaningful canary.",
         "arm_id": "VID-Q4",
         "stage": "canary",
         "needs_owner_authorization": true,
