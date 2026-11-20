@@ -24,7 +24,7 @@ PHONE_QUEUE_PATH = "/v1/phone-queue"
 PHONE_SUBMISSION = "phone_submission"
 MAX_PHONE_JOBS = 250
 _READ = re.compile(r"(list|receipt|result)(?:/([a-f0-9]{16}|[a-f0-9]{32}))?")
-_KINDS = frozenset({"rework", "promptpack", "video", "video_eval"})
+_KINDS = frozenset({"rework", "promptpack", "video", "video_eval", "followup"})
 _EVAL_RUN_ID = re.compile(r"\d{8}_\d{6}_[A-Za-z0-9_-]{1,150}")
 _PUBLIC_CAUSES = {
     INTERRUPTED_RESTART_ACTION_REQUIRED: "restart_action_required",
