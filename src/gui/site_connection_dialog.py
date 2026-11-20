@@ -16,6 +16,7 @@ from src.app.site_pairing_protocol import PairingTickets, register_protocol
 from src.app.site_phone_admission import PhoneQueueAdmission
 from src.app.site_phone_connector import SitePhoneConnector
 from src.app.site_phone_eval import PhoneEvalReports
+from src.app.site_phone_followup import PhoneFollowup
 from src.app.site_phone_preview_host import PhonePreviewHost
 from src.app.site_phone_queue import PhoneQueueView
 from src.app.site_phone_video import PhoneVideo
@@ -299,13 +300,15 @@ class SiteConnectionDialog:
         admission = None
         if repository is not None:
             host = PhonePreviewHost(app, repository, records)
+            video = PhoneVideo(app.job_service)
             admission = PhoneQueueAdmission(
                 PhoneQueueView(repository, app.job_service),
                 app.job_service,
                 packs=host.packs,
                 compile_pack=host.compile_pack,
                 compile_rework=host.compile_rework,
-                video=PhoneVideo(app.job_service),
+                video=video,
+                followup=PhoneFollowup(repository, video),
             )
         self._phone = SitePhoneConnector(
             review_outputs=self._review_outputs,
