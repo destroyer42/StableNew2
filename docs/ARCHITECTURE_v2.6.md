@@ -384,6 +384,14 @@ contained child per job; Ideogram is a model family, not the public backend
 architecture. Backend/runtime, model family,
 and model identity must remain separate concepts.
 
+The `comfyui` image backend (PR-IMG-COMFY-100) runs frozen still-image graphs on
+StableNew's own managed ComfyUI. Its first family is Qwen-Image 2.1 (base and
+Turbo int8 profiles, `txt2img` only, one image per NJR). It leases the GPU through
+`prepare_for("comfy")`, uses only a ComfyUI that StableNew launched and owns,
+dispatches one prompt per job (never replayed) and releases the owned runtime
+after each job. Comfy's queue and history stay private to the adapter, and its
+graph catalog is separate from the video workflow registry.
+
 An image NJR whose selected backend does not support every requested image stage
 must fail deterministically before backend dispatch. The first backend-neutral
 implementation does **not** silently fall back to A1111 per stage.

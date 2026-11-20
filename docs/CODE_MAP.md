@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-771 of 926 modules have a docstring.
+775 of 930 modules have a docstring.
 
 ## src/
 
@@ -553,6 +553,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: StableNew-owned still-image backend contracts and implementations
 - `a1111_webui_backend.py`: A1111 adapter that preserves the existing StableNew image executor behavior
 - `backend_capabilities.py`: Backend-owned capability facts that presentation layers consult (PR-IMG-FORGE-120)
+- `comfy_image_backend.py`: The Comfy still-image backend (PR-IMG-COMFY-100): Qwen-Image 2.1 txt2img on StableNew's managed ComfyUI
+- `comfy_image_graphs.py`: PR-IMG-COMFY-100: the frozen Comfy still-image graph catalog (pure; no I/O and no Comfy import)
+- `comfy_image_readiness.py`: PR-IMG-COMFY-100: readiness of the Comfy still-image profiles (read-only; never downloads, moves or loads wei…
+- `comfy_qwen_image_profile.py`: PR-IMG-COMFY-100: the immutable Qwen-Image 2.1 (Comfy) profiles; pure intent contracts
 - `diffusers_backend.py`: The Diffusers image backend (PR-IMG-120): Ideogram 4 NF4 txt2img in a contained child per job
 - `diffusers_ideogram4_profile.py`: PR-IMG-120: the one immutable Ideogram 4 NF4 (Diffusers) profile; pure intent contracts
 - `diffusers_ideogram4_worker.py`: Contained child that runs one Ideogram 4 NF4 job through Diffusers (PR-IMG-120)

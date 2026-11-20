@@ -110,7 +110,8 @@ def test_forge_is_the_new_work_default_and_a1111_the_historical_compatibility_id
 
 def test_registry_contains_both_backends_and_historical_records_still_resolve_to_a1111() -> None:
     registry = build_default_image_backend_registry()
-    assert registry.list_backend_ids() == ["a1111_webui", "diffusers", "forge_webui"]  # diffusers: PR-IMG-120
+    # diffusers: PR-IMG-120; comfyui: PR-IMG-COMFY-100
+    assert registry.list_backend_ids() == ["a1111_webui", "comfyui", "diffusers", "forge_webui"]
     assert isinstance(registry.get("forge_webui"), ForgeWebUIImageBackend)
     assert resolve_image_backend_id({}) == "a1111_webui"
     assert resolve_image_backend_id(None) == "a1111_webui"

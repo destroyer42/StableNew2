@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from src.image_backends.a1111_webui_backend import A1111WebUIImageBackend
+from src.image_backends.comfy_image_backend import ComfyImageBackend
 from src.image_backends.diffusers_backend import DiffusersImageBackend
 from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
 from src.image_backends.image_backend_types import ImageBackendInterface
@@ -52,4 +53,6 @@ def build_default_image_backend_registry() -> ImageBackendRegistry:
     registry.register(ForgeWebUIImageBackend())
     # Selected only by a model that requires it (PR-IMG-120, ``model_backend_routing``); never a fallback target.
     registry.register(DiffusersImageBackend())
+    # Selected only by a frozen Qwen-Image profile (PR-IMG-COMFY-100, ``model_backend_routing``); never a fallback.
+    registry.register(ComfyImageBackend())
     return registry
