@@ -432,3 +432,42 @@ def test_canonical_run_njr_dispatches_to_comfy_without_any_webui_call(
         "noise_seed")) == 5  # fmt: skip
     assert webui.method_calls == [] and runner._pipeline.client is None
     assert manager.stops == 1
+
+
+def test_the_registered_comfy_owner_wins_and_construction_stays_in_the_video_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.video.comfy_process_manager as manager_module
+    import src.video.comfy_workflow_backend as video_backend
+
+    remembered, live, constructed = FakeManager(), FakeManager(), FakeManager()
+    built: list[str] = []
+    monkeypatch.setattr(manager_module, "get_global_comfy_process_manager", lambda: None)
+    monkeypatch.setattr(video_backend, "shared_comfy_process_manager", lambda: built.append("x") or constructed)
+    backend = ComfyImageBackend(transition=FakeTransition())
+    assert backend._resolve_process_manager() is constructed and built == ["x"]
+    backend._process_manager = remembered
+    assert backend._resolve_process_manager() is remembered and built == ["x"]
+    # Another feature (video) holds the live owner: use it rather than launching a second manager on its port.
+    monkeypatch.setattr(manager_module, "get_global_comfy_process_manager", lambda: live)
+    assert backend._resolve_process_manager() is live
+    monkeypatch.setattr(video_backend, "shared_comfy_process_manager", lambda: None)
+    monkeypatch.setattr(manager_module, "get_global_comfy_process_manager", lambda: None)
+    with pytest.raises(ComfyImageUnavailable, match="launch configuration"):
+        ComfyImageBackend(transition=FakeTransition())._resolve_process_manager()
+
+
+def test_shared_comfy_process_manager_reuses_the_global_owner_or_builds_from_the_default_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.video.comfy_workflow_backend as video_backend
+
+    owner = object()
+    monkeypatch.setattr(video_backend, "get_global_comfy_process_manager", lambda: owner)
+    assert video_backend.shared_comfy_process_manager() is owner
+    monkeypatch.setattr(video_backend, "get_global_comfy_process_manager", lambda: None)
+    monkeypatch.setattr(video_backend, "build_default_comfy_process_config", lambda: None)
+    assert video_backend.shared_comfy_process_manager() is None
+    monkeypatch.setattr(video_backend, "build_default_comfy_process_config", lambda: "config")
+    monkeypatch.setattr(video_backend, "ComfyProcessManager", lambda config: ("manager", config))
+    assert video_backend.shared_comfy_process_manager() == ("manager", "config")

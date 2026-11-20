@@ -134,6 +134,7 @@ class ComfyImageBackend:
         poll_seconds: float = HISTORY_POLL_SECONDS,
     ) -> None:
         self._transition = transition or RuntimeTransitionCoordinator()
+        self._injected_process_manager = process_manager
         self._process_manager = process_manager
         self._client_factory = client_factory
         self._installation = installation or (
@@ -314,23 +315,27 @@ class ComfyImageBackend:
     # -- runtime ownership --------------------------------------------------------------------------------------
 
     def _resolve_process_manager(self) -> Any:
-        if self._process_manager is not None:
-            return self._process_manager
-        from src.video.comfy_process_manager import (
-            ComfyProcessManager,
-            build_default_comfy_process_config,
-            get_global_comfy_process_manager,
-        )
+        """The injected manager, else the registered global Comfy owner, else the last one used, else a new one.
 
-        manager = get_global_comfy_process_manager()
+        The global owner wins over a remembered one: another feature (video) may hold the live owned ComfyUI, and a
+        second manager would only be refused when it tried to launch on the occupied port. Construction stays in the
+        video backend module, the one production construction site for ``ComfyProcessManager``.
+        """
+
+        if self._injected_process_manager is not None:
+            return self._injected_process_manager
+        from src.video.comfy_process_manager import get_global_comfy_process_manager
+
+        manager = get_global_comfy_process_manager() or self._process_manager
         if manager is None:
-            config = build_default_comfy_process_config()
-            if config is None:
+            from src.video.comfy_workflow_backend import shared_comfy_process_manager
+
+            manager = shared_comfy_process_manager()
+            if manager is None:
                 raise ComfyImageUnavailable(
                     "Qwen-Image needs a StableNew-managed ComfyUI launch configuration (Settings: ComfyUI)"
                 )
-            manager = ComfyProcessManager(config)
-        # Keep the owner across release/relaunch cycles, as the video backend does.
+        # Remember the owner across release/relaunch cycles, as the video backend does.
         self._process_manager = manager
         return manager
 
