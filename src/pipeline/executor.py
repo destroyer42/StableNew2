@@ -4456,12 +4456,14 @@ class Pipeline:
                         eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
                     self.progress_controller.report_progress("txt2img", percent, eta_text)
 
+            from src.image_backends.forge_flux1_profile import project_flux1_wire_payload
             from src.image_backends.forge_zimage_profile import (
                 project_zimage_wire_payload,
                 verify_zimage_dispatch_state,
             )
 
             payload = project_zimage_wire_payload(config, payload, prompt=original_positive_prompt)
+            payload = project_flux1_wire_payload(config, payload)  # PR-IMG-FLUX-130: distilled guidance; no-op otherwise
             zimage_selection = verify_zimage_dispatch_state(config, self.client)
             # PR-IMG-CNET-210: one ControlNet unit joins alwayson_scripts only on the request that is actually sent. The
             # unit-free ``payload`` stays the copy used for logs and manifests (it never carries image bytes), and the

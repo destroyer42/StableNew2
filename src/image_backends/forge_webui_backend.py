@@ -70,8 +70,18 @@ from src.image_backends.forge_controlnet_units import (
 from src.image_backends.forge_controlnet_units import (
     validate_target as validate_units_target,
 )
+from src.image_backends.forge_flux1_profile import (
+    FIXED_CLIP_SKIP as FLUX1_CLIP_SKIP,
+)
+from src.image_backends.forge_flux1_profile import (
+    FLUX1_PROVENANCE_KEY,
+    Flux1Profile,
+    distilled_cfg_conflicts,
+    flux1_provenance,
+)
 from src.image_backends.forge_klein_assets import (
     _active_manager,
+    verify_flux1_assets,
     verify_klein_assets,
     verify_zimage_assets,
 )
@@ -249,7 +259,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     @staticmethod
     def _profile_for(backend_options: Any) -> ForgeExactModelProfile | None:
         profile = resolve_model_profile(backend_options)
-        if profile is None or isinstance(profile, (KleinProfile, ZImageProfile)):
+        if profile is None or isinstance(profile, (KleinProfile, ZImageProfile, Flux1Profile)):
             return profile
         # Unreachable through admission (the foreign-profile guard runs first); fail closed regardless.
         raise KleinProfileError(
@@ -352,6 +362,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             + self._vae_conflict(getattr(njr, "vae", None), profile)
             + self._global_term_conflicts(config)
             + lora_problems
+            + (distilled_cfg_conflicts(config, profile) if isinstance(profile, Flux1Profile) else [])
         )
         input_images = tuple(getattr(njr, "input_image_paths", ()) or ())
         mode = validate_profile_intent(
@@ -414,7 +425,10 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             + self._vae_conflict(request.selected_vae, profile)
             + self._global_term_conflicts(request.execution_config)
             + lora_problems
+            + (distilled_cfg_conflicts(request.execution_config, profile) if isinstance(profile, Flux1Profile) else [])
         )
+        if isinstance(profile, Flux1Profile) and request.input_image_path is not None:
+            features.append("an input image (txt2img only)")
         if int(request.image_count or 1) != 1:
             features.append(f"image count {request.image_count}")
         validate_profile_intent(
@@ -750,10 +764,17 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         )
         # What Forge will load, by bytes: the API names below are only supplementary evidence of selection.
         endpoint = str(getattr(getattr(pipeline, "client", None), "base_url", "") or "")
-        self._identity[request.job_id] = (
-            verify_zimage_assets(profile, client=pipeline.client) if isinstance(profile, ZImageProfile)
-            else verify_klein_assets(profile, endpoint=endpoint)
-        )
+        if isinstance(profile, Flux1Profile):
+            # Structure, not a name, admits the transformer; the module bytes are pinned (PR-IMG-FLUX-130).
+            self._identity[request.job_id] = verify_flux1_assets(
+                profile, client=pipeline.client, model_name=str(request.selected_model or ""),
+                inspect=self._component_evidence,
+            )
+        else:
+            self._identity[request.job_id] = (
+                verify_zimage_assets(profile, client=pipeline.client) if isinstance(profile, ZImageProfile)
+                else verify_klein_assets(profile, endpoint=endpoint)
+            )
         self._assert_assets_listed(pipeline, profile)
         if self._lora_evidence.get(request.job_id, ((), ()))[1]:
             self._identity[request.job_id]["lora_served"] = self._assert_lora_served(pipeline, request)
@@ -798,8 +819,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         """
 
         client = getattr(pipeline, "client", None)
-        if isinstance(profile, ZImageProfile):
-            return  # Strict served-path catalogs were already checked by verify_zimage_assets.
+        if isinstance(profile, (ZImageProfile, Flux1Profile)):
+            return  # Strict served-path catalogs were already checked by verify_zimage_assets / verify_flux1_assets.
         install_hint = (
             "Install the exact qualified files with scripts/install_forge_klein_assets.ps1 "
             "(-SourceDir <folder holding them>)."
@@ -849,9 +870,13 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             "apply_global_negative_img2img",
         ):
             pipeline[key] = False
+        # A family profile runs the selected (structurally verified) transformer; an exact profile its pinned file.
+        checkpoint = (
+            str(request.selected_model or "") if isinstance(profile, Flux1Profile) else profile.transformer.filename
+        )
         projected.update(
-            model=profile.transformer.filename,
-            sd_model_checkpoint=profile.transformer.filename,
+            model=checkpoint,
+            sd_model_checkpoint=checkpoint,
             sampler_name=profile.sampler,
             scheduler=profile.scheduler,
             steps=profile.steps,
@@ -874,6 +899,11 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                     "asset_identity": self._identity.get(request.job_id),
                     "qualification_status": "one_generation_observed; INSTRUMENTATION_GAP",
                 },
+            )
+        if isinstance(profile, Flux1Profile):
+            projected.update(
+                backend_options=request.backend_options, distilled_cfg_scale=profile.distilled_cfg_scale,
+                clip_skip=FLUX1_CLIP_SKIP,
             )
         if request.stage_name == "img2img" and isinstance(profile, KleinProfile):
             for key in ("mask_image_path", "mask_path", "negative_adjust", "prompt_adjust"):
@@ -943,6 +973,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 "job_id": request.job_id,
                 "effective_request": result.raw_result.get("config"),
             }
+        elif isinstance(profile, Flux1Profile):
+            evidence = flux1_provenance(profile, model_name=str(request.selected_model or ""))
         else:
             evidence = klein_provenance(profile, mode=mode, lora=lora_block)
         if readiness is not None:
@@ -952,7 +984,11 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             evidence["asset_identity"] = identity  # local size + SHA-256 of the files Forge loads
         if verified_source is not None:
             evidence["source_image"] = verified_source
-        result.backend_metadata["zimage_profile" if isinstance(profile, ZImageProfile) else "klein_profile"] = evidence
+        key = (
+            "zimage_profile" if isinstance(profile, ZImageProfile)
+            else FLUX1_PROVENANCE_KEY if isinstance(profile, Flux1Profile) else "klein_profile"
+        )
+        result.backend_metadata[key] = evidence
         return result
 
     def _lora_block(

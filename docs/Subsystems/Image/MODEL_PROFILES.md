@@ -63,9 +63,19 @@ Enforced where:
 - Envelope: `diffusers` backend only; txt2img only; steps choose the official preset (12 Turbo, 20 Default, 48 Quality; guidance reversed for Diffusers); sizes 1024x1024, 768x1024, 1024x768, 768x768, 512x512; 1-4 images per job; no negative prompt, LoRA, embeddings, VAE choice or other stages. Plain prompts map to a minimal caption, JSON prompts must pass the official caption rules (`ideogram4_caption.py`, mapping v1).
 - Runtime: 110R staged-swap residency in a per-job contained child with an allocator cap, VRAM/RAM floors and teardown proof. Non-commercial licence accepted by the owner on 2026-11-18. Record: `docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md`.
 
-### 2.3 Klein Base 9B (refused, no profile)
+### 2.2b FLUX.1 [dev] family profile (`flux1_dev_gguf` v1, Forge, not physically qualified)
 
-There is no profile, constant or name check for it. `NO_GO_RESOURCE_RISK` is the decision recorded in `PR-IMG-MODELS-151`. The refusal is generic: `ForgeWebUIImageBackend._dependency_gate` (run from `_before_dispatch` only when there is no exact profile and the name is not the Klein 4B transformer) calls `probe_model_readiness`; `ModelReadiness.blocks_dispatch` is true for a not-qualified checkpoint whose safetensors header positively identifies a dependency-bearing transformer; the gate raises `ForgeUnqualifiedModelError` before any module write or POST. Unreadable, ambiguous or unrecognized evidence is "unverified" and preserves the old generic behavior [V]. Any other FLUX-style multi-component checkpoint is refused the same way.
+- Record: `docs/Subsystems/Image/PR-IMG-FLUX-130_Generic_FLUX_Families.md` (owner decisions Q1-Q4, 2026-11-20). Module: `src/image_backends/forge_flux1_profile.py`.
+- A **family** profile: the transformer is admitted by its structural layout, not by name or bytes. Any transformer-only file whose bounded header (safetensors table or GGUF tensor table) classifies as `flux1_dev` (`src/assets/flux_variant.py`) in an admitted precision (GGUF Q4_K_S/Q5_K_S/Q6_K/Q8_0, FP8-scaled safetensors) runs under it; its SHA-256 is recorded (`recommended_download` when it equals the pinned `city96/FLUX.1-dev-gguf` Q4_K_S digest, else `derivative_or_other_conversion`), never required. CLIP-L, T5-XXL FP8 and the FLUX.1 AE are pinned by size and SHA-256 and verified on the served paths (`verify_flux1_assets`).
+- Envelope: managed Forge `d70373eb` only; txt2img only; Euler / Simple / 20 steps / CFG 1.0 / distilled guidance 3.5 / CLIP skip 1, all fixed; sizes 1024x1024, 896x1152, 1152x896, 832x1216, 1216x832; one image; no negative prompt, global terms, prompt optimizer, LoRA, embeddings, VAE choice, input image or other stages. Same 32e9-byte host-RAM floor as Klein.
+- Selection: the compiler stamps the reference only when the registry snapshot records a transformer-only `flux1_dev` layout for the selected checkpoint (the installable lookup `install_variant_lookup`, installed by `src/main.py`); a frozen reference is never upgraded or swapped. The backend re-derives the layout from the served file at dispatch.
+- Evidence: `backend_metadata["flux1_profile"]` (`flux1_provenance` + `asset_identity`), `qualification_status = "not physically qualified"`. Policy evidence is `structural_profile`, so `exact_identity_authority` is false and Model Comparison refuses it.
+
+### 2.3 Klein Base 9B and other FLUX layouts (refused, no profile)
+
+There is no profile for Klein 9B. `NO_GO_RESOURCE_RISK` is the decision recorded in `PR-IMG-MODELS-151`. The refusal is generic: `ForgeWebUIImageBackend._dependency_gate` (run from `_before_dispatch` only when there is no exact profile and the name is not the Klein 4B transformer) calls `probe_model_readiness`; `ModelReadiness.blocks_dispatch` is true for a not-qualified checkpoint whose safetensors header positively identifies a dependency-bearing transformer; the gate raises `ForgeUnqualifiedModelError` before any module write or POST. Unreadable, ambiguous or unrecognized evidence is "unverified" and preserves the old generic behavior [V]. Any other FLUX-style multi-component checkpoint is refused the same way.
+
+PR-IMG-FLUX-130 names the layout: a FLUX transformer is classified into `flux1_dev`, `flux1_schnell`, `flux2_klein_4b`, `flux2_klein_9b` or `flux_unrecognized` (plus a `_bundled` form) from safetensors headers **and GGUF tensor tables**, so the GGUF 9B files that used to bypass the gate as "unsupported format" are refused too. Each refused layout has its own sentence (`FLUX_VARIANT_REFUSALS`): 9B is NO-GO in every precision; a Klein 4B-class file other than the exact qualified one, FLUX.1 [schnell] and unrecognised FLUX layouts have no profile. `ModelPolicy.refusal` carries the same sentence to the GUI. A transformer-only DiT of no known layout (`unrecognized_dit`, the installed `flux3Klein_*` transformer) is refused, and a text encoder or VAE selected as a checkpoint is `NOT_A_CHECKPOINT`.
 
 ## 3. Versioning and frozen work
 
@@ -83,7 +93,7 @@ There is no profile, constant or name check for it. `NO_GO_RESOURCE_RISK` is the
 1. `is_klein_transformer_name` -> `policy_for_profile(latest_klein_profile())`.
 2. `is_zimage_transformer_name` -> `policy_for_profile(ZIMAGE_PROFILE_V1)`.
 3. Blank name or no lookup -> `unverified_generic`, evidence `no_evidence`.
-4. Lookup result: conflicting -> unknown/`conflicting_evidence`; structural error, `sdxl_refiner` or `sdxl_inpaint` -> unknown/`unknown_evidence`; resolved SDXL -> `_sdxl_policy` (evidence `registry_evidence`); any other resolved family (sd1, sd2, sd3, flux) -> `unverified_generic:<family>`, labelled but never qualified. A lookup exception is absent evidence.
+4. Lookup result: conflicting -> unknown/`conflicting_evidence`; structural error, `sdxl_refiner` or `sdxl_inpaint` -> unknown/`unknown_evidence`; resolved SDXL -> `_sdxl_policy` (evidence `registry_evidence`); resolved FLUX with a recorded transformer-only layout -> `flux1_dev_gguf` policy (evidence `structural_profile`) for `flux1_dev`, else `flux_refused:<variant>` with `refusal` set; any other resolved family (sd1, sd2, sd3, bundled or label-only flux) -> `unverified_generic:<family>`, labelled but never qualified. A lookup exception is absent evidence. (Ideogram 4 is checked by name before step 3.)
 
 Name matching is whole-name after stripping directory, a ` [hash]` suffix and a weights extension (`_model_key`), never a substring. Three copies of that normalizer exist (`forge_klein_profile._model_key`, `model_policy._model_key`, `model_readiness_probe.checkpoint_key`); keep them equivalent [V].
 
@@ -199,13 +209,14 @@ Refusals are exceptions raised before any generation POST; there is no shared co
 | Profile intent, host RAM, assets, served listing, LoRA, source hash | `KleinProfileError` (`ValueError`) | Outside the Klein envelope or unverifiable |
 | Z-Image intent, wire seam, dispatch state, assets | `ZImageProfileError` (subclass of `KleinProfileError`) | Outside the Z-Image envelope; one `except KleinProfileError` catches both |
 | Hypernetworks, frozen Klein selection without a profile | `ForgeUnsupportedIntentError` | Forge cannot do it |
-| Unqualified multi-component checkpoint | `ForgeUnqualifiedModelError` (carries `ModelReadiness`) | Dependency gate |
+| Unqualified multi-component checkpoint, refused FLUX layout, unrecognised DiT, encoder/VAE as checkpoint | `ForgeUnqualifiedModelError` (carries `ModelReadiness`) | Dependency gate |
+| FLUX.1 [dev] family envelope, served layout/precision, auxiliary bytes | `Flux1ProfileError` (subclass of `KleinProfileError`) / `KleinProfileError` | Outside `flux1_dev_gguf` or unverifiable |
 | Module baseline unverifiable | `ForgeVAEError` | Could not read or set Forge modules |
 | OpenPose or ordered ControlNet units on a profile model | `OpenPoseDispatchError` with `CODE_BACKEND` (`backend_unsupported`) | Conditioning refused for exact profiles; ordered units require registry-verified SDXL on Forge (IMAGE_PIPELINE 3.1) |
 | Preflight | `OperationNotSupportedError` (codes in 9.1) | Nothing was queued |
 | Learning/Model Comparison | `ValueError` with an operator sentence | Whole study refused; rebuild preview |
 
-`ModelReadiness.reason_code` values (`exact_profile_name_match`, `exact_profile_verified`, `checkpoint_evidence_unavailable`, `checkpoint_header_unreadable`, `no_auxiliary_dependency_identified`, `forge_state_unavailable`, `duplicate_module_names`, `dependency_not_listed`, `selected_but_unqualified`, `dependencies_listed_not_selected`, `served_file_ambiguous`) are stable diagnostics in path-free `as_dict()` records.
+`ModelReadiness.reason_code` values (`exact_profile_name_match`, `exact_profile_verified`, `checkpoint_evidence_unavailable`, `checkpoint_header_unreadable`, `no_auxiliary_dependency_identified`, `forge_state_unavailable`, `duplicate_module_names`, `dependency_not_listed`, `selected_but_unqualified`, `dependencies_listed_not_selected`, `served_file_ambiguous`, `component_not_checkpoint`) are stable diagnostics in path-free `as_dict()` records.
 
 Stage methods swallow generic exceptions (IMAGE_PIPELINE 11). Raise a refusal from `validate_njr_intent`, `_validate_request` or `_before_dispatch`, never from inside a stage method.
 
@@ -216,7 +227,7 @@ Stage methods swallow generic exceptions (IMAGE_PIPELINE 11). Raise a refusal fr
 ## 12. Invariants
 
 1. A profile version is immutable; new semantics are a new version. Never "upgrade" persisted work (`apply_zimage_compile_policy` explicitly refuses a profile upgrade).
-2. Exact identity is whole-name plus byte verification at dispatch; never a substring, a filename guess, or a Forge listing alone.
+2. Exact identity is whole-name plus byte verification at dispatch; never a substring, a filename guess, or a Forge listing alone. Amended for **family profiles only** (`flux1_dev_gguf`, owner decision Q4 on 2026-11-20): the transformer is admitted by the structural layout of the served file's header, its SHA-256 recorded; every auxiliary stays byte-pinned. A family profile is never an exact-identity authority.
 3. The GUI and operation compatibility never authorize; the backend validates every NJR and every stage request independently of how it was built.
 4. Conflicting immutable intent is refused, never silently rewritten. Only values the profile owns are replaced, and only at compile time, with recorded evidence.
 5. No backend switching and no profile fallback; a missing or unknown profile reference fails closed.
@@ -230,6 +241,7 @@ Stage methods swallow generic exceptions (IMAGE_PIPELINE 11). Raise a refusal fr
 |---|---|
 | Klein profile, assets, LoRA | `tests/image_backends/test_forge_klein_profile.py`, `test_forge_klein_assets.py`, `test_forge_klein_lora.py` |
 | Z-Image profile | `tests/image_backends/test_forge_zimage_profile.py` |
+| FLUX layouts, GGUF tables, FLUX.1 family profile | `tests/assets/test_flux_variant_130.py`, `tests/image_backends/test_forge_flux1_profile_130.py`, `tests/integration/test_pr_img_flux_130_canonical_path.py` (fixtures `tests/assets/flux_fixtures_130.py`) |
 | Backend validation and dispatch ordering | `tests/image_backends/test_forge_webui_backend.py` (with `tests/helpers/fake_webui_transport.py`) |
 | Policy and operation compatibility | `tests/image_backends/test_model_policy_130a.py`, `test_operation_compatibility_158.py` |
 | Compile policies and effective config | `tests/pipeline/test_klein_compile_policy.py`, `test_zimage_compile_policy.py`, `test_exact_profile_effective_config_159.py`, `test_zimage_effective_config_159.py`, `test_global_prompt_policy.py`, `test_klein_pack_selection_143.py` |

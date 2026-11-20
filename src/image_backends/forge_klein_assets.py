@@ -185,9 +185,104 @@ def verify_zimage_assets(profile: Any, *, client: Any) -> dict[str, Any]:
     return result
 
 
+def _served_path(entries: list[Any], name: str, label: str) -> Path:
+    from src.image_backends.model_readiness_probe import checkpoint_key
+
+    paths = {
+        str(item.get("filename") or "") for item in entries if isinstance(item, dict)
+        and checkpoint_key(name) in {checkpoint_key(item.get(k)) for k in ("model_name", "title", "filename")}
+    }
+    if len(paths) != 1 or not next(iter(paths), ""):
+        raise KleinProfileError(f"Forge must list one unambiguous served file for {label}")
+    path = Path(next(iter(paths)))
+    if not path.is_absolute() or not path.is_file():
+        raise KleinProfileError(f"Forge's served path for {label} is not a readable local file")
+    return path
+
+
+def _sha256_cached(path: Path) -> str:
+    stat = path.stat()
+    key = _stat_key(path, stat.st_size, stat)
+    with _LOCK:
+        cached = _VERIFIED.get(key)
+    if cached is not None:
+        return cached
+    actual = _sha256(path)
+    if _stat_key(path, stat.st_size, path.stat()) != key:
+        raise KleinProfileError(f"The served {path.name} changed while its bytes were read")
+    with _LOCK:
+        _VERIFIED[key] = actual
+    return actual
+
+
+def verify_flux1_assets(
+    profile: Any,
+    *,
+    client: Any,
+    model_name: str,
+    inspect: Any = None,
+    verify_launch: Any = None,
+) -> dict[str, Any]:
+    """FLUX.1 family identity (PR-IMG-FLUX-130): the served transformer by structure, the modules by bytes.
+
+    Requires the StableNew-owned managed Forge at the profile's pinned revision (like Z-Image). The transformer Forge will
+    load is located from its own catalog, classified from its bounded header (``inspect``: path -> ``ComponentEvidence``)
+    and must be a transformer-only FLUX.1 [dev]-class file in an admitted precision; its SHA-256 is then recorded, never
+    compared against a pin. Each module must be the one served file under its pinned name, with the pinned size and SHA-256.
+    ``inspect`` and ``verify_launch`` are test seams.
+    """
+    from src.assets.component_evidence import inspect_component_file
+    from src.assets.flux_variant import classify_flux_variant
+    from src.utils.managed_forge_runtime import verify_pinned_launch
+
+    manager = _active_manager()
+    root = resolve_owned_forge_data_dir(str(client.base_url), manager=manager)
+    pin = (verify_launch or verify_pinned_launch)(
+        manager.launch_session_command, str(getattr(manager._config, "working_dir", "") or ""),
+        profile.forge_revision,
+    )
+    models = client.get_models()
+    modules = client.get_module_catalog()
+    if not isinstance(models, list) or not isinstance(modules, list):
+        raise KleinProfileError(f"{profile.display_name} requires readable Forge checkpoint and module catalogs")
+    transformer = _served_path(models, model_name, f"the checkpoint {model_name}")
+    variant = classify_flux_variant((inspect or inspect_component_file)(transformer))
+    if variant is None or variant.variant != profile.transformer_variant or variant.bundled:
+        found = "not a FLUX transformer" if variant is None else variant.label
+        raise KleinProfileError(
+            f"{profile.display_name} admits only a transformer-only FLUX.1 [dev]-class checkpoint; the served "
+            f"{transformer.name} is {found}."
+        )
+    if variant.precision not in profile.transformer_precisions:
+        raise KleinProfileError(
+            f"{profile.display_name} admits the precisions {', '.join(profile.transformer_precisions)}; the served "
+            f"{transformer.name} is {variant.precision}."
+        )
+    digest = _sha256_cached(transformer)
+    recommended = profile.recommended_transformer
+    result: dict[str, Any] = {
+        "forge": pin,
+        "transformer": {
+            "name": transformer.name,
+            "size": transformer.stat().st_size,
+            "sha256": digest,
+            "variant": variant.variant,
+            "precision": variant.precision,
+            "container": variant.container,
+            "identity": "recommended_download" if digest == recommended.sha256 else "derivative_or_other_conversion",
+            "verified": "structure",
+        },
+    }
+    for asset in profile.modules:
+        path = _served_path(modules, asset.filename, asset.filename)
+        result[asset.role] = _verify_one(root, asset, served_path=path)
+    return result
+
+
 __all__ = [
     "clear_verified_cache",
     "data_dir_from_launch_command",
     "resolve_owned_forge_data_dir",
+    "verify_flux1_assets",
     "verify_klein_assets",
 ]

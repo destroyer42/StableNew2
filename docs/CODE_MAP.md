@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-774 of 929 modules have a docstring.
+776 of 931 modules have a docstring.
 
 ## src/
 
@@ -89,6 +89,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `controlnet_identity.py`: Documented ControlNet model identities and their modality (PR-IMG-CNET-210/220), below both its consumers
 - `controlnet_structure.py`: Bounded safetensors-header evidence for ControlNet weights (PR-IMG-CNET-210)
 - `evidence_census.py`: Bounded operator census over the existing registry; no independent scanner/cache
+- `flux_variant.py`: FLUX family taxonomy from header-only structural evidence (PR-IMG-FLUX-130)
 - `gguf.py`: Bounded GGUF container inspection for the observational inventory (PR-IMG-MODELS-152)
 - `inventory_report.py`: Deterministic, bounded, redacted operator report over the observational inventory (PR-IMG-MODELS-152)
 - `lora_preview.py`: Bounded, read-only local adapter preview access
@@ -564,6 +565,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `exact_model_profile.py`: Small dispatch seam for two independent immutable model contracts, not a new registry
 - `forge_controlnet.py`: Forge ControlNet execution contract for one pre-rendered OpenPose unit (PR-IMG-CNET-210)
 - `forge_controlnet_units.py`: All-or-nothing admission and wire projection for ordered pre-rendered units
+- `forge_flux1_profile.py`: FLUX.1 [dev] family profile for the existing ``forge_webui`` backend (PR-IMG-FLUX-130)
 - `forge_klein_assets.py`: Local, cryptographic identity of the Klein files the serving Forge will actually load (PR-IMG-116 review repa…
 - `forge_klein_lora.py`: FLUX.2 Klein 4B LoRA compatibility interpretation and v2 admission (PR-IMG-117)
 - `forge_klein_profile.py`: FLUX.2 Klein 4B FP8 model profile for the existing ``forge_webui`` backend (PR-IMG-116)

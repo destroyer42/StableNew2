@@ -101,6 +101,9 @@ def project_model_controls(
             f"is '{backend_id}'. StableNew will not switch backends for you: select the {label} "
             "runtime in settings before submitting."
         )
+    if policy.refusal:
+        # A model StableNew refuses outright (for example FLUX.2 Klein 9B, PR-IMG-FLUX-130); the backend refuses it too.
+        blocking = policy.refusal
     annotations, lora_blocking = _project_loras(policy, selected_loras, lora_resolver)
     return ModelControlProjection(
         policy=policy,

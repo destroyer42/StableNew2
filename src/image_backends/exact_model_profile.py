@@ -13,6 +13,12 @@ from src.image_backends.diffusers_ideogram4_profile import (
     validate_ideogram4_config,
     validate_ideogram4_njr,
 )
+from src.image_backends.forge_flux1_profile import (
+    FLUX1_PROFILE_ID,
+    Flux1Profile,
+    resolve_flux1_reference,
+    validate_flux1_intent,
+)
 from src.image_backends.forge_klein_profile import (
     KleinProfile,
     validate_klein_intent,
@@ -33,7 +39,8 @@ from src.image_backends.forge_zimage_profile import (
 )
 
 #: Profiles that run on the WebUI-family Forge backend (the Forge code paths are typed against exactly these).
-ForgeExactModelProfile = KleinProfile | ZImageProfile
+#: ``Flux1Profile`` is a family profile (structural transformer identity, PR-IMG-FLUX-130), not a whole-file one.
+ForgeExactModelProfile = KleinProfile | ZImageProfile | Flux1Profile
 #: Every exact profile, on any backend (PR-IMG-120 adds Ideogram 4 on Diffusers).
 ExactModelProfile = ForgeExactModelProfile | Ideogram4Profile
 
@@ -55,6 +62,8 @@ def resolve_model_profile(options: Any) -> ExactModelProfile | None:
         if type(reference.get("version")) is not int or reference != IDEOGRAM4_PROFILE_V1.reference():
             raise Ideogram4ProfileError("Unsupported Ideogram 4 profile reference; only immutable v1 is supported")
         return IDEOGRAM4_PROFILE_V1
+    if isinstance(reference, Mapping) and reference.get("id") == FLUX1_PROFILE_ID:
+        return resolve_flux1_reference(reference)
     return resolve_klein(options)
 
 
@@ -92,6 +101,8 @@ def profile_prompt_refusal(profile: ExactModelProfile | None, text: str) -> str 
 def validate_profile_intent(profile: ExactModelProfile, **intent: Any) -> str:
     if isinstance(profile, KleinProfile):
         return validate_klein_intent(profile, **intent)
+    if isinstance(profile, Flux1Profile):
+        return validate_flux1_intent(profile, **intent)
     if isinstance(profile, Ideogram4Profile):
         if intent["backend_id"] != profile.backend_id or tuple(intent["stage_names"]) != profile.modes:
             raise Ideogram4ProfileError(f"{profile.display_name} supports only txt2img on the '{profile.backend_id}' backend")
