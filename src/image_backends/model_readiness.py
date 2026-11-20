@@ -20,11 +20,13 @@ from enum import Enum
 from typing import Any
 
 from src.assets.component_evidence import (
+    ARCH_UNRECOGNIZED_DIT,
     ROLE_TEXT_ENCODER,
     ROLE_TRANSFORMER,
     ROLE_VAE,
     ComponentEvidence,
 )
+from src.assets.flux_variant import VARIANT_FLUX1_DEV, classify_flux_variant
 
 CONTRACT = "model_readiness/1"
 QUALIFIED_STATUS = "qualified"
@@ -43,6 +45,8 @@ class ReadinessStatus(str, Enum):
     SELECTED_UNQUALIFIED = "selected_unqualified"
     UNKNOWN_OR_CONFLICTING = "unknown_or_conflicting"
     UNAVAILABLE_OR_STALE = "unavailable_or_stale"
+    #: The selected "checkpoint" is positively a text encoder or VAE (PR-IMG-FLUX-130); refused before dispatch.
+    NOT_A_CHECKPOINT = "not_a_checkpoint"
 
 
 STATUS_LABELS: Mapping[ReadinessStatus, str] = {
@@ -54,6 +58,7 @@ STATUS_LABELS: Mapping[ReadinessStatus, str] = {
     ReadinessStatus.SELECTED_UNQUALIFIED: "Discovered — selected but execution unqualified",
     ReadinessStatus.UNKNOWN_OR_CONFLICTING: "Unknown/conflicting",
     ReadinessStatus.UNAVAILABLE_OR_STALE: "Unavailable/stale",
+    ReadinessStatus.NOT_A_CHECKPOINT: "Not a checkpoint",
 }
 
 
@@ -127,6 +132,8 @@ class ModelReadiness:
     def blocks_dispatch(self) -> bool:
         """Only a positively identified dependency-bearing, unqualified checkpoint is refused before dispatch."""
 
+        if self.status is ReadinessStatus.NOT_A_CHECKPOINT:
+            return True
         return not self.qualified and self.architecture != "unrecognized" and bool(self.dependencies)
 
     def as_dict(self) -> dict[str, Any]:
@@ -252,6 +259,22 @@ def assess_model_readiness(
             evidence_type="safetensors_header",
             observed_at=stamp,
         )
+    evidence_type = "gguf_tensor_table" if checkpoint.fact("container") == "gguf" else "safetensors_header"
+    if checkpoint.role in (ROLE_TEXT_ENCODER, ROLE_VAE):
+        role = "text encoder" if checkpoint.role == ROLE_TEXT_ENCODER else "VAE"
+        return ModelReadiness(
+            model_name,
+            ReadinessStatus.NOT_A_CHECKPOINT,
+            "component_not_checkpoint",
+            (
+                f"This file is a {role} ({checkpoint.architecture.replace('_', ' ')}), not a diffusion checkpoint. "
+                "Move it out of the checkpoint folder or choose a real checkpoint; nothing is moved for you.",
+            ),
+            evidence_type=evidence_type,
+            architecture=checkpoint.architecture,
+            facts=dict(checkpoint.facts),
+            observed_at=stamp,
+        )
     if not checkpoint.dependency_bearing or checkpoint.role != ROLE_TRANSFORMER:
         return ModelReadiness(
             model_name,
@@ -265,7 +288,7 @@ def assess_model_readiness(
         )
 
     base: dict[str, Any] = {
-        "evidence_type": "safetensors_header",
+        "evidence_type": evidence_type,
         "architecture": checkpoint.architecture,
         "facts": dict(checkpoint.facts),
         "observed_at": stamp,
@@ -277,6 +300,25 @@ def assess_model_readiness(
         "separately. StableNew has no exact qualified execution profile for it."
     )
     tail = "Physical qualification (PR-IMG-MODELS-151) is required before it can run."
+    flux = classify_flux_variant(checkpoint)
+    if flux is not None:
+        # PR-IMG-FLUX-130: name the layout class and say exactly why it is refused.
+        from src.image_backends.forge_flux1_profile import (
+            FLUX1_UNPROFILED_HINT,
+            flux_variant_refusal,
+        )
+
+        intro += f" Layout: {flux.label}."
+        tail = (
+            FLUX1_UNPROFILED_HINT if flux.variant == VARIANT_FLUX1_DEV
+            else f"{flux_variant_refusal(flux.variant)} {tail}"
+        )
+    elif checkpoint.architecture == ARCH_UNRECOGNIZED_DIT:
+        intro = (
+            "This is a transformer-only diffusion model of a layout that no runtime StableNew pins recognises "
+            "(no bundled text encoder or VAE)."
+        )
+        tail = "It has no StableNew profile and is refused before any module write or generation."
     if catalog is None or selected is None:
         missing = "the Forge module catalog" if catalog is None else "Forge's current module selection"
         return ModelReadiness(

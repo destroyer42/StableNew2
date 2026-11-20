@@ -28,6 +28,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from src.assets.flux_variant import (
+    VARIANT_FLUX1_DEV,
+    VARIANT_FLUX1_SCHNELL,
+    VARIANT_FLUX2_KLEIN_4B,
+    VARIANT_FLUX2_KLEIN_9B,
+    variant_from_architecture,
+    variant_label,
+)
 from src.image_backends.comfy_qwen_image_profile import (
     QwenImageProfile,
     apply_qwen_image_compile_policy,
@@ -44,6 +52,14 @@ from src.image_backends.diffusers_ideogram4_profile import (
     is_ideogram4_model_name,
 )
 from src.image_backends.exact_model_profile import ExactModelProfile, resolve_model_profile
+from src.image_backends.forge_flux1_profile import (
+    FLUX1_DEV_PROFILE_V1,
+    Flux1Profile,
+    apply_flux1_compile_policy,
+    flux1_selected,
+    flux_variant_refusal,
+    frozen_profile_is_flux1,
+)
 from src.image_backends.forge_klein_profile import (
     KLEIN_PROFILE_ID,
     apply_klein_compile_policy,
@@ -74,6 +90,9 @@ FAMILY_SDXL = "sdxl"
 FAMILY_FLUX2_KLEIN = "flux2_klein"
 FAMILY_IDEOGRAM4 = "ideogram4"
 FAMILY_QWEN_IMAGE = "qwen_image"
+#: FLUX.1 (dev/schnell) layouts (PR-IMG-FLUX-130); the coarse registry family stays ``flux``.
+FAMILY_FLUX1 = "flux1"
+FAMILY_FLUX = "flux"
 FAMILY_UNKNOWN = "unknown"
 
 EVIDENCE_PROFILE = "exact_profile"
@@ -81,6 +100,9 @@ EVIDENCE_REGISTRY = "registry_evidence"
 EVIDENCE_NONE = "no_evidence"
 EVIDENCE_UNKNOWN = "unknown_evidence"
 EVIDENCE_CONFLICTING = "conflicting_evidence"
+#: A family profile admitted by the checkpoint's structural layout (PR-IMG-FLUX-130): a real profile, but never an
+#: exact-identity authority (Model Comparison and other exact-identity consumers keep refusing it).
+EVIDENCE_STRUCTURAL = "structural_profile"
 
 POLICY_ID_SDXL = "sdxl"
 POLICY_ID_UNVERIFIED = "unverified_generic"
@@ -186,6 +208,9 @@ class ModelPolicy:
     #: Operator-facing explanation of fixed/unsupported behavior (policy-authored; the GUI only shows it).
     note: str = ""
     stage_controls: Mapping[str, Mapping[str, ControlPolicy]] = field(default_factory=dict)
+    #: Non-empty when StableNew refuses this model outright (shown as the blocking sentence; the backend refuses
+    #: independently). Not part of a frozen Learning policy context.
+    refusal: str = ""
 
     def control(self, name: str, stage: str | None = None) -> ControlPolicy:
         if stage is not None and name in self.stage_controls.get(stage, {}):
@@ -268,6 +293,8 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
         return _ideogram4_policy(profile)
     if isinstance(profile, QwenImageProfile):
         return _qwen_image_policy(profile)
+    if isinstance(profile, Flux1Profile):
+        return _flux1_policy(profile)
     if isinstance(profile, ZImageProfile):
         return ModelPolicy(
             policy_id=profile.profile_id, family="z_image", display_name=profile.display_name,
@@ -361,6 +388,53 @@ def _ideogram4_policy(profile: Ideogram4Profile) -> ModelPolicy:
               "Write plain text, or paste an Ideogram JSON caption (checked against the official caption schema before "
               "queueing). No negative prompt, LoRA, embeddings or extra stages. Each job loads the model again "
               "(about 20 s). Non-commercial licence. Not yet physically qualified in StableNew."),
+    )
+
+
+def _flux1_policy(profile: Flux1Profile) -> ModelPolicy:
+    """FLUX.1 [dev] family profile (PR-IMG-FLUX-130): txt2img only, fixed distilled settings, the five sizes."""
+
+    fixed = ControlMode.FIXED
+    return ModelPolicy(
+        policy_id=profile.profile_id, family=FAMILY_FLUX1, display_name=profile.display_name,
+        evidence=EVIDENCE_STRUCTURAL, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
+        profile_ref=profile.reference(), stages=(STAGE_TXT2IMG,), modes=profile.modes,
+        controls=_controls(
+            sampler=ControlPolicy(fixed, profile.sampler), scheduler=ControlPolicy(fixed, profile.scheduler),
+            steps=ControlPolicy(fixed, profile.steps), cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
+            vae=ControlPolicy(fixed, ""),
+            geometry=ControlPolicy(ControlMode.CONFIGURABLE, allowed=profile.geometries),
+        ),
+        features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
+        note=(f"FLUX.1 [dev]-class transformer on the managed Forge: {profile.sampler} / {profile.scheduler} / "
+              f"{profile.steps} steps / CFG {profile.cfg_scale:g} / distilled guidance {profile.distilled_cfg_scale:g}, "
+              "one image, txt2img only. Any transformer-only file with the FLUX.1 [dev] layout runs under this profile "
+              "(fine-tunes included; its SHA-256 is recorded, not required). CLIP-L, T5-XXL FP8 and the FLUX.1 VAE must be "
+              "the exact pinned files. No negative prompt, LoRA, embeddings or extra stages. Non-commercial licence. "
+              "Not yet physically qualified in StableNew."),
+    )
+
+
+def _flux_refused_policy(variant: str) -> ModelPolicy:
+    """A FLUX layout class with no executable profile: labelled precisely, every feature unsupported, refused."""
+
+    family = FAMILY_FLUX1 if variant == VARIANT_FLUX1_SCHNELL else (
+        FAMILY_FLUX2_KLEIN if variant in (VARIANT_FLUX2_KLEIN_4B, VARIANT_FLUX2_KLEIN_9B) else FAMILY_FLUX
+    )
+    refusal = flux_variant_refusal(variant)
+    return ModelPolicy(
+        policy_id=f"flux_refused:{variant}",
+        family=family,
+        display_name=f"{variant_label(variant)} (refused)",
+        evidence=EVIDENCE_REGISTRY,
+        allowed_backends=(FORGE_IMAGE_BACKEND_ID,),
+        controls=_controls(),
+        features=_features(_UNSUPPORTED),
+        stages=(),
+        modes=(),
+        prompt_dialect=DIALECT_NATURAL_LANGUAGE,
+        note=refusal,
+        refusal=refusal,
     )
 
 
@@ -478,6 +552,14 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
     family_value = str(getattr(family, "value", family))
     if family_value == FAMILY_SDXL:
         return _sdxl_policy(EVIDENCE_REGISTRY)
+    if family_value == FAMILY_FLUX:
+        # PR-IMG-FLUX-130: a transformer-only FLUX layout class recorded from structure. A bundled (all-in-one) FLUX
+        # checkpoint and a filename/metadata-only FLUX label keep the previous labelled-but-unverified projection.
+        layout = variant_from_architecture(getattr(compat, "checkpoint_architecture", None))
+        if layout is not None and not layout[1]:
+            if layout[0] == VARIANT_FLUX1_DEV:
+                return policy_for_profile(FLUX1_DEV_PROFILE_V1)
+            return _flux_refused_policy(layout[0])
     return _unverified_policy(family_value, EVIDENCE_REGISTRY)  # sd1/sd2/sd3/flux: labelled, never qualified
 
 
@@ -486,7 +568,7 @@ def _model_key(name: str) -> str:
     if base.endswith("]") and " [" in base:
         base = base[: base.rindex(" [")]
     lowered = base.strip().lower()
-    for ext in (".safetensors", ".sft", ".ckpt", ".pt", ".pth"):
+    for ext in (".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".gguf"):
         if lowered.endswith(ext):
             return lowered[: -len(ext)]
     return lowered
@@ -539,10 +621,30 @@ class RegistryFamilyLookup:
             return None
         outcomes = {(item.status, item.family,
                      item.checkpoint_architecture in ("sdxl_refiner", "sdxl_inpaint"),
-                     bool(item.structural_error)) for item in found}
+                     bool(item.structural_error),
+                     # Two same-named files of different FLUX layouts are a conflict, never a pick.
+                     variant_from_architecture(item.checkpoint_architecture)) for item in found}
         if len(outcomes) > 1:
             return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, ())
         return found[0]
+
+
+def registry_variant_lookup(family_lookup: FamilyLookup) -> Callable[[str], tuple[str, bool] | None]:
+    """Adapt a family lookup to the FLUX structural-variant seam ``forge_flux1_profile.install_variant_lookup`` takes.
+
+    Only a resolved FLUX family with a recorded layout answers; conflicting or unknown evidence answers ``None``.
+    """
+
+    def lookup(model_name: str) -> tuple[str, bool] | None:
+        compat = family_lookup(model_name)
+        family = getattr(compat, "family", None)
+        if compat is None or getattr(getattr(compat, "status", None), "value", "") != "resolved":
+            return None
+        if str(getattr(family, "value", family)) != FAMILY_FLUX:
+            return None
+        return variant_from_architecture(getattr(compat, "checkpoint_architecture", None))
+
+    return lookup
 
 
 # -- compiler seam ----------------------------------------------------------------------------------------------
@@ -599,6 +701,8 @@ def apply_model_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
         return apply_qwen_image_compile_policy(config)
     if klein_selected(config):
         return _COMPILE_POLICIES[KLEIN_PROFILE_ID](config)
+    if frozen_profile_is_flux1(config.get("backend_options")) or flux1_selected(config):
+        return apply_flux1_compile_policy(config)
     return config
 
 
@@ -645,6 +749,8 @@ class ModelPolicyResult:
             return apply_qwen_image_compile_policy(payload)
         if klein_selected(payload):
             return _project_klein_flat(payload)
+        if frozen_profile_is_flux1(payload.get("backend_options")) or flux1_selected(payload):
+            return apply_flux1_compile_policy(payload)
         return payload
 
 
@@ -751,7 +857,10 @@ __all__ = [
     "EVIDENCE_NONE",
     "EVIDENCE_PROFILE",
     "EVIDENCE_REGISTRY",
+    "EVIDENCE_STRUCTURAL",
     "EVIDENCE_UNKNOWN",
+    "FAMILY_FLUX",
+    "FAMILY_FLUX1",
     "FAMILY_FLUX2_KLEIN",
     "FAMILY_IDEOGRAM4",
     "FAMILY_QWEN_IMAGE",
@@ -770,6 +879,7 @@ __all__ = [
     "policy_for_model_profile_reference",
     "policy_for_profile",
     "prepare_candidate_baseline",
+    "registry_variant_lookup",
     "resolve_model_policy",
     "resolve_model_profile_for_policy",
 ]

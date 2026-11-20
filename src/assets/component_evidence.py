@@ -45,6 +45,13 @@ ARCH_UNET_BUNDLE_UNRECOGNIZED = "unet_bundle_unrecognized"
 ARCH_Z_IMAGE_DIT = "z_image_dit"
 ARCH_QWEN_IMAGE_DIT = "qwen_image_dit"
 ARCH_QWEN_IMAGE_VAE = "qwen_image_vae"
+#: A Qwen3-VL language+vision encoder (``model.language_model.*`` plus ``model.visual.*``); never interchangeable with Qwen3.
+ARCH_QWEN3_VL = "qwen3_vl"
+#: A transformer-only diffusion DiT (timestep and text inputs, single-stream blocks, no bundled encoder/VAE) whose layout
+#: matches no known signature. Positively a dependency-bearing transformer, so never "unrecognized" (PR-IMG-FLUX-130).
+ARCH_UNRECOGNIZED_DIT = "unrecognized_dit"
+#: A GGUF container that declares ``general.architecture = flux`` but whose tensor table could not be read.
+ARCH_FLUX_GGUF_UNREAD = "flux_gguf_structure_unread"
 
 #: Qwen3 hidden size -> published size label (only when the layer count also matches, see ``_qwen3``).
 _QWEN3_SIZES = {2560: "qwen3_4b", 4096: "qwen3_8b"}
@@ -164,6 +171,8 @@ def _flux_transformer(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]
         singles = _indices(table, r"^single_blocks\.(\d+)\.")
         flux2 = "double_stream_modulation_img.lin.weight" in table
         key_format = "native"
+        guidance = "guidance_in.in_layer.weight" in table
+        vector = table.get("vector_in.in_layer.weight")
     else:
         shape = table["x_embedder.weight"]
         hidden, in_channels = (shape[0], shape[1]) if len(shape) == 2 else (None, None)
@@ -172,6 +181,8 @@ def _flux_transformer(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]
         singles = _indices(table, r"^single_transformer_blocks\.(\d+)\.")
         flux2 = "double_stream_modulation_img.linear.weight" in table
         key_format = "diffusers"
+        guidance = "time_text_embed.guidance_embedder.linear_1.weight" in table
+        vector = table.get("time_text_embed.text_embedder.linear_1.weight")
     bundled = any(_prefixed(shapes, prefix) for prefix in _BUNDLED_TEXT_ENCODER_PREFIXES + _BUNDLED_VAE_PREFIXES)
     facts: dict[str, Any] = {
         "key_format": key_format,
@@ -183,6 +194,9 @@ def _flux_transformer(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]
         "dtype": _dominant_dtype(dtypes),
         "tensor_count": len(shapes),
         "bundled_text_encoder_or_vae": bundled,
+        # FLUX.1 discriminators (PR-IMG-FLUX-130): a guidance embedding (dev) and the pooled CLIP vector input width.
+        "guidance_embedding": guidance,
+        "vector_input_dim": vector[1] if isinstance(vector, list) and len(vector) == 2 else None,
     }
     if isinstance(joint, int) and flux2 and joint % _JOINT_STACK == 0:
         facts["required_text_encoder_hidden_size"] = joint // _JOINT_STACK
@@ -280,6 +294,48 @@ def _qwen3(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) -> Compon
     return ComponentEvidence(ROLE_TEXT_ENCODER, ARCH_QWEN3, facts)
 
 
+def _qwen3_vl(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) -> ComponentEvidence | None:
+    embed = shapes.get("model.language_model.embed_tokens.weight")
+    if not embed or len(embed) != 2 or not _prefixed(shapes, "model.visual."):
+        return None
+    layers = _indices(shapes, r"^model\.language_model\.layers\.(\d+)\.")
+    quantized = any(dtype in _QUANTIZED_DTYPES for dtype in dtypes.values()) or any(
+        is_quantization_scale_key(name) for name in shapes
+    )
+    # ``language_hidden_size``, not ``hidden_size``: a VL encoder is never a dependency candidate for a plain Qwen3 slot.
+    facts: dict[str, Any] = {
+        "language_hidden_size": embed[1],
+        "vocab_size": embed[0],
+        "layers": layers,
+        "vision_tower": True,
+        "quantized": quantized,
+        "tensor_count": len(shapes),
+    }
+    return ComponentEvidence(ROLE_TEXT_ENCODER, ARCH_QWEN3_VL, facts)
+
+
+def _unrecognized_dit(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) -> ComponentEvidence | None:
+    """A transformer-only DiT of no known layout: text input, timestep input and single-stream blocks, nothing bundled."""
+
+    table = _strip_transformer_prefix(shapes)
+    txt_in = table.get("txt_in.weight")
+    if (
+        not txt_in or len(txt_in) != 2
+        or "time_in.in_layer.weight" not in table
+        or not _prefixed(table, "single_blocks.")
+        or any(_prefixed(shapes, prefix) for prefix in _BUNDLED_TEXT_ENCODER_PREFIXES + _BUNDLED_VAE_PREFIXES)
+    ):
+        return None
+    facts: dict[str, Any] = {
+        "hidden_size": txt_in[0],
+        "joint_input_dim": txt_in[1],
+        "single_blocks": _indices(table, r"^single_blocks\.(\d+)\."),
+        "tensor_count": len(shapes),
+        "bundled_text_encoder_or_vae": False,
+    }
+    return ComponentEvidence(ROLE_TRANSFORMER, ARCH_UNRECOGNIZED_DIT, facts, dependency_bearing=True)
+
+
 def _vae(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) -> ComponentEvidence | None:
     conv_in = shapes.get("decoder.conv_in.weight")
     if not conv_in or len(conv_in) != 4 or "decoder.conv_out.weight" not in shapes:
@@ -306,7 +362,8 @@ def classify_tensor_table(shapes: Mapping[str, list[int]], dtypes: Mapping[str, 
     """Classify an already-validated header. First matching structural signature wins; otherwise unrecognized."""
 
     precision = precision_facts(shapes, dtypes)
-    for classify in (_flux_transformer, _z_image_dit, _qwen_image_dit, _qwen3, _qwen_image_vae, _vae):
+    for classify in (_flux_transformer, _z_image_dit, _qwen_image_dit, _qwen3, _qwen3_vl, _qwen_image_vae, _vae,
+                     _unrecognized_dit):
         found = classify(shapes, dtypes)
         if found is not None:
             return replace(found, facts={**found.facts, **precision})
@@ -324,10 +381,42 @@ def classify_tensor_table(shapes: Mapping[str, list[int]], dtypes: Mapping[str, 
     return ComponentEvidence(facts={"tensor_count": len(shapes), **precision})
 
 
+def classify_gguf_evidence(evidence: Any) -> ComponentEvidence:
+    """Structural evidence of a GGUF transformer from its bounded tensor-info table (PR-IMG-FLUX-130).
+
+    Only the diffusion-transformer signatures apply (a GGUF here is a transformer, never an encoder bundle). Precision is the
+    container's declared quantization, never a tensor-type histogram. A container that declares ``flux`` but whose table was
+    not read is a FLUX transformer of unknown variant, which is enough for the dependency gate to refuse it.
+    """
+
+    container = {"container": "gguf", "gguf_quantization": getattr(evidence, "quantization", None),
+                 "precision_layout": "gguf_quantized"}
+    if not getattr(evidence, "parsed", False):
+        return ComponentEvidence(error=getattr(evidence, "error", None) or "unreadable GGUF container")
+    shapes = dict(getattr(evidence, "tensor_shapes", {}) or {})
+    dtypes = dict(getattr(evidence, "tensor_types", {}) or {})
+    if shapes:
+        for classify in (_flux_transformer, _z_image_dit, _qwen_image_dit, _unrecognized_dit):
+            found = classify(shapes, dtypes)
+            if found is not None:
+                return replace(found, facts={**found.facts, **container, "dtype": ""})
+    if str(getattr(evidence, "architecture", "") or "").lower() == "flux":
+        return ComponentEvidence(
+            ROLE_TRANSFORMER, ARCH_FLUX_GGUF_UNREAD,
+            {**container, "declared_architecture": "flux", "tensor_count": getattr(evidence, "tensor_count", None)},
+            dependency_bearing=True,
+        )
+    return ComponentEvidence(facts={**container, "tensor_count": getattr(evidence, "tensor_count", None)})
+
+
 def inspect_component_file(path: Path | str) -> ComponentEvidence:
     """Header-only evidence for one local file; never raises, never hashes, never loads tensors."""
 
     target = Path(path)
+    if target.suffix.lower() == ".gguf":
+        from src.assets.gguf import inspect_gguf
+
+        return classify_gguf_evidence(inspect_gguf(target))
     if target.suffix.lower() != ".safetensors":
         return ComponentEvidence(error="unsupported format for structural recognition")
     try:
@@ -340,12 +429,15 @@ def inspect_component_file(path: Path | str) -> ComponentEvidence:
 __all__ = [
     "ARCH_FLUX2_DIT",
     "ARCH_FLUX_DIT",
+    "ARCH_FLUX_GGUF_UNREAD",
     "ARCH_FLUX_VAE",
     "ARCH_QWEN3",
+    "ARCH_QWEN3_VL",
     "ARCH_QWEN_IMAGE_DIT",
     "ARCH_QWEN_IMAGE_VAE",
     "ARCH_SDXL_UNET",
     "ARCH_UNET_BUNDLE_UNRECOGNIZED",
+    "ARCH_UNRECOGNIZED_DIT",
     "ARCH_Z_IMAGE_DIT",
     "COMPONENT_CONTRACT",
     "ComponentEvidence",
@@ -354,6 +446,7 @@ __all__ = [
     "ROLE_TRANSFORMER",
     "ROLE_UNRECOGNIZED",
     "ROLE_VAE",
+    "classify_gguf_evidence",
     "classify_tensor_table",
     "inspect_component_file",
     "precision_facts",

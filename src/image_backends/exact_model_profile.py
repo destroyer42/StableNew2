@@ -21,6 +21,12 @@ from src.image_backends.diffusers_ideogram4_profile import (
     validate_ideogram4_config,
     validate_ideogram4_njr,
 )
+from src.image_backends.forge_flux1_profile import (
+    FLUX1_PROFILE_ID,
+    Flux1Profile,
+    resolve_flux1_reference,
+    validate_flux1_intent,
+)
 from src.image_backends.forge_klein_profile import (
     KleinProfile,
     validate_klein_intent,
@@ -41,7 +47,8 @@ from src.image_backends.forge_zimage_profile import (
 )
 
 #: Profiles that run on the WebUI-family Forge backend (the Forge code paths are typed against exactly these).
-ForgeExactModelProfile = KleinProfile | ZImageProfile
+#: ``Flux1Profile`` is a family profile (structural transformer identity, PR-IMG-FLUX-130), not a whole-file one.
+ForgeExactModelProfile = KleinProfile | ZImageProfile | Flux1Profile
 #: Every exact profile, on any backend (PR-IMG-120 adds Ideogram 4 on Diffusers; PR-IMG-COMFY-100 adds the two
 #: Qwen-Image 2.1 profiles on the Comfy still-image backend).
 ExactModelProfile = ForgeExactModelProfile | Ideogram4Profile | QwenImageProfile
@@ -70,6 +77,8 @@ def resolve_model_profile(options: Any) -> ExactModelProfile | None:
     qwen = qwen_image_profile_for_reference(reference)
     if qwen is not None:
         return qwen
+    if isinstance(reference, Mapping) and reference.get("id") == FLUX1_PROFILE_ID:
+        return resolve_flux1_reference(reference)
     return resolve_klein(options)
 
 
@@ -127,6 +136,8 @@ def validate_profile_intent(profile: ExactModelProfile, **intent: Any) -> str:
             negative=str(intent.get("negative_prompt") or ""),
         )  # fmt: skip
         return "txt2img"
+    if isinstance(profile, Flux1Profile):
+        return validate_flux1_intent(profile, **intent)
     if isinstance(profile, Ideogram4Profile):
         if intent["backend_id"] != profile.backend_id or tuple(intent["stage_names"]) != profile.modes:
             raise Ideogram4ProfileError(f"{profile.display_name} supports only txt2img on the '{profile.backend_id}' backend")

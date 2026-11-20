@@ -582,6 +582,20 @@ def _install_file_access_hooks(logger: FileAccessLogger) -> None:
 # --- logging bypass ---
 
 
+def _install_flux_variant_lookup() -> None:
+    """Let the compiler see a checkpoint's recorded FLUX layout (PR-IMG-FLUX-130).
+
+    The lookup reads only ``AssetRegistry``'s persisted snapshot, lazily on first use (no scan, no hashing). Installed
+    here, at the application entry point, so tests and other hosts stay hermetic: without it the compiler stamps no FLUX.1
+    profile and the Forge dependency gate refuses the unprofiled transformer instead.
+    """
+
+    from src.image_backends.forge_flux1_profile import install_variant_lookup
+    from src.image_backends.model_policy import RegistryFamilyLookup, registry_variant_lookup
+
+    install_variant_lookup(registry_variant_lookup(RegistryFamilyLookup()))
+
+
 def main() -> None:
     """Main function"""
 
@@ -610,6 +624,7 @@ def main() -> None:
         _install_file_access_hooks(file_access_logger)
 
     logging.info("Starting StableNew V2 GUI (MainWindowV2)")
+    _install_flux_variant_lookup()
     # Don't bootstrap WebUI synchronously - do it asynchronously after GUI loads
     webui_manager = None
 

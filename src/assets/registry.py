@@ -36,6 +36,7 @@ from src.assets.compatibility import (
     sidecar_metadata_evidence,
     sidecar_metadata_field_present,
 )
+from src.assets.flux_variant import ARCHITECTURE_IDS as FLUX_ARCHITECTURE_IDS
 from src.assets.observation import (
     ObservationRoot,
     ObservationScan,
@@ -86,11 +87,15 @@ _AUXILIARY_EXTENSIONS = frozenset({".json", ".onnx", ".safetensors", ".txt"})
 AUXILIARY_MAX_BYTES = 16 * 1024**3
 #: Kinds a default (``kinds=None``) refresh covers; auxiliary files are hashed only when explicitly requested.
 _DEFAULT_REFRESH_KINDS = frozenset(set(AssetKind) - _AUXILIARY_KINDS)
+#: A checkpoint may also be a GGUF transformer (PR-IMG-FLUX-130): its structure is read from the bounded tensor table.
+_CHECKPOINT_EXTENSIONS = _EXTENSIONS | {".gguf"}
 
 
 def _extensions_for(kind: AssetKind) -> frozenset[str]:
     if kind in _AUXILIARY_KINDS:
         return _AUXILIARY_EXTENSIONS
+    if kind is AssetKind.CHECKPOINT:
+        return _CHECKPOINT_EXTENSIONS
     return _IMAGE_EXTENSIONS if kind in _IMAGE_KINDS else _EXTENSIONS
 
 
@@ -171,7 +176,7 @@ def _safetensors_metadata(path: Path) -> tuple[dict[str, Any], str | None]:
         return {}, f"{type(exc).__name__}: {exc}"
 
 
-_CHECKPOINT_NAME_SUFFIXES = (".safetensors", ".sft", ".ckpt", ".pt", ".pth")
+_CHECKPOINT_NAME_SUFFIXES = (".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".gguf")
 
 
 def _checkpoint_name_key(value: str) -> str:
@@ -998,6 +1003,8 @@ class AssetRegistry:
         structural_family = {
             "sdxl_base": ModelFamily.SDXL, "sdxl_refiner": ModelFamily.SDXL,
             "sdxl_inpaint": ModelFamily.SDXL, "sd1": ModelFamily.SD1, "sd2": ModelFamily.SD2,
+            # PR-IMG-FLUX-130: a FLUX layout class is structural FLUX evidence (it can conflict with a metadata claim).
+            **dict.fromkeys(FLUX_ARCHITECTURE_IDS, ModelFamily.FLUX),
         }.get(architecture or "")
         if structural_family is not None:
             evidence.append(FamilyEvidence(

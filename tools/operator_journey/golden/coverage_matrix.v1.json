@@ -459,6 +459,20 @@
       "limits": "The compiler, NJR, run_njr dispatch, GPU lease, owned-runtime check, object_info probe, floors, one-prompt dispatch, observation, cancellation, artifacts and release run against in-memory Comfy fakes; no desktop journey selects Qwen-Image, no ComfyUI is started and no model is loaded.",
       "physical_qualification": "NOT RUN: no Qwen-Image weights are installed; a physical run needs the owner's install and a separate authorization.",
       "remaining_risk": "Real Qwen-Image generation through StableNew is unverified: the int8_convrot layout on Ada, VRAM/RAM floors, timings and quality are unmeasured."
+    },
+    {
+      "id": "flux-families-policy-and-flux1-dev-profile",
+      "title": "Generic FLUX families: layout-class labels, refusals and the FLUX.1 [dev] family profile",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/assets/test_flux_variant_130.py",
+        "tests/image_backends/test_forge_flux1_profile_130.py",
+        "tests/integration/test_pr_img_flux_130_canonical_path.py"
+      ],
+      "limits": "FLUX layouts are classified from synthetic safetensors tables and header-only GGUF tensor tables (no weights). The FLUX.1 [dev] profile runs through NJR, JobService, SQLite, run_njr, the Forge backend and the executor against a loopback Forge fake with the asset and host-memory byte checks stubbed; their own unit tests use small files. No desktop journey selects a FLUX checkpoint and no FLUX.1 file is installed.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "FLUX.1 [dev] generation through StableNew is unqualified: the Euler/Simple/20/distilled 3.5 settings and the host-memory envelope are published defaults and estimates, not StableNew measurements. FLUX.2 Klein 9B stays NO-GO (PR-IMG-MODELS-151)."
     }
   ]
 }
