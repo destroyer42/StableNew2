@@ -29,6 +29,7 @@ from src.pipeline.job_models_v2 import NormalizedJobRecord, UnifiedJobSummary, W
 from src.pipeline.njr_compiler import NjrDerivation, derive_njr
 
 if TYPE_CHECKING:
+    from src.app.site_phone_followup import PhoneFollowup
     from src.app.site_phone_video import PhoneVideo
 
 _DIGEST = re.compile(r"[a-f0-9]{64}")
@@ -55,6 +56,7 @@ class _FrozenPreview:
     kind: str
     until: float
     draft: PhonePreviewInput
+    evidence_kind: str = ""
 
 
 def _preview_job(record: NormalizedJobRecord) -> dict[str, Any]:
@@ -100,6 +102,7 @@ class PhoneQueueAdmission:
         compile_pack: Callable[[PreparePack], PhonePreviewInput],
         compile_rework: Callable[[SiteOutputCatalog, str, str, str], PhonePreviewInput],
         video: PhoneVideo | None = None,
+        followup: PhoneFollowup | None = None,
     ) -> None:
         self._queue = queue_view
         self._jobs = jobs
@@ -107,6 +110,7 @@ class PhoneQueueAdmission:
         self._compile_pack = compile_pack
         self._compile_rework = compile_rework
         self._video = video
+        self._followup = followup
         self._lock = Lock()
         self._catalog: tuple[str, str, SitePackCatalog] | None = None
         self._preview: _FrozenPreview | None = None
@@ -149,10 +153,12 @@ class PhoneQueueAdmission:
                 except ValueError as exc:
                     raise SiteOutputError("promptpack_changed") from exc
         if method == "POST" and isinstance(body, dict):
+            if route == "followup" and self._followup is not None:
+                return self._followup.suggest(catalog, grant, body)
             if route == "preview":
-                return self._prepare(owner, catalog, body)
+                return self._prepare(owner, catalog, grant, body)
             if route == "submit":
-                return self._submit(owner, catalog, body)
+                return self._submit(owner, catalog, grant, body)
         raise SiteOutputError("phone_scope_refused")
 
     def _pack_catalog(self, owner: str, catalog: SiteOutputCatalog) -> SitePackCatalog:
@@ -162,9 +168,10 @@ class PhoneQueueAdmission:
         return current[2]
 
     def _prepare(
-        self, owner: str, catalog: SiteOutputCatalog, body: dict[str, Any]
+        self, owner: str, catalog: SiteOutputCatalog, grant: PhoneGrant, body: dict[str, Any]
     ) -> dict[str, Any]:
         kind = body.get("kind")
+        evidence_kind = ""
         workload = WorkloadKind.IMAGE
         with self._lock:
             self._preview = None
@@ -205,6 +212,11 @@ class PhoneQueueAdmission:
         elif kind in ("video", "video_eval") and self._video is not None:
             draft = self._video.preview(catalog, body, evaluation=kind == "video_eval")
             workload = WorkloadKind.VIDEO
+        elif kind == "followup" and self._followup is not None:
+            draft = self._followup.preview(catalog, grant, body)
+            evidence_kind = body["source"]["kind"]
+            kind = "video_eval" if draft.eval_run else "followup"
+            workload = WorkloadKind.VIDEO if draft.eval_run else WorkloadKind.IMAGE
         else:
             raise SiteOutputError("invalid_preview")
         if not 1 <= len(draft.records) <= MAX_PHONE_JOBS or any(
@@ -249,10 +261,11 @@ class PhoneQueueAdmission:
                 kind,
                 time.monotonic() + _PREVIEW_SECONDS,
                 replace(draft, records=records),
+                evidence_kind,
             )
         return {
             "preview_id": identifier,
-            "kind": kind,
+            "kind": body["kind"],
             "label": draft.label,
             "jobs": [
                 {"job_id": record.job_id, "stages": record.stage_chain_labels, **details}
@@ -273,7 +286,7 @@ class PhoneQueueAdmission:
         return self._queue.receipt(owner, identifier)
 
     def _submit(
-        self, owner: str, catalog: SiteOutputCatalog, body: dict[str, Any]
+        self, owner: str, catalog: SiteOutputCatalog, grant: PhoneGrant, body: dict[str, Any]
     ) -> dict[str, Any]:
         identifier = body.get("preview_id")
         if body.keys() != {"preview_id", "confirmed"} or not (
@@ -291,6 +304,13 @@ class PhoneQueueAdmission:
         if preview is None:
             return self._receipt(owner, identifier)
         try:
+            if (
+                preview.evidence_kind in {"rating", "returned"}
+                and not grant.native_review
+                or preview.evidence_kind == "evaluation"
+                and not grant.rating
+            ):
+                raise SiteOutputError("phone_scope_refused")
             if preview.scope != catalog.scope or preview.until <= time.monotonic():
                 raise SiteOutputError("preview_changed")
             if self._jobs.queue.is_dispatch_fenced():
