@@ -2,6 +2,11 @@
 
 The SDXL dimensions are observational architecture signatures, not model
 qualification. Only the standard LDM SDXL base layout is admitted here.
+
+Contract 2 (PR-IMG-FLUX-130) also records the FLUX layout class (``src/assets/flux_variant.py``) of a FLUX transformer or
+all-in-one checkpoint as its ``architecture`` (``flux1_dev``, ``flux2_klein_9b``, ``flux1_dev_bundled`` ...), for
+safetensors and for GGUF tensor tables. Bumping the contract makes the registry re-read every checkpoint header (no
+re-hash) on its next refresh; until then old entries keep their previous meaning.
 """
 
 from __future__ import annotations
@@ -12,7 +17,7 @@ import struct
 from pathlib import Path
 from typing import Any
 
-STRUCTURE_CONTRACT = "checkpoint_structure/1"
+STRUCTURE_CONTRACT = "checkpoint_structure/2"
 _MAX_HEADER = 64 * 1024 * 1024
 # Inspection supports ordinary tensor ranks without allowing adversarial work.
 _MAX_TENSOR_RANK = 64
@@ -183,6 +188,23 @@ def checkpoint_variant_from_metadata(metadata: dict[str, Any]) -> str | None:
     return None
 
 
+def _flux_variant_of_table(shapes: dict[str, list[int]], dtypes: dict[str, str]) -> str | None:
+    # Deferred: component_evidence imports this module's parser.
+    from src.assets.component_evidence import classify_tensor_table
+    from src.assets.flux_variant import classify_flux_variant
+
+    variant = classify_flux_variant(classify_tensor_table(shapes, dtypes))
+    return None if variant is None else variant.architecture_id
+
+
+def _flux_variant_of(path: Path) -> str | None:
+    from src.assets.component_evidence import inspect_component_file
+    from src.assets.flux_variant import classify_flux_variant
+
+    variant = classify_flux_variant(inspect_component_file(path))
+    return None if variant is None else variant.architecture_id
+
+
 def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
     """Read at most a bounded JSON header, validating descriptors against file size.
 
@@ -196,14 +218,23 @@ def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
         "error": None,
     }
     metadata: dict[str, Any] = {}
+    if path.suffix.lower() == ".gguf":
+        variant = _flux_variant_of(path)
+        if variant is None:
+            structure["error"] = "unsupported checkpoint format for structural recognition"
+        else:
+            structure["architecture"] = variant
+        return {"structure": structure, "metadata": metadata, "metadata_error": None}
     if path.suffix.lower() != ".safetensors":
         structure["error"] = "unsupported checkpoint format for structural recognition"
         return {"structure": structure, "metadata": metadata, "metadata_error": None}
     try:
-        shapes, _dtypes, metadata = read_tensor_table(path)
+        shapes, dtypes, metadata = read_tensor_table(path)
         structure["architecture"], error = classify_checkpoint_shapes(shapes)
         if error:
             structure["error"] = error
+        elif structure["architecture"] == "unrecognized":
+            structure["architecture"] = _flux_variant_of_table(shapes, dtypes) or "unrecognized"
     except (OSError, ValueError, TypeError, UnicodeDecodeError, struct.error):
         # Diagnostic intentionally omits local paths and raw authored metadata.
         structure["error"] = "malformed or truncated safetensors header/tensor descriptors"

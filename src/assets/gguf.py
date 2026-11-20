@@ -5,6 +5,11 @@ metadata key/value block. It never reads a tensor, hashes, loads or converts any
 establishes is only what the container states about itself (``general.architecture``, ``general.file_type``); the
 quantization name is reported *only* from that declared file type, never from the file name or size, and anything it cannot
 parse safely is an error result, not a guess. A parsed container is still **not** proof that any backend can load it.
+
+PR-IMG-FLUX-130 adds the tensor-info table that follows the key/value block (names, dims and tensor types; never tensor
+data), read from the same bounded prefix. Dims are reported in the safetensors order (slowest first; GGUF stores them
+fastest first), so the one structural classifier can read both containers. A table that does not fit the bound or does not
+parse is ``tensor_table_error``: the container facts above still stand and nothing structural is guessed.
 """
 
 from __future__ import annotations
@@ -19,6 +24,14 @@ MAX_KV_COUNT = 4096
 MAX_STRING_BYTES = 64 * 1024
 MAX_ARRAY_ELEMENTS = 1 << 20
 SUPPORTED_VERSIONS = (2, 3)
+MAX_TENSOR_COUNT = 1 << 16
+MAX_TENSOR_DIMS = 8
+
+#: ggml tensor type ids -> names (per-tensor storage type, distinct from the file type above).
+TENSOR_TYPES = {
+    0: "F32", 1: "F16", 2: "Q4_0", 3: "Q4_1", 6: "Q5_0", 7: "Q5_1", 8: "Q8_0", 9: "Q8_1", 10: "Q2_K", 11: "Q3_K",
+    12: "Q4_K", 13: "Q5_K", 14: "Q6_K", 15: "Q8_K", 24: "I8", 25: "I16", 26: "I32", 27: "I64", 28: "F64", 30: "BF16",
+}
 
 #: llama.cpp ``LLAMA_FTYPE`` values that name a quantization (container-declared ``general.file_type``).
 FILE_TYPES = {
@@ -69,6 +82,11 @@ class GgufEvidence:
     metadata_keys: tuple[str, ...] = ()
     error: str | None = None
     facts: dict[str, Any] = field(default_factory=dict)
+    #: Tensor name -> shape in safetensors order (empty when the table was not read).
+    tensor_shapes: dict[str, list[int]] = field(default_factory=dict)
+    #: Tensor name -> ggml storage type name (``TENSOR_TYPES``; ``T<id>`` for an unlisted id).
+    tensor_types: dict[str, str] = field(default_factory=dict)
+    tensor_table_error: str | None = None
 
 
 class _Reader:
@@ -153,6 +171,25 @@ def inspect_gguf(path: Path) -> GgufEvidence:
                 found[key] = value
     except (ValueError, struct.error):
         return GgufEvidence(error="malformed or truncated GGUF header")
+    shapes: dict[str, list[int]] = {}
+    types: dict[str, str] = {}
+    table_error: str | None = None
+    try:
+        if tensor_count > MAX_TENSOR_COUNT:
+            raise ValueError("tensor count is implausible")
+        for _ in range(tensor_count):
+            name = reader.string()
+            dims = reader.unpack("I", 4)
+            if dims > MAX_TENSOR_DIMS or name in shapes:
+                raise ValueError("invalid tensor descriptor")
+            shape = [reader.unpack("Q", 8) for _ in range(dims)]
+            kind = reader.unpack("I", 4)
+            reader.unpack("Q", 8)  # data offset: never followed
+            shapes[name] = list(reversed(shape))
+            types[name] = TENSOR_TYPES.get(kind, f"T{kind}")
+    except (ValueError, struct.error):
+        shapes, types = {}, {}
+        table_error = "tensor table exceeds the bounded header read or is malformed"
     file_type = found.get("general.file_type")
     file_type = file_type if isinstance(file_type, int) else None
     return GgufEvidence(
@@ -166,7 +203,10 @@ def inspect_gguf(path: Path) -> GgufEvidence:
         quantization=FILE_TYPES.get(file_type) if file_type is not None else None,
         metadata_keys=tuple(keys),
         facts={"quantization_version": found.get("general.quantization_version")},
+        tensor_shapes=shapes,
+        tensor_types=types,
+        tensor_table_error=table_error,
     )
 
 
-__all__ = ["FILE_TYPES", "GgufEvidence", "inspect_gguf"]
+__all__ = ["FILE_TYPES", "TENSOR_TYPES", "GgufEvidence", "inspect_gguf"]
