@@ -1755,6 +1755,11 @@ def describe_startup_exit(diagnostics: Mapping[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _read_deliberate_stop_count(manager: WebUIProcessManager) -> int:
+    count = getattr(manager, "deliberate_stop_count", 0)
+    return count if type(count) is int else 0
+
+
 def wait_for_managed_startup(
     manager: WebUIProcessManager,
     base_url: str,
@@ -1780,7 +1785,7 @@ def wait_for_managed_startup(
         from src.api.healthcheck import wait_for_webui_ready as probe
     from src.api.healthcheck import clear_readiness_failure_state
 
-    stops_at_start = int(getattr(manager, "deliberate_stop_count", 0) or 0)
+    stops_at_start = _read_deliberate_stop_count(manager)
     budget = max(float(timeout_s), 0.0)
     deadline = time.monotonic() + budget
     first = True
@@ -1791,7 +1796,7 @@ def wait_for_managed_startup(
         try:
             probe(base_url, timeout=attempt_timeout, poll_interval=poll_interval_s)
         except Exception as exc:
-            if int(getattr(manager, "deliberate_stop_count", 0) or 0) != stops_at_start:
+            if _read_deliberate_stop_count(manager) != stops_at_start:
                 clear_readiness_failure_state(base_url)
                 logger.info(
                     "WebUI startup wait ended: StableNew released the starting WebUI process deliberately"
