@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-783 of 938 modules have a docstring.
+784 of 939 modules have a docstring.
 
 ## src/
 
@@ -893,6 +893,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `operator_readiness_service.py`: Read-only operator readiness projection built from existing authorities
 - `persistence_worker.py`: PR-HB-004: Async Persistence Worker
 - `runtime_transition_service.py`: PR-RUNTIME-100: coordinate release of conflicting StableNew-owned GPU runtimes
+- `runtime_warm_hold.py`: One idle warm hold of a StableNew-owned runtime between consecutive jobs (VID-WARM-373)
 - `ui_state_store.py`: UI state persistence for StableNew v2.6
 - `watchdog_system_v2.py`: (no docstring)
 

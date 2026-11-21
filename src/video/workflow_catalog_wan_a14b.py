@@ -126,6 +126,11 @@ WAN_A14B_FRAME_COUNT_POLICY = {
     "fps": 16,
 }
 WAN_A14B_REQUIRED_LAUNCH_FLAGS = ("--disable-pinned-memory",)
+# VID-WARM-373 (owner request 2026-11-21): after a successful job the StableNew-owned ComfyUI stays warm for this
+# many seconds of idle time, so the next A14B job skips the cold start and the two-expert load (321F: 125 s cold
+# versus 91-92 s warm prompt time in one process). Any other job, a failure or cancellation, or the grace passing
+# still releases it. The graph's ModelSamplingSD3 shift is a constant, so a reused process never sees another one.
+WAN_A14B_KEEP_WARM_SECONDS = 120
 # 321F: peak whole-GPU VRAM 9,596 MiB of 12,282 with 1,420 MiB in use before the run, i.e. a footprint of
 # about 8,176 MiB; the floor adds ~5 % margin.  The host-RAM figure is advisory only: the session started
 # with 16.4 GiB free and dipped to 4.8 GiB while loading about 36 GB of weights.
@@ -332,6 +337,7 @@ def build_wan_a14b_spec() -> WorkflowSpec:
             "output_policy": {"mode": "frames", "fps": WAN_A14B_FRAME_COUNT_POLICY["fps"]},
             "runtime_policy": {
                 "release_owned_runtime_after_job": True,
+                "keep_warm_between_jobs_seconds": WAN_A14B_KEEP_WARM_SECONDS,
                 "required_launch_flags": list(WAN_A14B_REQUIRED_LAUNCH_FLAGS),
             },
             "provenance": {
@@ -386,6 +392,7 @@ def build_wan_a14b_spec() -> WorkflowSpec:
 __all__ = [
     "WAN_A14B_FRAME_COUNT_POLICY",
     "WAN_A14B_ID",
+    "WAN_A14B_KEEP_WARM_SECONDS",
     "WAN_A14B_MODEL_FILES",
     "WAN_A14B_STOCK_NODES",
     "WAN_A14B_VERSION",
