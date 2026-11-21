@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-783 of 938 modules have a docstring.
+785 of 940 modules have a docstring.
 
 ## src/
 
@@ -97,6 +97,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `inventory_report.py`: Deterministic, bounded, redacted operator report over the observational inventory (PR-IMG-MODELS-152)
 - `lora_preview.py`: Bounded, read-only local adapter preview access
 - `observation.py`: Tier-1 observational inventory (PR-IMG-MODELS-152): bounded, cancellable, header-only, no hashing
+- `picker_compatibility.py`: Observational component evidence and compatibility for Base Generation catalogs
 - `registry.py`: Offline local-file identity registry; never contacts A1111 or a network
 - `resource_catalog.py`: Checked-in, versioned catalog of curated model resources (PR-ASSET-130)
 - `resource_readiness.py`: Offline readiness projection of installed assets against the curated catalog (PR-ASSET-130)
@@ -592,6 +593,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `openpose_capability.py`: Target eligibility for OpenPose ControlNet conditioning (PR-IMG-CNET-210)
 - `openpose_output.py`: Classify pinned Forge generated images before any artifact write (PR-IMG-CNET-211)
 - `operation_compatibility.py`: PR-IMG-MODELS-158: one pure, read-only "can this requested operation run on that resolved target?" projection
+- `sdxl_turbo_recipe.py`: Shared SDXL Turbo recipe for compatibility probes and advisory Research
 - `webui_family_backend.py`: Shared WebUI-family image backend: one StableNew stage translation for A1111 and Forge
 
 ## src/learning/

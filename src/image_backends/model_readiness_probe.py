@@ -37,7 +37,7 @@ def checkpoint_key(name: Any) -> str:
     if base.endswith("]") and " [" in base:
         base = base[: base.rindex(" [")]
     lowered = base.strip().lower()
-    for ext in (".safetensors", ".sft", ".ckpt", ".pt", ".pth"):
+    for ext in (".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".gguf"):
         if lowered.endswith(ext):
             return lowered[: -len(ext)]
     return lowered

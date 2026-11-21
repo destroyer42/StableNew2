@@ -12,6 +12,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.assets.picker_compatibility import VaeCatalog
 from src.generation_profiles.contract import (
     IDENTITY_EXACT,
     KIND_LEARNING,
@@ -140,6 +141,8 @@ def plan_application(
     previous_family: str | None = None,
     current_family: str | None = None,
     missing_ref: ProfileRef | None = None,
+    vae_options: VaeCatalog | None = None,
+    require_verified_vae: bool = False,
 ) -> ApplicationPlan:
     """Plan applying ``profile`` to ``working`` (keys are ``SETTING_KEYS`` names).
 
@@ -160,7 +163,7 @@ def plan_application(
             else "No profile is available for this model; the current settings were kept."
         )
         plan_notes = _carry_over(
-            notes, changes, working, policy, catalogs, family_changed, set(), set()
+            notes, changes, working, policy, catalogs, family_changed, set(), vae_options
         )
         return ApplicationPlan(status, missing_ref, changes, tuple(plan_notes), message)
 
@@ -197,10 +200,32 @@ def plan_application(
                 SettingNote(key, NOTE_POLICY, f"{_label(key)} not applied: {blocked}.", old, value)
             )
             continue
+        if key == SETTING_VAE and value and (vae_options is not None or require_verified_vae):
+            resolved_vae = (
+                vae_options.resolve(value, recommendation=require_verified_vae)
+                if vae_options is not None
+                else None
+            )
+            if resolved_vae is None:
+                notes.append(
+                    SettingNote(
+                        key,
+                        NOTE_UNAVAILABLE,
+                        (
+                            f"VAE '{value}' has no verified compatibility recommendation."
+                            if require_verified_vae
+                            else f"VAE '{value}' is incompatible or unavailable for this model."
+                        ),
+                        old,
+                        value,
+                    )
+                )
+                continue
+            value = resolved_vae
         catalog_key = {
             SETTING_SAMPLER: "samplers",
             SETTING_SCHEDULER: "schedulers",
-            SETTING_VAE: "vaes",
+            SETTING_VAE: "vaes" if vae_options is None else None,
         }.get(key)
         if (
             catalog_key
@@ -255,9 +280,7 @@ def plan_application(
                 None,
             )
         )
-    _carry_over(
-        notes, changes, working, policy, catalogs, family_changed, covered, set(profile.settings)
-    )
+    _carry_over(notes, changes, working, policy, catalogs, family_changed, covered, vae_options)
     status = STATUS_APPLIED if changes else STATUS_NO_CHANGE
     message = (
         f"Applied {profile.name}."
@@ -275,22 +298,28 @@ def _carry_over(
     catalogs: Mapping[str, Collection[str]] | None,
     family_changed: bool,
     covered: set[str],
-    recommended: set[str],
+    vae_options: VaeCatalog | None,
 ) -> list[SettingNote]:
     """Settings the profile did not set: keep legal values, drop ones that cannot belong to the new model."""
 
     for key in _FAMILY_BOUND:
-        # "No recommendation" for a VAE is not permission to keep one that belonged to another family.
-        if key in recommended or key in changes:
+        if key in changes or policy_blocks(policy, key, ""):
             continue
         current = working.get(key)
-        if family_changed and current:
+        unavailable = bool(
+            current and vae_options is not None and vae_options.resolve(current) is None
+        )
+        if current and (unavailable or (family_changed and vae_options is None)):
             changes[key] = ""
             notes.append(
                 SettingNote(
                     key,
                     NOTE_RESET,
-                    "VAE reset to the model's own: a VAE does not carry across model families.",
+                    (
+                        f"VAE '{current}' reset to model default because it is incompatible or unavailable for this model."
+                        if unavailable
+                        else "VAE reset to model default because its compatibility across families is unknown."
+                    ),
                     current,
                     "",
                 )
