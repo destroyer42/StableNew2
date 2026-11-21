@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-780 of 935 modules have a docstring.
+783 of 938 modules have a docstring.
 
 ## src/
 
@@ -29,6 +29,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `observe.py`: Consume only the read capability minted by run_bounded for this request (F2)
 - `paths.py`: Where the offline AI runtime, weights and records live
 - `preview.py`: AI Assist Preview: the operator-recorded enablement of an unqualified candidate (owner decision D13, 2026-11-…
+- `remote.py`: Remote Ollama readiness and one request per explicit AI Assist action
+- `remote_preview.py`: Operator-approved, per-user Remote Preview settings
+- `remote_transport.py`: Deadline-bounded HTTP over the operator-managed IPv4 loopback SSH forward
 - `runtime.py`: One bounded, contained, CPU-only inference as a short-lived child (owner decision D2)
 - `selector.py`: The in-app model selector (owner decision D20): list the models that are ready to use and switch between them
 - `service.py`: Single-flight admission, yielding and outcome mapping for one AI request at a time
@@ -184,7 +187,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/controller/app_controller_services/
 
 - `__init__.py`: app_controller_services — extracted service helpers for AppController
-- `ai_assist_integration.py`: Application-scoped Offline AI Assist composition; read generation truth, never own it
+- `ai_assist_integration.py`: Application-scoped AI Assist composition; read generation truth, never own it
 - `application_runtime_coordinator.py`: (no docstring)
 - `background_task_coordinator.py`: (no docstring)
 - `diagnostics_coordinator.py`: (no docstring)
