@@ -166,6 +166,9 @@ class WebUIProcessManager:
         self._owns_process = False
         self._launch_session_command: tuple[str, ...] | None = None
         self._last_exit_code: int | None = None
+        # Counts stop_webui calls that terminated a live owned process, so a startup wait can tell a deliberate
+        # release (e.g. a runtime transition ahead of a ComfyUI job) from a crash or a slow boot.
+        self._deliberate_stop_count = 0
         self._start_time: float | None = None
         self._health_cache: bool | None = None
         self._pid: int | None = None
@@ -317,6 +320,11 @@ class WebUIProcessManager:
     @property
     def process(self) -> subprocess.Popen | None:
         return self._process
+
+    @property
+    def deliberate_stop_count(self) -> int:
+        """How many times ``stop_webui`` has terminated a live owned process (monotonic)."""
+        return self._deliberate_stop_count
 
     @property
     def runtime_identity(self) -> str:
@@ -956,6 +964,7 @@ class WebUIProcessManager:
         logger.info("Initiating WebUI shutdown (pid=%s, grace=%.1fs)", pid, grace_seconds)
 
         owned_descendants = self._owned_descendants(pid)
+        self._deliberate_stop_count += 1
 
         # Try graceful termination first
         try:
@@ -1746,6 +1755,11 @@ def describe_startup_exit(diagnostics: Mapping[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _read_deliberate_stop_count(manager: WebUIProcessManager) -> int:
+    count = getattr(manager, "deliberate_stop_count", 0)
+    return count if type(count) is int else 0
+
+
 def wait_for_managed_startup(
     manager: WebUIProcessManager,
     base_url: str,
@@ -1761,12 +1775,17 @@ def wait_for_managed_startup(
     code and output tail instead of after the full timeout. Connection refusals while the owned process boots
     are expected, not failures, so readiness backoff recorded by a slice is cleared before the next one. A
     slow startup is allowed up to ``timeout_s``; on timeout the manager keeps its truthful ownership.
+
+    If StableNew itself stops the process during the wait (a runtime transition releasing WebUI ahead of a
+    ComfyUI job dispatched while WebUI was still booting), the wait ends quietly without marking readiness:
+    that is a deliberate release, not a startup failure, and whatever needs WebUI next relaunches it.
     """
 
     if probe is None:
         from src.api.healthcheck import wait_for_webui_ready as probe
     from src.api.healthcheck import clear_readiness_failure_state
 
+    stops_at_start = _read_deliberate_stop_count(manager)
     budget = max(float(timeout_s), 0.0)
     deadline = time.monotonic() + budget
     first = True
@@ -1777,6 +1796,12 @@ def wait_for_managed_startup(
         try:
             probe(base_url, timeout=attempt_timeout, poll_interval=poll_interval_s)
         except Exception as exc:
+            if _read_deliberate_stop_count(manager) != stops_at_start:
+                clear_readiness_failure_state(base_url)
+                logger.info(
+                    "WebUI startup wait ended: StableNew released the starting WebUI process deliberately"
+                )
+                return
             diagnostics = manager.exit_diagnostics()
             if diagnostics is not None:
                 raise WebUIStartupError(describe_startup_exit(diagnostics)) from exc
