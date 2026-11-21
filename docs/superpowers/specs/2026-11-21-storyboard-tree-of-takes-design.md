@@ -1,6 +1,7 @@
 # Storyboard: a tree of takes (PR-VID-STORY-380, design)
 
-Date: 2026-11-21. Status: **draft, awaiting Rob's approval**. Execution class: **Architectural** (it extends the frozen
+Date: 2026-11-21. Status: **approved by Rob 2026-11-21** ("Approve, write plan"). Implementation plan:
+`docs/superpowers/plans/2026-11-21-storyboard-tree-of-takes.md`. Execution class: **Architectural** (it extends the frozen
 sequence-plan contract with a new execution policy and adds a top-level GUI workspace).
 Evidence base: `origin/main` at `0be26d97`.
 
