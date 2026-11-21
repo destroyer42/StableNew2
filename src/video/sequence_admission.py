@@ -303,8 +303,9 @@ def freeze_sequence_plan(
     inputs agree.
 
     ``storyboard`` makes the plan a storyboard take (policy v2, PR-VID-STORY-380): Comfy video workflows only (a link
-    on ``svd_native`` is refused first), always assembled, never colour matched. With a lead-in, segment 0 overlaps the handoff frame by ``LEAD_IN_OVERLAP`` and the lead-in is verified
-    against its cut manifest (``verify_lead_in``) before the plan is built; ``source`` must be the handoff frame.
+    on ``svd_native`` is refused first), always assembled, never colour matched. With a lead-in, segment 0 overlaps
+    the handoff frame by ``LEAD_IN_OVERLAP`` and the lead-in is verified against its cut manifest (``verify_lead_in``)
+    before the plan is built; ``source`` must be the handoff frame.
     """
 
     if not isinstance(intent, Mapping):
