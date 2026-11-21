@@ -1,10 +1,11 @@
-"""Application-scoped Offline AI Assist composition; read generation truth, never own it."""
+"""Application-scoped AI Assist composition; read generation truth, never own it."""
 
 from __future__ import annotations
 
 import logging
 import threading
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -29,6 +30,8 @@ from src.ai_assist.preview import (
     enable_preview,
     revoke_preview,
 )
+from src.ai_assist.remote import RemoteAssist, RemoteState
+from src.ai_assist.remote_preview import REMOTE_DISCLOSURE, REMOTE_PREVIEW_LABEL
 from src.ai_assist.selector import (
     REFUSED_IN_FLIGHT,
     REFUSED_NOT_ATTESTED,
@@ -55,6 +58,17 @@ from src.ai_assist.status import (
     read_status,
 )
 from src.queue.job_model import JobStatus
+
+_REMOTE_STATUS = {
+    RemoteState.RECOVERING: "AI Assist is checking the remote GPU.",
+    RemoteState.READY: "AI Assist: Remote GPU ready.",
+    RemoteState.RESTORED: "AI Assist: Remote GPU restored.",
+    RemoteState.RUNNING: "AI Assist: Running on remote GPU.",
+    RemoteState.UNAVAILABLE: "AI Assist: Remote GPU unavailable.",
+    RemoteState.UNTRUSTED: "Remote AI requires verification.",
+    RemoteState.ERROR: "Remote AI readiness check failed.",
+    RemoteState.LOCAL_FALLBACK: "AI Assist: Remote unavailable. Running local fallback.",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -101,10 +115,8 @@ class QueueGenerationActivity:
 class AiAssistIntegration:
     """One service per application, with lifetime-checked delivery on the existing UI scheduler.
 
-    Construction reads pinned manifests only. No import/install/download, deep hashing, worker or process launch.
-    Production runs a qualified model, or (AI Assist Preview, owner decision D13) a candidate that the operator enabled for
-    its exact model SHA-256 and runtime build id. Both always require the operator-managed outbound restriction
-    attestation (``strict_offline``).
+    Local requests retain strict-offline and resource gates. An approved remote configuration starts only a
+    tracked, prompt-free health monitor. The remote adapter has no generation or process-control dependencies.
     """
 
     def __init__(
@@ -115,6 +127,7 @@ class AiAssistIntegration:
         root: Path | None = None,
         runtime_manifest: RuntimeManifest | None = None,
         registry: ModelRegistry | None = None,
+        remote: RemoteAssist | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._dispatch = dispatch
@@ -123,6 +136,8 @@ class AiAssistIntegration:
         self.quiescent: bool | None = None
         self.service: AiAssistService | None = None
         self._root = resolve_ai_root(root)
+        self._activity = QueueGenerationActivity(job_service)
+        self._remote = remote if remote is not None else RemoteAssist(self._root)
         self._manifests: tuple[RuntimeManifest, ModelRegistry] | None = None
         try:
             self._manifests = (
@@ -135,14 +150,17 @@ class AiAssistIntegration:
                 root=self._root,
                 runtime_manifest=self._manifests[0],
                 registry=self._manifests[1],
-                activity_provider=QueueGenerationActivity(job_service),
+                activity_provider=self._activity,
+                remote=self._remote,
                 memory_probe=read_host_memory,
                 policy=ServicePolicy(
                     allow_candidate=False, allow_preview=True, strict_offline=True
                 ),
             )
         except Exception:  # noqa: BLE001 - construction failure must leave a usable, disabled GUI
-            logger.error("Offline AI Assist construction failed (service_unavailable)")
+            logger.error("AI Assist construction failed (service_unavailable)")
+        if self.service is not None:
+            self._start_remote_monitor()
 
     @property
     def closed(self) -> bool:
@@ -164,6 +182,43 @@ class AiAssistIntegration:
                 STATE_INTEGRITY_FAILED, "AI readiness is unreadable. Open Operator Readiness."
             )
 
+    def _start_remote_monitor(self) -> None:
+        try:
+            self._remote.start_monitor()
+        except RuntimeError:
+            logger.warning("Remote AI readiness monitor could not be started")
+
+    def operator_status(self) -> AiAssistStatus:
+        local = self.status()
+        remote = self._remote.state()
+        if remote is RemoteState.DISABLED:
+            return local
+        code, fallback = self._fallback_availability()
+        return replace(
+            local,
+            summary=f"{_REMOTE_STATUS[remote]} {fallback}",
+            remote_state=remote.value,
+            local_fallback_ready=code is None,
+        )
+
+    def _fallback_availability(self) -> tuple[OutcomeCode | None, str]:
+        code, reason = self._local_availability()
+        if code is None:
+            try:
+                active = self._activity()
+            except ActivityUnreadable:
+                return (
+                    OutcomeCode.GENERATION_ACTIVE,
+                    "Local fallback blocked: queue activity is unreadable.",
+                )
+            if active.running_jobs or active.gpu_quarantined:
+                return (
+                    OutcomeCode.GENERATION_ACTIVE,
+                    "Local fallback blocked by generation or GPU quarantine.",
+                )
+            return None, "Local fallback ready for request-time admission."
+        return code, f"Local fallback blocked. {reason}"
+
     # -- AI Assist Preview (owner decision D13) ---------------------------------------------------------------------
 
     def preview_state(self) -> PreviewState:
@@ -172,6 +227,14 @@ class AiAssistIntegration:
     def trust_label(self) -> str:
         """The label every Preview surface shows; empty when the installed model is qualified or nothing is usable."""
 
+        remote = self._remote.state()
+        if remote in (
+            RemoteState.READY,
+            RemoteState.RESTORED,
+            RemoteState.RUNNING,
+            RemoteState.RECOVERING,
+        ):
+            return REMOTE_PREVIEW_LABEL
         return PREVIEW_LABEL if self.status().state == STATE_PREVIEW else ""
 
     @staticmethod
@@ -262,8 +325,24 @@ class AiAssistIntegration:
             return OutcomeCode.UNAVAILABLE, "Application shutdown has begun."
         if self.service is None:
             return OutcomeCode.UNAVAILABLE, "AI Assist service is unavailable."
+        remote = self._remote.state()
         if self.busy:
-            return OutcomeCode.BUSY, "Another AI request is running."
+            message = "Another AI request is running."
+            if remote in (RemoteState.RUNNING, RemoteState.LOCAL_FALLBACK):
+                message = _REMOTE_STATUS[remote]
+            return OutcomeCode.BUSY, message
+        if remote is RemoteState.DISABLED:
+            return self._local_availability()
+        self._start_remote_monitor()
+        if remote is RemoteState.UNTRUSTED:
+            return OutcomeCode.INTEGRITY_FAILED, _REMOTE_STATUS[remote]
+        if remote is RemoteState.UNAVAILABLE:
+            # A request rechecks availability even when the local fallback is blocked.
+            _, fallback = self._fallback_availability()
+            return None, f"{_REMOTE_STATUS[remote]} {fallback} {REMOTE_DISCLOSURE}"
+        return None, f"{_REMOTE_STATUS[remote]} {REMOTE_DISCLOSURE}"
+
+    def _local_availability(self) -> tuple[OutcomeCode | None, str]:
         status = self.status()
         if status.state == STATE_INTEGRITY_FAILED:
             return (
@@ -358,10 +437,11 @@ class AiAssistIntegration:
                         if self._closed or self._active_id != request.request_id:
                             return
                         self._active_id = None
+                    delivered = self._remote.validate_delivery(outcome)
                     if judge is None:
-                        on_done(outcome)
+                        on_done(delivered)
                     else:
-                        on_done(outcome, judged)
+                        on_done(delivered, judged if delivered.ok else None)
 
                 with self._lock:
                     if self._closed:

@@ -64,6 +64,8 @@ class AiAssistStatus:
     model_name: str = ""
     build_id: str = ""
     model_sha256: str = ""
+    remote_state: str = ""
+    local_fallback_ready: bool = False
 
 
 def read_status(

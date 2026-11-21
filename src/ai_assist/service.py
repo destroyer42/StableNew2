@@ -1,6 +1,6 @@
 """Single-flight admission, yielding and outcome mapping for one AI request at a time.
 
-AI yields to generation (owner decision D10). Admission refuses while a queue job is RUNNING, a GPU dispatch quarantine is
+Local AI yields to generation (owner decision D10). Admission refuses while a queue job is RUNNING, a GPU dispatch quarantine is
 active, or generation activity cannot be read. An already-running request is terminated within one poll interval (the
 watch interval plus the 50 ms ``run_bounded`` poll) when any of that appears, or when host memory falls below the guard.
 The service only *reads* generation activity through an injected provider: it adds no queue flag, claim path, lifecycle
@@ -52,6 +52,8 @@ from src.ai_assist.preview import (
     preview_enabled_for,
     trust_tier,
 )
+from src.ai_assist.remote import RemoteAssist, RemoteState
+from src.ai_assist.remote_preview import RemoteSettings
 from src.ai_assist.runtime import AiRuntime
 from src.ai_assist.validators import validate_output
 from src.utils.thread_registry import get_thread_registry
@@ -217,6 +219,7 @@ class AiAssistService:
         limits: RunLimits = RunLimits(),  # noqa: B008
         sampling: Sampling = Sampling(),  # noqa: B008
         event_log: EventLog | None = None,
+        remote: RemoteAssist | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._root = root
@@ -229,6 +232,7 @@ class AiAssistService:
         self._limits = limits
         self._sampling = sampling
         self._events = event_log or EventLog(events_path(root))
+        self.remote = remote
         self._clock = clock
         self._lock = threading.Lock()
         self._active: tuple[str, AiCancelToken] | None = None
@@ -254,7 +258,7 @@ class AiAssistService:
         admitted = self._admit(request, token)
         if isinstance(admitted, AssistOutcome):
             return self._record(request, admitted, None)
-        return self._execute(request, token, admitted)
+        return self._run_admitted(request, token, admitted)
 
     def submit(
         self, request: AssistRequest, on_done: Callable[[AssistOutcome], None]
@@ -267,11 +271,11 @@ class AiAssistService:
             return Submission(False, self._record(request, admitted, None))
 
         def work() -> None:
-            outcome = self._execute(request, token, admitted)
+            outcome = self._run_admitted(request, token, admitted)
             try:
                 on_done(outcome)
             except Exception:  # noqa: BLE001 - a failing listener must not leak into the service
-                logger.warning("AI assist completion callback failed", exc_info=True)
+                logger.warning("AI assist completion callback failed")
 
         try:
             # Publish the worker under the same lock as the shutdown fence. Shutdown cannot observe a reserved
@@ -297,7 +301,8 @@ class AiAssistService:
                 request_id=request.request_id,
                 reason="worker_unavailable",
             )
-            return Submission(False, self._record(request, refused, admitted))
+            verification = admitted if isinstance(admitted, Verification) else None
+            return Submission(False, self._record(request, refused, verification))
         return Submission(True, None, token)
 
     def cancel(self, request_id: str) -> bool:
@@ -317,19 +322,27 @@ class AiAssistService:
             if self._active is not None:
                 self._active[1].cancel()
 
+        if self.remote is not None:
+            self.remote.begin_shutdown()
+
     def shutdown(self, timeout: float = 10.0) -> bool:
         """Cancel any in-flight request and wait for it. ``True`` only when nothing is left running."""
 
         self.begin_shutdown()
+        deadline = time.monotonic() + max(0.0, timeout)
         with self._lock:
             worker = self._worker
         if worker is not None and worker.is_alive():
             if worker is threading.current_thread():
                 return False
-            worker.join(timeout)
-            return not worker.is_alive()
+            worker.join(max(0.0, deadline - time.monotonic()))
+        remote_quiet = self.remote is None or self.remote.join(
+            max(0.0, deadline - time.monotonic())
+        )
         with self._lock:
-            return self._active is None
+            return (
+                remote_quiet and self._active is None and (worker is None or not worker.is_alive())
+            )
 
     def _read_activity(self) -> GenerationActivity | None:
         try:
@@ -347,78 +360,195 @@ class AiAssistService:
 
     # -- admission ----------------------------------------------------------------------------------------------------
 
-    def _admit(self, request: AssistRequest, token: AiCancelToken) -> AssistOutcome | Verification:
-        """Fail closed. Order: single-flight, installation, egress attestation, generation, memory."""
+    def _admit(
+        self, request: AssistRequest, token: AiCancelToken
+    ) -> AssistOutcome | Verification | RemoteSettings:
+        with self._lock:
+            if self._closed:
+                return AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id, "service_closed")
+            if self._active is not None or (self._worker is not None and self._worker.is_alive()):
+                return AssistOutcome(OutcomeCode.BUSY, request.request_id, "another_request_active")
+            settings = self.remote.settings() if self.remote is not None else RemoteSettings()
+            admitted = settings if settings.preferred else self._admit_local(request)
+            if not isinstance(admitted, AssistOutcome):
+                self._active = (request.request_id, token)
+            return admitted
+
+    def _admit_local(self, request: AssistRequest) -> AssistOutcome | Verification:
+        """Called with the service lock. Every local execution passes the same gates."""
 
         def refuse(code: OutcomeCode, reason: str) -> AssistOutcome:
             return AssistOutcome(code=code, request_id=request.request_id, reason=reason)
 
-        with self._lock:
-            if self._closed:
-                return refuse(OutcomeCode.UNAVAILABLE, "service_closed")
-            if self._active is not None or (self._worker is not None and self._worker.is_alive()):
-                return refuse(OutcomeCode.BUSY, "another_request_active")
-            if not self._swept:
-                # Once per service, before the first request: remove scratch directories (which hold prompt text) that a
-                # hard kill or a locked file left behind. Age-gated, so another live request is never touched.
-                self._swept = True
-                self._runtime.sweep_stale_scratch()
-            verification = verify_installation(
-                self._root,
-                self._manifest,
-                self._registry,
-                allow_candidate=self._policy.allow_candidate or self._policy.allow_preview,
-            )
-            if not verification.ok:
-                assert verification.code is not None
-                return refuse(verification.code, verification.reason)
-            assert verification.entry is not None and verification.build is not None
-            build = verification.build
-            tier = trust_tier(verification.entry, verification.build)
-            if tier != TRUST_QUALIFIED:
-                if self._policy.allow_candidate:
-                    tier = TRUST_CANDIDATE
-                elif self._policy.allow_preview and preview_enabled_for(
-                    self._root, verification.entry, verification.build
-                ):
-                    tier = TRUST_PREVIEW
-                else:
-                    # Fail closed: a missing, malformed or mismatched enablement record is "not enabled".
-                    return refuse(OutcomeCode.NOT_INSTALLED, "preview_not_enabled")
-            verification = replace(verification, trust_tier=tier)
-            if self._policy.strict_offline and not attestation_covers(
-                self._root, build.build_id, build.executable
+        if not self._swept:
+            # Once per service, before the first request: remove scratch directories (which hold prompt text) that a
+            # hard kill or a locked file left behind. Age-gated, so another live request is never touched.
+            self._swept = True
+            self._runtime.sweep_stale_scratch()
+        verification = verify_installation(
+            self._root,
+            self._manifest,
+            self._registry,
+            allow_candidate=self._policy.allow_candidate or self._policy.allow_preview,
+        )
+        if not verification.ok:
+            assert verification.code is not None
+            return refuse(verification.code, verification.reason)
+        assert verification.entry is not None and verification.build is not None
+        build = verification.build
+        tier = trust_tier(verification.entry, verification.build)
+        if tier != TRUST_QUALIFIED:
+            if self._policy.allow_candidate:
+                tier = TRUST_CANDIDATE
+            elif self._policy.allow_preview and preview_enabled_for(
+                self._root, verification.entry, verification.build
             ):
-                # No record, a legacy record without coverage, or one that does not name this build and executable.
-                return refuse(OutcomeCode.EGRESS_NOT_ATTESTED, "operator_attestation_missing")
-            activity = self._read_activity()
-            if activity is None:
-                return refuse(OutcomeCode.GENERATION_ACTIVE, "activity_unreadable")
-            if activity.running_jobs > 0:
-                return refuse(OutcomeCode.GENERATION_ACTIVE, "generation_running")
-            if activity.gpu_quarantined:
-                return refuse(OutcomeCode.GENERATION_ACTIVE, "gpu_quarantine")
-            assert verification.entry is not None
-            needed = verification.entry.bytes / _GIB + MEMORY_MARGIN_GIB
-            memory = self._read_memory()
-            if memory is None:
-                return refuse(OutcomeCode.RESOURCE_INSUFFICIENT, "memory_unreadable")
-            if not memory.available_gib >= needed:
-                return refuse(OutcomeCode.RESOURCE_INSUFFICIENT, "available_ram_below_requirement")
-            if not memory.commit_headroom_gib >= needed:
-                return refuse(
-                    OutcomeCode.RESOURCE_INSUFFICIENT, "commit_headroom_below_requirement"
-                )
-            self._active = (request.request_id, token)
-            return verification
+                tier = TRUST_PREVIEW
+            else:
+                # Fail closed: a missing, malformed or mismatched enablement record is "not enabled".
+                return refuse(OutcomeCode.NOT_INSTALLED, "preview_not_enabled")
+        verification = replace(verification, trust_tier=tier)
+        if self._policy.strict_offline and not attestation_covers(
+            self._root, build.build_id, build.executable
+        ):
+            # No record, a legacy record without coverage, or one that does not name this build and executable.
+            return refuse(OutcomeCode.EGRESS_NOT_ATTESTED, "operator_attestation_missing")
+        activity = self._read_activity()
+        if activity is None:
+            return refuse(OutcomeCode.GENERATION_ACTIVE, "activity_unreadable")
+        if activity.running_jobs > 0:
+            return refuse(OutcomeCode.GENERATION_ACTIVE, "generation_running")
+        if activity.gpu_quarantined:
+            return refuse(OutcomeCode.GENERATION_ACTIVE, "gpu_quarantine")
+        assert verification.entry is not None
+        needed = verification.entry.bytes / _GIB + MEMORY_MARGIN_GIB
+        memory = self._read_memory()
+        if memory is None:
+            return refuse(OutcomeCode.RESOURCE_INSUFFICIENT, "memory_unreadable")
+        if not memory.available_gib >= needed:
+            return refuse(OutcomeCode.RESOURCE_INSUFFICIENT, "available_ram_below_requirement")
+        if not memory.commit_headroom_gib >= needed:
+            return refuse(OutcomeCode.RESOURCE_INSUFFICIENT, "commit_headroom_below_requirement")
+        return verification
 
     # -- execution ----------------------------------------------------------------------------------------------------
 
+    def _run_admitted(
+        self, request: AssistRequest, token: AiCancelToken, admitted: Verification | RemoteSettings
+    ) -> AssistOutcome:
+        try:
+            if isinstance(admitted, Verification):
+                return self._execute(request, token, admitted)
+            return self._execute_remote(request, token, admitted)
+        finally:
+            if isinstance(admitted, RemoteSettings) and self.remote is not None:
+                self.remote.set_active(None)
+            with self._lock:
+                self._active = None
+
+    def _execute_remote(
+        self, request: AssistRequest, token: AiCancelToken, settings: RemoteSettings
+    ) -> AssistOutcome:
+        assert self.remote is not None
+        identity = settings.approval
+        if identity is None:
+            outcome = AssistOutcome(
+                OutcomeCode.INTEGRITY_FAILED,
+                request.request_id,
+                "remote_approval_required",
+                details={"provider": "remote"},
+            )
+            return self._record(request, outcome, None)
+        details = {
+            "provider": "remote",
+            "trust_tier": TRUST_PREVIEW,
+            "model_sha256": identity.digest,
+            "model_name": identity.model,
+            "runtime_build_id": f"ollama-{identity.version}",
+            "fallback": False,
+        }
+        try:
+            result = self.remote.run(identity, request, token, self._limits, self._sampling)
+            if result.reason == "remote_disconnected":
+                return self._fallback_local(request, token, settings)
+            code, reason = result.code, result.reason
+            suggestion = None
+            if code is None:
+                validated = validate_output(result.stdout, request)
+                code, reason, suggestion = validated.code, validated.reason, validated.suggestion
+            with self._lock:
+                if token.cancelled:
+                    code, reason, suggestion = OutcomeCode.CANCELLED, "request_cancelled", None
+                elif self.remote.settings() != settings:
+                    code, reason, suggestion = (
+                        OutcomeCode.INTEGRITY_FAILED,
+                        "remote_identity_mismatch",
+                        None,
+                    )
+            outcome = AssistOutcome(
+                code,
+                request.request_id,
+                reason,
+                suggestion=suggestion,
+                elapsed_ms=result.elapsed_ms,
+                details=details,
+            )
+            return self._record(
+                request, outcome, None, len(result.stdout) if result.code is None else None
+            )
+        except Exception:  # noqa: BLE001 - transport or validation exceptions could contain request text
+            logger.warning("Remote AI Assist request failed unexpectedly")
+            outcome = AssistOutcome(
+                OutcomeCode.UNAVAILABLE,
+                request.request_id,
+                "remote_unexpected_error",
+                details=details,
+            )
+            return self._record(request, outcome, None)
+
+    def _fallback_local(
+        self, request: AssistRequest, token: AiCancelToken, settings: RemoteSettings
+    ) -> AssistOutcome:
+        assert self.remote is not None
+        with self._lock:
+            if self._closed or token.cancelled:
+                return self._record(
+                    request,
+                    AssistOutcome(
+                        OutcomeCode.CANCELLED,
+                        request.request_id,
+                        "request_cancelled",
+                    ),
+                    None,
+                )
+            if self.remote.settings() != settings:
+                return self._record(
+                    request,
+                    AssistOutcome(
+                        OutcomeCode.INTEGRITY_FAILED,
+                        request.request_id,
+                        "remote_identity_mismatch",
+                        details={"provider": "remote"},
+                    ),
+                    None,
+                )
+            admitted = self._admit_local(request)
+        fallback = {"provider": "local", "fallback": True, "fallback_reason": "remote_disconnected"}
+        if isinstance(admitted, AssistOutcome):
+            return self._record(request, replace(admitted, details=fallback), None)
+        self.remote.set_active(RemoteState.LOCAL_FALLBACK)
+        return self._execute(request, token, admitted, fallback=fallback)
+
     def _execute(
-        self, request: AssistRequest, token: AiCancelToken, verification: Verification
+        self,
+        request: AssistRequest,
+        token: AiCancelToken,
+        verification: Verification,
+        *,
+        fallback: dict[str, Any] | None = None,
     ) -> AssistOutcome:
         started = self._clock()
-        assert verification.entry is not None
+        assert verification.entry is not None and verification.build is not None
         observer = ChildObserver(
             cap_gib=self._policy.process_memory_cap_gib
             or default_cap_gib(verification.entry.bytes),
@@ -447,6 +577,11 @@ class AiAssistService:
             details: dict[str, Any] = {
                 **observer.evidence.as_details(),
                 "trust_tier": verification.trust_tier,
+                "provider": "local",
+                "model_sha256": verification.entry.sha256,
+                "runtime_build_id": verification.build.build_id,
+                "fallback": False,
+                **(fallback or {}),
             }
             if type(result.exit_code) is int:
                 details["exit_code"] = result.exit_code
@@ -482,10 +617,8 @@ class AiAssistService:
                 request_id=request.request_id,
                 reason="unexpected_error",
                 elapsed_ms=int((self._clock() - started) * 1000),
+                details=fallback or {},
             )
-        finally:
-            with self._lock:
-                self._active = None
         return self._record(request, outcome, verification, output_chars)
 
     def _record(
@@ -504,7 +637,8 @@ class AiAssistService:
             "input_chars": request.input_chars(),
             "output_chars": output_chars,
             "request_digest": request.digest(),
-            "strict_offline": self._policy.strict_offline,
+            "strict_offline": self._policy.strict_offline
+            and outcome.details.get("provider") != "remote",
         }
         if (
             verification is not None
@@ -515,7 +649,14 @@ class AiAssistService:
             record["runtime_build_id"] = verification.build.build_id
             if verification.trust_tier in (TRUST_QUALIFIED, TRUST_PREVIEW):
                 record["trust_tier"] = verification.trust_tier
+        if outcome.details.get("provider") == "remote" and "model_sha256" in outcome.details:
+            record["model_sha256_prefix"] = outcome.details["model_sha256"][:12]
+            record["runtime_build_id"] = outcome.details["runtime_build_id"]
+            record["trust_tier"] = TRUST_PREVIEW
         for key, field in (
+            ("provider", "provider"),
+            ("fallback", "fallback"),
+            ("fallback_reason", "fallback_reason"),
             ("peak_tree_private_gib", "peak_private_gib"),
             ("priority_verified", "priority_verified"),
             ("child_observed", "child_observed"),

@@ -1,4 +1,4 @@
-"""Operator terminal tool for Offline AI Assist: local files only, never a download, never an execution.
+"""Operator terminal tool for AI Assist settings and local installation. Performs no network calls or inference.
 
     python -m tools.ai_assist_admin describe-runtime <archive.zip> --build-id ID --upstream-repository URL \\
         --upstream-tag TAG --license-spdx SPDX --executable llama-completion.exe
@@ -10,8 +10,7 @@
 
 ``describe-runtime`` reads the archive and prints a manifest build entry for a reviewed pull request; it extracts and runs
 nothing. The import commands verify against the committed manifests (``config/managed_ai_runtime.json`` and
-``config/ai_model_registry.json``) and refuse anything they do not pin. AI Assist Preview is enabled only in the application
-(Prompt tab, "AI Preview..."), by an explicit operator confirmation, never from here.
+``config/ai_model_registry.json``) and refuse anything they do not pin. Local Preview is enabled from the Prompt tab. Remote Preview has a separate, explicit identity approval.
 """
 
 from __future__ import annotations
@@ -33,6 +32,14 @@ from src.ai_assist.manifests import (
     load_runtime_manifest,
 )
 from src.ai_assist.paths import resolve_ai_root
+from src.ai_assist.remote_preview import (
+    DEFAULT_MODEL,
+    ENDPOINT,
+    MODELS,
+    RemoteApproval,
+    disable_remote_preview,
+    write_remote_approval,
+)
 from src.ai_assist.status import (
     MODEL_REGISTRY_PATH,
     RUNTIME_MANIFEST_PATH,
@@ -87,6 +94,27 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "status", help="print the installation and Preview status (no hashing, no execution)"
     )
+    remote = sub.add_parser(
+        "approve-remote-preview", help="approve the exact SSH-forwarded Ollama identity"
+    )
+    remote.add_argument("--endpoint", required=True, choices=(ENDPOINT,))
+    remote.add_argument("--model", choices=MODELS, default=DEFAULT_MODEL)
+    remote.add_argument(
+        "--digest",
+        required=True,
+        help="64 lowercase hexadecimal digits from trusted Ollama metadata",
+    )
+    remote.add_argument("--version", required=True)
+    remote.add_argument(
+        "--accept-ssh-transfer",
+        action="store_true",
+        required=True,
+        help="confirm prompts may be sent over the operator-managed SSH tunnel to this unqualified model",
+    )
+    sub.add_parser(
+        "disable-remote-preview",
+        help="revoke remote approval and explicitly select local-only mode",
+    )
     return parser
 
 
@@ -110,6 +138,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                     asset_name=args.asset_name,
                 )
             )
+            return 0
+        if args.command == "approve-remote-preview":
+            write_remote_approval(
+                root, RemoteApproval(args.endpoint, args.model, args.digest, args.version)
+            )
+            print(
+                "Remote Preview approved for the exact endpoint, model digest and runtime version."
+            )
+            return 0
+        if args.command == "disable-remote-preview":
+            disable_remote_preview(root)
+            print("Remote Preview disabled. AI Assist uses the local provider.")
             return 0
         runtime = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
         registry = load_model_registry(MODEL_REGISTRY_PATH)

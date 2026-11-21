@@ -595,6 +595,14 @@ contract. Rendering, dialogs and event handling remain in `src/gui/`.
 The MVP remains a single-process desktop application. Threaded work must marshal
 UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 
+AI Assist runs before Intent as an operator-invoked authoring service. The application-scoped service owns
+single-flight admission, provider selection, cancellation, deterministic validation and provenance. Local requests
+may spawn a pinned, CPU-only llama.cpp child under the existing strict-offline and D10 controls. Approved Remote
+Preview sends a bounded request through the operator-managed SSH forward to an external Ollama worker. Remote
+execution can overlap desktop generation. A confirmed transport failure can use the same local admission and
+runtime, with no queue or generation authority. See [AI Assist](Subsystems/AiAssist/AI_ASSIST.md#14-remote-preview-and-provider-policy-pr-ai-remote-310).
+
+
 The Windows Operator Site phone connector is an opt-in, application-owned HTTPS
 client. Sites supplies the signed-in browser identity or admits the backend with
 its Site-wide service credential. The Worker requires a separate enrolled host
