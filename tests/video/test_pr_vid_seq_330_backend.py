@@ -222,7 +222,8 @@ def test_the_backend_asks_for_the_warm_floor_only_for_the_process_that_ran_the_l
         def policy_for(self, spec):
             return {"policy": "spy"}
 
-        def evaluate(self, spec, *, system_stats, warm_sequence=False):
+        def evaluate(self, spec, *, system_stats, warm_sequence=False, owned_warm_reuse=False):
+            assert not owned_warm_reuse
             Spy.calls.append(warm_sequence)
             return SimpleNamespace(ready=True, message="", to_dict=lambda: {})
 

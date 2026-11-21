@@ -407,7 +407,9 @@ def _resource_gates(spec: Any, probes: PreflightProbes, state: str) -> tuple[Pre
                 "GPU memory",
                 GATE_ADVISORY if vram_blocks else GATE_OK,
                 (vram_blocks[0] if vram_blocks else detail)
-                + " GPU readiness is checked again after runtime handoff and ComfyUI startup, before dispatch."
+                + " Execution checks GPU readiness after runtime handoff and before dispatch."
+                " Consecutive standalone jobs skip that check when StableNew verifies reuse"
+                " of the same held ComfyUI process."
                 + (
                     " StableNew releases its own conflicting runtime; external processes stay untouched."
                     if vram_blocks
