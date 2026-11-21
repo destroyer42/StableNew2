@@ -698,16 +698,18 @@ class ComfyWorkflowVideoBackend:
                 and warm_pid is not None
                 and self._owned_running_pid() == warm_pid
             )
-            # A process claimed warm from the idle hold is the same resident runtime as a warm sequence segment.
+            # Check that the claimed warm process is still the owned process after startup and handoff.
             held_warm = bool(
                 warm_claim is not None
                 and warm_claim.warm
+                and warm_claim.pid is not None
                 and self._owned_running_pid() == warm_claim.pid
             )
             readiness = self._readiness.evaluate(
                 spec,
                 system_stats=system_stats,
                 warm_sequence=sequence_warm or held_warm,
+                owned_warm_reuse=held_warm and not request.hold_runtime,
             )
             # Record the measurements and RAM advisories even if allocation or dispatch later fails.
             logger.info(

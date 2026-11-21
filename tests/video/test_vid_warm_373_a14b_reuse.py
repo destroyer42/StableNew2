@@ -18,6 +18,7 @@ from src.services.runtime_transition_service import RuntimeTransitionCoordinator
 from src.services.runtime_warm_hold import RuntimeWarmHold
 from src.video.comfy_workflow_backend import _keep_warm_seconds
 from src.video.workflow_catalog_wan_a14b import WAN_A14B_ID, WAN_A14B_VERSION
+from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import build_default_workflow_registry
 from tests.video.test_vid_clip_370_candidate_specs import (
     _a14b_backend,
@@ -26,7 +27,7 @@ from tests.video.test_vid_clip_370_candidate_specs import (
     _fake_export,
     _FramesFake,
 )
-from tests.video.test_wan22_experimental_workflow import WAN_ID
+from tests.video.test_wan22_experimental_workflow import WAN_ID, _stats
 
 
 @pytest.fixture
@@ -70,8 +71,6 @@ def _slot() -> tuple[RuntimeWarmHold, _Clock, _Spawned]:
 
 
 def _client(tmp_path: Path) -> _FramesFake:
-    from tests.video.test_wan22_experimental_workflow import _stats
-
     return _FramesFake(tmp_path, save_node="16", info=_a14b_info(), stats=_stats(free_mib=11800.0))
 
 
@@ -161,6 +160,59 @@ def test_the_idle_grace_releases_the_owned_runtime(tmp_path: Path, _no_encode) -
     manager = backend.fake_manager
     assert manager.stops == 1 and not manager.running
     assert slot.snapshot() is None
+
+
+def test_same_owned_warm_process_skips_the_vram_check_between_jobs(tmp_path: Path, _no_encode) -> None:
+    slot, _, _ = _slot()
+    client = _client(tmp_path)
+    first = _a14b_backend(client, tmp_path, warm_hold=slot)
+    _run(first, tmp_path, "job-1")
+    manager = first.fake_manager
+    pid = manager.pid
+    # Live ComfyUI reported only 64 MiB reserved by PyTorch after generation. The
+    # old per-job check added that to 8,071 MiB driver free and rejected the warm job.
+    client.stats = _stats(free_mib=8071.0, held_mib=64.0)
+    second = _a14b_backend(client, tmp_path, warm_hold=slot)
+    second._process_manager = manager
+    driver_probes: list[int] = []
+
+    def probe(index: int) -> tuple[float, float]:
+        driver_probes.append(index)
+        return 12282.0, 8071.0
+
+    second._readiness = WorkflowResourceReadiness(ram_probe=lambda: 5.7, gpu_probe=probe)
+
+    result = _run(second, tmp_path, "job-2")
+
+    assert driver_probes == []
+    assert len(client.queued) == 2
+    assert manager.starts == 1 and manager.stops == 0 and manager.pid == pid
+    assert result.backend_metadata["runtime_reuse"]["status"] == "warm"
+    readiness = result.diagnostic_payload["resource_readiness"]
+    assert readiness["observations"]["vram_check"] == "skipped_owned_warm_reuse"
+    assert readiness["observations"]["ram_available_gb"] == 5.7
+
+
+def test_warm_hold_does_not_exempt_a_replacement_process_from_the_vram_check(
+    tmp_path: Path, _no_encode
+) -> None:
+    slot, _, _ = _slot()
+    client = _client(tmp_path)
+    first = _a14b_backend(client, tmp_path, warm_hold=slot)
+    _run(first, tmp_path, "job-1")
+    manager = first.fake_manager
+    held_pid = manager.pid
+    manager.stop()
+    manager.ensure_running()
+
+    client.stats = _stats(free_mib=8071.0, held_mib=64.0)
+    second = _a14b_backend(client, tmp_path, warm_hold=slot)
+    second._process_manager = manager
+    assert manager.pid != held_pid
+
+    with pytest.raises(RuntimeError, match="only 8135 MiB"):
+        _run(second, tmp_path, "job-2")
+    assert len(client.queued) == 1
 
 
 def test_a_warm_claim_whose_launch_check_fails_releases_the_claimed_process(

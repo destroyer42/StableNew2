@@ -120,12 +120,13 @@ class WorkflowResourceReadiness:
         *,
         system_stats: Mapping[str, Any],
         warm_sequence: bool = False,
+        owned_warm_reuse: bool = False,
     ) -> ResourceReadinessResult:
         """Observe-only readiness.
 
-        ``warm_sequence`` is set only by the backend for a later segment of a sequence, when the very StableNew-owned
-        process that served the earlier segment is still the one running. It provides context for the RAM
-        observation; RAM is advisory for cold and warm loads alike. GPU readiness always gates execution."""
+        ``warm_sequence`` provides context for the RAM advisory when the same owned runtime is warm.
+        ``owned_warm_reuse`` skips the GPU check only for consecutive standalone jobs when the backend
+        verifies it is reusing the same StableNew-owned process for the same workflow and version."""
 
         policy = self.policy_for(spec)
         if policy is None:
@@ -144,7 +145,12 @@ class WorkflowResourceReadiness:
         observations: dict[str, Any] = {"policy": policy.get("policy")}
 
         vram_floor = float(policy.get("min_available_to_comfy_vram_mib") or 0)
-        if vram_floor:
+        if vram_floor and owned_warm_reuse:
+            observations.update(
+                vram_floor_mib=round(vram_floor),
+                vram_check="skipped_owned_warm_reuse",
+            )
+        elif vram_floor:
             devices = [
                 device
                 for device in (system_stats.get("devices") or [])
@@ -201,7 +207,7 @@ class WorkflowResourceReadiness:
                         f"Only {available_ram:.1f} GB of system RAM is available; the qualification-derived "
                         f"cold-load advisory is {ram_floor:.1f} GB. Loading may be slow or fail to allocate"
                         + (
-                            "; this sequence's owned runtime is already warm."
+                            "; the owned runtime is already warm."
                             if warm_sequence
                             else "."
                         )
