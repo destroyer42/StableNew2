@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-786 of 941 modules have a docstring.
+788 of 943 modules have a docstring.
 
 ## src/
 
@@ -1004,6 +1004,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `storyboard_readiness.py`: Read-only source identity and workflow projections for editable Storyboards; admission stays authoritative
 - `storyboard_root.py`: Storyboard root preparation (PR-VID-STORY-380, spec 7.3)
 - `storyboard_store.py`: Atomic Storyboard JSON storage with revision compare-and-swap; never stores executable jobs
+- `storyboard_tree.py`: Storyboard tree-of-takes authoring file (PR-VID-STORY-380)
+- `storyboard_tree_store.py`: Atomic storyboard-tree JSON storage with revision compare-and-swap (PR-VID-STORY-380)
 - `svd_capabilities.py`: Capability discovery for native SVD postprocess helpers
 - `svd_config.py`: Typed configuration models for native SVD image-to-video
 - `svd_errors.py`: Typed error surface for native SVD runtime
