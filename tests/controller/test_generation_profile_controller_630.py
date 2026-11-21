@@ -491,3 +491,24 @@ def test_effective_lines_name_model_profile_and_override_precedence(host: FakeHo
     assert SDXL_MODEL in off and "Research" in off and "Override is OFF" in off
     host.override_pack_config_enabled = True
     assert "Override is ON" in "\n".join(host.profiles.effective_lines())
+
+
+def test_delayed_startup_vae_respects_restored_family_and_retries_partial_catalog(tmp_path):
+    from src.api.webui_resources import WebUIResource, WebUIResourceType
+    from src.assets.component_evidence import ROLE_VAE, ComponentEvidence
+    from src.assets.picker_compatibility import PickerEvidence
+
+    saver = FakeHost(FakePanel(), tmp_path)
+    assert saver.profiles.save_startup_defaults()[0]
+    runtime = FakeHost(FakePanel(), tmp_path)
+    plan = runtime.profiles.restore_startup_defaults()
+    assert plan.pending_vae == "sdxl_vae.safetensors"
+    assert runtime.panel.values["vae"] == ""
+    runtime.profiles.on_resources_updated({"models": [SDXL_MODEL]})
+    incompatible = WebUIResource(
+        WebUIResourceType.VAE, plan.pending_vae, plan.pending_vae,
+        picker=PickerEvidence(ComponentEvidence(ROLE_VAE, facts={"vae_family": "ldm_kl_4ch"}), family="sd1"),
+    )
+    runtime.profiles.on_resources_updated({"models": [SDXL_MODEL], "vaes": [incompatible]})
+    assert runtime.panel.values["vae"] == ""
+    assert any("incompatible or unavailable" in issue for issue in runtime.profiles.startup_issues)

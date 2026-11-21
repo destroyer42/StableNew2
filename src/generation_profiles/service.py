@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
+from src.assets.picker_compatibility import VaeCatalog, picker_model_family, vae_catalog
 from src.generation_profiles.application import (
     STATUS_NO_PROFILE,
     STATUS_PROFILE_MISSING,
@@ -42,7 +43,7 @@ from src.generation_profiles.identity import (
     match_identity,
     match_learning_identity,
 )
-from src.generation_profiles.research import research_profiles
+from src.generation_profiles.research import research_profiles, turbo_research_profile
 from src.generation_profiles.startup import (
     StartupDefaults,
     StartupRestorePlan,
@@ -121,6 +122,11 @@ class GenerationProfileService:
     def resolve(self, model_name: str | None) -> ResolvedModel:
         return self._resolver.resolve(model_name)
 
+    def vae_options(self, model_name: str, resources: Mapping[str, Any]) -> VaeCatalog | None:
+        policy = self.resolve(model_name).policy
+        family = picker_model_family(resources.get("models") or (), model_name, policy)
+        return vae_catalog(resources.get("vaes") or (), family)
+
     def _catalog(self) -> list[GenerationProfile]:
         from src.generation_profiles.evidence_catalog import catalog_profiles
 
@@ -131,13 +137,23 @@ class GenerationProfileService:
             *self._store.list_latest(KIND_CUSTOM),
         ]
 
+    def _turbo_profile(
+        self, identity: ModelIdentity, *, served_models: Collection[Any] | None = None,
+    ) -> GenerationProfile | None:
+        if identity.sha256 and self._resolver.verifies_turbo(identity, served_models=served_models):
+            return turbo_research_profile(identity)
+        return None
+
     def options_for(self, identity: ModelIdentity) -> tuple[ProfileOption, ...]:
         favorite = self._store.favorite_for(identity.key)
         options = []
         catalog = self._catalog()
+        turbo = self._turbo_profile(identity)
+        if turbo is not None:
+            catalog.append(turbo)
         for ref in (favorite, self._selected.get(identity.key)):
             if ref is not None and ref.kind == KIND_RESEARCH:
-                pinned = self.get(ref)
+                pinned = self.get(ref, identity)
                 if pinned and not any(p.profile_id == pinned.profile_id for p in catalog):
                     catalog.append(pinned)
         for profile in catalog:
@@ -161,8 +177,14 @@ class GenerationProfileService:
             )
         )
 
-    def get(self, ref: ProfileRef) -> GenerationProfile | None:
+    def get(
+        self, ref: ProfileRef, identity: ModelIdentity | None = None, *,
+        served_models: Collection[Any] | None = None,
+    ) -> GenerationProfile | None:
         if ref.kind == KIND_RESEARCH:
+            if ref.profile_id.startswith("research-sdxl-turbo-"):
+                turbo = self._turbo_profile(identity, served_models=served_models) if identity is not None else None
+                return turbo if turbo and turbo.profile_id == ref.profile_id and ref.revision in (None, 1) else None
             current = next(
                 (
                     p
@@ -184,7 +206,7 @@ class GenerationProfileService:
         favorite = self._store.favorite_for(identity.key)
         missing: ProfileRef | None = None
         if favorite is not None:
-            profile = self.get(favorite)
+            profile = self.get(favorite, identity)
             if profile is not None and _profile_match(profile, identity).applies:
                 return profile.ref, None
             missing = favorite
@@ -205,7 +227,7 @@ class GenerationProfileService:
             selected = None
         modified = False
         if selected is not None and working is not None:
-            profile = self.get(selected)
+            profile = self.get(selected, resolved.identity)
             modified = bool(
                 profile
                 and any(
@@ -224,12 +246,13 @@ class GenerationProfileService:
         working: Mapping[str, Any],
         *,
         catalogs: Mapping[str, Collection[str]] | None = None,
+        vae_options: VaeCatalog | None = None,
     ) -> tuple[ApplicationPlan, SelectionState]:
         """The operator picked a model: plan the preferred profile onto ``working`` (the caller applies the changes)."""
 
         resolved = self.resolve(model_name)
         preferred, missing = self.preferred_ref(resolved.identity)
-        profile = self.get(preferred) if preferred else None
+        profile = self.get(preferred, resolved.identity) if preferred else None
         previous_family = self._last_family
         self._last_family = resolved.identity.family
         if profile is None:
@@ -239,6 +262,7 @@ class GenerationProfileService:
                 working=working,
                 policy=resolved.policy,
                 catalogs=catalogs,
+                vae_options=vae_options,
                 previous_family=previous_family,
                 current_family=resolved.identity.family,
                 missing_ref=missing,
@@ -251,6 +275,7 @@ class GenerationProfileService:
                 working=working,
                 policy=resolved.policy,
                 catalogs=catalogs,
+                vae_options=vae_options,
                 previous_family=previous_family,
                 current_family=resolved.identity.family,
             )
@@ -265,17 +290,19 @@ class GenerationProfileService:
         working: Mapping[str, Any],
         *,
         catalogs: Mapping[str, Collection[str]] | None = None,
+        vae_options: VaeCatalog | None = None,
     ) -> tuple[ApplicationPlan, SelectionState]:
         """The operator chose a profile in the selector (or pressed Restore on the current one)."""
 
         resolved = self.resolve(model_name)
-        profile = self.get(ref)
+        profile = self.get(ref, resolved.identity)
         plan = plan_application(
             profile=profile,
             match=_profile_match(profile, resolved.identity) if profile else None,
             working=working,
             policy=resolved.policy,
             catalogs=catalogs,
+            vae_options=vae_options,
             current_family=resolved.identity.family,
             previous_family=resolved.identity.family,
             missing_ref=ref if profile is None else None,
@@ -300,15 +327,16 @@ class GenerationProfileService:
         working: Mapping[str, Any],
         *,
         catalogs: Mapping[str, Collection[str]] | None = None,
+        vae_options: VaeCatalog | None = None,
     ) -> tuple[ApplicationPlan, SelectionState]:
         resolved = self.resolve(model_name)
         ref = self._selected.get(resolved.identity.key)
         if ref is None:
             plan = plan_application(
-                profile=None, match=None, working=working, policy=resolved.policy, catalogs=catalogs
+                profile=None, match=None, working=working, policy=resolved.policy, catalogs=catalogs, vae_options=vae_options
             )
             return plan, self.state_for(model_name, working)
-        return self.select(model_name, ref, working, catalogs=catalogs)
+        return self.select(model_name, ref, working, catalogs=catalogs, vae_options=vae_options)
 
     # ------------------------------------------------------------------ custom profiles and favorites
 
@@ -362,7 +390,7 @@ class GenerationProfileService:
     def set_favorite(self, model_name: str, ref: ProfileRef | None) -> None:
         identity = self.resolve(model_name).identity
         if ref is not None:
-            profile = self.get(ref)
+            profile = self.get(ref, identity)
             if profile is None or not _profile_match(profile, identity).applies:
                 raise ProfileError("That profile does not apply to the selected model.")
             # A favorite follows the latest Custom/Learning revision; Research is pinned to its revision.
@@ -416,39 +444,51 @@ class GenerationProfileService:
         *,
         available_models: Collection[str] | None,
         catalogs: Mapping[str, Collection[str]] | None = None,
+        resources: Mapping[str, Any] | None = None,
     ) -> tuple[StartupDefaults | None, StartupRestorePlan | None]:
         defaults = self.startup_defaults()
         if defaults is None:
             return None, None
+        saved_turbo = defaults.profile is not None and defaults.profile.profile_id.startswith("research-sdxl-turbo-")
+        if saved_turbo and resources is not None and available_models is None:
+            return defaults, StartupRestorePlan(None, awaiting_model_catalog=True)
+        resolved = self.resolve(defaults.model_name)
         plan = plan_startup_restore(
             defaults,
-            current_identity=self.resolve(defaults.model_name).identity,
+            current_identity=resolved.identity,
             available_models=available_models,
             catalogs=catalogs,
+            policy=resolved.policy,
+            vae_options=self.vae_options(defaults.model_name, resources) if resources is not None else None,
+            defer_unknown_vae=resources is not None,
         )
         if plan.model_name is not None and defaults.profile is not None:
-            profile = self.get(defaults.profile)
+            profile = self.get(
+                defaults.profile, resolved.identity,
+                served_models=resources.get("models") if resources is not None else None,
+            )
+            if profile is None and saved_turbo:
+                return defaults, StartupRestorePlan(None, issues=(
+                    "The saved SDXL Turbo profile requires the same verified checkpoint bytes; startup defaults were not applied.",
+                ))
             if profile is not None and profile.kind == KIND_LEARNING:
-                match = _profile_match(profile, self.resolve(defaults.model_name).identity)
+                match = _profile_match(profile, resolved.identity)
                 if not match.applies:
                     return defaults, StartupRestorePlan(None, issues=(match.reason,))
             if profile is not None:
                 self._selected[defaults.model.key] = profile.ref
-                self._selected[self.resolve(defaults.model_name).identity.key] = profile.ref
+                self._selected[resolved.identity.key] = profile.ref
             else:
-                plan = StartupRestorePlan(
-                    plan.model_name,
-                    None,
-                    plan.generation,
-                    plan.stage_flags,
-                    plan.stage_settings,
-                    (
+                plan = replace(
+                    plan,
+                    profile=None,
+                    issues=(
                         *plan.issues,
                         "The profile saved with the startup defaults is no longer available; its values were restored as saved.",
                     ),
                 )
         if plan.model_name is not None:
-            self._last_family = self.resolve(plan.model_name).identity.family
+            self._last_family = resolved.identity.family
         return defaults, plan
 
 

@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import concurrent.futures
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from src.api.client import DEFAULT_SCHEDULERS, SDWebUIClient, normalize_scheduler_names
-from src.api.webui_resources import DEFAULT_CLIENT
+from src.api.webui_resources import DEFAULT_CLIENT, WebUIResource
 from src.api.webui_resources import WebUIResourceService as BaseWebUIResourceService
+from src.assets.compatibility import CompatibilityProfile, CompatibilityStatus, ModelFamily
+from src.assets.component_evidence import ComponentEvidence
+from src.assets.flux_variant import classify_flux_variant
+from src.assets.picker_compatibility import PickerEvidence
+from src.assets.registry import AssetRegistry
+from src.image_backends.model_policy import resolve_model_policy
+from src.image_backends.model_readiness import assess_model_readiness
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +66,8 @@ class WebUIResourceService(BaseWebUIResourceService):
             max_workers=len(CANONICAL_WEBUI_RESOURCE_KEYS)
         ) as executor:
             futures = {
-                "models": executor.submit(self.list_models),
-                "vaes": executor.submit(self.list_vaes),
+                "models": executor.submit(self._classify_pickers, self.list_models, vae=False),
+                "vaes": executor.submit(self._classify_pickers, self.list_vaes, vae=True),
                 "samplers": executor.submit(self._fetch_samplers),
                 "schedulers": executor.submit(self._fetch_schedulers),
                 "upscalers": executor.submit(self.list_upscalers),
@@ -82,6 +91,44 @@ class WebUIResourceService(BaseWebUIResourceService):
                     results[key] = fallback
 
             return results
+
+    def _classify_pickers(self, list_resources: Callable[[], list[Any]], *, vae: bool) -> list[Any]:
+        # Reuse the catalog's paths. Only probe an exact direct child when the endpoint supplies a name alone.
+        root = self.root_path / "models" / ("VAE" if vae else "Stable-diffusion")
+        registry = AssetRegistry(self.root_path)
+        result = []
+        for entry in list_resources():
+            if not isinstance(entry, WebUIResource):
+                result.append(entry)
+                continue
+            raw = entry.raw or {}
+            filename = raw.get("path") or raw.get("filename")
+            path = None
+            try:
+                path = Path(filename) if filename else root / Path(entry.name).name
+                if filename and not path.is_absolute() and not raw.get("path"):
+                    path = root / path
+                evidence = registry.inspect_picker_candidate(path, entry.name, vae=vae)
+            except (OSError, ValueError, TypeError):
+                evidence = PickerEvidence(ComponentEvidence(error="unreadable local catalog entry"))
+            if not vae and evidence.component.dependency_bearing:
+                variant = classify_flux_variant(evidence.component)
+                compatibility = (
+                    CompatibilityProfile(
+                        CompatibilityStatus.RESOLVED, ModelFamily.FLUX, (), variant.architecture_id,
+                    )
+                    if variant is not None else None
+                )
+                policy = resolve_model_policy(entry.name, family_lookup=lambda _, compatibility=compatibility: compatibility)
+                # The dispatch gate already owns the wording and decision for dependency-bearing transformers.
+                readiness = assess_model_readiness(
+                    entry.name, checkpoint=evidence.component, catalog=None, selected=None,
+                    profile_available=policy.qualified,
+                )
+                refusal = policy.refusal or (" ".join(readiness.reasons) if readiness.blocks_dispatch else "")
+                evidence = replace(evidence, refusal=refusal)
+            result.append(replace(entry, picker=replace(evidence, path=path)))
+        return result
 
     def _fetch_samplers(self) -> list[str]:
         if self.client is None:  # filesystem-only mode: samplers are API-only

@@ -17,6 +17,8 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.assets.picker_compatibility import VaeCatalog
+from src.generation_profiles.application import policy_blocks
 from src.generation_profiles.contract import (
     SETTING_KEYS,
     ModelIdentity,
@@ -25,6 +27,8 @@ from src.generation_profiles.contract import (
     validate_settings,
 )
 from src.generation_profiles.identity import MATCH_CONFLICT, MATCH_OTHER_MODEL, match_identity
+from src.image_backends.model_policy import ModelPolicy
+from src.image_backends.model_readiness_probe import checkpoint_key
 
 STARTUP_SCHEMA = 1
 STAGE_NAMES = ("txt2img", "img2img", "adetailer", "upscale")
@@ -167,6 +171,8 @@ class StartupRestorePlan:
     stage_flags: Mapping[str, bool] = field(default_factory=dict)
     stage_settings: Mapping[str, Any] = field(default_factory=dict)
     issues: tuple[str, ...] = ()
+    pending_vae: str | None = None
+    awaiting_model_catalog: bool = False
 
     @property
     def restores_anything(self) -> bool:
@@ -195,13 +201,22 @@ def available_model_names(resources: Mapping[str, Any] | None) -> set[str] | Non
         return None
     names: set[str] = set()
     for entry in entries:
+        if getattr(getattr(entry, "picker", None), "excluded", False):
+            continue
         for attr in ("name", "display_name"):
             value = getattr(entry, attr, None)
             if value:
                 names.add(str(value))
         if isinstance(entry, str) and entry:
             names.add(entry)
-    return names or None
+    return names
+
+
+def model_is_offered(name: str, offered: Collection[str]) -> bool:
+    if name in offered:
+        return True
+    key = checkpoint_key(name)
+    return bool(key and key in {checkpoint_key(candidate) for candidate in offered})
 
 
 def plan_startup_restore(
@@ -210,11 +225,14 @@ def plan_startup_restore(
     current_identity: ModelIdentity | None,
     available_models: Collection[str] | None,
     catalogs: Mapping[str, Collection[str]] | None = None,
+    policy: ModelPolicy | None = None,
+    vae_options: VaeCatalog | None = None,
+    defer_unknown_vae: bool = False,
 ) -> StartupRestorePlan:
     """What to restore at startup, and what to report instead. Never launches, scans or substitutes."""
 
     issues: list[str] = []
-    if available_models is not None and defaults.model_name not in available_models:
+    if available_models is not None and not model_is_offered(defaults.model_name, available_models):
         return StartupRestorePlan(
             None,
             issues=(
@@ -234,6 +252,22 @@ def plan_startup_restore(
                 ),
             )
     generation = dict(defaults.generation)
+    pending_vae = None
+    vae = generation.get("vae")
+    if vae is not None and policy_blocks(policy, "vae", vae):
+        if vae:
+            issues.append(f"Saved VAE '{vae}' was not restored because the executable profile owns this setting.")
+        generation.pop("vae")
+    elif vae and vae_options is not None:
+        selected = vae_options.resolve(vae)
+        if selected is None:
+            issues.append(f"Saved VAE '{vae}' is incompatible or unavailable and was not restored.")
+            generation["vae"] = ""
+        else:
+            generation["vae"] = selected
+    elif vae and defer_unknown_vae:
+        pending_vae = vae
+        generation["vae"] = ""
     for key, catalog_key in (
         ("sampler_name", "samplers"),
         ("scheduler", "schedulers"),
@@ -253,6 +287,7 @@ def plan_startup_restore(
         dict(defaults.stage_flags),
         copy.deepcopy(dict(defaults.stage_settings)),
         tuple(issues),
+        pending_vae,
     )
 
 

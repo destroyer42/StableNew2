@@ -8,7 +8,7 @@ profile never attaches to a checkpoint by a filename substring, and a same-named
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -42,10 +42,13 @@ MATCH_OTHER_MODEL = "other_model"
 class RegistryShaLookup:
     """SHA-256 of a checkpoint from the persisted registry snapshot only (never computed here)."""
 
-    def __init__(self, registry: Any | None = None) -> None:
+    def __init__(
+        self, registry: Any | None = None, *, served_models: Callable[[], Collection[Any]] | None = None,
+    ) -> None:
         self._registry = registry
+        self._served_models = served_models
 
-    def __call__(self, model_name: str) -> str | None:
+    def _verified_record(self, model_name: str, *, path: Path | None = None) -> Any | None:
         try:
             from src.assets import AssetKind, AssetRegistry
 
@@ -53,19 +56,58 @@ class RegistryShaLookup:
             if getattr(registry, "webui_root", None) is None:
                 return None
             key = checkpoint_key(model_name)
-            digests = set()
+            found = []
             for record in registry.cached_snapshot().records_for(AssetKind.CHECKPOINT):
                 for location in record.locations:
-                    if (
-                        location.kind is AssetKind.CHECKPOINT
-                        and checkpoint_key(Path(location.path).name) == key
-                    ):
-                        verified = registry.verified_sha256(Path(location.path))
-                        digests.add(verified if verified == record.sha256 else None)
+                    if location.kind is not AssetKind.CHECKPOINT:
+                        continue
+                    if path is not None:
+                        if location.path.resolve() != path:
+                            continue
+                    elif checkpoint_key(location.path.name) != key:
+                        continue
+                    if registry.verified_sha256(location.path) != record.sha256:
+                        return None
+                    found.append(record)
+            if found and len({record.sha256 for record in found}) == 1:
+                return found[0]
         except Exception:  # noqa: BLE001 - absent evidence, never a guess
             return None
-        return next(iter(digests)) if len(digests) == 1 else None
+        return None
 
+    def __call__(self, model_name: str) -> str | None:
+        record = self._verified_record(model_name)
+        return record.sha256 if record is not None else None
+
+    def verifies_turbo(self, identity: ModelIdentity, *, served_models: Collection[Any] | None = None) -> bool:
+        from src.assets.checkpoint_structure import checkpoint_variant_from_metadata
+        from src.assets.compatibility import CompatibilityStatus, ModelFamily
+        from src.assets.picker_compatibility import picker_entry
+
+        if identity.kind != IDENTITY_MODEL or identity.family != "sdxl" or not identity.sha256:
+            return False
+        entries = served_models if served_models is not None else self._served_models() if self._served_models else ()
+        path = None
+        if entries:
+            evidence = getattr(picker_entry(entries, identity.display_name), "picker", None)
+            if evidence is None or evidence.family != "sdxl" or evidence.path is None:
+                return False
+            try:
+                path = evidence.path.resolve()
+            except OSError:
+                return False
+        record = self._verified_record(identity.display_name, path=path)
+        if record is None or record.sha256 != identity.sha256 or record.embedded_metadata_error:
+            return False
+        compat = record.compatibility
+        return bool(
+            compat is not None
+            and compat.status is CompatibilityStatus.RESOLVED
+            and compat.family is ModelFamily.SDXL
+            and not compat.structural_error
+            and compat.checkpoint_architecture == "sdxl_base"
+            and checkpoint_variant_from_metadata(record.embedded_metadata) == "turbo"
+        )
 
 @dataclass(frozen=True)
 class ResolvedModel:
@@ -149,6 +191,10 @@ class ModelIdentityResolver:
             "No registry evidence for this checkpoint yet; refresh resources to classify it.",
         )
         return ResolvedModel(_unverified(key, name, sha), policy, reason)
+
+    def verifies_turbo(self, identity: ModelIdentity, *, served_models: Collection[Any] | None = None) -> bool:
+        verify = getattr(self._sha_lookup, "verifies_turbo", None)
+        return bool(verify and verify(identity, served_models=served_models))
 
     def _safe_sha(self, name: str) -> str | None:
         try:
