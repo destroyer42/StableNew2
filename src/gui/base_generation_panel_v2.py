@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import tkinter as tk
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from tkinter import ttk
 from typing import Any
 
@@ -24,6 +24,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     SECONDARY_CONTROL_MIN_WIDTH,
     get_two_pair_form_column_specs,
 )
+from src.gui_v2.model_policy_projection import ModelControlProjection
 from src.utils.webui_resource_names import (
     normalize_vae_config_value,
     strip_webui_resource_suffix,
@@ -958,6 +959,12 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 self._on_change()
             except Exception:  # noqa: BLE001
                 logger.debug("change callback failed after applying profile values", exc_info=True)
+
+    def project_checkpoint_candidates(
+        self, model_names: Iterable[str]
+    ) -> Iterator[ModelControlProjection]:
+        """Expose the Base Generation policy and backend authority for read-only candidate discovery."""
+        return self._model_policy_projection.project_checkpoint_candidates(model_names)
 
     def _normalize_model_name(self, raw: object) -> str:
         value = str(raw or "").strip()

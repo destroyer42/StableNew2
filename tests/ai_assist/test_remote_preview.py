@@ -28,7 +28,11 @@ from src.ai_assist.remote_preview import (
 )
 from src.ai_assist.remote_transport import TransportFailure, loopback_request
 from src.ai_assist.service import AiAssistService, ServicePolicy
+from src.assets.compatibility import CompatibilityProfile, CompatibilityStatus, ModelFamily
 from src.controller.app_controller_services.ai_assist_integration import AiAssistIntegration
+from src.gui.model_policy_panel_projection import ModelPolicyPanelProjection
+from src.gui.prompt_ai_plan_sources import build_plan_snapshot
+from src.gui_v2.ai_plan_advice import build_plan_request, judge_plan
 from src.gui_v2.ai_suggestion_view import provider_outcome_text, result_provider_label
 from src.services.operator_readiness_service import OperatorReadinessService, OperatorReadinessState
 from tools.ai_assist_admin import main as admin
@@ -186,6 +190,98 @@ def test_active_generation_and_local_quarantine_do_not_gate_remote(installation,
     assert event["model_sha256_prefix"] == APPROVAL.digest[:12]
     assert "private" not in json.dumps(event) and "private" not in caplog.text
     assert "Remote AI Assist Preview" in result_provider_label(outcome)
+
+
+@pytest.fixture
+def sdxl_plan():
+    name = "juggernautXL_ragnarokBy"
+    panel = SimpleNamespace(
+        _model_combo={"values": (name,)},
+        _normalize_model_name=lambda raw: raw,
+        model_var=SimpleNamespace(get=lambda: name),
+    )
+    evidence = CompatibilityProfile(CompatibilityStatus.RESOLVED, ModelFamily.SDXL, ())
+    policy_panel = ModelPolicyPanelProjection(
+        panel, family_lookup=lambda _name: evidence, backend_id_provider=lambda: "forge_webui"
+    )
+    panel.project_checkpoint_candidates = policy_panel.project_checkpoint_candidates
+    snapshot = build_plan_snapshot(panel, None, "sfw", policy_panel.refresh())
+    request = build_plan_request(
+        "sdxl-remote-plan",
+        "Plan a landscape image.",
+        targets=snapshot.targets,
+        workflows=snapshot.workflows,
+        stages=snapshot.stages,
+        target_policy_id=snapshot.target_policy_id,
+        current_target=snapshot.current_target,
+        current_target_label=snapshot.current_target_label,
+        current_target_stages=snapshot.current_target_stages,
+    )
+    plan = {
+        "schema": "ai_assist.suggestion/1",
+        "status": "ok",
+        "kind": "plan_proposal",
+        "steps": [
+            {
+                "stage": "txt2img",
+                "target": name,
+                "workflow": None,
+                "count": 1,
+                "rationale": "Start with one view of the landscape.",
+            },
+        ],
+    }
+    return request, snapshot.facts, plan
+
+
+def test_registry_backed_remote_plan_is_valid_during_generation(installation, sdxl_plan):
+    request, facts, plan = sdxl_plan
+    worker = Worker()
+    worker.output = json.dumps(plan)
+    activity = Mock(return_value=GenerationActivity(1, False))
+    service, spy, _ = service_for(installation, worker, activity)
+    outcome = service.run(request)
+    assert outcome.ok and outcome.suggestion is not None
+    assert outcome.suggestion.steps[0].target == request.current_target
+    assert judge_plan(outcome.suggestion, facts).all_valid
+    assert outcome.details["provider"] == "remote"
+    assert request.allowed_targets == ("juggernautXL_ragnarokBy",)
+    assert request.target_policy_id == "sdxl"
+    assert "Use this id for it: juggernautXL_ragnarokBy." in json.loads(worker.calls[-1][1])["prompt"]
+    activity.assert_not_called()
+    assert spy.calls == 0
+
+    worker.failures["/api/generate"] = "disconnected"
+    fallback = service.run(request)
+    assert fallback.code is OutcomeCode.GENERATION_ACTIVE and fallback.suggestion is None
+    assert fallback.details["fallback"] is True and spy.calls == 0
+    activity.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("override", "reason"),
+    [
+        ({"target": "invented-checkpoint"}, "target_not_in_closed_list"),
+        ({"target": "juggernautXL_ragnarokBy (SDXL)"}, "target_not_in_closed_list"),
+        ({"stage": "unsupported"}, "stage_not_in_closed_list"),
+        ({"workflow": "video-workflow"}, "step_workflow_with_image_stage"),
+        ({"unexpected": "field"}, "step_fields_invalid"),
+        ({"count": 9}, "step_count_out_of_bounds"),
+    ],
+)
+def test_invalid_registry_backed_remote_plan_is_rejected_without_repair(
+    installation, sdxl_plan, override, reason
+):
+    request, _facts, plan = sdxl_plan
+    plan["steps"][0].update(override)
+    worker = Worker()
+    worker.output = json.dumps(plan)
+    service, spy, _ = service_for(installation, worker)
+    outcome = service.run(request)
+    assert outcome.code is OutcomeCode.MALFORMED and outcome.reason == reason
+    assert outcome.suggestion is None and outcome.details["fallback"] is False
+    assert [path for path, _body in worker.calls] == ["/api/version", "/api/tags", "/api/generate"]
+    assert spy.calls == 0
 
 
 @pytest.mark.parametrize("broken_path", ["/api/version", "/api/tags", "/api/generate"])

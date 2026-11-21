@@ -52,8 +52,8 @@ _VERDICT_TEXT = {
 OTHER_MODEL_NOTE = "This step uses a model other than the one selected in Pipeline."
 #: Shown in place of the "Planning for" line when no selection was sent with the request (AI-211).
 UNANCHORED_NOTICE = (
-    "The model selected in Pipeline is not available for planning (none selected, blocked, hidden or without a verified "
-    "policy), so this advice is not anchored to your selection."
+    "The Pipeline selection is unavailable, hidden, incompatible with the configured backend, or lacks a matching "
+    "supported policy. This advice is not anchored to your selection."
 )
 
 _GOVERNANCE_APPROVED = "approved"
@@ -62,7 +62,7 @@ _GOVERNANCE_EXPERIMENTAL = "experimental"
 
 @dataclass(frozen=True, slots=True)
 class TargetFact:
-    """What the model policy says about one model id (read from ``project_model_selection``)."""
+    """What the captured model policy says about one model id."""
 
     label: str
     stages: tuple[str, ...]

@@ -10,8 +10,6 @@ from __future__ import annotations
 import tkinter as tk
 from unittest.mock import Mock
 
-import pytest
-
 from src.assets.compatibility import CompatibilityProfile, CompatibilityStatus, ModelFamily
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
 from src.image_backends import model_policy as mp
@@ -337,11 +335,26 @@ def test_selecting_a_model_never_switches_the_backend_it_only_explains_the_misma
         panel.destroy()
 
 
-def test_the_default_projection_resolves_policy_without_a_scan(tk_root: tk.Tk, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_default_projection_resolves_policy_without_a_scan(tk_root: tk.Tk) -> None:
     """The panel's default family lookup is the persisted-snapshot lookup (no refresh/scan on the Tk thread)."""
 
     panel = BaseGenerationPanelV2(tk_root, models=[SDXL_A], samplers=["Euler"], include_vae=True)
     try:
         assert isinstance(panel._model_policy_projection._family_lookup, mp.RegistryFamilyLookup)
+    finally:
+        panel.destroy()
+
+
+def test_checkpoint_candidates_use_base_generation_policy_without_selecting(tk_root: tk.Tk) -> None:
+    panel = _panel(tk_root)
+    try:
+        panel.model_var.set(SDXL_A)
+        selection = panel._model_policy_projection.last_projection
+        sdxl, klein = panel.project_checkpoint_candidates((SDXL_A, KLEIN))
+        assert sdxl.policy == selection.policy
+        assert sdxl.policy.evidence == mp.EVIDENCE_REGISTRY
+        assert klein.policy.exact_identity_authority
+        assert panel._model_policy_projection.last_projection is selection
+        assert panel.model_var.get() == SDXL_A
     finally:
         panel.destroy()
