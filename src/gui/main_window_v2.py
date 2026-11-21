@@ -688,6 +688,9 @@ class MainWindowV2:
             webui_outage_provider=webui_outage_provider,
             gpu_loss_provider=gpu_loss_provider,
             comfy_command_provider=comfy_command_provider,
+            ai_assist_status_provider=getattr(
+                getattr(controller, "ai_assist", None), "operator_status", None
+            ),
         )
 
     def _watch_gpu_quarantine(self) -> None:

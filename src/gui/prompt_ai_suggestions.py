@@ -10,7 +10,6 @@ from typing import Any
 from uuid import uuid4
 
 from src.ai_assist.contracts import AssistOutcome, AssistRequest, OutcomeCode, SuggestionKind
-from src.ai_assist.preview import PREVIEW_LABEL
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.ai_preview_dialog import AiPreviewDialog
 from src.gui.ai_suggestion_dialog import AiSuggestionDialog
@@ -42,6 +41,8 @@ from src.gui_v2.ai_suggestion_view import (
     SuggestionSnapshot,
     checked_suggestion,
     outcome_review,
+    provider_outcome_text,
+    result_provider_label,
     runtime_detail_text,
 )
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
@@ -89,7 +90,7 @@ class PromptAiSuggestions:
         )
         attach_tooltip(
             self.button,
-            "Request a local AI suggestion, then review and explicitly accept into the editing buffer.",
+            "Request an AI suggestion, then review and explicitly accept into the editing buffer.",
         )
         self.explanation = ttk.Label(
             tab.center_frame,
@@ -227,7 +228,7 @@ class PromptAiSuggestions:
         if label and label not in explanation:
             explanation = f"{label}. {explanation}"
         self.explanation.configure(text=explanation)
-        self.button.configure(text="Suggest… (Preview)" if label else "Suggest…")
+        self.button.configure(text="Suggest… (Preview)" if "Preview" in label else "Suggest…")
         self.preview_button.state(["!disabled"] if self.owner is not None else ["disabled"])
         self.button.state(
             ["!disabled"] if code is None and self._active_id is None else ["disabled"]
@@ -372,6 +373,12 @@ class PromptAiSuggestions:
                 None,
             )
 
+    @staticmethod
+    def _plan_outcome_text(outcome: AssistOutcome) -> str:
+        if outcome.details.get("provider") == "remote" or outcome.details.get("fallback") is True:
+            return provider_outcome_text(outcome)
+        return outcome_plan_text(outcome, OUTCOME_TEXT)
+
     def _plan_completed(self, outcome: AssistOutcome, judgement: PlanJudgement | None) -> None:
         # Queued GUI delivery (or a synchronous admission refusal). Same lifetime and identity checks as ``_completed``.
         plan, request, dialog = self._plan, self._plan_request, self.dialog
@@ -386,8 +393,7 @@ class PromptAiSuggestions:
         ):
             return
         self._active_id = None
-        preview = outcome.details.get("trust_tier") == "preview"
-        trust = PREVIEW_LABEL if preview else self._trust_label()
+        trust = result_provider_label(outcome) or self._trust_label()
         # What was sent with the request, shown above every result (AI-211).
         sent = planning_for_text(request)
         if trust:
@@ -403,7 +409,7 @@ class PromptAiSuggestions:
         if outcome.code is not OutcomeCode.SUGGESTION:
             dialog.show_plan(
                 unavailable_plan_review(
-                    outcome_plan_text(outcome, OUTCOME_TEXT), trust_label=trust, planning_for=sent
+                    self._plan_outcome_text(outcome), trust_label=trust, planning_for=sent
                 )
             )
             dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
@@ -583,9 +589,7 @@ class PromptAiSuggestions:
         ):
             return
         self._active_id = None
-        trust = (
-            PREVIEW_LABEL if outcome.details.get("trust_tier") == "preview" else self._trust_label()
-        )
+        trust = result_provider_label(outcome) or self._trust_label()
         if trust:
             dialog.set_trust_label(trust)
         if self._review_cancelled:
@@ -601,7 +605,8 @@ class PromptAiSuggestions:
         if suggestion is None:
             self._drop_variety()
             code = outcome.code if not outcome.ok else OutcomeCode.MALFORMED
-            dialog.show_variety(unavailable_variety_review(OUTCOME_TEXT[code], trust_label=trust))
+            text = provider_outcome_text(outcome) if code is outcome.code else OUTCOME_TEXT[code]
+            dialog.show_variety(unavailable_variety_review(text, trust_label=trust))
             dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
             self.refresh()
             return
@@ -702,8 +707,7 @@ class PromptAiSuggestions:
             self.refresh()
             return
         self.outcome = outcome
-        if outcome.details.get("trust_tier") == "preview":
-            dialog.set_trust_label(PREVIEW_LABEL)
+        dialog.set_trust_label(result_provider_label(outcome) or self._trust_label())
         review = outcome_review(outcome, snapshot.request.kind)
         if outcome.code is OutcomeCode.SUGGESTION:
             suggestion = checked_suggestion(outcome, snapshot.request)

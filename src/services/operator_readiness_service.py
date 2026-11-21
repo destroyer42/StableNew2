@@ -610,6 +610,8 @@ class OperatorReadinessService:
                 f"The Offline AI Assist status could not be read ({type(exc).__name__}).",
                 "AI assist installation status",
             )
+        if status.remote_state:
+            return self._remote_ai_assist_record(status)
         if status.state == STATE_READY:
             state = OperatorReadinessState.READY
         elif status.state == STATE_INTEGRITY_FAILED:
@@ -630,6 +632,40 @@ class OperatorReadinessService:
             blocking_reasons=status.blockers if state is OperatorReadinessState.ACTION_REQUIRED else (),
             operator_actions=status.actions,
             source="AI assist installation status",
+        )
+
+    @staticmethod
+    def _remote_ai_assist_record(status: AiAssistStatus) -> OperatorReadinessRecord:
+        remote = status.remote_state
+        summary = status.summary
+        actions: tuple[str, ...]
+        if remote in ("remote_ready", "remote_restored", "remote_running"):
+            state = OperatorReadinessState.READY
+            summary += " Remote Preview: unqualified model."
+            actions = ()
+        elif remote == "remote_untrusted":
+            state = OperatorReadinessState.ACTION_REQUIRED
+            actions = (
+                "Verify the SSH tunnel, configured runtime and model digest, then reapprove Remote Preview.",
+            )
+        elif remote in ("remote_unavailable", "local_fallback") and status.local_fallback_ready:
+            state = OperatorReadinessState.READY
+            actions = ()
+        elif remote in ("remote_unavailable", "remote_error"):
+            state = OperatorReadinessState.ACTION_REQUIRED
+            summary += " No eligible provider is ready."
+            actions = ("Check the operator-managed SSH tunnel and local Preview prerequisites.",)
+        else:
+            state = OperatorReadinessState.OPTIONAL
+            actions = ()
+        return OperatorReadinessRecord(
+            id="ai_assist",
+            display_name="AI Assist",
+            state=state,
+            summary=summary,
+            blocking_reasons=(summary,) if state is OperatorReadinessState.ACTION_REQUIRED else (),
+            operator_actions=actions,
+            source="AI Assist provider readiness",
         )
 
     def _recovery_record(self) -> OperatorReadinessRecord:

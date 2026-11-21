@@ -165,3 +165,42 @@ no binary was run, so the first real Suggest is the check. Still unverified, and
 
 Report the outcome code, the exit code and the error line from **Show runtime detail**, and the `status` output; do not edit
 installed files or the argv to work around them.
+
+
+## Remote Preview
+
+Remote Preview uses the operator-managed **StableNew AI Tunnel** Windows task. The SSH forward binds
+`127.0.0.1:11435` on Windows to Ollama on `127.0.0.1:11434` in the AI worker. Keep SSH public-key
+authentication and strict host-key checking enabled. The Windows listener is part of the approved trust boundary.
+Loopback HTTP cannot authenticate individual local processes. StableNew sends request content through the encrypted
+SSH connection, so use local-only mode for work that must stay on the desktop.
+
+Before approval, verify that the Windows listener belongs to the expected SSH instance and that your worker is running
+Ollama 0.40.16 with prompt and response logging disabled. Verify the worker limits are one loaded model and one
+concurrent inference (`OLLAMA_MAX_LOADED_MODELS=1` and `OLLAMA_NUM_PARALLEL=1`). Verify the full installed model manifest digest using a trusted
+operator session on the worker. The default candidate is `qwen3.5:4b-q4_K_M`. The comparison candidate is `lfm3:1.7b`.
+Supply the exact verified digest in the approval command.
+
+```powershell
+python -m tools.ai_assist_admin approve-remote-preview --endpoint http://127.0.0.1:11435 --version 0.40.16 --digest VERIFIED_SHA256 --accept-ssh-transfer
+```
+
+Use `--model lfm3:1.7b` to approve that comparison candidate. Approval persists and applies to one exact model,
+manifest digest, runtime version and endpoint. Restart StableNew or open the Prompt tab to see the provider status.
+If the approved tag no longer reports the verified digest, or Ollama reports a different version, verify the new
+identity before reapproving. To restore local-only mode explicitly, run the following.
+
+```powershell
+python -m tools.ai_assist_admin disable-remote-preview
+```
+
+The local Preview steps above still apply to fallback. A confirmed disconnect permits one local attempt if local
+admission succeeds. A verification failure, refusal, timeout, worker error or invalid result stays visible in the
+review path. Remote health probes carry metadata only. Remote Preview models and the worker remain unqualified.
+
+For separately authorized manual acceptance, use a disposable PromptPack and non-sensitive text. Confirm startup
+reports the remote GPU ready without inference. Submit one suggestion and verify Remote Preview provenance.
+With the application idle, exercise a controlled tunnel outage, confirm local fallback and restore the tunnel.
+For a separately authorized generation workload, check that a remote suggestion completes while the job is running
+and that an outage then leaves local fallback blocked. Record provider, identity, outcome and lifecycle evidence
+without collecting prompt or response text.

@@ -14,7 +14,8 @@ from src.ai_assist.contracts import (
     RuntimeDetail,
     SuggestionKind,
 )
-from src.ai_assist.preview import PreviewState
+from src.ai_assist.preview import PREVIEW_LABEL, PreviewState
+from src.ai_assist.remote_preview import REMOTE_PREVIEW_LABEL
 from src.ai_assist.validators import validate_output
 from src.gui_v2.prompt_adaptation_preview import AdaptationPreviewModel
 
@@ -95,9 +96,35 @@ def checked_suggestion(outcome: AssistOutcome, request: AssistRequest) -> Assist
     return validate_output(json.dumps(document), request).suggestion
 
 
+def result_provider_label(outcome: AssistOutcome) -> str:
+    preview = outcome.details.get("trust_tier") == "preview"
+    if outcome.details.get("provider") == "remote":
+        return REMOTE_PREVIEW_LABEL if preview else "Remote AI Assist"
+    if outcome.details.get("fallback") is True:
+        label = "Local fallback (remote unavailable)"
+        return f"{label}. {PREVIEW_LABEL}" if preview else label
+    if outcome.details.get("provider") == "local":
+        return f"Local AI Assist. {PREVIEW_LABEL}" if preview else "Local AI Assist"
+    return PREVIEW_LABEL if preview else ""
+
+
+def provider_outcome_text(outcome: AssistOutcome) -> str:
+    if outcome.reason in ("remote_approval_required", "remote_identity_mismatch"):
+        return "Remote AI requires verification. No prompt change was made."
+    if outcome.details.get("fallback") is True:
+        if outcome.code is OutcomeCode.GENERATION_ACTIVE:
+            return "Remote unavailable. Local AI is blocked by generation or GPU quarantine."
+        return f"Remote unavailable. {OUTCOME_TEXT[outcome.code]}"
+    if outcome.reason == "remote_generation_http_error":
+        return "The remote worker returned an inference error. Authored work is unchanged."
+    if outcome.reason == "remote_health_http_error":
+        return "The remote worker returned a readiness error. Authored work is unchanged."
+    return OUTCOME_TEXT[outcome.code]
+
+
 def outcome_review(outcome: AssistOutcome, kind: SuggestionKind) -> SuggestionReview:
     # Never expose raw model refusal text, details, exception messages or malformed stdout.
-    return SuggestionReview(OUTCOME_TEXT[outcome.code], KIND_LABELS[kind])
+    return SuggestionReview(provider_outcome_text(outcome), KIND_LABELS[kind])
 
 
 RUNTIME_DETAIL_BUTTON = "Show runtime detail"
