@@ -71,7 +71,9 @@ HISTORICAL_SPEC_SHA256 = {
     # approved (governance text, make_video_default, provenance wording) and 1.4.0 gained its own 1200 s
     # history timeout (it stays experimental).
     (WAN_ID, "1.4.0"): "2bbeb38b27c878afabf34afd993668aed3f0db864cf8588e5d35281fb685a59e",
-    (A14B_ID, "1.0.0"): "b3aef49fb7766aafdc5d01631f0aaacddec3b100c0a96f2c7d647588f70b3849",
+    # VID-WARM-373 re-pinned A14B 1.0.0 deliberately (owner request 2026-11-21): its runtime policy gained
+    # keep_warm_between_jobs_seconds; the graph is untouched (the template digest below did not move).
+    (A14B_ID, "1.0.0"): "06e8ae387ff7b902bc536cb778bc2a2b6274131b4e2ace5770245a1c0af54ab2",
 }
 HISTORICAL_TEMPLATE_SHA256 = {
     (WAN_ID, "1.0.0"): "116e980387bc763c5a598641b81ead80201a2615ad19cdc625b4eb4da1484154",

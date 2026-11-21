@@ -17,6 +17,7 @@ import pytest
 from PIL import Image
 
 from src.controller.video_workflow_controller import VideoWorkflowController
+from src.services.runtime_warm_hold import RuntimeWarmHold
 from src.video import ComfyWorkflowVideoBackend, VideoExecutionRequest
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.video_backend_types import (
@@ -309,6 +310,8 @@ def test_the_a14b_policies_are_declared_with_the_existing_fields_only() -> None:
     }
     assert defaults["runtime_policy"] == {
         "release_owned_runtime_after_job": True,
+        # VID-WARM-373: the one deliberate addition, interpreted by ComfyWorkflowVideoBackend.
+        "keep_warm_between_jobs_seconds": 120,
         "required_launch_flags": ["--disable-pinned-memory"],
     }
     assert set(WAN_A14B_REQUIRED_LAUNCH_FLAGS) <= set(
@@ -385,7 +388,24 @@ class _FramesFake(_FakeComfy):
         return _png(Path(destination), (int(filename.split("_")[1]) * 10) % 256)
 
 
-def _a14b_backend(client, tmp: Path, *, ram_gb: float = 24.0, supported: bool = True):
+def _private_warm_hold() -> RuntimeWarmHold:
+    """A warm-hold slot of the test's own (VID-WARM-373): no watcher thread, never the process-wide slot."""
+
+    return RuntimeWarmHold(
+        spawn=lambda **_kwargs: None,
+        shutdown_requested=lambda: False,
+        add_shutdown_listener=lambda _listener: None,
+    )
+
+
+def _a14b_backend(
+    client,
+    tmp: Path,
+    *,
+    ram_gb: float = 24.0,
+    supported: bool = True,
+    warm_hold: RuntimeWarmHold | None = None,
+):
     """Backend over a fake managed runtime whose launch command does (or does not) support the flag."""
 
     manager = _FakeManager()
@@ -400,6 +420,7 @@ def _a14b_backend(client, tmp: Path, *, ram_gb: float = 24.0, supported: bool = 
             ram_probe=lambda: ram_gb, gpu_probe=_driver_probe(client.stats)
         ),
         transition=_no_transition(),
+        warm_hold=warm_hold or _private_warm_hold(),
         history_timeout=5.0,
         history_poll_interval=0.1,
     )
@@ -429,7 +450,9 @@ def test_an_a14b_job_completes_through_the_frames_out_path(tmp_path: Path, _no_e
     result = backend.execute(None, _a14b_request(tmp_path))
 
     assert result is not None
-    assert backend.fake_manager.stops == 1  # the owned runtime is released after the job
+    # VID-WARM-373: the owned runtime is kept warm for the next A14B job instead of being stopped.
+    assert backend.fake_manager.stops == 0
+    assert result.backend_metadata["runtime_release"]["held"] is True
     [queued] = client.queued
     assert queued["prompt"]["16"]["class_type"] == "SaveImage"
     assert queued["prompt"]["13"]["inputs"]["noise_seed"] == 7

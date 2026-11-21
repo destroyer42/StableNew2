@@ -18,6 +18,7 @@ from src.services.runtime_transition_service import (
     RuntimeTransitionCoordinator,
     RuntimeTransitionError,
 )
+from src.services.runtime_warm_hold import RuntimeWarmHold, WarmHoldClaim, get_runtime_warm_hold
 from src.utils.atomic_io import atomic_write_json
 from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
@@ -93,6 +94,18 @@ def shared_comfy_process_manager() -> ComfyProcessManager | None:
 def _release_owned_runtime_after_job(spec: Any) -> bool:
     policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
     return isinstance(policy, Mapping) and policy.get("release_owned_runtime_after_job") is True
+
+
+def _keep_warm_seconds(spec: Any) -> float:
+    """Idle grace (seconds) a release-after-job workflow keeps its owned runtime warm for the next job; 0 = none."""
+
+    policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
+    if not isinstance(policy, Mapping):
+        return 0.0
+    value = policy.get("keep_warm_between_jobs_seconds")
+    if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
+        return 0.0
+    return float(value)
 
 
 def _is_generated_output(descriptor: Mapping[str, Any]) -> bool:
@@ -464,6 +477,7 @@ class ComfyWorkflowVideoBackend:
         process_manager: ComfyProcessManager | None = None,
         readiness: WorkflowResourceReadiness | None = None,
         transition: RuntimeTransitionCoordinator | None = None,
+        warm_hold: RuntimeWarmHold | None = None,
         base_url: str = "http://127.0.0.1:8188",
         history_poll_interval: float = 0.5,
         history_timeout: float = 120.0,
@@ -479,6 +493,8 @@ class ComfyWorkflowVideoBackend:
         self._managed_process_manager: ComfyProcessManager | None = None
         #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one).
         self._sequence_warm_pid: int | None = None
+        #: The process-wide idle hold between consecutive jobs of one workflow (VID-WARM-373).
+        self._warm_hold = warm_hold or get_runtime_warm_hold()
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
         self._history_poll_interval = max(history_poll_interval, 0.1)
         self._history_timeout = max(history_timeout, 5.0)
@@ -550,14 +566,32 @@ class ComfyWorkflowVideoBackend:
         # runtime or an unknown frame rate fails here, not after the clip has been generated.
         if normalize_interpolation_request(stage_config.get("interpolation")) is not None:
             _interpolation_source_fps(spec, stage_config)
+        # VID-WARM-373: take the process-wide warm hold before anything touches the runtime. The same workflow on
+        # the very owned process that served the previous job reuses it; anything else held is released first,
+        # so this job starts exactly as it would have without the hold (including the launch-flag check below,
+        # which then judges a fresh launch rather than another workflow's held process).
+        warm_key = (str(spec.workflow_id), str(spec.workflow_version))
+        claim = self._warm_hold.claim(
+            runtime=RUNTIME_COMFY, key=warm_key, current_pid=self._owned_running_pid
+        )
+        if claim.status != "none":
+            logger.info("Workflow '%s' warm-hold claim: %s", spec.workflow_id, claim.to_dict())
+
         # A declared launch requirement (e.g. the qualified pinned-memory-off policy) must be
         # provable from StableNew's own managed launch configuration before anything starts.
-        self._verify_required_launch_flags(spec)
+        try:
+            self._verify_required_launch_flags(spec)
+        except BaseException:
+            if claim.warm and _release_owned_runtime_after_job(spec):
+                self._release_owned_runtime()  # the claimed process is neither held nor used: release it
+            raise
 
         if request.hold_runtime or not _release_owned_runtime_after_job(spec):
             # A sequence segment (hold_runtime) leaves the owned runtime warm for the next segment;
             # the sequence's own end-of-job release (release_for_sequence) is the only one.
-            result = self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+            result = self._execute_on_runtime(
+                pipeline, request, spec, stage_config, workflow_id, warm_claim=claim
+            )
             if request.hold_runtime:
                 # Remember which owned process now holds the model, so the next segment is judged warm only if
                 # it is still that very process.
@@ -570,15 +604,57 @@ class ComfyWorkflowVideoBackend:
         # stopped.  BaseException, so an interrupt cannot leave a resident runtime behind; the
         # original exception always propagates unchanged.
         try:
-            result = self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+            result = self._execute_on_runtime(
+                pipeline, request, spec, stage_config, workflow_id, warm_claim=claim
+            )
         except BaseException:
             self._release_owned_runtime()
             raise
-        release = self._release_owned_runtime()
+        # VID-WARM-373: a workflow that declares an idle grace keeps the owned process warm after a successful
+        # job instead of stopping it; the hold ends on the next claim, another runtime's preparation, or the grace.
+        release = self._hold_owned_runtime(spec, warm_key) or self._release_owned_runtime()
         if result is not None:
             result.backend_metadata["runtime_release"] = dict(release)
             result.diagnostic_payload["runtime_release"] = dict(release)
+            if claim.status != "none":
+                result.backend_metadata["runtime_reuse"] = claim.to_dict()
+                result.diagnostic_payload["runtime_reuse"] = claim.to_dict()
         return result
+
+    def _hold_owned_runtime(self, spec: Any, key: tuple[str, str]) -> dict[str, Any] | None:
+        """Arm the warm hold for the owned process that just served ``spec``; ``None`` means release as usual."""
+
+        seconds = _keep_warm_seconds(spec)
+        if seconds <= 0:
+            return None
+        pid = self._owned_running_pid()
+        if pid is None:
+            return None  # nothing StableNew owns is running: there is nothing to keep warm
+
+        def release_if_same_process() -> dict[str, Any]:
+            if self._owned_running_pid() != pid:
+                return {
+                    "policy": "keep_warm_between_jobs",
+                    "pid": pid,
+                    "released": False,
+                    "reason": "the held process is no longer the one StableNew owns",
+                }
+            return self._release_owned_runtime()
+
+        held = self._warm_hold.hold(
+            runtime=RUNTIME_COMFY, key=key, pid=pid, seconds=seconds, release=release_if_same_process
+        )
+        if not held.get("held"):
+            logger.info("Warm hold not armed (%s); releasing as usual", held.get("reason"))
+            return None
+        return {
+            "policy": "keep_warm_between_jobs",
+            "ownership": "owned",
+            "pid": pid,
+            "released": False,
+            "held": True,
+            "idle_release_seconds": seconds,
+        }
 
     def _execute_on_runtime(
         self,
@@ -587,6 +663,8 @@ class ComfyWorkflowVideoBackend:
         spec: Any,
         stage_config: dict[str, Any],
         workflow_id: str,
+        *,
+        warm_claim: WarmHoldClaim | None = None,
     ) -> VideoExecutionResult | None:
         # Release conflicting StableNew-owned runtime residency (owned A1111, cached SVD state)
         # before Comfy starts/serves; never touches an external runtime.  See PR-RUNTIME-100.
@@ -615,14 +693,21 @@ class ComfyWorkflowVideoBackend:
             if version_warning:
                 logger.warning(version_warning)
             warm_pid = self._sequence_warm_pid
+            sequence_warm = bool(
+                request.hold_runtime
+                and warm_pid is not None
+                and self._owned_running_pid() == warm_pid
+            )
+            # A process claimed warm from the idle hold is the same resident runtime as a warm sequence segment.
+            held_warm = bool(
+                warm_claim is not None
+                and warm_claim.warm
+                and self._owned_running_pid() == warm_claim.pid
+            )
             readiness = self._readiness.evaluate(
                 spec,
                 system_stats=system_stats,
-                warm_sequence=bool(
-                    request.hold_runtime
-                    and warm_pid is not None
-                    and self._owned_running_pid() == warm_pid
-                ),
+                warm_sequence=sequence_warm or held_warm,
             )
             # Record the measurements and RAM advisories even if allocation or dispatch later fails.
             logger.info(
