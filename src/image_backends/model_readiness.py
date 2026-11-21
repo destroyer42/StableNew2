@@ -21,6 +21,7 @@ from typing import Any
 
 from src.assets.component_evidence import (
     ARCH_UNRECOGNIZED_DIT,
+    ROLE_PREVIEW_DECODER,
     ROLE_TEXT_ENCODER,
     ROLE_TRANSFORMER,
     ROLE_VAE,
@@ -260,8 +261,9 @@ def assess_model_readiness(
             observed_at=stamp,
         )
     evidence_type = "gguf_tensor_table" if checkpoint.fact("container") == "gguf" else "safetensors_header"
-    if checkpoint.role in (ROLE_TEXT_ENCODER, ROLE_VAE):
-        role = "text encoder" if checkpoint.role == ROLE_TEXT_ENCODER else "VAE"
+    non_checkpoints = {ROLE_TEXT_ENCODER: "text encoder", ROLE_VAE: "VAE", ROLE_PREVIEW_DECODER: "preview decoder"}
+    if checkpoint.role in non_checkpoints:
+        role = non_checkpoints[checkpoint.role]
         return ModelReadiness(
             model_name,
             ReadinessStatus.NOT_A_CHECKPOINT,

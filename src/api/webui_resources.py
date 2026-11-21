@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from src.api.client import SDWebUIClient
+from src.assets.picker_compatibility import PickerEvidence
 from src.utils.webui_resource_names import normalize_vae_config_value
 
 
@@ -26,6 +27,7 @@ class WebUIResource:
     name: str
     display_name: str
     raw: dict[str, Any] | None = None
+    picker: PickerEvidence | None = None
 
 
 # Marks "no client argument supplied" so an explicit ``client=None`` can mean filesystem-only.

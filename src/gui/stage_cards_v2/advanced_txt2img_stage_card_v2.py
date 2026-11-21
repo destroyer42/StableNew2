@@ -962,6 +962,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             self._vae_name_map.get(vae_display, vae_display.strip() if vae_display else "")
         )
 
+        base = self.base_generation_panel
+        if base is not None:
+            model_name = base._normalize_model_name(self.model_var.get())
+            vae_name = base._normalize_vae_name(vae_display)
+
         # Store use_refiner flag for conditional field writing
         use_refiner = bool(self.refiner_enabled_var.get())
 

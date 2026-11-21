@@ -12,13 +12,15 @@ import logging
 from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any
 
-from src.generation_profiles.application import ApplicationPlan
+from src.generation_profiles.application import ApplicationPlan, policy_blocks
 from src.generation_profiles.contract import ProfileError, ProfileRef
+from src.generation_profiles.identity import ModelIdentityResolver, RegistryShaLookup
 from src.generation_profiles.service import GenerationProfileService, SelectionState
 from src.generation_profiles.startup import (
     STAGE_NAMES,
     StartupRestorePlan,
     available_model_names,
+    model_is_offered,
     restored_generation_values,
 )
 from src.generation_profiles.store import GenerationProfileStore
@@ -94,6 +96,8 @@ class GenerationProfileController:
         self._built_with: dict[str, Any] | None = None
         self._startup_issues: tuple[str, ...] = ()
         self._startup_model: str | None = None
+        self._startup_vae: str | None = None
+        self._startup_waiting_for_models: dict[str, Any] | None = None
         self._listeners: list[Callable[[], None]] = []
 
     # ------------------------------------------------------------------ plumbing
@@ -101,7 +105,12 @@ class GenerationProfileController:
     @property
     def service(self) -> GenerationProfileService:
         if self._service is None:
-            self._service = GenerationProfileService(GenerationProfileStore())
+            resolver = ModelIdentityResolver(
+                sha_lookup=RegistryShaLookup(
+                    served_models=lambda: self._resources().get("models") or ()
+                ),
+            )
+            self._service = GenerationProfileService(GenerationProfileStore(), resolver)
         return self._service
 
     def add_listener(self, listener: Callable[[], None]) -> None:
@@ -143,20 +152,18 @@ class GenerationProfileController:
     def current_model(self) -> str:
         return str(self.working_values().get("model") or "")
 
-    def catalogs(self) -> dict[str, Collection[str]]:
+    def _resources(self) -> Mapping[str, Any]:
         resources = getattr(getattr(self._host, "app_state", None), "resources", None)
-        if not isinstance(resources, Mapping):
-            return {}
+        return resources if isinstance(resources, Mapping) else {}
+
+    def catalogs(self) -> dict[str, Collection[str]]:
+        resources = self._resources()
         catalogs: dict[str, Collection[str]] = {}
         for key in ("samplers", "schedulers", "vaes"):
             entries = resources.get(key)
             if isinstance(entries, (list, tuple)) and entries:
                 catalogs[key] = [str(getattr(item, "name", item)) for item in entries]
         return catalogs
-
-    def _available_models(self) -> set[str] | None:
-        resources = getattr(getattr(self._host, "app_state", None), "resources", None)
-        return available_model_names(resources)
 
     def _apply_to_panel(self, changes: Mapping[str, Any]) -> None:
         panel = self._panel()
@@ -188,14 +195,24 @@ class GenerationProfileController:
         if not name or name == self._last_model:
             return None
         self._last_model = name
+        self._startup_waiting_for_models = None
+        self._startup_vae = None
         values = self.working_values()
         values["model"] = name
-        plan, _state = self.service.on_model_changed(name, values, catalogs=self.catalogs())
+        plan, _state = self.service.on_model_changed(
+            name,
+            values,
+            catalogs=self.catalogs(),
+            vae_options=self.service.vae_options(name, self._resources()),
+        )
         self._apply_to_panel(plan.changes)
         self._last_plan = plan
         self._log(plan.message)
         self._changed()
         return plan
+
+    def note_vae_chosen(self) -> None:
+        self._startup_vae = None
 
     def note_model(self, model_name: str) -> None:
         """Record the current model without applying anything (startup restore, programmatic loads)."""
@@ -210,7 +227,11 @@ class GenerationProfileController:
             return None
         model = self.current_model()
         plan, _state = self.service.select(
-            model, ref, self.working_values(), catalogs=self.catalogs()
+            model,
+            ref,
+            self.working_values(),
+            catalogs=self.catalogs(),
+            vae_options=self.service.vae_options(model, self._resources()),
         )
         self._apply_to_panel(plan.changes)
         self._last_plan = plan
@@ -221,7 +242,10 @@ class GenerationProfileController:
     def on_restore_selected(self) -> ApplicationPlan:
         model = self.current_model()
         plan, _state = self.service.restore_selected(
-            model, self.working_values(), catalogs=self.catalogs()
+            model,
+            self.working_values(),
+            catalogs=self.catalogs(),
+            vae_options=self.service.vae_options(model, self._resources()),
         )
         self._apply_to_panel(plan.changes)
         self._last_plan = plan
@@ -339,18 +363,26 @@ class GenerationProfileController:
             f"Saved startup defaults for {record.model_name}{profile}. They are used the next time StableNew starts.",
         )
 
-    def restore_startup_defaults(self) -> StartupRestorePlan | None:
+    def restore_startup_defaults(
+        self, *, resources: Mapping[str, Any] | None = None
+    ) -> StartupRestorePlan | None:
         """Apply saved startup defaults to the working settings. Reports what could not be restored; launches nothing."""
 
+        snapshot = self._resources() if resources is None else resources
         try:
             defaults, plan = self.service.plan_startup(
-                available_models=self._available_models(), catalogs=self.catalogs()
+                available_models=available_model_names(snapshot),
+                catalogs=self.catalogs(),
+                resources=snapshot,
             )
         except Exception as exc:  # noqa: BLE001 - startup must never fail because of a profile file
             logger.warning("startup defaults not restored: %s", exc)
             return None
         if plan is None:
             return None
+        self._startup_waiting_for_models = (
+            self.working_values() if plan.awaiting_model_catalog else None
+        )
         self._startup_issues = plan.issues
         for issue in plan.issues:
             self._log(issue)
@@ -375,30 +407,58 @@ class GenerationProfileController:
             marker("startup")
         self._log(f"Restored startup defaults for {plan.model_name}.")
         self._startup_model = plan.model_name
+        self._startup_vae = plan.pending_vae
         self._changed()
         return plan
 
     def on_resources_updated(self, resources: Mapping[str, Any] | None) -> None:
         """Once the runtime publishes its model list, report a saved startup model it does not offer (no substitution)."""
 
-        if self._startup_model is None or not isinstance(resources, Mapping):
+        if not isinstance(resources, Mapping) or (
+            self._startup_model is None and self._startup_waiting_for_models is None
+        ):
             return
         models = available_model_names(resources)
+        startup_model = self._startup_model
         if models is None:
             return
-        startup_model = self._startup_model
 
         def validate() -> None:
-            if self._startup_model != startup_model:
+            if self._startup_waiting_for_models is not None:
+                original = self._startup_waiting_for_models
+                self._startup_waiting_for_models = None
+                if original == self.working_values():
+                    self.restore_startup_defaults(resources=resources)
                 return
-            if startup_model not in models:
+            if startup_model is None or self._startup_model != startup_model:
+                return
+            message = ""
+            if not model_is_offered(startup_model, models):
                 message = (
                     f"Saved startup model '{startup_model}' is not offered by the runtime; "
                     "your current selection was kept."
                 )
+            elif (
+                self._startup_vae
+                and self.current_model() == startup_model
+                and not self.working_values().get("vae")
+            ):
+                options = self.service.vae_options(startup_model, resources)
+                if options is None:
+                    return
+                vae = options.resolve(self._startup_vae)
+                policy = self.service.resolve(startup_model).policy
+                if policy_blocks(policy, "vae", self._startup_vae):
+                    message = f"Saved VAE '{self._startup_vae}' was not restored because the executable profile owns it."
+                elif vae is not None:
+                    self._apply_to_panel({"vae": vae})
+                else:
+                    message = f"Saved VAE '{self._startup_vae}' is incompatible or unavailable and was not restored."
+            if message:
                 self._startup_issues = (*self._startup_issues, message)
                 self._log(message)
             self._startup_model = None
+            self._startup_vae = None
             self._changed()
 
         dispatch = getattr(self._host, "_run_in_gui_thread", None)

@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.assets.cache_diagnostics import (
     CacheDescription,
@@ -298,6 +298,10 @@ def _resolve_sidecar(path: Path, cached: dict[str, Any] | None) -> dict[str, Any
         "sidecar_error": error,
         "sidecar_fingerprint": fingerprint,
     }
+
+
+if TYPE_CHECKING:
+    from src.assets.picker_compatibility import PickerEvidence
 
 
 class AssetRegistry:
@@ -612,6 +616,14 @@ class AssetRegistry:
             if isinstance(item.get("sha256"), str) and re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
         )
         return CacheDescription(state, version, len(entries), len(checkpoints), with_digest)
+
+    def inspect_picker_candidate(self, path: Path, name: str, *, vae: bool) -> PickerEvidence:
+        from src.assets.picker_compatibility import inspect_picker_file
+
+        approximate = any(part.lower() == "vae-approx" for part in path.parts)
+        # Registry sidecar reads are bounded and use a current sidecar fingerprint.
+        sidecar = _resolve_sidecar(path, None)["sidecar_metadata"] if vae and not approximate else None
+        return inspect_picker_file(path, name, vae=vae, approximate=approximate, sidecar=sidecar)
 
     def inspect_checkpoint(self, path: Path) -> CheckpointInspection:
         """Worker-only header/sidecar preflight, without byte identity.
