@@ -35,16 +35,38 @@ datacenter host policy ACCEPT in both directions. The proposed guest policy
 defaults to DROP and allows IPv4 SSH from the single approved desktop.
 No guest outbound rule is added. Loopback remains inside the guest.
 
-**Block activation pending the address and restart decision.** CT 110 uses
-DHCP. The router reserves 192.168.1.22 for the guest MAC when it obtains a lease.
-The candidate blocks DHCP, so a guest restart can take away the existing
-IPv4 address and SSH path. Proxmox documents that guests must restart when the
-backend changes. A recorded maintenance window, a console recovery path, an
-approved stable address or scoped address-acquisition exception, and explicit
-authorization for any affected guest restart are required. If another guest
-would require changes or a restart, this candidate cannot be deployed under
-the CT 110 scope. A live lease that lasts through the window does not resolve
-the restart case. See the [Proxmox firewall guide](https://pve.proxmox.com/pve-docs/chapter-pve-firewall.html).
+### Approved DHCP scope
+
+The owner approved a scoped DHCP exception on 2026-11-21 to preserve the
+router reservation for CT 110 at 192.168.1.22. Apply it only to the guest
+interface associated with that reservation. The scope is IPv4 DHCP client
+traffic from UDP 68 to 67, including the local limited broadcast needed for
+address acquisition and rebinding and unicast renewal to the identified
+router DHCP server. Permit replies from that server from UDP 67 to 68 to
+the reserved address or the local limited broadcast. Verify the interface,
+reservation MAC and DHCP server identity before constructing any candidate
+that enables the exception. DHCPv6 and broader UDP destinations are outside
+the approval.
+
+**Activation remains blocked on enforcement and restart.** The upstream
+nftables backend processes the native DHCP option before custom guest rules.
+Its allow and block chains cover both DHCPv4 and DHCPv6, without a server
+address match. The render-only candidate retains `dhcp: 0` until the exact
+installed compiler and skeleton demonstrate a way to enforce only the
+approved exception. Turning on `dhcp: 1` or appending an override to the
+custom rules is insufficient. If the installed build has the same rule order
+and scope, obtain an owner decision on a CT-specific host filter or static
+addressing before changing the design.
+[Upstream guest rule order](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/src/firewall.rs#L328)
+[Upstream DHCP chains](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/resources/proxmox-firewall.nft#L300)
+
+Proxmox documents a guest restart when switching firewall backends. Record
+a maintenance window and console recovery path and obtain separate restart
+authorization. If another guest requires a change or restart, stop under
+the CT 110 scope. Verify a fresh lease and its renewal, continued SSH
+forwarding and denial of DHCPv6 and traffic outside the approved DHCPv4
+scope before accepting the policy. A currently valid lease is insufficient.
+[Proxmox firewall guide](https://pve.proxmox.com/pve-docs/chapter-pve-firewall.html)
 
 Before an activation decision, use a disposable matching Proxmox environment
 or an approved offline copy of the installed compiler and its configuration.

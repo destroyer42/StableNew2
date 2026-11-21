@@ -99,6 +99,8 @@ def test_self_consistent_bundle_without_verified_observations_cannot_admit(evide
         ("egress", "active_ct_policy", "FAIL", "HOLD"),
         ("egress", "ipv6_tcp", "UNKNOWN", "INCONCLUSIVE"),
         ("egress", "udp_dns", "FAIL", "HOLD"),
+        ("egress", "dhcpv4_acquisition_and_renewal", "UNKNOWN", "INCONCLUSIVE"),
+        ("egress", "dhcp_scope_enforced", "FAIL", "HOLD"),
         ("egress", "no_unauthorized_egress", "FAIL", "HOLD"),
         ("egress", "all_interfaces", "UNKNOWN", "INCONCLUSIVE"),
         ("egress", "zero_loss", "FAIL", "HOLD"),

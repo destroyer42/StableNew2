@@ -34,6 +34,8 @@ CHECKS = {
             "ipv4_tcp",
             "ipv6_tcp",
             "udp_dns",
+            "dhcpv4_acquisition_and_renewal",
+            "dhcp_scope_enforced",
             "other_outbound",
             "no_preexisting_egress",
             "continuous_attribution",
