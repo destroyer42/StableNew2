@@ -1,0 +1,244 @@
+"""PR-IMG-COMFY-100: readiness of the Comfy still-image profiles (read-only; never downloads, moves or loads weights).
+
+Three layers, from cheapest to live:
+
+* ``check_installation``: every pinned file is in a configured Comfy model folder at its exact size; with
+  ``verify_sha256`` also its exact SHA-256, hashed once per (path, size, mtime) per process. Used for the GUI offer
+  (size only) and before dispatch (with the hash).
+* ``probe_object_info``: the running StableNew-owned Comfy offers every node class of the frozen graph, the three file
+  names in its loader options and the ``qwen_image`` encoder type.
+* ``evaluate_floors``: the free VRAM and free host RAM Comfy itself reports meet the profile's floors.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import threading
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from src.image_backends.comfy_image_graphs import ComfyImageGraph
+from src.image_backends.comfy_qwen_image_profile import ComfyModelAsset, QwenImageProfile
+
+ModelFolders = Mapping[str, Sequence[Path]]
+
+_HASH_CACHE: dict[tuple[str, int, int], str] = {}
+_HASH_LOCK = threading.Lock()
+_HASH_CHUNK = 8 * 1024 * 1024
+
+
+class ComfyImageResourceError(RuntimeError):
+    """A fail-closed resource floor is not met (free VRAM or host RAM); nothing was queued."""
+
+
+@dataclass(frozen=True, slots=True)
+class ComfyInstallationStatus:
+    ready: bool
+    problems: tuple[str, ...] = ()
+    #: Pinned filename -> the local file that satisfied it.
+    paths: Mapping[str, str] = field(default_factory=dict)
+    sha256_verified: bool = False
+
+    @property
+    def summary(self) -> str:
+        return "installed" if self.ready else "; ".join(self.problems)
+
+
+def comfy_model_folders() -> dict[str, list[Path]]:
+    """The model folders of StableNew's managed Comfy launch configuration (reads settings, never runs Comfy)."""
+
+    from src.video.comfy_process_manager import (
+        build_default_comfy_process_config,
+        get_global_comfy_process_manager,
+    )
+    from src.video.workflow_asset_integrity import model_folders
+
+    manager = get_global_comfy_process_manager()
+    config = getattr(manager, "config", None) if manager is not None else None
+    config = config or build_default_comfy_process_config()
+    if config is None:
+        raise ValueError("no StableNew-managed ComfyUI launch configuration is set")
+    return model_folders(
+        tuple(getattr(config, "command", ()) or ()), getattr(config, "working_dir", None)
+    )
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(_HASH_CHUNK):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def cached_sha256(path: Path, *, hasher: Callable[[Path], str] = _sha256) -> str:
+    """SHA-256 of ``path``, hashed again only when its size or modification time changes."""
+
+    stat = path.stat()
+    key = (str(path.resolve()), int(stat.st_size), int(stat.st_mtime_ns))
+    with _HASH_LOCK:
+        cached = _HASH_CACHE.get(key)
+    if cached is not None:
+        return cached
+    value = hasher(path)
+    with _HASH_LOCK:
+        _HASH_CACHE[key] = value
+    return value
+
+
+def clear_hash_cache() -> None:
+    with _HASH_LOCK:
+        _HASH_CACHE.clear()
+
+
+def _check_asset(
+    asset: ComfyModelAsset,
+    folders: ModelFolders,
+    verify_sha256: bool,
+    hasher: Callable[[Path], str],
+) -> tuple[str | None, list[str]]:
+    candidates = [Path(root) / asset.filename for root in folders.get(asset.folder, ())]
+    found = list(dict.fromkeys(path for path in candidates if path.is_file()))
+    if not found:
+        return None, [
+            f"Model missing: {asset.filename} (Comfy models/{asset.folder}; StableNew never downloads it)"
+        ]
+    problems: list[str] = []
+    for path in found:
+        try:
+            if path.stat().st_size != asset.size:
+                problems.append(f"Model size mismatch (truncated or different file): {path}")
+            elif verify_sha256 and cached_sha256(path, hasher=hasher) != asset.sha256:
+                problems.append(f"Model SHA-256 mismatch: {path}")
+        except OSError as exc:
+            problems.append(f"Model could not be verified: {path}: {exc}")
+    return str(found[0]), problems
+
+
+def check_installation(
+    profile: QwenImageProfile,
+    *,
+    folders: ModelFolders | None = None,
+    verify_sha256: bool = False,
+    hasher: Callable[[Path], str] = _sha256,
+) -> ComfyInstallationStatus:
+    """Whether every pinned file of ``profile`` is installed exactly (size; optionally SHA-256). Never raises."""
+
+    try:
+        resolved = comfy_model_folders() if folders is None else folders
+    except (OSError, ValueError) as exc:
+        return ComfyInstallationStatus(False, (f"Local model identity cannot be verified: {exc}",))
+    problems: list[str] = []
+    paths: dict[str, str] = {}
+    for asset in profile.assets:
+        path, asset_problems = _check_asset(asset, resolved, verify_sha256, hasher)
+        problems.extend(asset_problems)
+        if path is not None:
+            paths[asset.filename] = path
+    ready = not problems
+    return ComfyInstallationStatus(
+        ready, tuple(problems), paths, sha256_verified=ready and verify_sha256
+    )
+
+
+def _input_options(object_info: Mapping[str, Any], node_class: str, input_name: str) -> list[str]:
+    """The combo options Comfy's ``/object_info`` lists for one input (legacy and ``COMBO`` shapes)."""
+
+    node = object_info.get(node_class)
+    inputs = node.get("input") if isinstance(node, Mapping) else None
+    if not isinstance(inputs, Mapping):
+        return []
+    for group in ("required", "optional"):
+        spec = inputs.get(group)
+        value = spec.get(input_name) if isinstance(spec, Mapping) else None
+        if not isinstance(value, (list, tuple)) or not value:
+            continue
+        head = value[0]
+        if isinstance(head, (list, tuple)):
+            return [str(item) for item in head]
+        if head == "COMBO" and len(value) > 1 and isinstance(value[1], Mapping):
+            return [str(item) for item in value[1].get("options") or ()]
+    return []
+
+
+def probe_object_info(graph: ComfyImageGraph, object_info: Any) -> tuple[str, ...]:
+    """Problems that stop the frozen graph from running on this Comfy; empty when it can be queued."""
+
+    if not isinstance(object_info, Mapping) or not object_info:
+        return ("ComfyUI returned no node information",)
+    profile = graph.profile
+    problems = [
+        f"ComfyUI has no '{node_class}' node (the pinned v0.38.0 runtime provides it)"
+        for node_class in graph.required_node_classes
+        if node_class not in object_info
+    ]
+    for node_class, input_name, expected in (
+        ("UNETLoader", "unet_name", profile.diffusion_model.filename),
+        ("CLIPLoader", "clip_name", profile.text_encoder.filename),
+        ("VAELoader", "vae_name", profile.vae.filename),
+        ("CLIPLoader", "type", graph.clip_type),
+    ):
+        if node_class in object_info and expected not in _input_options(
+            object_info, node_class, input_name
+        ):
+            problems.append(f"ComfyUI does not list '{expected}' for {node_class}.{input_name}")
+    return tuple(problems)
+
+
+def _int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def evaluate_floors(profile: QwenImageProfile, system_stats: Any) -> dict[str, Any]:
+    """Check Comfy's own free VRAM and host RAM against the profile floors; returns the readings or raises."""
+
+    stats = system_stats if isinstance(system_stats, Mapping) else {}
+    raw_system = stats.get("system")
+    system: Mapping[str, Any] = raw_system if isinstance(raw_system, Mapping) else {}
+    raw_devices = stats.get("devices")
+    devices: list[Any] = raw_devices if isinstance(raw_devices, list) else []
+    device = devices[0] if devices and isinstance(devices[0], Mapping) else {}
+    vram_free, vram_total = _int(device.get("vram_free")), _int(device.get("vram_total"))
+    ram_free, ram_total = _int(system.get("ram_free")), _int(system.get("ram_total"))
+    if vram_free is None or ram_free is None:
+        raise ComfyImageResourceError(
+            f"ComfyUI did not report free GPU memory and host RAM, so {profile.display_name} cannot be admitted; "
+            "nothing was queued"
+        )
+    floors = profile.resources
+    gib = 1024**3
+    if vram_free < floors.min_free_vram_bytes:
+        raise ComfyImageResourceError(
+            f"{profile.display_name} needs {floors.min_free_vram_bytes / gib:.0f} GiB of free GPU memory, but ComfyUI "
+            f"reports {vram_free / gib:.1f} GiB free. StableNew released its own runtimes; another program is using "
+            "the GPU. Nothing was queued."
+        )
+    if ram_free < floors.min_free_ram_bytes:
+        raise ComfyImageResourceError(
+            f"{profile.display_name} needs {floors.min_free_ram_bytes / gib:.0f} GiB of free host RAM, but ComfyUI "
+            f"reports {ram_free / gib:.1f} GiB free. Close other programs and try again. Nothing was queued."
+        )
+    return {
+        "vram_free_bytes": vram_free,
+        "vram_total_bytes": vram_total,
+        "ram_free_bytes": ram_free,
+        "ram_total_bytes": ram_total,
+        "device_name": str(device.get("name") or ""),
+    }
+
+
+__all__ = [
+    "ComfyImageResourceError",
+    "ComfyInstallationStatus",
+    "cached_sha256",
+    "check_installation",
+    "clear_hash_cache",
+    "comfy_model_folders",
+    "evaluate_floors",
+    "probe_object_info",
+]

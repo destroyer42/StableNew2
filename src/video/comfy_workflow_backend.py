@@ -75,6 +75,21 @@ from src.video.workflow_registry import WorkflowRegistry, build_default_workflow
 logger = logging.getLogger(__name__)
 
 
+def shared_comfy_process_manager() -> ComfyProcessManager | None:
+    """The single StableNew-managed ComfyUI owner for callers outside this backend (the still-image backend).
+
+    Returns the registered global manager, or constructs one from the default launch configuration (which registers
+    itself globally); ``None`` when no managed launch configuration exists. Keeping the construction here keeps
+    ``ComfyProcessManager`` to one production construction site (P3-2 N1). This backend's own path is unchanged.
+    """
+
+    manager = get_global_comfy_process_manager()
+    if manager is not None:
+        return manager
+    config = build_default_comfy_process_config()
+    return ComfyProcessManager(config) if config is not None else None
+
+
 def _release_owned_runtime_after_job(spec: Any) -> bool:
     policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
     return isinstance(policy, Mapping) and policy.get("release_owned_runtime_after_job") is True

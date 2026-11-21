@@ -36,6 +36,13 @@ from src.assets.flux_variant import (
     variant_from_architecture,
     variant_label,
 )
+from src.image_backends.comfy_qwen_image_profile import (
+    QwenImageProfile,
+    apply_qwen_image_compile_policy,
+    frozen_qwen_image_profile,
+    qwen_image_profile_for_model,
+    qwen_image_selected,
+)
 from src.image_backends.diffusers_ideogram4_profile import (
     IDEOGRAM4_PROFILE_V1,
     Ideogram4Profile,
@@ -82,6 +89,7 @@ from src.image_backends.image_backend_types import (
 FAMILY_SDXL = "sdxl"
 FAMILY_FLUX2_KLEIN = "flux2_klein"
 FAMILY_IDEOGRAM4 = "ideogram4"
+FAMILY_QWEN_IMAGE = "qwen_image"
 #: FLUX.1 (dev/schnell) layouts (PR-IMG-FLUX-130); the coarse registry family stays ``flux``.
 FAMILY_FLUX1 = "flux1"
 FAMILY_FLUX = "flux"
@@ -283,6 +291,8 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
     fixed = ControlMode.FIXED
     if isinstance(profile, Ideogram4Profile):
         return _ideogram4_policy(profile)
+    if isinstance(profile, QwenImageProfile):
+        return _qwen_image_policy(profile)
     if isinstance(profile, Flux1Profile):
         return _flux1_policy(profile)
     if isinstance(profile, ZImageProfile):
@@ -428,6 +438,29 @@ def _flux_refused_policy(variant: str) -> ModelPolicy:
     )
 
 
+def _qwen_image_policy(profile: QwenImageProfile) -> ModelPolicy:
+    """Qwen-Image 2.1 on the Comfy still-image backend (PR-IMG-COMFY-100): txt2img only, frozen graph values."""
+
+    fixed = ControlMode.FIXED
+    return ModelPolicy(
+        policy_id=profile.profile_id, family=FAMILY_QWEN_IMAGE, display_name=profile.display_name,
+        evidence=EVIDENCE_PROFILE, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
+        profile_ref=profile.reference(), stages=(STAGE_TXT2IMG,), modes=profile.modes,
+        controls=_controls(
+            sampler=ControlPolicy(fixed, profile.sampler), scheduler=ControlPolicy(fixed, profile.scheduler),
+            steps=ControlPolicy(fixed, profile.steps), cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
+            vae=ControlPolicy(fixed, ""), geometry=ControlPolicy(ControlMode.CONFIGURABLE, allowed=profile.geometries),
+        ),
+        features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
+        note=(f"{profile.display_name} runs on StableNew's own managed ComfyUI, one image per job, after StableNew "
+              f"releases its own Forge/A1111 and SVD runtimes; ComfyUI is stopped after each job, so each job loads the "
+              f"model again. Fixed {profile.steps} steps, cfg {profile.cfg_scale:g}; sizes are the 1-megapixel set "
+              "(1024x1024 and six aspect ratios). Plain natural-language prompts only: no negative prompt, LoRA, "
+              "embeddings or extra stages. Weights are never downloaded by StableNew. Non-commercial licence (Qwen "
+              "Research License). Not yet physically qualified in StableNew."),
+    )  # fmt: skip
+
+
 def _sdxl_policy(evidence: str) -> ModelPolicy:
     """Existing StableNew behavior for an SDXL-family checkpoint: nothing narrowed, nothing newly claimed qualified."""
 
@@ -495,6 +528,9 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
         return policy_for_profile(ZIMAGE_PROFILE_V1)
     if is_ideogram4_model_name(model_name):
         return policy_for_profile(IDEOGRAM4_PROFILE_V1)
+    qwen = qwen_image_profile_for_model(model_name)
+    if qwen is not None:
+        return policy_for_profile(qwen)
     if not str(model_name or "").strip() or family_lookup is None:
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_NONE)
     try:
@@ -661,6 +697,8 @@ def apply_model_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("The frozen Z-Image profile requires its exact selected checkpoint")
     if ideogram4_selected(config) or frozen_profile_is_ideogram4(config.get("backend_options")):
         return apply_ideogram4_compile_policy(config)
+    if qwen_image_selected(config) or frozen_qwen_image_profile(config.get("backend_options")):
+        return apply_qwen_image_compile_policy(config)
     if klein_selected(config):
         return _COMPILE_POLICIES[KLEIN_PROFILE_ID](config)
     if frozen_profile_is_flux1(config.get("backend_options")) or flux1_selected(config):
@@ -707,6 +745,8 @@ class ModelPolicyResult:
             raise ValueError("The frozen Z-Image profile requires its exact selected checkpoint")
         if ideogram4_selected(payload) or frozen_profile_is_ideogram4(payload.get("backend_options")):
             return apply_ideogram4_compile_policy(payload)
+        if qwen_image_selected(payload) or frozen_qwen_image_profile(payload.get("backend_options")):
+            return apply_qwen_image_compile_policy(payload)
         if klein_selected(payload):
             return _project_klein_flat(payload)
         if frozen_profile_is_flux1(payload.get("backend_options")) or flux1_selected(payload):
@@ -823,6 +863,7 @@ __all__ = [
     "FAMILY_FLUX1",
     "FAMILY_FLUX2_KLEIN",
     "FAMILY_IDEOGRAM4",
+    "FAMILY_QWEN_IMAGE",
     "FAMILY_SDXL",
     "FAMILY_UNKNOWN",
     "FEATURES",

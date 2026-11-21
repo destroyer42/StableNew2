@@ -446,6 +446,21 @@
       "remaining_risk": "Real Ideogram 4 generation through StableNew is unqualified; the 110R residency envelope was measured with the qualification harness, not this product code."
     },
     {
+      "id": "qwen-image-comfy-txt2img",
+      "title": "Qwen-Image 2.1 txt2img (base int8 and Turbo int8) on the Comfy still-image backend",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/image_backends/test_comfy_image_backend_comfy100.py",
+        "tests/image_backends/test_comfy_image_readiness_comfy100.py",
+        "tests/image_backends/test_comfy_qwen_image_profile_comfy100.py",
+        "tests/gui_v2/test_qwen_image_gui_comfy100.py"
+      ],
+      "limits": "The compiler, NJR, run_njr dispatch, GPU lease, owned-runtime check, object_info probe, floors, one-prompt dispatch, observation, cancellation, artifacts and release run against in-memory Comfy fakes; no desktop journey selects Qwen-Image, no ComfyUI is started and no model is loaded.",
+      "physical_qualification": "NOT RUN: no Qwen-Image weights are installed; a physical run needs the owner's install and a separate authorization.",
+      "remaining_risk": "Real Qwen-Image generation through StableNew is unverified: the int8_convrot layout on Ada, VRAM/RAM floors, timings and quality are unmeasured."
+    },
+    {
       "id": "flux-families-policy-and-flux1-dev-profile",
       "title": "Generic FLUX families: layout-class labels, refusals and the FLUX.1 [dev] family profile",
       "coverage": "integration_only",

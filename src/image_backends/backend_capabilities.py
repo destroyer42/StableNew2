@@ -12,6 +12,7 @@ from typing import Any
 
 from src.image_backends.image_backend_types import (
     A1111_IMAGE_BACKEND_ID,
+    COMFY_IMAGE_BACKEND_ID,
     DIFFUSERS_IMAGE_BACKEND_ID,
     FORGE_IMAGE_BACKEND_ID,
     ImageBackendCapabilities,
@@ -23,6 +24,7 @@ def capabilities_for(backend_id: str) -> ImageBackendCapabilities:
     """The declared capabilities of a registered image backend (class-level; nothing is instantiated)."""
 
     from src.image_backends.a1111_webui_backend import A1111WebUIImageBackend
+    from src.image_backends.comfy_image_backend import ComfyImageBackend
     from src.image_backends.diffusers_backend import DiffusersImageBackend
     from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
 
@@ -30,6 +32,7 @@ def capabilities_for(backend_id: str) -> ImageBackendCapabilities:
         A1111_IMAGE_BACKEND_ID: A1111WebUIImageBackend,
         FORGE_IMAGE_BACKEND_ID: ForgeWebUIImageBackend,
         DIFFUSERS_IMAGE_BACKEND_ID: DiffusersImageBackend,
+        COMFY_IMAGE_BACKEND_ID: ComfyImageBackend,
     }
     return backends[backend_id].capabilities
 

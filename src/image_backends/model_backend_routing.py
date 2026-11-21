@@ -11,7 +11,10 @@ resolver to ``_RESOLVERS``. Resolvers are pure, cheap name matches and import no
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
 
 
 def _ideogram4(model_name: str) -> str | None:
@@ -23,7 +26,14 @@ def _ideogram4(model_name: str) -> str | None:
     return IDEOGRAM4_PROFILE_V1.backend_id if is_ideogram4_model_name(model_name) else None
 
 
-_RESOLVERS: tuple[Callable[[str], str | None], ...] = (_ideogram4,)
+def _qwen_image(model_name: str) -> str | None:
+    from src.image_backends.comfy_qwen_image_profile import qwen_image_profile_for_model
+
+    profile = qwen_image_profile_for_model(model_name)
+    return profile.backend_id if profile is not None else None
+
+
+_RESOLVERS: tuple[Callable[[str], str | None], ...] = (_ideogram4, _qwen_image)
 
 
 def _ideogram4_offer() -> tuple[str, str] | None:
@@ -35,8 +45,31 @@ def _ideogram4_offer() -> tuple[str, str] | None:
     return IDEOGRAM4_PROFILE_V1.display_name, IDEOGRAM4_PROFILE_V1.model_name
 
 
-#: Models offered in the model list because their own runtime is installed (display name, model identity).
-_OFFERS: tuple[Callable[[], tuple[str, str] | None], ...] = (_ideogram4_offer,)
+def _qwen_image_offers() -> tuple[tuple[str, str], ...]:
+    """Each Qwen-Image 2.1 variant whose exact files are in the managed Comfy model folders (sizes only, no hash)."""
+
+    from src.image_backends.comfy_image_readiness import check_installation, comfy_model_folders
+    from src.image_backends.comfy_qwen_image_profile import QWEN_IMAGE_PROFILES
+
+    folders = comfy_model_folders()
+    return tuple(
+        (profile.display_name, profile.model_name)
+        for profile in QWEN_IMAGE_PROFILES
+        if check_installation(profile, folders=folders).ready
+    )
+
+
+def _ideogram4_offers() -> tuple[tuple[str, str], ...]:
+    offer = _ideogram4_offer()
+    return () if offer is None else (offer,)
+
+
+#: Models offered in the model list because their own runtime is installed: each entry returns its installed
+#: (display name, model identity) pairs (a family with several exact variants returns several).
+_OFFERS: tuple[Callable[[], tuple[tuple[str, str], ...]], ...] = (
+    _ideogram4_offers,
+    _qwen_image_offers,
+)
 
 
 def offered_backend_models() -> tuple[tuple[str, str], ...]:
@@ -45,11 +78,11 @@ def offered_backend_models() -> tuple[tuple[str, str], ...]:
     offers: list[tuple[str, str]] = []
     for offer in _OFFERS:
         try:
-            item = offer()
+            offers.extend(offer())
         except Exception:  # noqa: BLE001 - an unreadable install is simply not offered; the backend re-checks
-            item = None
-        if item is not None:
-            offers.append(item)
+            logger.debug(
+                "Not offering %s: its installation could not be read", offer.__name__, exc_info=True
+            )
     return tuple(offers)
 
 

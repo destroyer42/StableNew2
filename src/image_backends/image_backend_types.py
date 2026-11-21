@@ -20,9 +20,13 @@ A1111_IMAGE_BACKEND_ID = "a1111_webui"
 FORGE_IMAGE_BACKEND_ID = "forge_webui"
 #: The Diffusers runtime family (PR-IMG-120): a contained child per job, selected only by a model that requires it.
 DIFFUSERS_IMAGE_BACKEND_ID = "diffusers"
+#: The Comfy still-image backend (PR-IMG-COMFY-100): StableNew's managed ComfyUI, selected only by a model that requires
+#: it (the frozen Qwen-Image 2.1 profiles); never the new-work default and never a fallback target.
+COMFY_IMAGE_BACKEND_ID = "comfyui"
 #: ``ImageBackendCapabilities.runtime_family`` values.
 RUNTIME_FAMILY_WEBUI = "webui"
 RUNTIME_FAMILY_DIFFUSERS = "diffusers"
+RUNTIME_FAMILY_COMFY = "comfy"
 
 #: The product default for NEW still-image work when no explicit runtime identity is configured (PR-IMG-FORGE-120).
 NEW_IMAGE_BACKEND_DEFAULT_ID = FORGE_IMAGE_BACKEND_ID
