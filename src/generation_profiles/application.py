@@ -202,9 +202,15 @@ def plan_application(
         if key == SETTING_VAE and value:
             resolved_vae = vae_options.resolve(value, recommendation=True) if vae_options else None
             if resolved_vae is None:
-                notes.append(SettingNote(
-                    key, NOTE_UNAVAILABLE, f"VAE '{value}' has no verified compatibility recommendation.", old, value,
-                ))
+                notes.append(
+                    SettingNote(
+                        key,
+                        NOTE_UNAVAILABLE,
+                        f"VAE '{value}' has no verified compatibility recommendation.",
+                        old,
+                        value,
+                    )
+                )
                 continue
             value = resolved_vae
         catalog_key = {
@@ -264,9 +270,7 @@ def plan_application(
                 None,
             )
         )
-    _carry_over(
-        notes, changes, working, policy, catalogs, family_changed, covered, vae_options
-    )
+    _carry_over(notes, changes, working, policy, catalogs, family_changed, covered, vae_options)
     status = STATUS_APPLIED if changes else STATUS_NO_CHANGE
     message = (
         f"Applied {profile.name}."
@@ -292,7 +296,9 @@ def _carry_over(
         if key in changes or policy_blocks(policy, key, ""):
             continue
         current = working.get(key)
-        unavailable = bool(current and vae_options is not None and vae_options.resolve(current) is None)
+        unavailable = bool(
+            current and vae_options is not None and vae_options.resolve(current) is None
+        )
         if current and (unavailable or (family_changed and vae_options is None)):
             changes[key] = ""
             notes.append(
@@ -301,7 +307,8 @@ def _carry_over(
                     NOTE_RESET,
                     (
                         f"VAE '{current}' reset to model default because it is incompatible or unavailable for this model."
-                        if unavailable else "VAE reset to model default because its compatibility across families is unknown."
+                        if unavailable
+                        else "VAE reset to model default because its compatibility across families is unknown."
                     ),
                     current,
                     "",

@@ -105,13 +105,20 @@ def test_base_picker_uses_component_catalog_and_preserves_exact_backend_values(t
 
     def resource(kind, name, label, role, **evidence):
         facts = {"vae_family": "ldm_kl_4ch"} if role == ROLE_VAE else {}
-        return WebUIResource(kind, name, label, picker=PickerEvidence(ComponentEvidence(role, facts=facts), **evidence))
+        return WebUIResource(
+            kind,
+            name,
+            label,
+            picker=PickerEvidence(ComponentEvidence(role, facts=facts), **evidence),
+        )
 
     model = WebUIResourceType.MODEL
     vae = WebUIResourceType.VAE
     x = resource(model, "xl.safetensors", "XL [hash]", ROLE_BUNDLED, family="sdxl")
     one = resource(model, "one.safetensors", "One", ROLE_BUNDLED, family="sd1")
-    refused = resource(model, "refused.safetensors", "Refused", ROLE_BUNDLED, refusal="Existing refusal")
+    refused = resource(
+        model, "refused.safetensors", "Refused", ROLE_BUNDLED, refusal="Existing refusal"
+    )
     klein_name = KLEIN_PROFILE_V1.transformer.filename
     klein = resource(model, klein_name, klein_name, ROLE_BUNDLED)
     text = resource(model, "encoder.safetensors", "Encoder", ROLE_TEXT_ENCODER, excluded=True)
@@ -121,13 +128,19 @@ def test_base_picker_uses_component_catalog_and_preserves_exact_backend_values(t
     resources = {"models": [x, one, refused, klein, text], "vaes": [x_vae, one_vae, unknown]}
 
     app_state = AppStateV2()
-    tab = PipelineTabFrame(tk_root, app_state=app_state, pipeline_controller=DummyPipelineController())
+    tab = PipelineTabFrame(
+        tk_root, app_state=app_state, pipeline_controller=DummyPipelineController()
+    )
     panel = tab.sidebar.base_generation_panel
     app_state.set_resources(resources)
     panel.apply_profile_values({"model": x.name, "vae": x_vae.name})
     assert panel.model_var.get() == "XL"
     assert "Encoder" not in panel._model_combo["values"]
-    assert tuple(panel._vae_combo["values"]) == ("No VAE (model default)", "XL VAE", "Ambiguous (unverified)")
+    assert tuple(panel._vae_combo["values"]) == (
+        "No VAE (model default)",
+        "XL VAE",
+        "Ambiguous (unverified)",
+    )
     assert panel.get_overrides()["vae"] == x_vae.name
 
     panel.model_var.set("One")

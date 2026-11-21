@@ -144,7 +144,14 @@ RECIPES: Mapping[str, ProbeRecipe] = {
             width=1024,
             height=1024,
         ),
-        ProbeRecipe("sdxl_turbo", SDXL_TURBO_LABEL, "sdxl", SDXL_TURBO_SETTINGS, SDXL_TURBO_SOURCE, SDXL_TURBO_NOTE),
+        ProbeRecipe(
+            "sdxl_turbo",
+            SDXL_TURBO_LABEL,
+            "sdxl",
+            SDXL_TURBO_SETTINGS,
+            SDXL_TURBO_SOURCE,
+            SDXL_TURBO_NOTE,
+        ),
         _recipe(
             "flux",
             "FLUX-style (1024², Euler Simple, 20 steps, CFG 1)",

@@ -138,7 +138,10 @@ class GenerationProfileService:
         ]
 
     def _turbo_profile(
-        self, identity: ModelIdentity, *, served_models: Collection[Any] | None = None,
+        self,
+        identity: ModelIdentity,
+        *,
+        served_models: Collection[Any] | None = None,
     ) -> GenerationProfile | None:
         if identity.sha256 and self._resolver.verifies_turbo(identity, served_models=served_models):
             return turbo_research_profile(identity)
@@ -178,13 +181,24 @@ class GenerationProfileService:
         )
 
     def get(
-        self, ref: ProfileRef, identity: ModelIdentity | None = None, *,
+        self,
+        ref: ProfileRef,
+        identity: ModelIdentity | None = None,
+        *,
         served_models: Collection[Any] | None = None,
     ) -> GenerationProfile | None:
         if ref.kind == KIND_RESEARCH:
             if ref.profile_id.startswith("research-sdxl-turbo-"):
-                turbo = self._turbo_profile(identity, served_models=served_models) if identity is not None else None
-                return turbo if turbo and turbo.profile_id == ref.profile_id and ref.revision in (None, 1) else None
+                turbo = (
+                    self._turbo_profile(identity, served_models=served_models)
+                    if identity is not None
+                    else None
+                )
+                return (
+                    turbo
+                    if turbo and turbo.profile_id == ref.profile_id and ref.revision in (None, 1)
+                    else None
+                )
             current = next(
                 (
                     p
@@ -333,7 +347,12 @@ class GenerationProfileService:
         ref = self._selected.get(resolved.identity.key)
         if ref is None:
             plan = plan_application(
-                profile=None, match=None, working=working, policy=resolved.policy, catalogs=catalogs, vae_options=vae_options
+                profile=None,
+                match=None,
+                working=working,
+                policy=resolved.policy,
+                catalogs=catalogs,
+                vae_options=vae_options,
             )
             return plan, self.state_for(model_name, working)
         return self.select(model_name, ref, working, catalogs=catalogs, vae_options=vae_options)
@@ -449,7 +468,9 @@ class GenerationProfileService:
         defaults = self.startup_defaults()
         if defaults is None:
             return None, None
-        saved_turbo = defaults.profile is not None and defaults.profile.profile_id.startswith("research-sdxl-turbo-")
+        saved_turbo = defaults.profile is not None and defaults.profile.profile_id.startswith(
+            "research-sdxl-turbo-"
+        )
         if saved_turbo and resources is not None and available_models is None:
             return defaults, StartupRestorePlan(None, awaiting_model_catalog=True)
         resolved = self.resolve(defaults.model_name)
@@ -459,18 +480,24 @@ class GenerationProfileService:
             available_models=available_models,
             catalogs=catalogs,
             policy=resolved.policy,
-            vae_options=self.vae_options(defaults.model_name, resources) if resources is not None else None,
+            vae_options=self.vae_options(defaults.model_name, resources)
+            if resources is not None
+            else None,
             defer_unknown_vae=resources is not None,
         )
         if plan.model_name is not None and defaults.profile is not None:
             profile = self.get(
-                defaults.profile, resolved.identity,
+                defaults.profile,
+                resolved.identity,
                 served_models=resources.get("models") if resources is not None else None,
             )
             if profile is None and saved_turbo:
-                return defaults, StartupRestorePlan(None, issues=(
-                    "The saved SDXL Turbo profile requires the same verified checkpoint bytes; startup defaults were not applied.",
-                ))
+                return defaults, StartupRestorePlan(
+                    None,
+                    issues=(
+                        "The saved SDXL Turbo profile requires the same verified checkpoint bytes; startup defaults were not applied.",
+                    ),
+                )
             if profile is not None and profile.kind == KIND_LEARNING:
                 match = _profile_match(profile, resolved.identity)
                 if not match.applies:

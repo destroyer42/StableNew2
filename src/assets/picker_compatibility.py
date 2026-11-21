@@ -30,7 +30,23 @@ if TYPE_CHECKING:
     from src.image_backends.model_policy import ModelPolicy
 
 _NON_CHECKPOINTS = {ROLE_VAE, ROLE_TEXT_ENCODER, ROLE_PREVIEW_DECODER}
-_SIDECARS = {".json", ".yaml", ".yml", ".txt", ".md", ".png", ".jpg", ".jpeg", ".webp", ".csv", ".toml", ".info", ".ini", ".url", ".html"}
+_SIDECARS = {
+    ".json",
+    ".yaml",
+    ".yml",
+    ".txt",
+    ".md",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".csv",
+    ".toml",
+    ".info",
+    ".ini",
+    ".url",
+    ".html",
+}
 _VAE_WEIGHTS = {".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".bin"}
 _LATENT_4_FAMILIES = {"sd1", "sd2", "sdxl"}
 _VAE_FAMILIES = {
@@ -54,13 +70,25 @@ class PickerEvidence:
 
 
 def inspect_picker_file(
-    path: Path | None, name: str, *, vae: bool, approximate: bool = False,
+    path: Path | None,
+    name: str,
+    *,
+    vae: bool,
+    approximate: bool = False,
     sidecar: Mapping[str, Any] | None = None,
 ) -> PickerEvidence:
     """Inspect an already discovered file on the refresh worker. Never scans or hashes."""
     suffix = (path or Path(name)).suffix.lower()
-    if approximate or suffix in _SIDECARS or (
-        vae and (suffix == ".gguf" or (path is not None and path.is_file() and suffix not in _VAE_WEIGHTS))
+    if (
+        approximate
+        or suffix in _SIDECARS
+        or (
+            vae
+            and (
+                suffix == ".gguf"
+                or (path is not None and path.is_file() and suffix not in _VAE_WEIGHTS)
+            )
+        )
     ):
         return PickerEvidence(ComponentEvidence(), excluded=True)
     metadata: dict[str, Any] = {}
@@ -71,22 +99,44 @@ def inspect_picker_file(
             shapes, dtypes, metadata = read_tensor_table(path)
             component = classify_tensor_table(shapes, dtypes)
         except (OSError, ValueError, TypeError, UnicodeDecodeError):
-            component = ComponentEvidence(error="malformed, truncated or unreadable safetensors header")
+            component = ComponentEvidence(
+                error="malformed, truncated or unreadable safetensors header"
+            )
     else:
         component = inspect_component_file(path)
 
     role = component.role
-    if (vae and role not in {ROLE_VAE, ROLE_UNRECOGNIZED}) or (not vae and role in _NON_CHECKPOINTS):
+    if (vae and role not in {ROLE_VAE, ROLE_UNRECOGNIZED}) or (
+        not vae and role in _NON_CHECKPOINTS
+    ):
         return PickerEvidence(component, excluded=True)
     architecture = component.fact("checkpoint_architecture")
-    declared = resolve_compatibility_profile((
-        *embedded_metadata_evidence(metadata),
-        *sidecar_metadata_evidence(dict(sidecar or {}), location=str(path or name)),
-    ), checkpoint_architecture=architecture)
-    family = str(declared.family.value) if declared.status is CompatibilityStatus.RESOLVED and declared.family else None
-    if role == ROLE_BUNDLED and architecture in {"sd1", "sd2", "sdxl_base", "sdxl_refiner", "sdxl_inpaint"}:
+    declared = resolve_compatibility_profile(
+        (
+            *embedded_metadata_evidence(metadata),
+            *sidecar_metadata_evidence(dict(sidecar or {}), location=str(path or name)),
+        ),
+        checkpoint_architecture=architecture,
+    )
+    family = (
+        str(declared.family.value)
+        if declared.status is CompatibilityStatus.RESOLVED and declared.family
+        else None
+    )
+    if role == ROLE_BUNDLED and architecture in {
+        "sd1",
+        "sd2",
+        "sdxl_base",
+        "sdxl_refiner",
+        "sdxl_inpaint",
+    }:
         structural_family = architecture.split("_", 1)[0]
-        family = structural_family if family in (None, structural_family) and declared.status is not CompatibilityStatus.CONFLICTING else None
+        family = (
+            structural_family
+            if family in (None, structural_family)
+            and declared.status is not CompatibilityStatus.CONFLICTING
+            else None
+        )
     elif role != ROLE_VAE:
         family = None
     return PickerEvidence(component, family)
@@ -107,7 +157,13 @@ def vae_compatibility(evidence: PickerEvidence | None, family: str | None) -> st
         compatible = _VAE_FAMILIES[layout]
         if family in compatible:
             return "compatible"
-        if family in _LATENT_4_FAMILIES or family in {"flux", "flux1", "flux2_klein", "qwen_image", "sd3"}:
+        if family in _LATENT_4_FAMILIES or family in {
+            "flux",
+            "flux1",
+            "flux2_klein",
+            "qwen_image",
+            "sd3",
+        }:
             return "incompatible"
     return "unverified"
 
@@ -142,8 +198,11 @@ def picker_entry(entries: Iterable[Any], name: str) -> Any | None:
         return exact[0] if len(exact) == 1 else None
     key = checkpoint_key(name)
     matches = [
-        entry for entry in entries
-        if key and key in {
+        entry
+        for entry in entries
+        if key
+        and key
+        in {
             checkpoint_key(getattr(entry, "name", entry)),
             checkpoint_key(getattr(entry, "display_name", "")),
         }
@@ -169,11 +228,15 @@ def vae_catalog(entries: Iterable[Any], family: str | None) -> VaeCatalog | None
             if status == "compatible":
                 verified.append(name)
     return VaeCatalog(
-        tuple(dict.fromkeys(offered)), tuple(dict.fromkeys(verified)), tuple(dict.fromkeys(listed)),
+        tuple(dict.fromkeys(offered)),
+        tuple(dict.fromkeys(verified)),
+        tuple(dict.fromkeys(listed)),
     )
 
 
-def picker_model_family(entries: Iterable[Any], name: str, policy: ModelPolicy | None) -> str | None:
+def picker_model_family(
+    entries: Iterable[Any], name: str, policy: ModelPolicy | None
+) -> str | None:
     if policy is not None and policy.qualified:
         return policy.family
     evidence = getattr(picker_entry(entries, name), "picker", None)

@@ -16,13 +16,19 @@ from tests.assets.checkpoint_fixtures import tensor_checkpoint
 
 def test_turbo_research_is_bound_to_verified_bytes_and_respects_precedence(tmp_path):
     models = tmp_path / "models" / "Stable-diffusion"
-    original = tensor_checkpoint(models / "original.safetensors", metadata={"modelspec.architecture": "sdxl-turbo"})
+    original = tensor_checkpoint(
+        models / "original.safetensors", metadata={"modelspec.architecture": "sdxl-turbo"}
+    )
     renamed = models / "renamed.safetensors"
     copyfile(original, renamed)
     ordinary = tensor_checkpoint(models / "looks-like-turbo.safetensors")
-    conflict = tensor_checkpoint(models / "conflict.safetensors", metadata={
-        "modelspec.architecture": "sdxl-turbo", "ss_base_model_version": "sd_v1.5",
-    })
+    conflict = tensor_checkpoint(
+        models / "conflict.safetensors",
+        metadata={
+            "modelspec.architecture": "sdxl-turbo",
+            "ss_base_model_version": "sd_v1.5",
+        },
+    )
     served = []
     registry = AssetRegistry(tmp_path, cache_path=tmp_path / "assets.json")
     resolver = ModelIdentityResolver(
@@ -40,7 +46,10 @@ def test_turbo_research_is_bound_to_verified_bytes_and_respects_precedence(tmp_p
     assert service.state_for(renamed.name).options[0].ref == turbo.ref
     assert service.state_for(ordinary.name).options[0].ref.profile_id == SDXL_RESEARCH_ID
     assert not service.state_for(conflict.name).options
-    assert service.state_for(KLEIN_PROFILE_V1.transformer.filename).options[0].ref.profile_id == KLEIN_RESEARCH_ID
+    assert (
+        service.state_for(KLEIN_PROFILE_V1.transformer.filename).options[0].ref.profile_id
+        == KLEIN_RESEARCH_ID
+    )
 
     # The favorite or an explicit choice may select the general SDXL Research profile.
     service.set_favorite(original.name, research[1].ref)
@@ -52,20 +61,39 @@ def test_turbo_research_is_bound_to_verified_bytes_and_respects_precedence(tmp_p
     pending = service.plan_startup(available_models=None, resources={})[1]
     assert pending.awaiting_model_catalog and not pending.restores_anything
     verified = registry.inspect_picker_candidate(original, original.name, vae=False)
-    catalog = {"models": [
-        WebUIResource(WebUIResourceType.MODEL, original.name, original.name, picker=replace(verified, path=original)),
-    ]}
-    assert service.plan_startup(available_models={original.name}, resources=catalog)[1].profile == turbo.ref
+    catalog = {
+        "models": [
+            WebUIResource(
+                WebUIResourceType.MODEL,
+                original.name,
+                original.name,
+                picker=replace(verified, path=original),
+            ),
+        ]
+    }
+    assert (
+        service.plan_startup(available_models={original.name}, resources=catalog)[1].profile
+        == turbo.ref
+    )
 
     elsewhere = tensor_checkpoint(tmp_path / "remote" / original.name)
     evidence = registry.inspect_picker_candidate(elsewhere, original.name, vae=False)
-    served.append(WebUIResource(WebUIResourceType.MODEL, original.name, original.name, picker=replace(evidence, path=elsewhere)))
+    served.append(
+        WebUIResource(
+            WebUIResourceType.MODEL,
+            original.name,
+            original.name,
+            picker=replace(evidence, path=elsewhere),
+        )
+    )
     assert service.state_for(original.name).options[0].ref.profile_id == SDXL_RESEARCH_ID
     assert service.plan_startup(available_models={original.name})[1].model_name is None
     served.clear()
 
     # A same-name replacement invalidates a saved recommendation before and after reindexing.
-    tensor_checkpoint(original, metadata={"modelspec.architecture": "sdxl-turbo", "different": "same name"})
+    tensor_checkpoint(
+        original, metadata={"modelspec.architecture": "sdxl-turbo", "different": "same name"}
+    )
     assert not resolver.resolve(original.name).identity.sha256
     assert service.select(original.name, turbo.ref, {})[0].changes == {}
     assert service.plan_startup(available_models={original.name})[1].model_name is None

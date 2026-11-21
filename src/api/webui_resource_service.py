@@ -115,17 +115,28 @@ class WebUIResourceService(BaseWebUIResourceService):
                 variant = classify_flux_variant(evidence.component)
                 compatibility = (
                     CompatibilityProfile(
-                        CompatibilityStatus.RESOLVED, ModelFamily.FLUX, (), variant.architecture_id,
+                        CompatibilityStatus.RESOLVED,
+                        ModelFamily.FLUX,
+                        (),
+                        variant.architecture_id,
                     )
-                    if variant is not None else None
+                    if variant is not None
+                    else None
                 )
-                policy = resolve_model_policy(entry.name, family_lookup=lambda _, compatibility=compatibility: compatibility)
+                policy = resolve_model_policy(
+                    entry.name, family_lookup=lambda _, compatibility=compatibility: compatibility
+                )
                 # The dispatch gate already owns the wording and decision for dependency-bearing transformers.
                 readiness = assess_model_readiness(
-                    entry.name, checkpoint=evidence.component, catalog=None, selected=None,
+                    entry.name,
+                    checkpoint=evidence.component,
+                    catalog=None,
+                    selected=None,
                     profile_available=policy.qualified,
                 )
-                refusal = policy.refusal or (" ".join(readiness.reasons) if readiness.blocks_dispatch else "")
+                refusal = policy.refusal or (
+                    " ".join(readiness.reasons) if readiness.blocks_dispatch else ""
+                )
                 evidence = replace(evidence, refusal=refusal)
             result.append(replace(entry, picker=replace(evidence, path=path)))
         return result

@@ -506,8 +506,12 @@ def test_delayed_startup_vae_respects_restored_family_and_retries_partial_catalo
     assert runtime.panel.values["vae"] == ""
     runtime.profiles.on_resources_updated({"models": [SDXL_MODEL]})
     incompatible = WebUIResource(
-        WebUIResourceType.VAE, plan.pending_vae, plan.pending_vae,
-        picker=PickerEvidence(ComponentEvidence(ROLE_VAE, facts={"vae_family": "ldm_kl_4ch"}), family="sd1"),
+        WebUIResourceType.VAE,
+        plan.pending_vae,
+        plan.pending_vae,
+        picker=PickerEvidence(
+            ComponentEvidence(ROLE_VAE, facts={"vae_family": "ldm_kl_4ch"}), family="sd1"
+        ),
     )
     runtime.profiles.on_resources_updated({"models": [SDXL_MODEL], "vaes": [incompatible]})
     assert runtime.panel.values["vae"] == ""

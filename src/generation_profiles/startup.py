@@ -256,7 +256,9 @@ def plan_startup_restore(
     vae = generation.get("vae")
     if vae is not None and policy_blocks(policy, "vae", vae):
         if vae:
-            issues.append(f"Saved VAE '{vae}' was not restored because the executable profile owns this setting.")
+            issues.append(
+                f"Saved VAE '{vae}' was not restored because the executable profile owns this setting."
+            )
         generation.pop("vae")
     elif vae and vae_options is not None:
         selected = vae_options.resolve(vae)

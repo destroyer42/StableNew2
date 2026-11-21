@@ -106,7 +106,9 @@ class GenerationProfileController:
     def service(self) -> GenerationProfileService:
         if self._service is None:
             resolver = ModelIdentityResolver(
-                sha_lookup=RegistryShaLookup(served_models=lambda: self._resources().get("models") or ()),
+                sha_lookup=RegistryShaLookup(
+                    served_models=lambda: self._resources().get("models") or ()
+                ),
             )
             self._service = GenerationProfileService(GenerationProfileStore(), resolver)
         return self._service
@@ -198,7 +200,10 @@ class GenerationProfileController:
         values = self.working_values()
         values["model"] = name
         plan, _state = self.service.on_model_changed(
-            name, values, catalogs=self.catalogs(), vae_options=self.service.vae_options(name, self._resources()),
+            name,
+            values,
+            catalogs=self.catalogs(),
+            vae_options=self.service.vae_options(name, self._resources()),
         )
         self._apply_to_panel(plan.changes)
         self._last_plan = plan
@@ -222,7 +227,10 @@ class GenerationProfileController:
             return None
         model = self.current_model()
         plan, _state = self.service.select(
-            model, ref, self.working_values(), catalogs=self.catalogs(),
+            model,
+            ref,
+            self.working_values(),
+            catalogs=self.catalogs(),
             vae_options=self.service.vae_options(model, self._resources()),
         )
         self._apply_to_panel(plan.changes)
@@ -234,7 +242,9 @@ class GenerationProfileController:
     def on_restore_selected(self) -> ApplicationPlan:
         model = self.current_model()
         plan, _state = self.service.restore_selected(
-            model, self.working_values(), catalogs=self.catalogs(),
+            model,
+            self.working_values(),
+            catalogs=self.catalogs(),
             vae_options=self.service.vae_options(model, self._resources()),
         )
         self._apply_to_panel(plan.changes)
@@ -353,20 +363,26 @@ class GenerationProfileController:
             f"Saved startup defaults for {record.model_name}{profile}. They are used the next time StableNew starts.",
         )
 
-    def restore_startup_defaults(self, *, resources: Mapping[str, Any] | None = None) -> StartupRestorePlan | None:
+    def restore_startup_defaults(
+        self, *, resources: Mapping[str, Any] | None = None
+    ) -> StartupRestorePlan | None:
         """Apply saved startup defaults to the working settings. Reports what could not be restored; launches nothing."""
 
         snapshot = self._resources() if resources is None else resources
         try:
             defaults, plan = self.service.plan_startup(
-                available_models=available_model_names(snapshot), catalogs=self.catalogs(), resources=snapshot,
+                available_models=available_model_names(snapshot),
+                catalogs=self.catalogs(),
+                resources=snapshot,
             )
         except Exception as exc:  # noqa: BLE001 - startup must never fail because of a profile file
             logger.warning("startup defaults not restored: %s", exc)
             return None
         if plan is None:
             return None
-        self._startup_waiting_for_models = self.working_values() if plan.awaiting_model_catalog else None
+        self._startup_waiting_for_models = (
+            self.working_values() if plan.awaiting_model_catalog else None
+        )
         self._startup_issues = plan.issues
         for issue in plan.issues:
             self._log(issue)
@@ -422,7 +438,11 @@ class GenerationProfileController:
                     f"Saved startup model '{startup_model}' is not offered by the runtime; "
                     "your current selection was kept."
                 )
-            elif self._startup_vae and self.current_model() == startup_model and not self.working_values().get("vae"):
+            elif (
+                self._startup_vae
+                and self.current_model() == startup_model
+                and not self.working_values().get("vae")
+            ):
                 options = self.service.vae_options(startup_model, resources)
                 if options is None:
                     return

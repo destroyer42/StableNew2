@@ -43,7 +43,10 @@ class RegistryShaLookup:
     """SHA-256 of a checkpoint from the persisted registry snapshot only (never computed here)."""
 
     def __init__(
-        self, registry: Any | None = None, *, served_models: Callable[[], Collection[Any]] | None = None,
+        self,
+        registry: Any | None = None,
+        *,
+        served_models: Callable[[], Collection[Any]] | None = None,
     ) -> None:
         self._registry = registry
         self._served_models = served_models
@@ -79,14 +82,22 @@ class RegistryShaLookup:
         record = self._verified_record(model_name)
         return record.sha256 if record is not None else None
 
-    def verifies_turbo(self, identity: ModelIdentity, *, served_models: Collection[Any] | None = None) -> bool:
+    def verifies_turbo(
+        self, identity: ModelIdentity, *, served_models: Collection[Any] | None = None
+    ) -> bool:
         from src.assets.checkpoint_structure import checkpoint_variant_from_metadata
         from src.assets.compatibility import CompatibilityStatus, ModelFamily
         from src.assets.picker_compatibility import picker_entry
 
         if identity.kind != IDENTITY_MODEL or identity.family != "sdxl" or not identity.sha256:
             return False
-        entries = served_models if served_models is not None else self._served_models() if self._served_models else ()
+        entries = (
+            served_models
+            if served_models is not None
+            else self._served_models()
+            if self._served_models
+            else ()
+        )
         path = None
         if entries:
             evidence = getattr(picker_entry(entries, identity.display_name), "picker", None)
@@ -108,6 +119,7 @@ class RegistryShaLookup:
             and compat.checkpoint_architecture == "sdxl_base"
             and checkpoint_variant_from_metadata(record.embedded_metadata) == "turbo"
         )
+
 
 @dataclass(frozen=True)
 class ResolvedModel:
@@ -192,7 +204,9 @@ class ModelIdentityResolver:
         )
         return ResolvedModel(_unverified(key, name, sha), policy, reason)
 
-    def verifies_turbo(self, identity: ModelIdentity, *, served_models: Collection[Any] | None = None) -> bool:
+    def verifies_turbo(
+        self, identity: ModelIdentity, *, served_models: Collection[Any] | None = None
+    ) -> bool:
         verify = getattr(self._sha_lookup, "verifies_turbo", None)
         return bool(verify and verify(identity, served_models=served_models))
 
