@@ -290,6 +290,7 @@ class GenerationProfileService:
                 policy=resolved.policy,
                 catalogs=catalogs,
                 vae_options=vae_options,
+                require_verified_vae=True,
                 previous_family=previous_family,
                 current_family=resolved.identity.family,
             )

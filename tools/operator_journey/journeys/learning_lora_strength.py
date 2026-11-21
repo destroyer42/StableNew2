@@ -246,7 +246,8 @@ class _Journey:
         self.check(ph, "resource_projection_models", True)
         if self.config.backend == "real":
             self._match_active_model(card)
-        self.ev.summary["model"] = str(card.model_var.get())
+        base = card.base_generation_panel
+        self.ev.summary["model"] = base.get_overrides()["model"]
         self.ev.summary["lora"] = self.config.lora_name
 
     def _await_webui_connection(self) -> None:
@@ -300,6 +301,7 @@ class _Journey:
 
     def _match_active_model(self, card: Any) -> None:
         """Use the model A1111 already has loaded; never switch the operator's checkpoint."""
+        from src.image_backends.model_readiness_probe import checkpoint_key
 
         active = self.backend_info.active_checkpoint
         if not active:
@@ -307,13 +309,14 @@ class _Journey:
                 "A1111 reports no active checkpoint; the journey will not pick a model "
                 "that could switch it"
             )
-        if model_base(card.model_var.get()) == model_base(active):
+        base = card.base_generation_panel
+        if checkpoint_key(base.get_overrides()["model"]) == checkpoint_key(active):
             return
         combo = self.driver.find(
             self.window.pipeline_tab, ttk.Combobox, textvariable=card.model_var
         )
         for value in [str(v) for v in combo.cget("values")]:
-            if model_base(value) == model_base(active):
+            if checkpoint_key(base._normalize_model_name(value)) == checkpoint_key(active):
                 self.driver.select_combobox(combo, value, label="txt2img model")  # type: ignore[arg-type]
                 return
         raise JourneyHold(

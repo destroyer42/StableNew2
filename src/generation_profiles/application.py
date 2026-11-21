@@ -142,6 +142,7 @@ def plan_application(
     current_family: str | None = None,
     missing_ref: ProfileRef | None = None,
     vae_options: VaeCatalog | None = None,
+    require_verified_vae: bool = False,
 ) -> ApplicationPlan:
     """Plan applying ``profile`` to ``working`` (keys are ``SETTING_KEYS`` names).
 
@@ -199,14 +200,22 @@ def plan_application(
                 SettingNote(key, NOTE_POLICY, f"{_label(key)} not applied: {blocked}.", old, value)
             )
             continue
-        if key == SETTING_VAE and value:
-            resolved_vae = vae_options.resolve(value, recommendation=True) if vae_options else None
+        if key == SETTING_VAE and value and (vae_options is not None or require_verified_vae):
+            resolved_vae = (
+                vae_options.resolve(value, recommendation=require_verified_vae)
+                if vae_options is not None
+                else None
+            )
             if resolved_vae is None:
                 notes.append(
                     SettingNote(
                         key,
                         NOTE_UNAVAILABLE,
-                        f"VAE '{value}' has no verified compatibility recommendation.",
+                        (
+                            f"VAE '{value}' has no verified compatibility recommendation."
+                            if require_verified_vae
+                            else f"VAE '{value}' is incompatible or unavailable for this model."
+                        ),
                         old,
                         value,
                     )
@@ -216,6 +225,7 @@ def plan_application(
         catalog_key = {
             SETTING_SAMPLER: "samplers",
             SETTING_SCHEDULER: "schedulers",
+            SETTING_VAE: "vaes" if vae_options is None else None,
         }.get(key)
         if (
             catalog_key
