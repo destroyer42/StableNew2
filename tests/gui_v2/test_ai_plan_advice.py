@@ -566,7 +566,9 @@ def registry_lookup():
 
 
 @pytest.mark.parametrize("selected", [JUGGERNAUT, PHOTO_MOMENTUM])
-def test_registry_verified_checkpoints_are_distinct_and_anchor_the_request(registry_lookup, selected):
+def test_registry_verified_checkpoints_are_distinct_and_anchor_the_request(
+    registry_lookup, selected
+):
     looked_up = []
 
     def lookup(name):
@@ -643,7 +645,9 @@ def test_a_stale_selection_with_different_policy_stays_unanchored(registry_looku
     current = project_model_selection(JUGGERNAUT, "forge_webui", family_lookup=registry_lookup)
     for stale in (
         project_model_selection(JUGGERNAUT, "forge_webui"),
-        dataclasses.replace(current, policy=dataclasses.replace(current.policy, stages=("txt2img",))),
+        dataclasses.replace(
+            current, policy=dataclasses.replace(current.policy, stages=("txt2img",))
+        ),
         dataclasses.replace(current, blocking="Backend changed"),
     ):
         snapshot = build_plan_snapshot(panel, None, "sfw", stale)

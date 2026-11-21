@@ -247,7 +247,9 @@ def test_registry_backed_remote_plan_is_valid_during_generation(installation, sd
     assert outcome.details["provider"] == "remote"
     assert request.allowed_targets == ("juggernautXL_ragnarokBy",)
     assert request.target_policy_id == "sdxl"
-    assert "Use this id for it: juggernautXL_ragnarokBy." in json.loads(worker.calls[-1][1])["prompt"]
+    assert (
+        "Use this id for it: juggernautXL_ragnarokBy." in json.loads(worker.calls[-1][1])["prompt"]
+    )
     activity.assert_not_called()
     assert spy.calls == 0
 
