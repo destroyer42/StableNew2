@@ -206,11 +206,7 @@ class WorkflowResourceReadiness:
                     advisories.append(
                         f"Only {available_ram:.1f} GB of system RAM is available; the qualification-derived "
                         f"cold-load advisory is {ram_floor:.1f} GB. Loading may be slow or fail to allocate"
-                        + (
-                            "; the owned runtime is already warm."
-                            if warm_sequence
-                            else "."
-                        )
+                        + ("; the owned runtime is already warm." if warm_sequence else ".")
                     )
         return ResourceReadinessResult(
             ready=not blocking,

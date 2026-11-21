@@ -162,7 +162,9 @@ def test_the_idle_grace_releases_the_owned_runtime(tmp_path: Path, _no_encode) -
     assert slot.snapshot() is None
 
 
-def test_same_owned_warm_process_skips_the_vram_check_between_jobs(tmp_path: Path, _no_encode) -> None:
+def test_same_owned_warm_process_skips_the_vram_check_between_jobs(
+    tmp_path: Path, _no_encode
+) -> None:
     slot, _, _ = _slot()
     client = _client(tmp_path)
     first = _a14b_backend(client, tmp_path, warm_hold=slot)
