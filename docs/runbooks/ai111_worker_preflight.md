@@ -48,17 +48,74 @@ reservation MAC and DHCP server identity before constructing any candidate
 that enables the exception. DHCPv6 and broader UDP destinations are outside
 the approval.
 
-**Activation remains blocked on enforcement and restart.** The upstream
-nftables backend processes the native DHCP option before custom guest rules.
-Its allow and block chains cover both DHCPv4 and DHCPv6, without a server
-address match. The render-only candidate retains `dhcp: 0` until the exact
-installed compiler and skeleton demonstrate a way to enforce only the
-approved exception. Turning on `dhcp: 1` or appending an override to the
-custom rules is insufficient. If the installed build has the same rule order
-and scope, obtain an owner decision on a CT-specific host filter or static
-addressing before changing the design.
+### Supplemental CT 110 filter
+
+The owner authorized design, implementation and validation preparation for
+the supplemental host filter on 2026-11-21. The draft keeps `dhcp: 0`.
+The upstream native guest option runs before custom guest rules and its
+allowance includes DHCPv6. Activate native DHCP only after independent
+verification of the supplemental filter and a separate activation decision.
 [Upstream guest rule order](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/src/firewall.rs#L328)
 [Upstream DHCP chains](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/resources/proxmox-firewall.nft#L300)
+
+Render with the measured inputs, then retain the exact bytes and SHA-256 for
+review. The tool prints a two-table nftables candidate and performs no writes
+to the host.
+
+```powershell
+python -m tools.qualification.ai111.worker_dhcp_guard --port veth110i0 --ifindex <observed-index> --bridge <observed-linux-bridge> --server-ipv4 <verified-server-ip> --server-mac <verified-server-mac> --ssh-ipv4 <approved-desktop-ip>
+```
+
+The supported topology is CT 110's sole `net0` attached directly to a
+Linux bridge, with guest MAC `bc:24:11:41:59:b1`. Reconcile the installed
+CT config, guest peer ifindex, host ifindex and bridge master. Verify the
+DHCP server IP and MAC from the approved lease and network authority.
+The renderer restricts local broadcast and server unicast DHCPv4, permits
+SSH only for the approved desktop, and permits ARP needed for address
+ownership checks and those neighbors. IP and MAC matching presumes trusted
+LAN source identities. If the segment permits source impersonation, show
+the applicable anti-spoofing control before accepting server identity.
+
+The netdev ingress chain on the host veth screens guest-originated Ethernet
+before the bridge can consume link-local frames. The bridge prerouting and
+postrouting chains add direction-specific DHCP, ARP and conntrack policy.
+The indexed and named bridge selectors detect a change to either identifier
+alone. Unrelated bridge ports use the existing chains. Confirm native
+untagged veth traffic, bridge conntrack availability and actual hook ordering
+against the installed versions. The candidate deliberately refuses alternate
+ports and topologies.
+[Linux bridge receive path](https://github.com/torvalds/linux/blob/master/net/bridge/br_input.c)
+[Bridge conntrack](https://github.com/torvalds/linux/blob/master/net/bridge/netfilter/nf_conntrack_bridge.c)
+[Proxmox guest hooks](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/resources/proxmox-firewall.nft#L353)
+
+**Activation interlock.** Establish an independent, console-recoverable
+CT-only fence that keeps the path closed when either guard table is absent,
+when the veth is replaced, and during firewall or topology transitions.
+Prevent simultaneous name/index replacement and second-port attachment
+from creating an unguarded path. The renderer does not implement that fence.
+A poll or a reload-event alarm cannot stop the first packet during a gap.
+The point evidence verifier rejects missing/altered tables, boot or interface
+drift, native policy drift, event loss and observed reloads. It supplies no
+packet-level interlock.
+
+Before presenting an activation decision, reproduce the exact installed
+Proxmox, nftables and kernel versions in an isolated Linux bridge lab. Run
+`nft --check --file <reviewed-batch>`, review the compiled native rules
+beside both supplemental tables, and rehearse the console sequence there.
+Compare the rule-preserving JSON fingerprint from both named table listings
+and independently verify the topology and observer epochs. Run
+`python -m tools.qualification.ai111.worker_guard_validation fingerprint`
+with `--bridge-rules` and `--link-rules` pointing to the separate named
+table JSON exports. Use the `compare` subcommand with those two current
+exports, `--reviewed-sha256`, `--reviewed-observation` and
+`--current-observation`. A snapshot match alone cannot authorize a
+transition. Review distinct
+approved native-state identities for the DHCP-disabled and enabled stages.
+The progress sequence for a later approved activation is to keep native
+DHCP disabled and the CT path fenced, install and verify both guard tables,
+then verify the independently compiled native allowance before exposing the
+path. On any uncertainty keep the CT path fenced and native DHCP disabled.
+Neither this runbook nor the evidence checker authorizes a state change.
 
 Proxmox documents a guest restart when switching firewall backends. Record
 a maintenance window and console recovery path and obtain separate restart
@@ -112,6 +169,18 @@ CT interface and observation window. Require loss-accounted event capture and
 independent accounting through that window. Treat unexplained loss, rule drift,
 attribution gaps or monitor failure as invalidating the evidence. The renderer
 and snapshot collector do not provide this observation.
+
+For the supplemental filter, close admission and end any evidence session.
+Use the verified host console. With both guards still enforcing, restore
+native `dhcp: 0` and independently confirm effective denial of both DHCP
+families before removing either guard. If a guard or its interface identity
+is missing, quarantine the CT path first and keep it closed until the state
+is reconciled. Delete only the reviewed `bridge stablenew_ai111_ct110`
+and `netdev stablenew_ai111_ct110_link` tables in one nft transaction after
+confirming both identities. Recheck the original firewall baseline, CT
+address, administrative path, SSH forward and Ollama availability. A
+rollback decision-table fixture exercises this order; the console rehearsal
+on the matching Proxmox version remains a prerequisite.
 
 ## Owned runtime and privacy
 
