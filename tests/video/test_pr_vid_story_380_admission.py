@@ -22,6 +22,7 @@ from src.video.sequence_plan import (
     ROOT_PARENT,
     SEQUENCE_POLICY_VERSION,
     SEQUENCE_POLICY_VERSION_V2,
+    STAGE_SVD_NATIVE,
     STAGE_VIDEO_WORKFLOW,
     SequencePlan,
     SequencePlanError,
@@ -443,3 +444,20 @@ def test_freeze_without_a_link_is_unchanged_v1(tmp_path: Path, registry: Any) ->
     assert "storyboard" not in plan.to_dict()
     assert [s.anchor_policy for s in plan.segments] == [ANCHOR_SOURCE, ANCHOR_CARRY]
     assert [s.overlap_frames for s in plan.segments] == [0, 1]
+
+
+def test_a_storyboard_link_on_native_svd_is_refused_before_anything_else() -> None:
+    # The segment would otherwise be refused for its prompt; the storyboard refusal comes first.
+    intent = {"segments": [{"frame_count": 17, "prompt": "waves"}]}
+    with pytest.raises(SequencePlanError) as caught:
+        freeze_sequence_plan(
+            intent,
+            stage=STAGE_SVD_NATIVE,
+            fps=6,
+            svd_max_frames=25,
+            model_id="svd_xt",
+            storyboard=_link(None, take_ids=("t1",)),
+        )
+    assert str(caught.value) == (
+        "storyboard takes run on Comfy video workflows only; native SVD has no prompt to vary"
+    )

@@ -302,8 +302,8 @@ def freeze_sequence_plan(
     ``segment_zero_seed`` is the seed already frozen for the job's first segment, so the plan and the single-clip
     inputs agree.
 
-    ``storyboard`` makes the plan a storyboard take (policy v2, PR-VID-STORY-380): always assembled, never colour
-    matched. With a lead-in, segment 0 overlaps the handoff frame by ``LEAD_IN_OVERLAP`` and the lead-in is verified
+    ``storyboard`` makes the plan a storyboard take (policy v2, PR-VID-STORY-380): Comfy video workflows only (a link
+    on ``svd_native`` is refused first), always assembled, never colour matched. With a lead-in, segment 0 overlaps the handoff frame by ``LEAD_IN_OVERLAP`` and the lead-in is verified
     against its cut manifest (``verify_lead_in``) before the plan is built; ``source`` must be the handoff frame.
     """
 
@@ -312,6 +312,10 @@ def freeze_sequence_plan(
     _strict("sequence", intent, INTENT_KEYS)
     if stage not in (STAGE_VIDEO_WORKFLOW, STAGE_SVD_NATIVE):
         raise SequencePlanError(f"sequences run on video_workflow or svd_native, not {stage!r}")
+    if storyboard is not None and stage == STAGE_SVD_NATIVE:
+        raise SequencePlanError(
+            "storyboard takes run on Comfy video workflows only; native SVD has no prompt to vary"
+        )
     segment_intents = intent.get("segments")
     if not isinstance(segment_intents, (list, tuple)) or not segment_intents:
         raise SequencePlanError("a sequence needs a list of segments")
