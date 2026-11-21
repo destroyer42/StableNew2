@@ -1,7 +1,7 @@
 """Closed lists and judge facts for advisory planning, read from the existing authorities (AI-210).
 
-Models: the Prompt tab's model picker through ``prompt_ai_targets`` (explicit-capability, non-blocked, visibility filtered
-choices), with each model's stages and blocking sentence from ``project_model_selection``. Workflows: the Video Workflow
+Models: the Base Generation picker through ``prompt_ai_target_projections``, with eligibility and stages from the same
+registry-backed checkpoint policy. Workflows: the Video Workflow
 controller's catalogue records (``list_workflow_specs``, with governance state) and its read-only ``workflow_preflight``
 gates, which are the only input that is read off the GUI thread. Nothing is derived from the operator's goal text, and nothing
 here can change a selection, a form or a job.
@@ -14,10 +14,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.ai_assist.contracts import VIDEO_STAGE
-from src.gui.prompt_ai_targets import prompt_ai_targets
+from src.gui.prompt_ai_targets import prompt_ai_target_projections
 from src.gui_v2.ai_plan_advice import PlanFacts, Preflight, TargetFact, WorkflowFact
-from src.gui_v2.model_policy_projection import project_model_selection
-from src.image_backends.image_backend_types import configured_image_backend_id
+from src.gui_v2.model_policy_projection import ModelControlProjection
 from src.image_backends.model_policy import GENERIC_IMAGE_STAGES
 
 _MAX_WORKFLOWS = 64
@@ -57,45 +56,46 @@ def controller_preflight(video_controller: Any) -> Preflight:
 
 
 def _current_selection(
-    projection: Any,
-    targets: tuple[tuple[str, str], ...],
-    target_facts: dict[str, TargetFact],
+    selection: ModelControlProjection | None,
+    targets: dict[str, tuple[str, ModelControlProjection]],
     stages: tuple[str, ...],
 ) -> tuple[str, str, tuple[str, ...], str]:
     """``(id, label, stages, policy id)`` of the model selected in Pipeline, or empty values when it cannot anchor a plan.
 
-    ``projection`` is the Prompt tab's ``_model_projection``: the model-policy projection of the Base Generation selection,
+    ``selection`` is the Prompt tab's ``_model_projection``: the model-policy projection of the Base Generation selection,
     the same object the "Prompt Target" header is built from. Only a selection that is one of the closed ``targets`` (so
     not blocked, not hidden by the visibility mode, with explicit capabilities) and supports an allowed image stage counts.
     Nothing is read from the goal text or the prompt.
     """
 
-    name = str(getattr(projection, "model_name", "") or "")
-    labels = dict(targets)
-    fact = target_facts.get(name)
-    if not name or name not in labels or fact is None:
+    if selection is None or selection.blocking or selection.model_name not in targets:
         return "", "", (), ""
-    supported = tuple(s for s in stages if s != VIDEO_STAGE and s in fact.stages)
+    label, candidate = targets[selection.model_name]
+    if selection.policy != candidate.policy:
+        return "", "", (), ""
+    supported = tuple(s for s in stages if s != VIDEO_STAGE and s in candidate.policy.stages)
     if not supported:
         return "", "", (), ""
-    policy_id = str(getattr(getattr(projection, "policy", None), "policy_id", "") or "")
-    return name, labels[name], supported, policy_id
+    return selection.model_name, label, supported, candidate.policy.policy_id
 
 
 def build_plan_snapshot(
-    base_panel: Any, app_controller: Any, visibility_mode: str, selection: Any = None
+    base_panel: Any,
+    app_controller: Any,
+    visibility_mode: str,
+    selection: ModelControlProjection | None = None,
 ) -> PlanSnapshot:
     """Read the closed lists and their facts now (GUI thread). Missing sources give empty lists, never invented ones.
 
     ``selection`` is the Prompt tab's current model projection (``tab._model_projection``); see ``_current_selection``.
     """
 
-    targets = tuple(prompt_ai_targets(base_panel, visibility_mode))
-    backend = configured_image_backend_id()
-    target_facts: dict[str, TargetFact] = {}
-    for key, label in targets:
-        projection = project_model_selection(key, backend)
-        target_facts[key] = TargetFact(label, tuple(projection.policy.stages), projection.blocking)
+    candidates = prompt_ai_target_projections(base_panel, visibility_mode)
+    targets = tuple((key, label) for key, (label, _projection) in candidates.items())
+    target_facts = {
+        key: TargetFact(label, projection.policy.stages, projection.blocking)
+        for key, (label, projection) in candidates.items()
+    }
     workflows: list[tuple[str, str]] = []
     workflow_facts: dict[str, WorkflowFact] = {}
     video_controller = None
@@ -115,13 +115,11 @@ def build_plan_snapshot(
                 str(record.get("workflow_version") or ""),
                 str(record.get("governance_state") or ""),
             )
-    stages = (
-        *(GENERIC_IMAGE_STAGES if targets else ()),
-        *((VIDEO_STAGE,) if workflows else ()),
-    )
-    current, label, supported, policy_id = _current_selection(
-        selection, targets, target_facts, stages
-    )
+    image_stages = {stage for fact in target_facts.values() for stage in fact.stages}
+    stages = tuple(stage for stage in GENERIC_IMAGE_STAGES if stage in image_stages)
+    if workflows:
+        stages += (VIDEO_STAGE,)
+    current, label, supported, policy_id = _current_selection(selection, candidates, stages)
     facts = (
         PlanFacts(target_facts, workflow_facts, controller_preflight(video_controller), current)
         if video_controller is not None

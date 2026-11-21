@@ -16,7 +16,7 @@ unconstrained models leave the values untouched, exactly as before.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 from src.gui_v2.model_policy_projection import (
@@ -128,6 +128,19 @@ class ModelPolicyPanelProjection:
     def drafts(self) -> dict[str, dict[str, Any]]:
         return self._drafts
 
+    def _resolve_policy(self, model_name: str | None) -> ModelPolicy:
+        if self._policy_resolver is not None:
+            return self._policy_resolver(model_name)
+        return resolve_model_policy(model_name, family_lookup=self._family_lookup)
+
+    def project_checkpoint_candidates(
+        self, model_names: Iterable[str]
+    ) -> Iterator[ModelControlProjection]:
+        """Read checkpoint policies against one backend without applying any panel changes."""
+        backend_id = self._backend_id_provider()
+        for name in model_names:
+            yield project_model_controls(self._resolve_policy(name), backend_id, model_name=name)
+
     def refresh(self) -> ModelControlProjection:
         panel = self._panel
         try:
@@ -144,13 +157,12 @@ class ModelPolicyPanelProjection:
         normalize_model = getattr(panel, "_normalize_model_name", None)
         if callable(normalize_model):
             model_name = normalize_model(model_name)
-        policy = (
-            self._policy_resolver(model_name)
-            if self._policy_resolver is not None
-            else resolve_model_policy(model_name, family_lookup=self._family_lookup)
-        )
         projection = project_model_controls(
-            policy, backend_id, selected_loras=selected, lora_resolver=self._lora_resolver, model_name=str(model_name or "")
+            self._resolve_policy(model_name),
+            backend_id,
+            selected_loras=selected,
+            lora_resolver=self._lora_resolver,
+            model_name=str(model_name or ""),
         )
         self.last_projection = projection
         key = projection.policy.policy_id

@@ -387,18 +387,13 @@ def test_new_installation_and_attestation_are_rechecked_without_restart(journey)
     assert j.flow.button.instate(["!disabled"])
 
 
-def test_target_choices_use_actual_picker_policy_and_visibility(monkeypatch):
+def test_target_choices_use_actual_picker_policy_and_visibility():
     from src.gui import prompt_ai_targets as choices
 
-    def project(name, backend):
-        assert backend == "forge_webui"
-        return _projection(name)
-
-    monkeypatch.setattr(choices, "configured_image_backend_id", lambda: "forge_webui")
-    monkeypatch.setattr(choices, "project_model_selection", project)
     base = SimpleNamespace(
         _model_combo={"values": (SDXL, KLEIN, "mystery.safetensors")},
         _normalize_model_name=lambda name: name,
+        project_checkpoint_candidates=lambda names: map(_projection, names),
     )
     offered = choices.prompt_ai_targets(base, "sfw")
     assert tuple(key for key, _label in offered) == (SDXL, KLEIN)
