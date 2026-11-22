@@ -34,6 +34,7 @@ from src.video.managed_comfy_runtime import (
 )
 from src.video.runtime_version_check import qualified_comfyui_version, runtime_version_warning
 from src.video.workflow_asset_integrity import configured_asset_issues
+from src.video.workflow_catalog_wan_a14b import a14b_launch_attention
 from src.video.workflow_readiness import WorkflowResourceReadiness, required_launch_flags
 
 GATE_OK = "ok"
@@ -152,6 +153,7 @@ def _launch_facts(probes: PreflightProbes) -> ComfyLaunchFacts:
 
 def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> PreflightGate | None:
     workflow_flags = required_launch_flags(spec)
+    profile = a14b_launch_attention(spec)
     facts = _launch_facts(probes)
     command = facts.command_in_force
     if state == ENDPOINT_HEALTHY and not facts.owns_runtime:
@@ -177,7 +179,7 @@ def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> Prefli
         required = workflow_launch_requirements(command, workflow_flags, probes.managed_contract)
         if not required and (state != ENDPOINT_FREE or not probes.autostart or facts.owns_runtime):
             return None
-        if facts.owns_runtime:
+        if facts.owns_runtime and profile is None:
             missing = missing_required_flags(facts.verified_launch_flags, required)
             if missing:
                 return PreflightGate(
@@ -194,7 +196,12 @@ def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> Prefli
                 f"The owned ComfyUI launch used {' '.join(required)}.",
             )
         config = probes.extras.get("process_config")
-        plan_comfy_launch(command, getattr(config, "working_dir", None), required)
+        plan_comfy_launch(
+            command,
+            getattr(config, "working_dir", None),
+            required,
+            attention_profile=profile,
+        )
     except UnsupportedConfiguredComfyFlag as exc:
         return PreflightGate(
             "launch_flags",
@@ -208,6 +215,14 @@ def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> Prefli
         return PreflightGate("launch_flags", "Launch flags", GATE_BLOCKED, str(exc))
     if not required:
         return None
+    if profile is not None:
+        return PreflightGate(
+            "launch_flags",
+            "Launch flags",
+            GATE_OK,
+            f"CLI checked for A14B {profile} attention. StableNew will apply the profile at launch "
+            "and verify the serving process before dispatch.",
+        )
     return PreflightGate(
         "launch_flags",
         "Launch flags",

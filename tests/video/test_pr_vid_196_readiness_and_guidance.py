@@ -595,6 +595,7 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
 
     expected = {
         "wan22_fun_control_5b_canny_i2v_v1@1.0.0": "8882daeda0571cc4cc00cf6d96e6a4fff25411a571f62626dd5bfc87389beac5",
+        "wan22_i2v_a14b_4step_ck_v1@1.0.0": "a8fa85df6368981879c65153deb740b3bb4ec606193723e45b276d4b529fc50a",
         # VID-WARM-373 changed the runtime policy only; VID-A14B-SPEED-374 raised the frame-count maximum to 121 and
         # added advisory_above 81. The graph digest is pinned separately and did not move.
         "wan22_i2v_a14b_4step_v1@1.0.0": "32c6662c8b74dc86d06256d1a3dcf57d3ef251fb2b6979fa9f678f4e82d573ed",

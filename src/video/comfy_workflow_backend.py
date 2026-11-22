@@ -43,6 +43,7 @@ from src.video.frames_out import (
 from src.video.managed_comfy_runtime import (
     missing_required_flags,
     plan_comfy_launch,
+    verify_a14b_launch_args,
     workflow_launch_requirements,
 )
 from src.video.runtime_version_check import runtime_version_warning
@@ -68,6 +69,7 @@ from src.video.video_interpolation import (
     normalize_interpolation_request,
 )
 from src.video.workflow_asset_integrity import configured_asset_issues
+from src.video.workflow_catalog_wan_a14b import a14b_launch_attention
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
 from src.video.workflow_input_integrity import verify_exact_dispatch_inputs
@@ -694,9 +696,22 @@ class ComfyWorkflowVideoBackend:
         if not transition.ready:
             raise RuntimeTransitionError(transition)
 
-        runtime_base_url = self._ensure_runtime_ready(_required_launch_flags(spec), cancel_token=token)
+        attention_profile = a14b_launch_attention(spec)
+        runtime_base_url = self._ensure_runtime_ready(
+            _required_launch_flags(spec),
+            attention_profile=attention_profile,
+            cancel_token=token,
+        )
         _raise_if_cancelled(token, "during runtime startup")
-        client = self._client or ComfyApiClient(base_url=runtime_base_url)
+        attention_manager = None
+        if attention_profile is not None:
+            attention_manager = self._resolve_process_manager()
+            if attention_manager is None:
+                raise ComfyStartupError("A14B attention requires a StableNew-owned ComfyUI.")
+            runtime_base_url = attention_manager.verified_a14b_endpoint(runtime_base_url)
+            client = self._client or ComfyApiClient(base_url=runtime_base_url, direct=True)
+        else:
+            client = self._client or ComfyApiClient(base_url=runtime_base_url)
 
         object_info = client.get_object_info()
         _raise_if_cancelled(token, "during the dependency request")
@@ -710,10 +725,15 @@ class ComfyWorkflowVideoBackend:
         readiness = None
         actual_runtime: dict[str, str] = {}
         version_warning: str | None = None
+        attention_evidence: dict[str, Any] | None = None
         if self._readiness.policy_for(spec) is not None:
             _raise_if_cancelled(token, "before resource readiness")
             system_stats = client.get_system_stats()
             _raise_if_cancelled(token, "during the resource request")
+            if attention_profile is not None and attention_manager is not None:
+                attention_evidence = attention_manager.verify_a14b_attention(
+                    attention_profile, system_stats
+                )
             actual_runtime = _actual_runtime_identity(system_stats)
             version_warning = runtime_version_warning(spec, actual_runtime.get("comfyui_version"))
             if version_warning:
@@ -764,6 +784,10 @@ class ComfyWorkflowVideoBackend:
         )
         # A job cancelled while it was still preparing must not dispatch anything.
         _raise_if_cancelled(request.cancel_token, "before the workflow was queued")
+        if attention_manager is not None:
+            if attention_evidence is None or self._owned_running_pid() != attention_evidence["pid"]:
+                raise ComfyStartupError("The verified A14B ComfyUI process changed before dispatch.")
+            attention_manager.verified_a14b_endpoint(runtime_base_url)
         # Not retried: a DispatchOutcomeUnknown here means Comfy may already be running this prompt.
         try:
             queue_response = client.queue_prompt(queue_payload)
@@ -869,6 +893,8 @@ class ComfyWorkflowVideoBackend:
             provenance_extra["interpolation"] = interpolation_record
         if frames_out_record is not None:
             provenance_extra["frames_out"] = frames_out_record.summary()
+        if attention_evidence is not None:
+            provenance_extra["comfy_attention"] = attention_evidence
         if runtime_policy:
             provenance_extra["runtime_policy"] = runtime_policy
         if actual_runtime:
@@ -1141,7 +1167,13 @@ class ComfyWorkflowVideoBackend:
         if not required and not getattr(config, "autostart_enabled", False):
             return
         running = getattr(manager, "running_command", ()) or ()
+        profile = a14b_launch_attention(spec)
         if running:
+            if profile is not None:
+                try:
+                    verify_a14b_launch_args(running, profile)
+                except ValueError as exc:
+                    raise ComfyStartupError(f"Workflow '{spec.workflow_id}': {exc}") from exc
             verified = getattr(manager, "verified_launch_flags", ()) or ()
             missing = missing_required_flags(verified, required)
             if missing:
@@ -1153,7 +1185,12 @@ class ComfyWorkflowVideoBackend:
         if required and isinstance(config, ComfyProcessConfig) and not config.autostart_enabled:
             raise ComfyStartupError("This workflow requires a StableNew-owned ComfyUI, but automatic start is off.")
         try:
-            plan_comfy_launch(command, getattr(config, "working_dir", None), required)
+            plan_comfy_launch(
+                command,
+                getattr(config, "working_dir", None),
+                required,
+                attention_profile=profile,
+            )
         except ValueError as exc:
             raise ComfyStartupError(f"Workflow '{spec.workflow_id}': {exc}") from exc
 
@@ -1205,7 +1242,11 @@ class ComfyWorkflowVideoBackend:
         }
 
     def _ensure_runtime_ready(
-        self, required_flags: Sequence[str] = (), *, cancel_token: Any = None,
+        self,
+        required_flags: Sequence[str] = (),
+        *,
+        attention_profile: str | None = None,
+        cancel_token: Any = None,
     ) -> str:
         options = {"cancel_token": cancel_token} if cancel_token is not None else {}
         manager = self._resolve_process_manager()
@@ -1238,6 +1279,8 @@ class ComfyWorkflowVideoBackend:
             launch_options: dict[str, Any] = dict(options) if isinstance(manager, ComfyProcessManager) else {}
             if required_flags:
                 launch_options["required_flags"] = required_flags
+            if attention_profile is not None:
+                launch_options["attention_profile"] = attention_profile
             ready = manager.ensure_running(**launch_options)
             if not ready:
                 raise RuntimeError("Managed ComfyUI process failed to become healthy")
