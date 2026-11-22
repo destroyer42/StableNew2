@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded 2026-11-22.** The owner resolved device loss by forcing PCIe Gen4. See [DIAG-GPU-160](DIAG-GPU-160_PCIe_Gen4_Resolution.md).
+
 **RECURRENCE RECORDED - ROOT CAUSE NOT ATTRIBUTED - EXIT CRITERION NOT MET.**
 
 - The RTX 4070 Ti dropped off the bus three times in 10 hours 47 minutes: 2026-10-20 18:57:15, 20:56:09 and 2026-10-21 05:44:31 (ET). These are the 17th, 18th and 19th NVIDIA Kernel-PnP remove-veto markers since 2026-09-07 (10th of 19 since XMP was turned off); the 60-day export confirms 19.

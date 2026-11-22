@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded 2026-11-22.** The owner resolved device loss by forcing PCIe Gen4. See [DIAG-GPU-160](DIAG-GPU-160_PCIe_Gen4_Resolution.md).
+
 **XMP-OFF RECURRENCE - ACTIVE OBSERVATION / EXIT CRITERION NOT MET.** This evidence-only package
 records the 2026-09-23 recurrence with proven immediately preceding StableNew/A1111 `txt2img`
 work and a further 2026-09-26 post-XMP-OFF recurrence with WER `141`/`1B8` artifacts and an

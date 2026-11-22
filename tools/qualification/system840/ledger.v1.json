@@ -41,11 +41,6 @@
       "id": "HOLD-AI-ETW-CANARY",
       "reason": "AI qualification is held on D12b and a protected-interpreter canary capture. Owner decision 2026-11-18: the AI track resumes as its own track; the owner performs the one-time elevated setup in docs/runbooks/ai_qualification_etw_capture.md (system-wide Python, protected ProgramData copy), then a fresh canary-2 capture, the D12a/D12b authorization text and the firewall attestation. None of that is done; the hold stays.",
       "source": "STATUS.md"
-    },
-    {
-      "id": "HOLD-GPU-DEVICE-LOSS",
-      "reason": "Intermittent GPU device loss is unresolved (21 NVIDIA Kernel-PnP remove-veto markers since 2026-09-07 in the 2026-11-05 event-log count; the last, 2026-10-30 18:50:44 ET, and the one on 2026-10-22 post-date the last DIAG-GPU record, which counted 19); the dispatch quarantine stays the response and any new loss stops the campaign.",
-      "source": "docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md"
     }
   ],
   "capabilities": [

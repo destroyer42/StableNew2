@@ -362,7 +362,7 @@ Provenance is best-effort but no longer silent (audit B9, fixed in P3-5) [V]: wh
 8. Conditioning bytes (OpenPose) never enter the NJR, logs or manifests; the job-owned snapshot is hash-verified at the POST.
 9. The registry never gains network or scan-at-import behavior; evidence modules stay header-only and path-free in reports.
 10. Persisted state goes through `src/utils/atomic_io.py`.
-11. The physical-GPU hold was lifted on 2026-10-18 (STATUS.md Holds); the device-loss quarantine remains. Tests must not contact a WebUI, model, GPU or display unless explicitly opt-in (`real_backend` marker).
+11. The owner resolved the device-loss fault on 2026-11-22 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The device-loss quarantine remains. Tests must not contact a WebUI, model, GPU or display unless explicitly opt-in (`real_backend` marker).
 12. Protected actions (push to `main`, merge, publish, secrets, material architecture changes) need explicit owner approval (`AGENTS.md` section 5).
 
 ## 10. How to test
