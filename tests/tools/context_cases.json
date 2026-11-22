@@ -1,0 +1,12 @@
+[
+  {"task":"Prevent duplicate queue dispatch after a WebUI outage","primary":{"src/controller/webui_outage_coordinator.py":"Owns outage dispatch holds and positive-evidence return to QUEUED.","src/queue/dispatch_evidence.py":"Classifies dispatch and progress evidence for safe retry."}},
+  {"task":"Connect GUI queue submission to job service admission","primary":{"src/controller/pipeline_controller_services/queue_submission_service.py":"Bridges GUI Preview and History records to submit_njrs.","src/controller/job_service.py":"Owns canonical validation and atomic admission."}},
+  {"task":"Route normalized job record compilation through a single assembly boundary","primary":{"src/pipeline/njr_compiler.py":"compile_njr and derive_njr own the constructor boundary."}},
+  {"task":"Preserve immutable job snapshots and mutable lifecycle state in SQLite","primary":{"src/queue/job_repository.py":"The jobs schema stores the snapshot separately from lifecycle transitions."}},
+  {"task":"Validate image model profile compatibility before building the backend request","primary":{"src/image_backends/model_policy.py":"Resolves compatibility and validates configuration before projection."}},
+  {"task":"Freeze Comfy video workflow inputs into an NJR for queue admission","primary":{"src/video/video_workflow_njr_builder.py":"Validates and freezes workflow inputs and seeds.","src/controller/video_workflow_controller.py":"Builds and hands the frozen record to submit_njrs."}},
+  {"task":"Record review ratings as Learning evidence and preserve image identity","primary":{"src/review/review_evidence.py":"Records digest-bound evidence and rejects changed files.","src/learning/learning_record.py":"Writes ratings and derives digest-keyed revisions."}},
+  {"task":"Wait for managed WebUI readiness without restarting an external process","primary":{"src/api/webui_process_manager.py":"Owns wait_for_managed_startup and the owned restart guard.","src/controller/webui_connection_controller.py":"Observes external endpoints and bounds startup on owned processes."}},
+  {"task":"Find the prescribed local PR gate and required CI checks","primary":{"tools/ci/run_pr_gate.py":"Defines the local gate and required steps.",".github/workflows/ci.yml":"Declares required, full-suite and Windows jobs."}},
+  {"task":"Calculate the orbital period of an exoplanet from its radial velocity","primary":{}}
+]
