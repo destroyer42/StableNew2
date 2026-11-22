@@ -94,7 +94,23 @@ Legal transitions are `_ALLOWED_TRANSITIONS` in `job_repository.py`: queued -> r
 5. GPU quarantine UI: `AppController.confirm_gpu_recovery` (blocking, call off the Tk thread) and `add_gpu_quarantine_listener`.
    Operator Readiness keeps its header actions fixed and scrolls guidance and readiness records, so the explicit recovery button remains reachable in a compact window. Scrolling never invokes recovery.
 
-Shutdown (`AppController.shutdown_app`, sequencing in `src/controller/app_controller_services/shutdown_coordinator.py`): fence queue admission -> cancel active jobs -> stop background work -> stop managed WebUI -> stop the job service within `QUEUE_QUIESCE_TIMEOUT_SECONDS` -> final queue-state save -> `close_repository_when_quiescent`. The shared repository is closed only after every worker has definitively quiesced; otherwise it stays open and queued jobs remain durably QUEUED. The fence is process-lifetime and never persisted: next launch resumes under the normal startup policy.
+Shutdown starts in `AppController.shutdown_app`. The shutdown coordinator fences admission, signals
+active cancellation, closes background-task admission and signals tracked workers before joining them.
+Pending projection work is discarded. The recent-History query checks for shutdown while acquiring
+the shared connection lock and during SQLite execution. Projection results queued for the UI are
+dropped once shutdown begins.
+
+One 14-second monotonic coordination budget covers blocking waits, including the queue and tracked
+threads. The controller verifies termination of queue and background repository users before it saves
+the final queue flags and closes SQLite. If a user survives the deadline, the repository stays open.
+Jobs already durably QUEUED remain queued under the existing startup recovery rules. The fence is
+process-local. The admission signal fences claims before waiting for any claim already inside
+the queue critical section.
+
+The shutdown result records quiescence, repository closure, persistence drain, owned runtime release
+and surviving workers. A timeout produces bounded stack samples of the remaining workers. Normal
+GUI shutdown returns to the interpreter after Tk teardown. A surviving non-daemon worker can delay
+process exit. Forced exit remains an explicit shutdown-watchdog opt-in.
 
 ## 7. Managed WebUI runtime
 

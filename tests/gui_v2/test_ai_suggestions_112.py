@@ -417,7 +417,9 @@ def test_real_application_and_window_bind_one_dormant_service(tk_root, tmp_path,
     monkeypatch.setattr(controller_module, "AiAssistIntegration", create)
     jobs, queue, _ = make_stubbed_job_service_with_queue()
     controller = controller_module.AppController(None, threaded=False, job_service=jobs)
-    controller._shutdown_webui = Mock()  # runtime state is outside this GUI wiring test
+    controller._shutdown_webui = Mock(
+        return_value="unowned_or_absent"
+    )  # runtime state is outside this GUI wiring test
     window = MainWindowV2(
         tk_root,
         app_state=controller.app_state,

@@ -1544,8 +1544,8 @@ class MainWindowV2:
         except Exception:
             pass
 
+        controller_owns_shutdown = bool(getattr(self, "app_controller", None))
         try:
-            controller_owns_shutdown = bool(getattr(self, "app_controller", None))
             if self.webui_process_manager and not controller_owns_shutdown:
                 stop = getattr(self.webui_process_manager, "shutdown", None) or getattr(
                     self.webui_process_manager, "stop", None
@@ -1555,14 +1555,15 @@ class MainWindowV2:
         except Exception:
             pass
 
-        try:
-            from src.video.comfy_process_manager import get_global_comfy_process_manager
+        if not controller_owns_shutdown:
+            try:
+                from src.video.comfy_process_manager import get_global_comfy_process_manager
 
-            comfy_manager = get_global_comfy_process_manager()
-            if comfy_manager is not None and comfy_manager.owns_process:
-                comfy_manager.stop()
-        except Exception:
-            pass
+                comfy_manager = get_global_comfy_process_manager()
+                if comfy_manager is not None and comfy_manager.owns_process:
+                    comfy_manager.stop()
+            except Exception:
+                pass
 
     def _wire_status_bar(self) -> None:
         if not getattr(self, "status_bar_v2", None):

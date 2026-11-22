@@ -982,6 +982,9 @@ class ManagedProcess:
         self._threads = []
         if self._log is not None:
             self._log.close()
+        # Retain the launched process identity if both stop attempts failed.
+        if process is not None and process.poll() is None:
+            self._process = process
 
     def _start_pump(
         self, stream: IO[bytes] | None, sink: deque[str], name: str

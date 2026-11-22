@@ -82,31 +82,23 @@ class PersistenceWorker:
             self._worker_thread.start()
             logger.info("[PersistenceWorker] Started")
 
-    def stop(self, timeout: float = 5.0) -> None:
-        """Stop the worker thread and wait for pending tasks to complete."""
-        with self._lock:
-            if not self._running:
-                return
-            self._running = False
+    def begin_shutdown(self) -> None:
+        """Close admission and wake the worker to drain all accepted tasks."""
+        self._queue.shutdown()
 
-        # Signal worker to stop
-        try:
-            self._queue.put((0, PersistenceTask("_stop", {})), timeout=1.0)
-        except queue.Full:
-            pass
-
-        # Wait for worker to finish
-        if self._worker_thread and self._worker_thread.is_alive():
-            self._worker_thread.join(timeout=timeout)
-            if self._worker_thread.is_alive():
+    def stop(self, timeout: float | None = 5.0) -> bool:
+        self.begin_shutdown()
+        thread = self._worker_thread
+        if thread is not None:
+            thread.join(timeout=None if timeout is None else max(0.0, timeout))
+            if thread.is_alive():
                 logger.warning("[PersistenceWorker] Worker did not stop within timeout")
+                return False
+        return self._queue.empty() and self._tasks_failed == 0
 
-        logger.info(
-            f"[PersistenceWorker] Stopped. Stats: "
-            f"completed={self._tasks_completed}, "
-            f"dropped={self._tasks_dropped}, "
-            f"failed={self._tasks_failed}"
-        )
+    def active_thread(self) -> threading.Thread | None:
+        thread = self._worker_thread
+        return thread if thread is not None and thread.is_alive() else None
 
     def enqueue(self, task: PersistenceTask, critical: bool = False) -> bool:
         """
@@ -138,6 +130,8 @@ class PersistenceWorker:
                 # Non-blocking - drop if full
                 self._queue.put_nowait((priority_tuple[0], task))
             return True
+        except queue.ShutDown:
+            return False
         except queue.Full:
             # Backpressure - log and drop non-critical tasks
             if critical:
@@ -163,24 +157,19 @@ class PersistenceWorker:
         """Main worker loop - processes tasks from queue."""
         logger.debug("[PersistenceWorker] Worker loop started")
 
-        while self._running:
-            try:
-                # Wait for task (with timeout to check _running flag)
-                priority, task = self._queue.get(timeout=0.5)
-
-                # Check for stop signal
-                if task.task_type == "_stop":
-                    break
-
-                # Process task
-                self._process_task(task)
-
-            except queue.Empty:
-                continue
-            except Exception as exc:
-                logger.exception(f"[PersistenceWorker] Unexpected error in worker loop: {exc}")
-
-        logger.debug("[PersistenceWorker] Worker loop exited")
+        try:
+            while True:
+                try:
+                    _, task = self._queue.get()
+                except queue.ShutDown:
+                    return
+                try:
+                    self._process_task(task)
+                finally:
+                    self._queue.task_done()
+        finally:
+            self._running = False
+            logger.debug("[PersistenceWorker] Worker loop exited")
 
     def _process_task(self, task: PersistenceTask) -> None:
         """Process a single persistence task."""
@@ -284,11 +273,23 @@ def get_persistence_worker() -> PersistenceWorker:
         return _global_worker
 
 
-def shutdown_persistence_worker(timeout: float = 5.0) -> None:
+def shutdown_persistence_worker(timeout: float | None = 5.0) -> bool:
     """Shutdown the global persistence worker."""
     global _global_worker
 
     with _worker_lock:
-        if _global_worker is not None:
-            _global_worker.stop(timeout=timeout)
-            _global_worker = None
+        worker = _global_worker
+    if worker is None:
+        return True
+    stopped = worker.stop(timeout=timeout)
+    if worker.active_thread() is None:
+        with _worker_lock:
+            if _global_worker is worker:
+                _global_worker = None
+    return stopped
+
+
+def active_persistence_thread() -> threading.Thread | None:
+    with _worker_lock:
+        worker = _global_worker
+    return worker.active_thread() if worker is not None else None

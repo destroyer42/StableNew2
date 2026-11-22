@@ -150,6 +150,11 @@ def test_the_real_manager_terminates_only_the_process_it_launched() -> None:
     managed = Mock()
     managed.process = Mock()
     managed.process.poll.return_value = None
+
+    def stop(**_kwargs):
+        managed.process.poll.return_value = 0
+
+    managed.stop.side_effect = stop
     managed.stdout_tail.return_value = []
     managed.stderr_tail.return_value = []
     manager = ComfyProcessManager(ComfyProcessConfig(command=["comfy"], base_url="http://x"))

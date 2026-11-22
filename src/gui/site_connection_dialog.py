@@ -602,9 +602,11 @@ class SiteConnectionDialog:
             dialog.destroy()
 
     def shutdown(self) -> None:
-        """Revoke the session after the main loop exits, even if Tk is gone."""
-        self._phone.close()
-        self._disconnect(cancel_timer=False)
+        """Signal the transports and drop UI references without waiting or calling Tk."""
+        self._phone.close(timeout=0)
+        if self.listener is not None:
+            self.listener.begin_shutdown()
+        self.dialog = self.connection = self.listener = self._timer = None
 
 
 def install_site_connection_control(

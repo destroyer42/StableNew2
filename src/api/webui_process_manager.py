@@ -1006,6 +1006,9 @@ class WebUIProcessManager:
         self._teardown_process_container(terminate_owned=True)
 
         self._stop_output_capture()
+        if process is not None and process.poll() is None:
+            logger.error("Owned WebUI PID %s is still running after shutdown", pid)
+            return False  # Retain the launched handle for the existing exit fallback.
         self._finalize_process(process)
         exit_code = self._last_exit_code
         running = self.is_running()
@@ -1372,12 +1375,26 @@ class WebUIProcessManager:
         from src.utils.thread_registry import get_thread_registry
 
         registry = get_thread_registry()
-        self._orphan_monitor_thread = registry.spawn(
-            target=self._orphan_monitor_loop,
-            name="WebUI-Orphan-Monitor",
-            daemon=False,
-            purpose="Monitor and cleanup orphaned WebUI processes",
-        )
+        remove_listener = registry.add_shutdown_listener(self._orphan_monitor_stop.set)
+
+        def monitor() -> None:
+            try:
+                self._orphan_monitor_loop()
+            finally:
+                remove_listener()
+
+        try:
+            self._orphan_monitor_thread = registry.spawn(
+                target=monitor,
+                name="WebUI-Orphan-Monitor",
+                daemon=False,
+                purpose="Monitor and cleanup orphaned WebUI processes",
+            )
+        except RuntimeError:
+            remove_listener()
+            if not registry.is_shutdown_requested():
+                raise
+            return
         logger.info(
             "[Orphan Monitor] Started monitoring thread to prevent orphaned WebUI processes"
         )

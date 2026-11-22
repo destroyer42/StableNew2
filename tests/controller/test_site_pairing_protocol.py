@@ -122,6 +122,7 @@ def test_startup_shares_configured_output_and_visible_packs_without_opening_a_di
     assert session.pack_catalog is not None
     dialog._timer = "pending"
     dialog.shutdown()
-    phone.close.assert_called_once_with()
+    phone.close.assert_called_once_with(timeout=0)
     dialog.root.after_cancel.assert_not_called()
-    listener.return_value.close.assert_called_once()
+    listener.return_value.begin_shutdown.assert_called_once_with()
+    assert dialog.listener is None and dialog._timer is None

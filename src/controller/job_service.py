@@ -679,18 +679,7 @@ class JobService:
         durable CANCELLED, and "return to queue" is decided and committed later by the worker, which returns the
         job only on positive evidence that nothing was dispatched (otherwise it is cancelled and flagged).
         """
-        running = self._find_running_job()
-        if running is None and getattr(self.runner, "current_job", None) is not None:
-            running = self.runner.current_job
-        if running and not return_to_queue:
-            self.cancel_job(running.job_id, reason="cancel_requested")
-        try:
-            self.runner.cancel_current(return_to_queue=return_to_queue)
-        except TypeError:
-            self.runner.cancel_current()  # a runner that cannot carry the return request only cancels
-        # Don't force queue to "idle" - let runner continue processing if auto-run enabled
-        # The runner will naturally pick up the next job or go idle when queue is empty
-        return running
+        return job_service_shutdown.cancel_current_job(self, return_to_queue=return_to_queue)
 
     def cancel_job(self, job_id: str, *, reason: str | None = None) -> None:
         """Cancel the job with the given ID and clean up associated processes."""
@@ -948,6 +937,9 @@ class JobService:
     def _stop_runner(self, timeout: float | None = None) -> bool:
         return job_service_shutdown.stop_runner(self, timeout)
 
+    def request_shutdown(self) -> None:
+        job_service_shutdown.request_shutdown(self)
+
     def begin_shutdown(self) -> None:
         """Fence queue admission for application shutdown (terminal, idempotent; see job_service_shutdown)."""
         job_service_shutdown.begin_shutdown(self)
@@ -1013,7 +1005,7 @@ class JobService:
             self._on_runner_activity()
 
     def _start_watchdog(self, job: Job) -> None:
-        if not self._watchdog_config.enabled:
+        if job_service_shutdown.is_shutting_down(self) or not self._watchdog_config.enabled:
             return
         if job.job_id in self._active_watchdogs:
             return
@@ -1030,8 +1022,7 @@ class JobService:
             config=self._watchdog_config,
             violation_callback=self._on_watchdog_violation,
         )
-        self._active_watchdogs[job.job_id] = watchdog
-        watchdog.start()
+        job_service_shutdown.start_job_watchdog(self, job, watchdog)
 
     def _stop_watchdog(self, job_id: str) -> None:
         watchdog = self._active_watchdogs.pop(job_id, None)

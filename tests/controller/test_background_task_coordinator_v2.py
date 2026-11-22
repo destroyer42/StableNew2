@@ -60,3 +60,17 @@ def test_background_task_coordinator_runs_inline_for_deterministic_callers() -> 
     seen: list[int] = []
     coordinator.submit("queue", lambda: 7, on_result=seen.append)
     assert seen == [7]
+
+
+def test_shutdown_discards_deliveries_already_queued_for_the_ui() -> None:
+    deliveries = []
+    seen = []
+    coordinator = BackgroundTaskCoordinator(dispatcher=deliveries.append, run_inline=True)
+    coordinator.submit("history", lambda: 7, on_result=seen.append)
+    assert len(deliveries) == 1
+
+    coordinator.begin_shutdown()
+    assert coordinator.is_quiescent()
+    deliveries[0]()
+    assert seen == []
+    assert coordinator.submit("history", lambda: 8, on_result=seen.append) == 0
