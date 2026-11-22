@@ -159,7 +159,7 @@ def run_scenario(driver: Driver, *, count: int = 500) -> list[StepRecord]:
     ok = (
         o.tab_id == "pipeline"
         and o.nav_labels == nav
-        and len(o.nav_labels) == 9
+        and len(o.nav_labels) == 10
         and o.queue_rows == count
         and o.history_rows == count
         and o.history_first[:1] == (rev0[0].job_id,)
