@@ -36,7 +36,9 @@ from typing import Any
 
 from src.image_backends.comfy_image_graphs import (
     SAVE_NODE_ID,
+    SDXL_T2I,
     ComfyImageGraph,
+    SdxlGraphSlots,
     canonical_sha256,
     graph_for_profile,
 )
@@ -45,6 +47,7 @@ from src.image_backends.comfy_image_readiness import (
     check_installation,
     evaluate_floors,
     probe_object_info,
+    probe_sdxl_graph,
 )
 from src.image_backends.comfy_qwen_image_profile import (
     QwenImagePlan,
@@ -54,6 +57,14 @@ from src.image_backends.comfy_qwen_image_profile import (
     resolve_qwen_image_plan,
     validate_qwen_image_config,
     validate_qwen_image_njr,
+)
+from src.image_backends.comfy_sdxl_assets import SdxlAssetResolver
+from src.image_backends.comfy_sdxl_profile import (
+    SDXL_RUN_PROFILE,
+    SdxlComfyPlan,
+    is_sdxl_comfy_selection,
+    resolve_sdxl_comfy_plan,
+    validate_sdxl_comfy_njr,
 )
 from src.image_backends.image_backend_types import (
     COMFY_IMAGE_BACKEND_ID,
@@ -114,7 +125,8 @@ class ComfyImageBackend:
     capabilities = ImageBackendCapabilities(
         backend_id=COMFY_IMAGE_BACKEND_ID,
         stage_types=("txt2img",),
-        supports_negative_prompt=False,
+        # The SDXL path (PR-IMG-COMFY-381) runs a negative prompt; a frozen Qwen-Image profile still refuses one.
+        supports_negative_prompt=True,
         supports_hypernetworks=False,
         runtime_family=RUNTIME_FAMILY_COMFY,
     )
@@ -132,7 +144,11 @@ class ComfyImageBackend:
         rng: random.Random | None = None,
         temp_root: str | None = None,
         poll_seconds: float = HISTORY_POLL_SECONDS,
+        family_lookup: Callable[[str], Any] | None = None,
+        sdxl_assets: SdxlAssetResolver | None = None,
     ) -> None:
+        self._family_lookup = family_lookup
+        self._sdxl_assets = sdxl_assets
         self._transition = transition or RuntimeTransitionCoordinator()
         self._injected_process_manager = process_manager
         self._process_manager = process_manager
@@ -168,6 +184,11 @@ class ComfyImageBackend:
     def validate_njr_intent(self, njr: Any, stage_names: list[str]) -> None:
         """Reject work this backend cannot run before the runner dispatches any stage (pure)."""
 
+        if is_sdxl_comfy_selection(
+            getattr(njr, "backend_options", None), getattr(njr, "base_model", None)
+        ):
+            validate_sdxl_comfy_njr(njr, list(stage_names), family_lookup=self._family_lookup)
+            return
         self._require_profile(
             getattr(njr, "backend_options", None), getattr(njr, "base_model", None)
         )
@@ -211,6 +232,8 @@ class ComfyImageBackend:
     # -- execution ---------------------------------------------------------------------------------------------
 
     def execute(self, pipeline: Any, request: ImageExecutionRequest) -> ImageExecutionResult | None:
+        if is_sdxl_comfy_selection(request.backend_options, request.selected_model):
+            return self._execute_sdxl(pipeline, request)
         profile, graph, plan = self._validate_request(request)
         if _cancelled(request.cancel_token):
             _raise_cancelled(f"Cancelled before {profile.display_name} started")
@@ -324,6 +347,245 @@ class ComfyImageBackend:
         finally:
             shutil.rmtree(job_dir, ignore_errors=True)
 
+    # -- SDXL txt2img (PR-IMG-COMFY-381) ---------------------------------------------------------------------------------
+
+    def _sdxl_plan(self, request: ImageExecutionRequest) -> SdxlComfyPlan:
+        from src.image_backends.comfy_sdxl_profile import SdxlComfyError
+
+        if request.stage_name != "txt2img":
+            raise SdxlComfyError("SDXL on the ComfyUI image backend supports only txt2img")
+        if request.input_image_path is not None:
+            raise SdxlComfyError("SDXL on the ComfyUI image backend takes no input image")
+        provenance = (request.context_metadata or {}).get("provenance")
+        names = provenance if isinstance(provenance, Mapping) else {}
+        return resolve_sdxl_comfy_plan(
+            model_name=request.selected_model,
+            stage_config=request.stage_config,
+            execution_config=request.execution_config,
+            prompt=str(request.prompt or ""),
+            negative_prompt=str(request.negative_prompt or ""),
+            sampler=request.sampler,
+            scheduler=request.scheduler,
+            steps=request.steps,
+            cfg_scale=request.cfg_scale,
+            width=request.width,
+            height=request.height,
+            seed=request.seed,
+            images=request.image_count,
+            vae=request.selected_vae,
+            embedding_names=tuple(names.get("positive_embeddings") or ()),
+            negative_embedding_names=tuple(names.get("negative_embeddings") or ()),
+            family_lookup=self._family_lookup,
+            rng=self._rng,
+        )
+
+    def _execute_sdxl(
+        self, pipeline: Any, request: ImageExecutionRequest
+    ) -> ImageExecutionResult | None:
+        """Fixed, fail-closed sequence of the SDXL path; the same lease, runtime, dispatch and release as Qwen-Image."""
+
+        label = SDXL_RUN_PROFILE.display_name
+        plan = self._sdxl_plan(request)
+        if _cancelled(request.cancel_token):
+            _raise_cancelled(f"Cancelled before {label} started")
+        resolver = self._sdxl_assets or SdxlAssetResolver()
+        checkpoint, loras, vae = resolver.resolve_all(
+            plan.checkpoint, [item.name for item in plan.loras], plan.vae
+        )
+        transition = self._transition.prepare_for(self.transition_target)
+        if not transition.ready:
+            raise RuntimeTransitionError(transition)
+        evidence: dict[str, Any] = {
+            "assets": {
+                "checkpoint": checkpoint.evidence(),
+                "loras": [
+                    {**file.evidence(), "weight": item.weight}
+                    for file, item in zip(loras, plan.loras, strict=True)
+                ],
+                "vae": vae.evidence() if vae is not None else None,
+            },
+            "lease": transition.to_dict(),
+        }
+        try:
+            result = self._execute_sdxl_on_runtime(
+                pipeline, request, plan, (checkpoint, loras, vae), evidence
+            )
+        except BaseException:
+            self._release_owned_runtime()
+            raise
+        release = self._release_owned_runtime()
+        result.backend_metadata["runtime_release"] = dict(release)
+        result.diagnostic_payload["runtime_release"] = dict(release)
+        return result
+
+    def _execute_sdxl_on_runtime(
+        self,
+        pipeline: Any,
+        request: ImageExecutionRequest,
+        plan: SdxlComfyPlan,
+        files: tuple[Any, tuple[Any, ...], Any],
+        evidence: dict[str, Any],
+    ) -> ImageExecutionResult:
+        from src.image_backends.comfy_image_readiness import listed_option
+        from src.video.comfy_workflow_backend import _actual_runtime_identity
+
+        profile = SDXL_RUN_PROFILE
+        checkpoint, loras, vae = files
+        base_url = self._ensure_owned_runtime(profile.display_name)
+        client = self._client(base_url)
+        info = client.get_object_info()
+        problems: list[str] = []
+
+        def listed(node_class: str, input_name: str, file: Any) -> str:
+            spelling = (
+                listed_option(info, node_class, input_name, file.comfy_name)
+                if isinstance(info, Mapping)
+                else None
+            )
+            if spelling is None:
+                problems.append(
+                    f"ComfyUI does not list '{file.comfy_name}' for {node_class}.{input_name}"
+                )
+                return str(file.comfy_name)
+            return spelling
+
+        job_part = _safe_component(request.job_id, "job")
+        name_part = _safe_component(request.image_name, "txt2img")
+        slots = SdxlGraphSlots(
+            checkpoint=listed("CheckpointLoaderSimple", "ckpt_name", checkpoint),
+            positive=plan.positive,
+            negative=plan.negative,
+            seed=plan.seed,
+            steps=plan.steps,
+            cfg=plan.cfg_scale,
+            sampler=plan.sampling.sampler,
+            scheduler=plan.sampling.scheduler,
+            width=plan.width,
+            height=plan.height,
+            clip_skip=plan.clip_skip,
+            loras=tuple(
+                (listed("LoraLoader", "lora_name", file), item.weight)
+                for file, item in zip(loras, plan.loras, strict=True)
+            ),
+            vae=listed("VAELoader", "vae_name", vae) if vae is not None else "",
+            filename_prefix=f"stablenew/{job_part}/{name_part}",
+        )
+        prompt_graph = SDXL_T2I.build(slots)
+        problems.extend(probe_sdxl_graph(prompt_graph, SDXL_T2I.required_node_classes, info))
+        if problems:
+            raise ComfyImageUnavailable(
+                f"{profile.display_name} cannot run on this ComfyUI: "
+                + "; ".join(dict.fromkeys(problems))
+            )
+        system_stats = client.get_system_stats()
+        evidence["floors"] = evaluate_floors(profile, system_stats)
+        evidence["actual_runtime"] = _actual_runtime_identity(system_stats)
+        prompt_id = str(uuid.uuid4())
+        payload = {
+            "prompt": prompt_graph,
+            "prompt_id": prompt_id,
+            "client_id": f"stablenew-{job_part}",
+            "extra_data": {"backend_id": self.backend_id, **SDXL_T2I.reference()},
+        }
+        if _cancelled(request.cancel_token):
+            _raise_cancelled(f"Cancelled before {profile.display_name} was queued")
+        # Not retried: a DispatchOutcomeUnknown here means ComfyUI may already be running this prompt.
+        response = client.queue_prompt(payload)
+        returned_id = str((response or {}).get("prompt_id") or "").strip()
+        if not returned_id:
+            raise ComfyImageExecutionError(
+                "no_prompt_id", "ComfyUI accepted the graph but returned no prompt id"
+            )
+        entry = self._wait_for_history(pipeline, request, client, returned_id, profile)
+        job_dir = Path(tempfile.mkdtemp(prefix="stablenew-comfy-image-", dir=self._temp_root))
+        try:
+            source = self._fetch_output(client, entry, job_dir)
+            return self._publish_sdxl(
+                request,
+                plan,
+                source,
+                {
+                    **evidence,
+                    "prompt_id": returned_id,
+                    "requested_prompt_id": prompt_id,
+                    "submitted_graph_sha256": canonical_sha256(prompt_graph),
+                },
+            )
+        finally:
+            shutil.rmtree(job_dir, ignore_errors=True)
+
+    def _publish_sdxl(
+        self,
+        request: ImageExecutionRequest,
+        plan: SdxlComfyPlan,
+        source: Path,
+        evidence: Mapping[str, Any],
+    ) -> ImageExecutionResult:
+        target, manifest_path, run_dir, base_name = self._prepare_target(
+            request, source, (plan.width, plan.height)
+        )
+        profile = SDXL_RUN_PROFILE
+        config = {
+            "model": plan.checkpoint,
+            "steps": plan.steps,
+            "width": plan.width,
+            "height": plan.height,
+            "sampler_name": plan.sampler_label,
+            "scheduler": plan.scheduler_label,
+            "cfg_scale": plan.cfg_scale,
+            "clip_skip": plan.clip_skip,
+            "seed": plan.seed,
+            "vae": plan.vae,
+        }
+        metadata: dict[str, Any] = {
+            "name": target.stem,
+            "stage": "txt2img",
+            "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+            "job_id": request.job_id,
+            "image_backend_id": self.backend_id,
+            "model": plan.checkpoint,
+            "model_identity": {"checkpoint_sha256": evidence["assets"]["checkpoint"]["sha256"]},
+            "original_prompt": request.prompt,
+            "final_prompt": plan.positive,
+            "original_negative_prompt": request.negative_prompt,
+            "final_negative_prompt": plan.negative,
+            "path": str(target),
+            "output_path": str(target),
+            "seed": plan.seed,
+            "actual_seed": plan.seed,
+            "requested_seed": plan.requested_seed if plan.requested_seed is not None else -1,
+            "all_seeds": [plan.seed],
+            "comfy_sdxl": {
+                "graph": SDXL_T2I.reference(),
+                "comfy_sampler": plan.sampling.sampler,
+                "comfy_scheduler": plan.sampling.scheduler,
+                "approximations": list(plan.sampling.approximations),
+                "embeddings": list(plan.embeddings),
+                **dict(evidence),
+            },
+            "config": config,
+            "expected_images": 1,
+            "returned_images": 1,
+            "saved_images": 1,
+            "partial_success": False,
+        }
+        return self._finish_publish(
+            request,
+            source,
+            target,
+            manifest_path,
+            run_dir,
+            base_name,
+            metadata,
+            {
+                "backend_id": self.backend_id,
+                "executor": "comfy_image_backend",
+                "model_profile": profile.reference(),
+                "graph": SDXL_T2I.reference(),
+                "prompt_id": evidence.get("prompt_id"),
+            },
+        )
+
     def _client(self, base_url: str) -> Any:
         if self._client_factory is not None:
             return self._client_factory(base_url)
@@ -333,7 +595,7 @@ class ComfyImageBackend:
 
     # -- runtime ownership --------------------------------------------------------------------------------------
 
-    def _resolve_process_manager(self) -> Any:
+    def _resolve_process_manager(self, label: str = "Qwen-Image") -> Any:
         """The injected manager, else the registered global Comfy owner, else the last one used, else a new one.
 
         The global owner wins over a remembered one: another feature (video) may hold the live owned ComfyUI, and a
@@ -352,16 +614,16 @@ class ComfyImageBackend:
             manager = shared_comfy_process_manager()
             if manager is None:
                 raise ComfyImageUnavailable(
-                    "Qwen-Image needs a StableNew-managed ComfyUI launch configuration (Settings: ComfyUI)"
+                    f"{label} needs a StableNew-managed ComfyUI launch configuration (Settings: ComfyUI)"
                 )
         # Remember the owner across release/relaunch cycles, as the video backend does.
         self._process_manager = manager
         return manager
 
-    def _ensure_owned_runtime(self) -> str:
+    def _ensure_owned_runtime(self, label: str = "Qwen-Image") -> str:
         from src.video.comfy_process_manager import ComfyStartupError
 
-        manager = self._resolve_process_manager()
+        manager = self._resolve_process_manager(label)
         config = getattr(manager, "config", None)
         if (
             config is not None
@@ -369,14 +631,14 @@ class ComfyImageBackend:
             and not manager.is_running()
         ):
             raise ComfyStartupError(
-                "Qwen-Image requires a StableNew-owned ComfyUI, but automatic ComfyUI start is off"
+                f"{label} requires a StableNew-owned ComfyUI, but automatic ComfyUI start is off"
             )
         # A required flag makes ensure_running refuse to adopt an external ComfyUI on the configured endpoint.
         if not manager.ensure_running(required_flags=REQUIRED_LAUNCH_FLAGS):
             raise ComfyStartupError("The StableNew-owned ComfyUI did not become healthy")
         if not getattr(manager, "owns_process", False):
             raise ComfyStartupError(
-                "Qwen-Image runs only on a ComfyUI that StableNew launched and owns; an external ComfyUI is never used"
+                f"{label} runs only on a ComfyUI that StableNew launched and owns; an external ComfyUI is never used"
             )
         return str(getattr(config, "base_url", "") or "http://127.0.0.1:8188").rstrip("/")
 
@@ -414,7 +676,7 @@ class ComfyImageBackend:
         request: ImageExecutionRequest,
         client: Any,
         prompt_id: str,
-        profile: QwenImageProfile,
+        profile: Any,
     ) -> dict[str, Any]:
         from src.video.comfy_workflow_backend import (
             _history_entry_from_payload,
@@ -480,7 +742,7 @@ class ComfyImageBackend:
 
     @staticmethod
     def _emit_liveness(
-        pipeline: Any, request: ImageExecutionRequest, profile: QwenImageProfile, elapsed: float
+        pipeline: Any, request: ImageExecutionRequest, profile: Any, elapsed: float
     ) -> None:
         """Execution liveness through the runner's status path; no step count or percentage is invented."""
 
@@ -541,31 +803,9 @@ class ComfyImageBackend:
         source: Path,
         evidence: Mapping[str, Any],
     ) -> ImageExecutionResult:
-        from PIL import Image
-
-        from src.pipeline.artifact_contract import artifact_manifest_payload
-        from src.utils.atomic_io import atomic_write_json
-        from src.utils.file_io import get_unique_output_path
-
-        try:
-            with Image.open(source) as image:
-                size = image.size
-        except Exception as exc:  # noqa: BLE001 - an unreadable file is a failed job, not a partial success
-            raise ComfyImageExecutionError(
-                "unreadable_output", f"ComfyUI's output image is unreadable: {exc}"
-            ) from exc
-        if size != (plan.width, plan.height):
-            raise ComfyImageExecutionError(
-                "wrong_output_size",
-                f"ComfyUI returned a {size[0]}x{size[1]} image; {plan.width}x{plan.height} was requested",
-            )
-        output_dir = Path(request.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        manifest_dir = output_dir / "manifests"
-        base_name = str(request.image_name or "txt2img")
-        run_dir = output_dir.parent if output_dir.name in {"txt2img"} else output_dir
-        target = get_unique_output_path(output_dir / f"{base_name}.png")
-        manifest_path = manifest_dir / f"{target.stem}.json"
+        target, manifest_path, run_dir, base_name = self._prepare_target(
+            request, source, (plan.width, plan.height)
+        )
         model_name = (
             str(request.selected_model) if profile.structural_transformer else profile.model_name
         )
@@ -620,6 +860,67 @@ class ComfyImageBackend:
             "saved_images": 1,
             "partial_success": False,
         }
+        return self._finish_publish(
+            request,
+            source,
+            target,
+            manifest_path,
+            run_dir,
+            base_name,
+            metadata,
+            {
+                "backend_id": self.backend_id,
+                "executor": "comfy_image_backend",
+                "model_profile": profile.reference(),
+                "graph": graph.reference(),
+                "prompt_id": evidence.get("prompt_id"),
+            },
+        )
+
+    def _prepare_target(
+        self, request: ImageExecutionRequest, source: Path, expected_size: tuple[int, int]
+    ) -> tuple[Path, Path, Path, str]:
+        """Check the downloaded image, then choose its target, manifest and run directory."""
+
+        from PIL import Image
+
+        from src.utils.file_io import get_unique_output_path
+
+        try:
+            with Image.open(source) as image:
+                size = image.size
+        except Exception as exc:  # noqa: BLE001 - an unreadable file is a failed job, not a partial success
+            raise ComfyImageExecutionError(
+                "unreadable_output", f"ComfyUI's output image is unreadable: {exc}"
+            ) from exc
+        if size != expected_size:
+            raise ComfyImageExecutionError(
+                "wrong_output_size",
+                f"ComfyUI returned a {size[0]}x{size[1]} image; {expected_size[0]}x{expected_size[1]} was requested",
+            )
+        output_dir = Path(request.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        base_name = str(request.image_name or "txt2img")
+        run_dir = output_dir.parent if output_dir.name in {"txt2img"} else output_dir
+        target = get_unique_output_path(output_dir / f"{base_name}.png")
+        return target, output_dir / "manifests" / f"{target.stem}.json", run_dir, base_name
+
+    def _finish_publish(
+        self,
+        request: ImageExecutionRequest,
+        source: Path,
+        target: Path,
+        manifest_path: Path,
+        run_dir: Path,
+        base_name: str,
+        metadata: dict[str, Any],
+        backend_metadata: dict[str, Any],
+    ) -> ImageExecutionResult:
+        """Write the PNG with StableNew's embedded metadata, the manifest and the typed result (shared by both paths)."""
+
+        from src.pipeline.artifact_contract import artifact_manifest_payload
+        from src.utils.atomic_io import atomic_write_json
+
         self._save_png(source, target, run_dir, metadata, request)
         metadata["artifact"] = artifact_manifest_payload(
             stage="txt2img",
@@ -628,7 +929,7 @@ class ComfyImageBackend:
             output_paths=[str(target)],
             job_id=request.job_id,
         )
-        manifest_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_json(manifest_path, metadata, indent=2, ensure_ascii=False)
         result = {
             **metadata,
@@ -640,13 +941,7 @@ class ComfyImageBackend:
             backend_id=self.backend_id,
             stage_name="txt2img",
             result=result,
-            backend_metadata={
-                "backend_id": self.backend_id,
-                "executor": "comfy_image_backend",
-                "model_profile": profile.reference(),
-                "graph": graph.reference(),
-                "prompt_id": evidence.get("prompt_id"),
-            },
+            backend_metadata=backend_metadata,
         )
 
     @staticmethod

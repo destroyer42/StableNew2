@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-803 of 958 modules have a docstring.
+809 of 964 modules have a docstring.
 
 ## src/
 
@@ -571,6 +571,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `comfy_image_graphs.py`: PR-IMG-COMFY-100: the frozen Comfy still-image graph catalog (pure; no I/O and no Comfy import)
 - `comfy_image_readiness.py`: PR-IMG-COMFY-100: readiness of the Comfy still-image profiles (read-only; never downloads, moves or loads wei…
 - `comfy_qwen_image_profile.py`: PR-IMG-COMFY-100: the immutable Qwen-Image 2.1 (Comfy) profiles; pure intent contracts
+- `comfy_sdxl_assets.py`: PR-IMG-COMFY-381: resolve the SDXL checkpoint, LoRA and VAE files StableNew selected to files ComfyUI can load
+- `comfy_sdxl_mapping.py`: PR-IMG-COMFY-381: the production Forge/A1111 -> ComfyUI vocabulary maps for SDXL txt2img (pure; no I/O)
+- `comfy_sdxl_profile.py`: PR-IMG-COMFY-381: admission and planning for SDXL txt2img on the ComfyUI still-image backend (pure; no I/O)
 - `diffusers_backend.py`: The Diffusers image backend (PR-IMG-120): Ideogram 4 NF4 txt2img in a contained child per job
 - `diffusers_ideogram4_profile.py`: PR-IMG-120: the one immutable Ideogram 4 NF4 (Diffusers) profile; pure intent contracts
 - `diffusers_ideogram4_worker.py`: Contained child that runs one Ideogram 4 NF4 job through Diffusers (PR-IMG-120)
@@ -909,6 +912,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Runtime-state and workspace-path helpers for StableNew
 - `content_visibility.py`: (no docstring)
+- `eval_plans_paths.py`: Names and first-use contents of the Evaluation Plans workspace
 - `output_routing.py`: (no docstring)
 - `workspace_paths.py`: Centralized paths for mutable StableNew workspace data
 
@@ -1040,7 +1044,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_backend_types.py`: (no docstring)
 - `video_eval_assessment.py`: Pure identity and continuity assessment of an eval run (PR-VID-QUALITY-351)
 - `video_eval_assessment_html.py`: HTML fragments for the identity assessment in the eval contact sheet (PR-VID-QUALITY-351)
+- `video_eval_catalog.py`: Read-only discovery of video evaluation plans and runs
 - `video_eval_identity.py`: Source-image, clip and job identity for eval reports (PR-VID-QUALITY-351)
+- `video_eval_import.py`: Copy a video suite into Evaluation Plans while keeping its source references usable
 - `video_eval_metrics.py`: Deterministic clip measurements for the video eval kit (PR-VID-EVAL-320)
 - `video_eval_ratings_store.py`: Safe, lossless persistence for an eval run's ``ratings.csv`` (PR-VID-QUALITY-351)
 - `video_eval_report.py`: Measure an admitted eval run and write its contact sheet (PR-VID-EVAL-320)

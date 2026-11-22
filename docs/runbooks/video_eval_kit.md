@@ -9,10 +9,10 @@ graph revision gets one eval run, a contact sheet and the owner's rating.
 
 ## 1. What a run is
 
-* A **suite** (`stablenew.video-eval-suite.v1`, a JSON file you keep next to its images) lists **cases**
+* A **suite** (`stablenew.video-eval-suite.v1`, a JSON file in `<Output>/eval_plans/video/`) lists **cases**
   (one source image plus a prompt) and **arms** (one way to make a clip: a native SVD configuration or a Video
   Workflow form). It also fixes one seed and names the baseline arm.
-* **Queue eval suite...** (Video Workflow tab, Eval suite section) builds one job per case per arm with the
+* **Queue…** for the selected **Plan** (Video Workflow → Compare and evaluate) builds one job per case per arm with the
   production builders (`SVDController.build_admitted_njr`, `VideoWorkflowNjrBuilder`), shows the plan, and after
   you confirm admits every job in **one** `JobService.submit_njrs` call. All or nothing: if any case cannot be
   built under any arm, nothing is queued and every reason is listed.
@@ -96,7 +96,7 @@ background. Eight cases by three arms is 24 jobs, an evening of local generation
 
 ## 3. Reading the results
 
-When the jobs finish, **Build eval report...** and choose the run folder. The report is written next to
+When the jobs finish, select the run in the **Run** dropdown and choose **Build report**. The report is written next to
 `run.json` and opens in the browser:
 
 | File | Content |
@@ -251,7 +251,9 @@ preview exceeds its limit.
 
 `docs/runbooks/examples/video_eval_three_engines.suite.json` is a ready-to-edit suite that compares three engines on
 identical cases (same images, prompts, seed and a frame count of 81). Its image names are synthetic placeholders: copy the
-file next to your own images and change `image` (and, ideally, pin `image_sha256`) before queueing.
+file into `<Output>/eval_plans/video/` and change `image` to an absolute path or a path relative to the suite
+(and, ideally, pin `image_sha256`) before queueing. See [Evaluation Plans](eval_plans.md) for the folder override and
+importing existing suites.
 
 | Arm | Workflow | Governance | What it tests |
 |---|---|---|---|
@@ -275,9 +277,8 @@ file next to your own images and change `image` (and, ideally, pin `image_sha256
 `docs/runbooks/examples/video_eval_a14b_speed_arms.suite.json` compares the approved I2V-A14B 4-step 1.0.0 (baseline)
 with its three experimental speed arms on eight identical cases (same images, prompts, seed 374 and 81 frames): a turn
 around, a walk toward the camera, a close-up face, a wave, a side step, wind in hair and clothing, a laugh and a landscape
-sit-down. 8 cases x 4 arms = 32 jobs. Its image names are synthetic placeholders: copy the file next to your own images
-(for example the VID-CLIP-371 Stage 2 full-body sources, which stay private and are not in the repository) and change
-`image`, ideally pinning `image_sha256`. Nothing is queued until you choose **Queue eval suite...** and confirm the plan.
+sit-down. 8 cases x 4 arms = 32 jobs. Its image names are synthetic placeholders: copy the file into the canonical video plan folder and set `image` to the desired source path,
+ideally pinning `image_sha256`. Select the plan, choose **Queue…** and confirm the preview to admit it.
 
 | Arm | Version | What changes against 1.0.0 |
 |---|---|---|
