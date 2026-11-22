@@ -629,7 +629,7 @@ class SiteListener:
         self._server.timeout = 0.25
         self._stop = Event()
         registry = get_thread_registry()
-        remove_listener = registry.add_shutdown_listener(self._stop.set)
+        remove_listener = registry.add_shutdown_listener(self.begin_shutdown)
         try:
             registry.spawn(
                 target=self._serve,
@@ -653,6 +653,10 @@ class SiteListener:
             finally:
                 remove_listener()
 
-    def close(self) -> None:
-        self._session.revoke()
+    def begin_shutdown(self) -> None:
+        """Signal the listener to stop and revoke its session in its worker."""
         self._stop.set()
+
+    def close(self) -> None:
+        self.begin_shutdown()
+        self._session.revoke()

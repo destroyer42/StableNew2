@@ -3,7 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from src.contracts import PreviewRequest
+from src.controller import app_controller as app_controller_module
 from src.controller.app_controller import AppController
+from src.controller.app_controller_services.background_task_coordinator import (
+    BackgroundTaskCoordinator,
+)
 from src.controller.runtime_state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionState
 from src.gui.app_state_v2 import AppStateV2
@@ -198,7 +202,13 @@ def test_start_run_v2_in_gui_mode_submits_queue_run_off_thread() -> None:
     assert controller.current_operation_label is None
 
 
-def test_refresh_app_state_queue_replays_latest_async_projection_request() -> None:
+def test_refresh_app_state_queue_replays_latest_async_projection_request(monkeypatch) -> None:
+    # Keep the app in threaded mode and control scheduling from construction.
+    monkeypatch.setattr(
+        app_controller_module,
+        "BackgroundTaskCoordinator",
+        lambda **kwargs: BackgroundTaskCoordinator(**(kwargs | {"run_inline": True})),
+    )
     main_window = SimpleNamespace(app_state=AppStateV2(), root=None)
     controller = _build_controller(main_window=main_window, threaded=True)
     projections = [(["first"], []), (["second"], [])]
@@ -210,7 +220,6 @@ def test_refresh_app_state_queue_replays_latest_async_projection_request() -> No
         build_calls += 1
         return result
 
-    controller._background_tasks._run_inline = True
     controller._runtime_projection_coordinator._build_queue_projection = _build_projection  # type: ignore[attr-defined]
 
     controller._refresh_app_state_queue()

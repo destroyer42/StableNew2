@@ -602,8 +602,10 @@ class SiteConnectionDialog:
             dialog.destroy()
 
     def shutdown(self) -> None:
-        """Drop UI references after the registry has signalled the transport owners."""
+        """Signal the transports and drop UI references without waiting or calling Tk."""
         self._phone.close(timeout=0)
+        if self.listener is not None:
+            self.listener.begin_shutdown()
         self.dialog = self.connection = self.listener = self._timer = None
 
 

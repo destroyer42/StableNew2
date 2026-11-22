@@ -21,11 +21,15 @@ class _Clock:
     def __init__(self) -> None:
         self.elapsed = 0.0
 
-    def time(self) -> float:
+    def monotonic(self) -> float:
         return 1_000.0 + self.elapsed
 
     def sleep(self, seconds: float) -> None:
         self.elapsed += seconds
+
+    def wait(self, seconds: float) -> bool:
+        self.sleep(seconds)
+        return False
 
 
 class _Comfy:
@@ -59,8 +63,10 @@ def _wait(monkeypatch, comfy: _Comfy, token: CancelToken | None) -> None:
     clock = _Clock()
     monkeypatch.setattr(
         "src.video.comfy_workflow_backend.time",
-        SimpleNamespace(time=clock.time, sleep=clock.sleep),
+        SimpleNamespace(monotonic=clock.monotonic, sleep=clock.sleep),
     )
+    if token is not None:
+        monkeypatch.setattr(token, "wait", clock.wait)
     backend = ComfyWorkflowVideoBackend(history_poll_interval=1.0)
     backend._wait_for_history_entry(comfy, prompt_id=PROMPT, timeout=1200.0, cancel_token=token)
 

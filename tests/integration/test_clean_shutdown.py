@@ -21,9 +21,6 @@ class TestCleanShutdown:
         """After registry shutdown, no tracked threads should remain alive."""
         registry = get_thread_registry()
 
-        # Clear any existing threads
-        registry.shutdown_all(timeout=1.0)
-
         # Spawn test threads
         completion_flags = []
         for i in range(3):
@@ -54,6 +51,8 @@ class TestCleanShutdown:
         active_after = registry.get_active_threads()
         alive_threads = [t for t in active_after if t.thread.is_alive()]
         assert len(alive_threads) == 0, f"Threads still alive: {[t.name for t in alive_threads]}"
+        with pytest.raises(RuntimeError, match="registry is shutting down"):
+            registry.spawn(target=lambda: None, name="LateWorker")
 
     def test_thread_count_matches_before_and_after(self):
         """Thread count should return to baseline after shutdown."""
@@ -61,7 +60,6 @@ class TestCleanShutdown:
         baseline_count = threading.active_count()
 
         registry = get_thread_registry()
-        registry.shutdown_all(timeout=1.0)
 
         # Spawn and shutdown threads
         done = threading.Event()
@@ -100,7 +98,6 @@ class TestCleanShutdown:
         baseline_count = len(baseline_children)
 
         registry = get_thread_registry()
-        registry.shutdown_all(timeout=1.0)
 
         # Spawn threads that might interact with processes
         done = threading.Event()
@@ -133,7 +130,6 @@ class TestCleanShutdown:
     def test_daemon_threads_do_not_prevent_shutdown(self):
         """Daemon threads should not block shutdown (but should be reported as orphaned)."""
         registry = get_thread_registry()
-        registry.shutdown_all(timeout=1.0)
 
         # Spawn daemon thread that takes a long time
         def slow_daemon_worker():
@@ -193,7 +189,6 @@ class TestRealWorldShutdownScenarios:
     def test_shutdown_with_io_bound_threads(self):
         """Threads doing I/O should shut down cleanly."""
         registry = get_thread_registry()
-        registry.shutdown_all(timeout=1.0)
 
         shutdown_flag = threading.Event()
 
@@ -219,7 +214,6 @@ class TestRealWorldShutdownScenarios:
     def test_shutdown_with_cpu_bound_threads(self):
         """CPU-bound threads should respect shutdown signals."""
         registry = get_thread_registry()
-        registry.shutdown_all(timeout=1.0)
 
         shutdown_flag = threading.Event()
 
@@ -248,7 +242,6 @@ class TestRealWorldShutdownScenarios:
     def test_shutdown_with_exception_in_thread(self):
         """Threads that crash should not prevent clean shutdown."""
         registry = get_thread_registry()
-        registry.shutdown_all(timeout=1.0)
 
         def crashing_worker():
             time.sleep(0.1)

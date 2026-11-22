@@ -707,7 +707,7 @@ class AppController:
         self.shutdown_app()
 
     def _ui_dispatch(self, fn: Callable[[], None]) -> None:
-        if self._is_shutting_down:
+        if getattr(self, "_is_shutting_down", False):
             return
 
         ui_thread_id = getattr(self, "_ui_thread_id", None)
@@ -740,7 +740,7 @@ class AppController:
 
     def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
         """Schedule the callable on the Tk main thread, safe from any thread."""
-        if self._is_shutting_down:
+        if getattr(self, "_is_shutting_down", False):
             return
 
         ui_thread_id = getattr(self, "_ui_thread_id", None)
