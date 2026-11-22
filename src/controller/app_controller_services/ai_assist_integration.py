@@ -31,7 +31,12 @@ from src.ai_assist.preview import (
     revoke_preview,
 )
 from src.ai_assist.remote import RemoteAssist, RemoteState
-from src.ai_assist.remote_preview import REMOTE_DISCLOSURE, REMOTE_PREVIEW_LABEL
+from src.ai_assist.remote_preview import (
+    REMOTE_DISCLOSURE,
+    REMOTE_PREVIEW_LABEL,
+    RemoteApproval,
+    RemoteSettings,
+)
 from src.ai_assist.selector import (
     REFUSED_IN_FLIGHT,
     REFUSED_NOT_ATTESTED,
@@ -65,7 +70,7 @@ _REMOTE_STATUS = {
     RemoteState.RESTORED: "AI Assist: Remote GPU restored.",
     RemoteState.RUNNING: "AI Assist: Running on remote GPU.",
     RemoteState.UNAVAILABLE: "AI Assist: Remote GPU unavailable.",
-    RemoteState.UNTRUSTED: "Remote AI requires verification.",
+    RemoteState.UNTRUSTED: "Remote AI requires verification of the Ollama version and manifest digest.",
     RemoteState.ERROR: "Remote AI readiness check failed.",
     RemoteState.LOCAL_FALLBACK: "AI Assist: Remote unavailable. Running local fallback.",
 }
@@ -223,6 +228,36 @@ class AiAssistIntegration:
 
     def preview_state(self) -> PreviewState:
         return preview_state(self.status())
+
+    def remote_preview(self) -> tuple[RemoteSettings, str]:
+        settings = self._remote.settings()
+        state = self._remote.state()
+        if settings.damaged:
+            return (
+                settings,
+                "Remote Preview settings are damaged. Restore or reset them with the admin tool.",
+            )
+        if state is RemoteState.DISABLED:
+            return settings, "Remote Preview is disabled."
+        if settings.approval is None:
+            return settings, "Select an approved remote model or approve one with the admin tool."
+        return settings, _REMOTE_STATUS[state]
+
+    def select_remote_model(self, approval: RemoteApproval) -> tuple[bool, str]:
+        with self._lock:
+            if self._closed or self.service is None or self._active_id is not None:
+                return (
+                    False,
+                    "Remote model selection is unavailable while AI Assist is busy or closing.",
+                )
+            try:
+                self.service.select_remote_model(approval)
+            except (OSError, ValueError):
+                return (
+                    False,
+                    "Remote model selection could not be saved. Check approval and request status.",
+                )
+        return True, "Remote model selected."
 
     def trust_label(self) -> str:
         """The label every Preview surface shows; empty when the installed model is qualified or nothing is usable."""

@@ -38,6 +38,8 @@ from src.ai_assist.remote_preview import (
     MODELS,
     RemoteApproval,
     disable_remote_preview,
+    enable_remote_preview,
+    revoke_remote_approval,
     write_remote_approval,
 )
 from src.ai_assist.status import (
@@ -113,8 +115,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     sub.add_parser(
         "disable-remote-preview",
-        help="revoke remote approval and explicitly select local-only mode",
+        help="select local-only mode while keeping valid remote approvals",
     )
+    sub.add_parser("enable-remote-preview", help="enable the existing remote approvals")
+    revoke = sub.add_parser(
+        "revoke-remote-preview", help="revoke one model's Remote Preview approval"
+    )
+    revoke.add_argument("--model", required=True, choices=MODELS)
     return parser
 
 
@@ -150,6 +157,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "disable-remote-preview":
             disable_remote_preview(root)
             print("Remote Preview disabled. AI Assist uses the local provider.")
+            return 0
+        if args.command == "enable-remote-preview":
+            enable_remote_preview(root)
+            print("Remote Preview enabled. Select an approved model in AI Preview if needed.")
+            return 0
+        if args.command == "revoke-remote-preview":
+            revoke_remote_approval(root, args.model)
+            print("Remote Preview approval revoked for the named model.")
             return 0
         runtime = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
         registry = load_model_registry(MODEL_REGISTRY_PATH)

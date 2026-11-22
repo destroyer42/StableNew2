@@ -7,6 +7,8 @@ from typing import Any
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui_v2.model_policy_projection import ModelControlProjection
+from src.image_backends.forge_flux1_profile import FLUX1_PROFILE_ID
+from src.image_backends.model_policy import EVIDENCE_STRUCTURAL
 
 _MAX_TARGETS = 256
 
@@ -26,6 +28,9 @@ def prompt_ai_target_projections(
     for projection in project(name for name in model_names if name and len(name) <= 200):
         policy = projection.policy
         if not policy.explicit_capabilities or projection.blocking or not policy.stages:
+            continue
+        # Keep the existing dev target. Newly executable structural profiles need their own advice eligibility.
+        if policy.evidence == EVIDENCE_STRUCTURAL and policy.policy_id != FLUX1_PROFILE_ID:
             continue
         name = projection.model_name
         label = f"{name} ({policy.display_name})"

@@ -23,7 +23,7 @@ from src.image_backends.diffusers_ideogram4_profile import (
     validate_ideogram4_njr,
 )
 from src.image_backends.forge_flux1_profile import (
-    FLUX1_PROFILE_ID,
+    FLUX1_PROFILE_IDS,
     Flux1Profile,
     resolve_flux1_reference,
     validate_flux1_intent,
@@ -87,7 +87,7 @@ def resolve_model_profile(options: Any) -> ExactModelProfile | None:
     qwen = qwen_image_profile_for_reference(reference)
     if qwen is not None:
         return qwen
-    if isinstance(reference, Mapping) and reference.get("id") == FLUX1_PROFILE_ID:
+    if isinstance(reference, Mapping) and reference.get("id") in FLUX1_PROFILE_IDS:
         return resolve_flux1_reference(reference)
     return resolve_klein(options)
 

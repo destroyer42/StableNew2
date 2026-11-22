@@ -179,27 +179,36 @@ Before approval, verify that the Windows listener belongs to the expected SSH in
 Ollama 0.40.16 with prompt and response logging disabled. Verify the worker limits are one loaded model and one
 concurrent inference (`OLLAMA_MAX_LOADED_MODELS=1` and `OLLAMA_NUM_PARALLEL=1`). Verify the full installed model manifest digest using a trusted
 operator session on the worker. The default candidate is `qwen3.5:4b-q4_K_M`. The comparison candidate is `lfm3:1.7b`.
-Supply the exact verified digest in the approval command.
+Supply each exact verified digest in its own approval command.
 
 ```powershell
-python -m tools.ai_assist_admin approve-remote-preview --endpoint http://127.0.0.1:11435 --version 0.40.16 --digest VERIFIED_SHA256 --accept-ssh-transfer
+python -m tools.ai_assist_admin approve-remote-preview --endpoint http://127.0.0.1:11435 --version 0.40.16 --model qwen3.5:4b-q4_K_M --digest VERIFIED_QWEN_SHA256 --accept-ssh-transfer
+python -m tools.ai_assist_admin approve-remote-preview --endpoint http://127.0.0.1:11435 --version 0.40.16 --model lfm3:1.7b --digest VERIFIED_LFM3_SHA256 --accept-ssh-transfer
 ```
 
-Use `--model lfm3:1.7b` to approve that comparison candidate. Approval persists and applies to one exact model,
-manifest digest, runtime version and endpoint. Restart StableNew or open the Prompt tab to see the provider status.
-If the approved tag no longer reports the verified digest, or Ollama reports a different version, verify the new
-identity before reapproving. To restore local-only mode explicitly, run the following.
+Open **Prompt → AI Preview…** and choose an approved model under **Remote Ollama model**. Qwen is the default on a new
+setup when approved. An explicit selection and an existing single-model approval remain selected. Wait for the readiness
+message, then use **Suggest…** to request and review advice. The review names the model that produced the response.
+Choosing a model records the selection. Ollama handles loading on the next explicit request.
+
+When an approved tag reports a different digest or Ollama reports a different version, check the identity before
+reapproving. To revoke just one model, use its exact name. If it was selected, choose one of the remaining approved models
+before requesting remote inference.
 
 ```powershell
+python -m tools.ai_assist_admin revoke-remote-preview --model lfm3:1.7b
 python -m tools.ai_assist_admin disable-remote-preview
+python -m tools.ai_assist_admin enable-remote-preview
 ```
 
-The local Preview steps above still apply to fallback. A confirmed disconnect permits one local attempt if local
-admission succeeds. A verification failure, refusal, timeout, worker error or invalid result stays visible in the
-review path. Remote health probes carry metadata only. Remote Preview models and the worker remain unqualified.
+Disable selects local-only mode while keeping valid approvals. If the settings are damaged, restore a verified backup
+or disable to clear the damaged record and explicitly approve each identity again. The local Preview steps above apply
+to fallback. A confirmed disconnect before the generation POST permits one local attempt if local admission succeeds.
+A lost response after possible dispatch ends the attempt. The review displays verification failures, refusals,
+timeouts, worker errors and invalid results. Remote health probes carry metadata only. Both models remain unqualified.
 
 For separately authorized manual acceptance, use a disposable PromptPack and non-sensitive text. Confirm startup
-reports the remote GPU ready without inference. Submit one suggestion and verify Remote Preview provenance.
+reports the remote GPU ready without inference. For each selectable model, submit a suggestion, verify its identity in review and check that the editing buffer changes only after an explicit review action.
 With the application idle, exercise a controlled tunnel outage, confirm local fallback and restore the tunnel.
 For a separately authorized generation workload, check that a remote suggestion completes while the job is running
 and that an outage then leaves local fallback blocked. Record provider, identity, outcome and lifecycle evidence

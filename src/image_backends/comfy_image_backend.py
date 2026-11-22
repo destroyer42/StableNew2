@@ -53,7 +53,7 @@ from src.image_backends.comfy_qwen_image_profile import (
     QwenImagePlan,
     QwenImageProfile,
     QwenImageProfileError,
-    qwen_image_profile_for_model,
+    qwen_model_matches,
     resolve_qwen_image_plan,
     validate_qwen_image_config,
     validate_qwen_image_njr,
@@ -153,9 +153,7 @@ class ComfyImageBackend:
         self._injected_process_manager = process_manager
         self._process_manager = process_manager
         self._client_factory = client_factory
-        self._installation = installation or (
-            lambda profile: check_installation(profile, verify_sha256=True)
-        )
+        self._installation = installation
         self._clock = clock
         self._sleep = sleep
         self._rng = rng
@@ -176,10 +174,10 @@ class ComfyImageBackend:
             )
         if frozen is None:
             raise QwenImageProfileError(
-                f"The '{COMFY_IMAGE_BACKEND_ID}' image backend runs only the frozen Qwen-Image 2.1 profiles; this work "
+                f"The '{COMFY_IMAGE_BACKEND_ID}' image backend runs only the frozen Qwen-Image profiles; this work "
                 "selects an ordinary checkpoint. StableNew never switches or falls back between backends."
             )
-        if qwen_image_profile_for_model(model_name) is not frozen:
+        if not qwen_model_matches(frozen, model_name):
             raise QwenImageProfileError(f"{frozen.display_name} requires its exact model selection")
         return frozen
 
@@ -206,7 +204,12 @@ class ComfyImageBackend:
             raise QwenImageProfileError(f"{profile.display_name} takes no input image")
         if not str(request.prompt or "").strip():
             raise QwenImageProfileError(f"{profile.display_name} needs a prompt")
-        validate_qwen_image_config(profile, request.stage_config, negative=request.negative_prompt)
+        validate_qwen_image_config(
+            profile,
+            request.stage_config,
+            negative=request.negative_prompt,
+            model_name=request.selected_model,
+        )
         validate_qwen_image_config(
             profile,
             {
@@ -234,7 +237,11 @@ class ComfyImageBackend:
         profile, graph, plan = self._validate_request(request)
         if _cancelled(request.cancel_token):
             _raise_cancelled(f"Cancelled before {profile.display_name} started")
-        installation = self._installation(profile)
+        installation = (
+            self._installation(profile)
+            if self._installation is not None
+            else check_installation(profile, model_name=request.selected_model, verify_sha256=True)
+        )
         if not installation.ready:
             raise ComfyImageUnavailable(
                 f"{profile.display_name} is not installed: {installation.summary}"
@@ -246,6 +253,14 @@ class ComfyImageBackend:
             "installation": {
                 "paths": dict(installation.paths),
                 "sha256_verified": installation.sha256_verified,
+                **(
+                    {
+                        "loader_names": dict(installation.loader_names),
+                        "sha256": dict(installation.sha256),
+                    }
+                    if profile.structural_transformer
+                    else {}
+                ),
             },
             "lease": transition.to_dict(),
         }
@@ -274,7 +289,9 @@ class ComfyImageBackend:
 
         base_url = self._ensure_owned_runtime()
         client = self._client(base_url)
-        problems = probe_object_info(graph, client.get_object_info())
+        installation = evidence["installation"]
+        names = installation.get("loader_names", {})
+        problems = probe_object_info(graph, client.get_object_info(), loader_names=names)
         if problems:
             raise ComfyImageUnavailable(
                 f"{profile.display_name} cannot run on this ComfyUI: " + "; ".join(problems)
@@ -290,6 +307,8 @@ class ComfyImageBackend:
             width=plan.width,
             height=plan.height,
             filename_prefix=f"stablenew/{job_part}/{name_part}",
+            diffusion_model=names.get("diffusion_model", ""),
+            vae=names.get("vae", ""),
         )
         prompt_id = str(uuid.uuid4())
         payload = {
@@ -787,18 +806,26 @@ class ComfyImageBackend:
         target, manifest_path, run_dir, base_name = self._prepare_target(
             request, source, (plan.width, plan.height)
         )
+        model_name = (
+            str(request.selected_model) if profile.structural_transformer else profile.model_name
+        )
+        files = (
+            evidence["installation"]["sha256"]
+            if profile.structural_transformer
+            else {asset.filename: asset.sha256 for asset in profile.assets}
+        )
         metadata: dict[str, Any] = {
             "name": target.stem,
             "stage": "txt2img",
             "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
             "job_id": request.job_id,
             "image_backend_id": self.backend_id,
-            "model": profile.model_name,
+            "model": model_name,
             "model_profile": profile.reference(),
             "model_identity": {
                 "repo_id": profile.repo_id,
                 "revision": profile.revision,
-                "files": {asset.filename: asset.sha256 for asset in profile.assets},
+                "files": files,
             },
             "original_prompt": request.prompt,
             "final_prompt": request.prompt,
@@ -819,7 +846,7 @@ class ComfyImageBackend:
                 **dict(evidence),
             },
             "config": {
-                "model": profile.model_name,
+                "model": model_name,
                 "steps": profile.steps,
                 "width": plan.width,
                 "height": plan.height,

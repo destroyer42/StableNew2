@@ -19,7 +19,7 @@ dependency gate refuses the unprofiled transformer instead. Never a guess.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from src.assets.flux_variant import (
@@ -144,7 +144,35 @@ FLUX1_DEV_PROFILE_V1 = Flux1Profile(
     min_total_ram_bytes=32_000_000_000,
 )
 
-_PROFILES: dict[tuple[str, int], Flux1Profile] = {(FLUX1_PROFILE_ID, 1): FLUX1_DEV_PROFILE_V1}
+FLUX1_SCHNELL_PROFILE_V1 = replace(
+    FLUX1_DEV_PROFILE_V1,
+    profile_id="flux1_schnell",
+    display_name="FLUX.1 [schnell] (family profile)",
+    transformer_variant=VARIANT_FLUX1_SCHNELL,
+    steps=4,
+    distilled_cfg_scale=1.0,
+    recommended_transformer=KleinAsset(
+        "transformer",
+        "flux1-schnell-Q5_K_S.gguf",
+        8_263_222_304,
+        "19f63562d9a20d2123288dddd9abb3d5560554e5694ded951aaf6bfafe46b5df",
+        "Stable-diffusion",
+        "city96/FLUX.1-schnell-gguf",
+        "822f72c4022ff67d51ee4d92bd731b3131542e82",
+    ),
+)
+_BY_VARIANT = {
+    profile.transformer_variant: profile
+    for profile in (FLUX1_DEV_PROFILE_V1, FLUX1_SCHNELL_PROFILE_V1)
+}
+_PROFILES = {(profile.profile_id, profile.version): profile for profile in _BY_VARIANT.values()}
+FLUX1_PROFILE_IDS = frozenset(profile_id for profile_id, _ in _PROFILES)
+
+
+def flux1_profile_for_variant(layout: tuple[str, bool] | None) -> Flux1Profile | None:
+    return _BY_VARIANT.get(layout[0]) if layout is not None and not layout[1] else None
+
+
 _LATEST = FLUX1_DEV_PROFILE_V1
 
 #: Operator-facing refusal per FLUX layout class that has no executable profile (the gate and the GUI both use it).
@@ -156,9 +184,6 @@ FLUX_VARIANT_REFUSALS: Mapping[str, str] = {
     VARIANT_FLUX2_KLEIN_4B: (
         "Only the exact qualified flux-2-klein-4b-fp8.safetensors runs under the FLUX.2 Klein 4B profile. This file has "
         "the Klein 4B layout but is not that file, so it is refused before generation."
-    ),
-    VARIANT_FLUX1_SCHNELL: (
-        "FLUX.1 [schnell] has no StableNew execution profile yet, so it is refused before generation."
     ),
     VARIANT_FLUX_UNRECOGNIZED: (
         "This FLUX transformer's layout matches no StableNew profile, so it is refused before generation."
@@ -224,7 +249,7 @@ def _mapping(value: Any) -> Mapping[str, Any]:
 
 def frozen_profile_is_flux1(backend_options: Any) -> bool:
     reference = _mapping(_mapping(backend_options).get("image")).get("model_profile")
-    return isinstance(reference, Mapping) and reference.get("id") == FLUX1_PROFILE_ID
+    return isinstance(reference, Mapping) and reference.get("id") in FLUX1_PROFILE_IDS
 
 
 def selected_model_name(config: Mapping[str, Any] | None) -> str:
@@ -237,9 +262,9 @@ def selected_model_name(config: Mapping[str, Any] | None) -> str:
 
 
 def flux1_selected(config: Mapping[str, Any] | None) -> bool:
-    """Whether a merged run config selects a transformer-only FLUX.1 [dev]-class checkpoint (registry evidence)."""
+    """Whether the registry identifies a supported standalone FLUX.1 transformer."""
 
-    return variant_for_model(selected_model_name(config)) == (VARIANT_FLUX1_DEV, False)
+    return flux1_profile_for_variant(variant_for_model(selected_model_name(config))) is not None
 
 
 # -- intent validation ---------------------------------------------------------------------------------------------
@@ -329,16 +354,20 @@ def apply_flux1_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
     options = dict(config.get("backend_options") or {})
     image = dict(_mapping(options.get("image")))
     reference = image.get("model_profile")
-    profile = (
-        resolve_flux1_reference(reference)
-        if isinstance(reference, Mapping) and reference.get("id") == FLUX1_PROFILE_ID
-        else latest_flux1_profile()
-    )
-    if isinstance(reference, Mapping) and reference.get("id") not in (None, FLUX1_PROFILE_ID):
-        raise Flux1ProfileError(
-            f"The selected checkpoint is a FLUX.1 [dev]-class transformer, but the work is frozen to profile "
-            f"{reference.get('id')!r}; rebuild the job"
-        )
+    selected = flux1_profile_for_variant(variant_for_model(selected_model_name(config)))
+    if isinstance(reference, Mapping) and reference.get("id") is not None:
+        if reference.get("id") not in FLUX1_PROFILE_IDS:
+            raise Flux1ProfileError(
+                f"The selected checkpoint is a FLUX.1 transformer, but the work is frozen to profile "
+                f"{reference.get('id')!r}; rebuild the job"
+            )
+        profile = resolve_flux1_reference(reference)
+        if selected is not None and selected is not profile:
+            raise Flux1ProfileError(
+                f"The selected checkpoint conflicts with {profile.display_name}; rebuild the job"
+            )
+    else:
+        profile = selected or latest_flux1_profile()
     owned = {
         "vae": "",
         "sampler_name": profile.sampler,
@@ -400,8 +429,13 @@ def project_flux1_wire_payload(
     if float(payload.get("cfg_scale", profile.cfg_scale)) != profile.cfg_scale or str(
         payload.get("negative_prompt") or ""
     ):
-        raise Flux1ProfileError("FLUX.1 [dev] CFG or negative text changed after admission")
-    payload["distilled_cfg_scale"] = profile.distilled_cfg_scale
+        raise Flux1ProfileError(
+            f"{profile.display_name} CFG or negative text changed after admission"
+        )
+    if profile.transformer_variant == VARIANT_FLUX1_SCHNELL:
+        payload.pop("distilled_cfg_scale", None)
+    else:
+        payload["distilled_cfg_scale"] = profile.distilled_cfg_scale
     return payload
 
 

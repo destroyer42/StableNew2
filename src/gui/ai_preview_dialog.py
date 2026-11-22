@@ -15,6 +15,7 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
 
+from src.ai_assist.remote_preview import MODEL_LABELS, REMOTE_PREVIEW_LABEL, RemoteApproval
 from src.gui.theme_v2 import apply_toplevel_theme
 from src.gui_v2.ai_suggestion_view import preview_status_text
 
@@ -63,10 +64,51 @@ class AiPreviewDialog(tk.Toplevel):
         )
         self.revoke_button.pack(side="left", padx=4)
         ttk.Button(actions, text="Close", command=self.destroy).pack(side="right", padx=4)
+        self._remote_choices: dict[str, RemoteApproval] = {}
+        remote = ttk.LabelFrame(self, text=REMOTE_PREVIEW_LABEL)
+        remote.pack(fill="x", padx=12, pady=(0, 10))
+        ttk.Label(remote, text="Remote Ollama model").pack(anchor="w", padx=6, pady=(4, 0))
+        self.remote_model = tk.StringVar()
+        self.remote_box = ttk.Combobox(remote, textvariable=self.remote_model, state="disabled")
+        self.remote_box.pack(fill="x", padx=6)
+        self.remote_box.bind("<<ComboboxSelected>>", self._select_remote)
+        self.remote_status = tk.StringVar()
+        ttk.Label(remote, textvariable=self.remote_status, wraplength=520, justify="left").pack(
+            fill="x", padx=6, pady=4
+        )
         self.refresh()
+
+    def refresh_remote(self, *, request_pending: bool = False) -> None:
+        get_status = getattr(self._owner, "remote_preview", None)
+        if get_status is None:
+            return
+        settings, status = get_status()
+        choices = {MODEL_LABELS[item.model]: item for item in settings.approvals}
+        if choices != self._remote_choices:
+            self._remote_choices = choices
+            self.remote_box.configure(values=tuple(choices))
+        self.remote_model.set(MODEL_LABELS.get(settings.active_model or "", ""))
+        selectable = (
+            choices
+            and settings.preferred
+            and not request_pending
+            and not self._owner.busy
+            and not self._owner.closed
+        )
+        self.remote_box.state(["!disabled", "readonly"] if selectable else ["disabled"])
+        self.remote_status.set(status)
+
+    def _select_remote(self, _event: object) -> None:
+        approval = self._remote_choices.get(self.remote_model.get())
+        if approval is not None:
+            _ok, message = self._owner.select_remote_model(approval)
+            self.result_var.set(message)
+        self.refresh_remote()
+        self._on_change()
 
     def refresh(self) -> None:
         self._refresh_models()
+        self.refresh_remote()
         state = self._owner.preview_state()
         self.state_var.set(preview_status_text(state))
         self.enable_button.state(["!disabled"] if state.can_enable else ["disabled"])

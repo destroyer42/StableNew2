@@ -13,9 +13,15 @@ from pathlib import Path
 
 import pytest
 
+from src.image_backends import forge_flux1_profile
 from src.image_backends.forge_flux1_profile import FLUX1_DEV_PROFILE_V1 as P
-from src.image_backends.forge_flux1_profile import FLUX1_UNPROFILED_HINT, flux_variant_refusal
+from src.image_backends.forge_flux1_profile import (
+    FLUX1_SCHNELL_PROFILE_V1,
+    FLUX1_UNPROFILED_HINT,
+    flux_variant_refusal,
+)
 from src.image_backends.forge_klein_readiness import HostMemorySnapshot
+from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.queue.job_model import JobStatus
 from tests.assets.flux_fixtures_130 import (
     FTYPE_Q6_K,
@@ -169,6 +175,32 @@ def test_the_family_profile_dispatches_its_frozen_settings_with_the_pinned_modul
     assert evidence["transformer"]["name"] == FLUX1
     assert evidence["asset_identity"]["transformer"]["verified"] == "structure"
     assert evidence["qualification_status"] == "not physically qualified"
+
+
+def test_schnell_compiles_and_dispatches_without_distilled_guidance(tmp_path, monkeypatch):
+    name = "renamed-schnell.gguf"
+    checkpoint = write_gguf(tmp_path / name, flux1_table(guidance=False))
+    monkeypatch.setattr(
+        forge_flux1_profile,
+        "_variant_lookup",
+        lambda selected: ("flux1_schnell", False) if selected == name else None,
+    )
+    record = JobBuilderV2().build_jobs(
+        base_config={
+            "model": name,
+            "prompt": "A lighthouse at dusk.",
+            "seed": 5,
+            "width": 1024,
+            "height": 1024,
+        }
+    )[0]
+    assert record.backend_options["image"]["model_profile"] == FLUX1_SCHNELL_PROFILE_V1.reference()
+    transport = _transport({name: checkpoint})
+    entry = run_njr_via_queue(record, _client(transport), artifact_root=tmp_path / "out")
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    payload = transport.generation_calls[0][2]
+    assert payload["steps"] == 4 and payload["cfg_scale"] == 1.0
+    assert "distilled_cfg_scale" not in payload
 
 
 @pytest.mark.parametrize(

@@ -1,7 +1,7 @@
 """PR-IMG-COMFY-100: the frozen Comfy still-image graph catalog (pure; no I/O and no Comfy import).
 
 Each graph is one immutable version of an API-format Comfy prompt. Only typed slots are substituted (prompt, seed,
-width, height and the output filename prefix); every node, link and other value is fixed. Any change is a new
+width, height, the output filename prefix and, for structural profiles, verified loader names); every node, link and other value is fixed. Any change is a new
 version. ``template_sha256`` hashes the canonical graph with neutral slot values, so a test can pin each version and
 catch an accidental edit.
 
@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.image_backends.comfy_qwen_image_profile import (
+    QWEN_IMAGE_20B_FP8_PROFILE_V1,
     QWEN_IMAGE_21_PROFILE_V1,
     QWEN_IMAGE_21_TURBO_PROFILE_V1,
     QwenImageProfile,
@@ -44,6 +45,8 @@ class GraphSlots:
     width: int
     height: int
     filename_prefix: str
+    diffusion_model: str = ""
+    vae: str = ""
 
 
 def _common_nodes(profile: QwenImageProfile, slots: GraphSlots) -> dict[str, dict[str, Any]]:
@@ -134,6 +137,55 @@ def _qwen_image_21_turbo_t2i(slots: GraphSlots) -> dict[str, dict[str, Any]]:
     }
     nodes["8"] = {"class_type": "VAEDecode", "inputs": {"samples": ["13", 0], "vae": ["4", 0]}}
     return nodes
+
+
+def _qwen_image_t2i_fp8(slots: GraphSlots) -> dict[str, dict[str, Any]]:
+    p = QWEN_IMAGE_20B_FP8_PROFILE_V1
+    return {
+        "1": {
+            "class_type": "UNETLoader",
+            "inputs": {
+                "unet_name": slots.diffusion_model or p.model_name,
+                "weight_dtype": "fp8_e4m3fn",
+            },
+        },
+        "2": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["1", 0], "shift": 3.1}},
+        "3": {
+            "class_type": "CLIPLoader",
+            "inputs": {
+                "clip_name": p.text_encoder.filename,
+                "type": "qwen_image",
+                "device": "default",
+            },
+        },
+        "4": {"class_type": "VAELoader", "inputs": {"vae_name": slots.vae or p.vae.filename}},
+        "5": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["3", 0], "text": slots.prompt}},
+        "10": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["3", 0], "text": ""}},
+        "6": {
+            "class_type": "EmptySD3LatentImage",
+            "inputs": {"width": slots.width, "height": slots.height, "batch_size": 1},
+        },
+        "7": {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["2", 0],
+                "positive": ["5", 0],
+                "negative": ["10", 0],
+                "latent_image": ["6", 0],
+                "seed": slots.seed,
+                "steps": p.steps,
+                "cfg": p.cfg_scale,
+                "sampler_name": p.sampler,
+                "scheduler": p.scheduler,
+                "denoise": 1.0,
+            },
+        },
+        "8": {"class_type": "VAEDecode", "inputs": {"samples": ["7", 0], "vae": ["4", 0]}},
+        SAVE_NODE_ID: {
+            "class_type": "SaveImage",
+            "inputs": {"images": ["8", 0], "filename_prefix": slots.filename_prefix},
+        },
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,7 +295,15 @@ class ComfyImageGraph:
     release_owned_runtime_after_job: bool = True
 
     def build(
-        self, *, prompt: str, seed: int, width: int, height: int, filename_prefix: str
+        self,
+        *,
+        prompt: str,
+        seed: int,
+        width: int,
+        height: int,
+        filename_prefix: str,
+        diffusion_model: str = "",
+        vae: str = "",
     ) -> dict[str, Any]:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ComfyImageGraphError(f"{self.profile.display_name} needs a non-empty prompt")
@@ -261,7 +321,7 @@ class ComfyImageGraph:
             or ":" in prefix
         ):
             raise ComfyImageGraphError("the output filename prefix must be a relative name")
-        return self.builder(GraphSlots(prompt, seed, width, height, prefix))
+        return self.builder(GraphSlots(prompt, seed, width, height, prefix, diffusion_model, vae))
 
     @property
     def required_node_classes(self) -> tuple[str, ...]:
@@ -347,7 +407,13 @@ QWEN_IMAGE_21_T2I = ComfyImageGraph(
 QWEN_IMAGE_21_TURBO_T2I = ComfyImageGraph(
     "qwen_image_21_turbo_t2i", "1.0.0", QWEN_IMAGE_21_TURBO_PROFILE_V1, _qwen_image_21_turbo_t2i
 )
-_GRAPHS = {(g.graph_id, g.version): g for g in (QWEN_IMAGE_21_T2I, QWEN_IMAGE_21_TURBO_T2I)}
+QWEN_IMAGE_20B_FP8_T2I = ComfyImageGraph(
+    "qwen_image_20b_fp8_t2i", "1.0.0", QWEN_IMAGE_20B_FP8_PROFILE_V1, _qwen_image_t2i_fp8
+)
+_GRAPHS = {
+    (g.graph_id, g.version): g
+    for g in (QWEN_IMAGE_21_T2I, QWEN_IMAGE_21_TURBO_T2I, QWEN_IMAGE_20B_FP8_T2I)
+}
 
 
 def graph_for_profile(profile: QwenImageProfile) -> ComfyImageGraph:

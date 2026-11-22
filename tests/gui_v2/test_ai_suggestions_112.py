@@ -506,6 +506,58 @@ def test_preview_dialog_enables_and_revokes_only_through_the_owner(journey):
     dialog.destroy()
 
 
+def test_remote_picker_disables_during_request_and_review_shows_bound_model(journey, monkeypatch):
+    from dataclasses import replace
+
+    from src.ai_assist.remote import RemoteState
+    from src.ai_assist.remote_preview import (
+        DEFAULT_MODEL,
+        ENDPOINT,
+        MODEL_LABELS,
+        RUNTIME_VERSION,
+        RemoteApproval,
+        select_remote_model,
+        write_remote_approval,
+    )
+
+    j = journey
+    qwen = RemoteApproval(ENDPOINT, DEFAULT_MODEL, "a" * 64, RUNTIME_VERSION)
+    lfm = RemoteApproval(ENDPOINT, "lfm3:1.7b", "b" * 64, RUNTIME_VERSION)
+    for approval in (qwen, lfm):
+        write_remote_approval(j.owner._root, approval)
+    monkeypatch.setattr(j.owner._remote, "state", lambda: RemoteState.READY)
+    monkeypatch.setattr(j.owner, "_start_remote_monitor", lambda: None)
+    j.service.select_remote_model = lambda item: select_remote_model(j.owner._root, item)
+
+    preview = j.flow.open_preview()
+    assert preview.remote_model.get() == MODEL_LABELS[qwen.model]
+    preview.remote_model.set(MODEL_LABELS[lfm.model])
+    preview._select_remote(None)
+    assert j.owner.remote_preview()[0].approval == lfm
+
+    before = copy.deepcopy(j.frame.workspace_state.current_pack)
+    dialog = start(j)
+    assert preview.remote_box.instate(["disabled"])
+    finish(
+        j,
+        replace(
+            successful(j),
+            details={
+                "provider": "remote",
+                "trust_tier": "preview",
+                "model_name": lfm.model,
+                "model_sha256": lfm.digest,
+                "runtime_build_id": f"ollama-{lfm.version}",
+            },
+        ),
+    )
+    assert lfm.model in dialog.trust_label and "Ollama" in dialog.trust_label
+    assert j.frame.workspace_state.current_pack == before
+    assert dialog.accept_button.instate(["!disabled"])
+    dialog.accept_button.invoke()
+    assert j.frame.workspace_state.dirty
+
+
 def test_preview_dialog_model_dropdown_selects_only_through_the_owner(journey):
     """AI-202b: a dropdown of verified models by display name; choosing one calls the owner, never enable/revoke."""
 
