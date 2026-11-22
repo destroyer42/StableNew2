@@ -72,12 +72,12 @@
       "row": 0
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, calm and confident, natural lighting.",
-     "arm_sha256": "4b94ca408b901ff47c8dac1891a69e4829857e27c6643d62b598f4f72c87faab",
+     "arm_sha256": "99d9484bf4ddff064db0a3d73727a3fa24a8aae3043b67ad6b3d56e661bc49ba",
      "candidate_index": 0,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -182,7 +182,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -490,12 +491,12 @@
       "row": 0
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, calm and confident, natural lighting.",
-     "arm_sha256": "4b94ca408b901ff47c8dac1891a69e4829857e27c6643d62b598f4f72c87faab",
+     "arm_sha256": "99d9484bf4ddff064db0a3d73727a3fa24a8aae3043b67ad6b3d56e661bc49ba",
      "candidate_index": 0,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -600,7 +601,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -854,12 +856,12 @@
       "row": 0
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, calm and confident, natural lighting.",
-     "arm_sha256": "7d7bcf8af9261edba0b69b99134225105d4570cde8bbaf4e406989e7935e44a8",
+     "arm_sha256": "329a7f555bf9db121781ab038d7a74d87f3d93ab44afcac6d52f3c3c51891c00",
      "candidate_index": 1,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -964,7 +966,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -1272,12 +1275,12 @@
       "row": 0
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, calm and confident, natural lighting.",
-     "arm_sha256": "7d7bcf8af9261edba0b69b99134225105d4570cde8bbaf4e406989e7935e44a8",
+     "arm_sha256": "329a7f555bf9db121781ab038d7a74d87f3d93ab44afcac6d52f3c3c51891c00",
      "candidate_index": 1,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -1382,7 +1385,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -1636,12 +1640,12 @@
       "row": 1
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
-     "arm_sha256": "f2fb9469ac9d88d9613effa1afaba73ba2337d65a51619370df9111b65013e98",
+     "arm_sha256": "da1ade177e30eb55c01d0237acf1a7b8cb99f3271a0e3bed8508c6394204b505",
      "candidate_index": 2,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -1746,7 +1750,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -2054,12 +2059,12 @@
       "row": 1
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
-     "arm_sha256": "f2fb9469ac9d88d9613effa1afaba73ba2337d65a51619370df9111b65013e98",
+     "arm_sha256": "da1ade177e30eb55c01d0237acf1a7b8cb99f3271a0e3bed8508c6394204b505",
      "candidate_index": 2,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -2164,7 +2169,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -2418,12 +2424,12 @@
       "row": 1
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
-     "arm_sha256": "6c23e20cf66a0b90f0ccc212b620a3c4a08bfa54a5a0dee9c8e7e31e30188bc4",
+     "arm_sha256": "91538cc581c6afd27a1a345cec9dd5d1bb831b0e08b1535623cd673892be373a",
      "candidate_index": 3,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -2528,7 +2534,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -2836,12 +2843,12 @@
       "row": 1
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
-     "arm_sha256": "6c23e20cf66a0b90f0ccc212b620a3c4a08bfa54a5a0dee9c8e7e31e30188bc4",
+     "arm_sha256": "91538cc581c6afd27a1a345cec9dd5d1bb831b0e08b1535623cd673892be373a",
      "candidate_index": 3,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -2946,7 +2953,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -3200,12 +3208,12 @@
       "row": 2
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, exhausted but determined, natural lighting.",
-     "arm_sha256": "63777fe3c38a2ea6174ccce2268c7fa10b4da26b3d05faf967a8cbd60e2daa51",
+     "arm_sha256": "dc89e475506078abd5ed0999ab4d07fee3cfcb2ed167b033df859f76283e0596",
      "candidate_index": 4,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -3310,7 +3318,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -3618,12 +3627,12 @@
       "row": 2
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, exhausted but determined, natural lighting.",
-     "arm_sha256": "63777fe3c38a2ea6174ccce2268c7fa10b4da26b3d05faf967a8cbd60e2daa51",
+     "arm_sha256": "dc89e475506078abd5ed0999ab4d07fee3cfcb2ed167b033df859f76283e0596",
      "candidate_index": 4,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -3728,7 +3737,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -3982,12 +3992,12 @@
       "row": 2
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, exhausted but determined, natural lighting.",
-     "arm_sha256": "4a81b081020a648395cb7091c27ef2a99944346e777429bdd8b5424bb38d8da5",
+     "arm_sha256": "a518dd1b43de77b80c93813e186a192c89d70cba22e8c2488380c1edb036ed22",
      "candidate_index": 5,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -4092,7 +4102,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -4400,12 +4411,12 @@
       "row": 2
      },
      "contract": "learning_prompt_model_matrix/1",
-     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+     "digest": "8bc7badfe6c06f9b6d10930c1438b0d197039d9bd6192117f06d2905151ccc0b"
     },
     "prompt_model_matrix_arm": {
      "adapted_negative_prompt": "global negative, bad hands",
      "adapted_positive_prompt": "A knight, exhausted but determined, natural lighting.",
-     "arm_sha256": "4a81b081020a648395cb7091c27ef2a99944346e777429bdd8b5424bb38d8da5",
+     "arm_sha256": "a518dd1b43de77b80c93813e186a192c89d70cba22e8c2488380c1edb036ed22",
      "candidate_index": 5,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -4510,7 +4521,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {

@@ -57,8 +57,12 @@ class ComfyInstallationStatus:
         return "installed" if self.ready else "; ".join(self.problems)
 
 
-def comfy_model_folders(*, use_registered_launcher: bool = True) -> dict[str, list[Path]]:
-    """The model folders of StableNew's managed Comfy launch configuration (reads settings, never runs Comfy)."""
+def comfy_model_folders(
+    extra_kinds: Sequence[str] = (), *, use_registered_launcher: bool = True
+) -> dict[str, list[Path]]:
+    """The model folders of StableNew's managed Comfy launch configuration (reads settings, never runs Comfy).
+
+    ``extra_kinds`` (``checkpoints``, ``loras``) adds the SDXL leg's folders; the default is the Qwen-Image set."""
 
     from src.video.comfy_process_manager import (
         build_default_comfy_process_config,
@@ -71,9 +75,13 @@ def comfy_model_folders(*, use_registered_launcher: bool = True) -> dict[str, li
     config = config or build_default_comfy_process_config()
     if config is None:
         raise ValueError("no StableNew-managed ComfyUI launch configuration is set")
-    return model_folders(
-        tuple(getattr(config, "command", ()) or ()), getattr(config, "working_dir", None)
+    command, working_dir = (
+        tuple(getattr(config, "command", ()) or ()),
+        getattr(config, "working_dir", None),
     )
+    if extra_kinds:
+        return model_folders(command, working_dir, extra_kinds=tuple(extra_kinds))
+    return model_folders(command, working_dir)
 
 
 def _sha256(path: Path) -> str:
@@ -303,6 +311,57 @@ def probe_object_info(
     return tuple(problems)
 
 
+def listed_option(
+    object_info: Mapping[str, Any], node_class: str, input_name: str, value: str
+) -> str | None:
+    """The spelling ``/object_info`` lists for ``value`` (path separators compared as ``/``), or ``None`` if unlisted."""
+
+    wanted = str(value).replace("\\", "/")
+    for item in _input_options(object_info, node_class, input_name):
+        if str(item).replace("\\", "/") == wanted:
+            return str(item)
+    return None
+
+
+def _combo_has(
+    object_info: Mapping[str, Any], node_class: str, input_name: str, value: str
+) -> bool:
+    return listed_option(object_info, node_class, input_name, value) is not None
+
+
+def probe_sdxl_graph(
+    prompt_graph: Mapping[str, Any], required_classes: Sequence[str], object_info: Any
+) -> tuple[str, ...]:
+    """Problems that stop the built SDXL graph from running on this Comfy; empty when it can be queued.
+
+    Checks every node class the frozen graph can contain, then that each loader file and the sampler and scheduler names
+    of THIS job are values the running ComfyUI lists (``/object_info``). Nothing is repaired or substituted.
+    """
+
+    if not isinstance(object_info, Mapping) or not object_info:
+        return ("ComfyUI returned no node information",)
+    problems = [
+        f"ComfyUI has no '{node_class}' node (the pinned v0.38.0 runtime provides it)"
+        for node_class in required_classes
+        if node_class not in object_info
+    ]
+    checks = {
+        "CheckpointLoaderSimple": ("ckpt_name",),
+        "LoraLoader": ("lora_name",),
+        "VAELoader": ("vae_name",),
+        "KSampler": ("sampler_name", "scheduler"),
+    }
+    for node in prompt_graph.values():
+        node_class = str(node.get("class_type"))
+        for input_name in checks.get(node_class, ()):
+            value = node.get("inputs", {}).get(input_name)
+            if node_class in object_info and not _combo_has(
+                object_info, node_class, input_name, str(value)
+            ):
+                problems.append(f"ComfyUI does not list '{value}' for {node_class}.{input_name}")
+    return tuple(dict.fromkeys(problems))
+
+
 def _int(value: Any) -> int | None:
     try:
         return int(value)
@@ -310,7 +369,7 @@ def _int(value: Any) -> int | None:
         return None
 
 
-def evaluate_floors(profile: QwenImageProfile, system_stats: Any) -> dict[str, Any]:
+def evaluate_floors(profile: Any, system_stats: Any) -> dict[str, Any]:
     """Check Comfy's own free VRAM and host RAM against the profile floors; returns the readings or raises."""
 
     stats = system_stats if isinstance(system_stats, Mapping) else {}
@@ -356,5 +415,7 @@ __all__ = [
     "clear_hash_cache",
     "comfy_model_folders",
     "evaluate_floors",
+    "listed_option",
     "probe_object_info",
+    "probe_sdxl_graph",
 ]

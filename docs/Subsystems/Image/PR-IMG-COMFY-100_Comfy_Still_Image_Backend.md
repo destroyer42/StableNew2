@@ -305,6 +305,11 @@ Asked in this session with AskUserQuestion; answers recorded 2026-11-19.
 Exclusions: physical runs, weight download, reference edit, 2048-class geometry, Turbo LoRAs, LoRA, prompt
 enhancer, warm-runtime reuse, matched Forge comparison, default switch, shared Comfy-session extraction.
 
+> Superseded in part by owner request (2026-11-22, PR-IMG-COMFY-381): the "default switch" and "matched Forge comparison"
+> exclusions no longer apply. The operator can now choose ComfyUI as the default still-image backend (setting
+> `image_backend_default`), SDXL txt2img runs there, and a Forge-vs-ComfyUI comparison package exists. Forge stays the shipped
+> default; Qwen-Image behavior is unchanged.
+
 ## 14. Stop conditions and authorization boundaries
 
 Stop and ask the owner if: a second queue, runner, history store or GUI shortcut becomes necessary; GPU

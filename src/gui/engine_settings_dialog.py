@@ -22,6 +22,13 @@ from src.gui_v2.prompt_optimizer_view import (
     LORA_POSITION_LABEL,
     UNKNOWN_POSITION_HELP,
 )
+from src.image_backends.image_backend_types import (
+    IMAGE_BACKEND_DEFAULT_CHOICES,
+    IMAGE_BACKEND_DEFAULT_COMFYUI,
+    IMAGE_BACKEND_DEFAULT_SETTING,
+    IMAGE_BACKEND_DEFAULT_WEBUI,
+    normalize_image_backend_default,
+)
 from src.state.content_visibility import normalize_content_visibility_mode
 from src.utils.config import ConfigManager
 from src.video.comfy_process_manager import read_comfy_launch_facts
@@ -48,7 +55,19 @@ from src.video.managed_comfy_runtime import (
 RUNTIME_DEFAULT = "default"
 RUNTIME_A1111 = A1111_WEBUI_IDENTITY
 _RUNTIME_IDENTITY = {RUNTIME_DEFAULT: FORGE_WEBUI_IDENTITY, RUNTIME_A1111: A1111_WEBUI_IDENTITY}
-_RUNTIME_LABEL = {RUNTIME_DEFAULT: "Default \u2014 Managed Forge", RUNTIME_A1111: "A1111 Compatibility"}
+_RUNTIME_LABEL = {
+    RUNTIME_DEFAULT: "Default \u2014 Managed Forge",
+    RUNTIME_A1111: "A1111 Compatibility",
+}
+#: The still-image backend NEW work defaults to (PR-IMG-COMFY-381). Independent of the WebUI runtime above.
+_IMAGE_BACKEND_LABEL = {
+    IMAGE_BACKEND_DEFAULT_WEBUI: "Forge (WebUI)",
+    IMAGE_BACKEND_DEFAULT_COMFYUI: "ComfyUI",
+}
+IMAGE_BACKEND_HELP = (
+    "ComfyUI supports txt2img for SDXL and Qwen-Image; hires fix, ADetailer, img2img and upscale need Forge. "
+    "Applies to new jobs at once; no restart is needed."
+)
 
 
 class EngineSettingsDialog(ttk.Frame):
@@ -100,6 +119,9 @@ class EngineSettingsDialog(ttk.Frame):
         self._initial_identity_raw = ""
         self._invalid_identity: str | None = None
         self._runtime_var = tk.StringVar()
+        self._image_backend_var = tk.StringVar()
+        self._initial_image_backend = ""
+        self._invalid_image_backend: str | None = None
         self._effective_endpoint_var = tk.StringVar()
         self._runtime_notice_var = tk.StringVar()
         self._on_save = on_save
@@ -158,6 +180,7 @@ class EngineSettingsDialog(ttk.Frame):
         self._build_actions()
 
     def _build_sections(self) -> None:
+        image_backend_frame = ttk.LabelFrame(self, text="Image backend", padding=8)
         webui_frame = ttk.LabelFrame(self, text="WebUI", padding=8)
         paths_frame = ttk.LabelFrame(self, text="Paths", padding=8)
         visibility_frame = ttk.LabelFrame(self, text="Content Visibility", padding=8)
@@ -165,12 +188,14 @@ class EngineSettingsDialog(ttk.Frame):
         optimizer_frame = ttk.LabelFrame(self, text="Prompt Optimizer", padding=8)
         comfy_frame = ttk.LabelFrame(self, text="Video runtime (ComfyUI)", padding=8)
 
-        webui_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=4)
-        paths_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=4)
-        visibility_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=4)
-        health_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=4)
-        optimizer_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=4)
-        comfy_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=4)
+        image_backend_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=4)
+        webui_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=4)
+        paths_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=4)
+        visibility_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=4)
+        health_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=4)
+        optimizer_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=4)
+        comfy_frame.grid(row=7, column=0, sticky="ew", padx=8, pady=4)
+        self._build_image_backend_section(image_backend_frame)
         comfy_frame.columnconfigure(1, weight=1)
         self._build_comfy_section(comfy_frame)
 
@@ -196,9 +221,9 @@ class EngineSettingsDialog(ttk.Frame):
             webui_frame, textvariable=self._runtime_notice_var, style="Muted.TLabel", wraplength=420
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
         self._add_label_entry(webui_frame, "API URL:", self._webui_base_url_var, row=2)
-        ttk.Label(webui_frame, textvariable=self._effective_endpoint_var, style="Muted.TLabel").grid(
-            row=3, column=1, sticky="w", padx=(4, 0)
-        )
+        ttk.Label(
+            webui_frame, textvariable=self._effective_endpoint_var, style="Muted.TLabel"
+        ).grid(row=3, column=1, sticky="w", padx=(4, 0))
         self._add_label_entry(webui_frame, "WebUI workdir:", self._webui_workdir_var, row=4)
         ttk.Checkbutton(
             webui_frame,
@@ -586,10 +611,49 @@ class EngineSettingsDialog(ttk.Frame):
             else:
                 var.set(int(value or 0))
         self._load_runtime_choice(settings)
+        self._load_image_backend_choice(settings)
         self._load_comfy_settings(settings)
         self._runtime_var.trace_add("write", self._on_runtime_changed)
         self._webui_base_url_var.trace_add("write", lambda *_a: self._refresh_runtime_labels())
         self._refresh_runtime_labels()
+
+    # ---- image backend default (application-level, applies to new jobs without a restart) ----------------
+    def _build_image_backend_section(self, frame: ttk.LabelFrame) -> None:
+        frame.columnconfigure(1, weight=1)
+        ttk.Label(frame, text="New still images use:").grid(row=0, column=0, sticky="w", pady=2)
+        choices = ttk.Frame(frame)
+        choices.grid(row=0, column=1, sticky="w")
+        for index, choice in enumerate(IMAGE_BACKEND_DEFAULT_CHOICES):
+            ttk.Radiobutton(
+                choices,
+                text=_IMAGE_BACKEND_LABEL[choice],
+                value=choice,
+                variable=self._image_backend_var,
+                style="Page.TRadiobutton",
+            ).grid(row=0, column=index, sticky="w", padx=(0, 12))
+        ttk.Label(
+            frame, text=IMAGE_BACKEND_HELP, style="Muted.TLabel", wraplength=420, justify="left"
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+    def _load_image_backend_choice(self, settings: dict[str, Any]) -> None:
+        raw = settings.get(IMAGE_BACKEND_DEFAULT_SETTING)
+        try:
+            choice = normalize_image_backend_default(raw)
+        except ValueError:
+            # Fail closed: an unknown persisted value selects neither backend until the operator chooses.
+            self._invalid_image_backend = str(raw)
+            self._initial_image_backend = ""
+            self._image_backend_var.set("")
+            return
+        self._invalid_image_backend = None
+        self._initial_image_backend = choice
+        self._image_backend_var.set(choice)
+
+    def selected_image_backend(self) -> str:
+        return str(self._image_backend_var.get() or "")
+
+    def set_image_backend(self, choice: str) -> None:
+        self._image_backend_var.set(choice)
 
     # ---- runtime selection (application-level, restart-required) -----------------------------------------
     def _load_runtime_choice(self, settings: dict[str, Any]) -> None:
@@ -678,11 +742,20 @@ class EngineSettingsDialog(ttk.Frame):
             },
         }
         self._collect_comfy_values(values)
+        image_choice = self.selected_image_backend()
+        if (
+            image_choice != self._initial_image_backend
+            and image_choice in IMAGE_BACKEND_DEFAULT_CHOICES
+        ):
+            # Only a changed selection is written, as for the runtime; an unchanged one never rewrites the file.
+            values[IMAGE_BACKEND_DEFAULT_SETTING] = image_choice
         choice = self.selected_runtime()
         identity = self._selected_identity()
         if choice != self._initial_runtime:
             # Only a changed selection is written; an unchanged one never rewrites (or pins) what is persisted.
-            values["webui_runtime_identity"] = A1111_WEBUI_IDENTITY if choice == RUNTIME_A1111 else ""
+            values["webui_runtime_identity"] = (
+                A1111_WEBUI_IDENTITY if choice == RUNTIME_A1111 else ""
+            )
         if identity is not None:
             url = str(values.get("webui_base_url") or "").strip()
             if url.rstrip("/") == default_webui_base_url(identity).rstrip("/"):
@@ -694,6 +767,12 @@ class EngineSettingsDialog(ttk.Frame):
     def _validate(self, values: dict[str, Any]) -> bool:
         if self._selected_identity() is None:
             messagebox.showwarning("Settings", "Choose a WebUI runtime before saving.")
+            return False
+        if self.selected_image_backend() not in IMAGE_BACKEND_DEFAULT_CHOICES:
+            messagebox.showwarning(
+                "Settings",
+                f"Choose an image backend before saving (the saved value '{self._invalid_image_backend}' is not valid).",
+            )
             return False
         if self.comfy_settings_changed() and not self._comfy_base_url_var.get().strip():
             messagebox.showwarning("Settings", "ComfyUI URL must be provided.")
@@ -748,6 +827,7 @@ class EngineSettingsDialog(ttk.Frame):
     def restore_defaults(self) -> None:
         defaults = self.config_manager.get_default_engine_settings()
         self._runtime_var.set(RUNTIME_DEFAULT)
+        self._image_backend_var.set(IMAGE_BACKEND_DEFAULT_WEBUI)
         for key, var in self._field_vars.items():
             value = defaults.get(key)
             if isinstance(var, tk.BooleanVar):

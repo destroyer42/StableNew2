@@ -16,6 +16,7 @@ from math import gcd
 from typing import Any
 
 from src.image_backends.forge_klein_lora import LoraResolver
+from src.image_backends.image_backend_types import COMFY_IMAGE_BACKEND_ID
 from src.image_backends.model_policy import (
     VALUE_CONTROLS,
     ControlMode,
@@ -87,7 +88,8 @@ def project_model_controls(
     model_name: str = "",
 ) -> ModelControlProjection:
     controls = {
-        name: ControlState(policy.control(name).mode, policy.control(name).value) for name in VALUE_CONTROLS
+        name: ControlState(policy.control(name).mode, policy.control(name).value)
+        for name in VALUE_CONTROLS
     }
     geometry = policy.control("geometry")
     presets = tuple((_preset_label(w, h), w, h) for w, h in geometry.allowed)
@@ -101,6 +103,20 @@ def project_model_controls(
             f"is '{backend_id}'. StableNew will not switch backends for you: select the {label} "
             "runtime in settings before submitting."
         )
+    note = policy.note
+    if str(backend_id or "") == COMFY_IMAGE_BACKEND_ID and required != COMFY_IMAGE_BACKEND_ID:
+        # PR-IMG-COMFY-381: the operator made ComfyUI the default for new still images. Show the effective backend
+        # (read-only) and say plainly when this model cannot run there; the backend refuses it too, never a fallback.
+        note = f"Image backend: ComfyUI (Settings). {note}".strip()
+        if (
+            not blocking
+            and policy.allowed_backends
+            and COMFY_IMAGE_BACKEND_ID not in policy.allowed_backends
+        ):
+            blocking = (
+                f"{policy.display_name} cannot run on the ComfyUI image backend (it runs SDXL checkpoints and "
+                "Qwen-Image). Switch the Image backend to Forge in Settings; StableNew will not switch for you."
+            )
     if policy.refusal:
         # A model StableNew refuses outright (for example FLUX.2 Klein 9B, PR-IMG-FLUX-130); the backend refuses it too.
         blocking = policy.refusal
@@ -110,7 +126,7 @@ def project_model_controls(
         controls=controls,
         model_name=str(model_name or ""),
         presets=presets,
-        note=policy.note,
+        note=note,
         blocking=blocking,
         lora_annotations=annotations,
         lora_blocking=lora_blocking,
