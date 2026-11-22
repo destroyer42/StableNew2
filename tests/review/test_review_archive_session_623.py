@@ -158,12 +158,13 @@ def test_restore_returns_the_last_discarded_file_after_a_new_file_took_the_same_
 
     assert restarted.restore(key)
     assert image.read_bytes() == second_bytes  # B comes back, byte for byte
-    # A is still kept: it is reported as present and is not lost.
-    assert [path.read_bytes() for path in arc.archived_variants(image, output_root=lab.output)] == [
-        first_bytes
-    ]
-    after = restarted.facts_of(key)
-    assert after.location == LOC_IN_PLACE and after.other_archived == 1
+    # PR-REVIEW-FIXES-625: A is not left restorable by hand only; it comes back beside B under a free name.
+    assert arc.archived_variants(image, output_root=lab.output) == []
+    beside = [path for path in image.parent.iterdir() if ".restored-" in path.name]
+    assert [path.read_bytes() for path in beside] == [first_bytes]
+    assert restarted.facts_of(key).location == LOC_IN_PLACE
+    assert "earlier file" in restarted.message and beside[0].name in restarted.message
+    assert item_key(beside[0]) in [item.key for item in restarted.items]  # listed, not lost
 
 
 def test_a_free_path_with_a_newer_discard_is_not_reported_missing(lab):
@@ -378,3 +379,81 @@ def test_status_text_never_contains_prompt_text(lab):
     session.decide(lab.key(0), "discard")
     text = " ".join([session.message, session.archive_line(lab.key(0))]).lower()
     assert "prompt" not in text
+
+
+# --- PR-REVIEW-FIXES-625 -----------------------------------------------------------------------------------------
+
+
+def test_discarding_many_images_uses_one_worker_job_and_moves_each(tmp_path):
+    class Counting(EditWorkRunner):
+        submitted: list[str] = []
+
+        def submit(self, key, work, **kwargs):
+            self.submitted.append(key)
+            return super().submit(key, work, **kwargs)
+
+    runner = Counting(BackgroundTaskCoordinator(run_inline=True), is_alive=lambda: True)
+    lab = Archiving(tmp_path, runner=runner, count=5)
+    originals = [path.read_bytes() for path in lab.images]
+    lab.session.set_items(lab.images)
+
+    began = lab.session.decide_many([lab.key(i) for i in range(5)], "discard")
+
+    assert began == 5
+    assert [key for key in runner.submitted if key.startswith("review:decide:")] == [
+        "review:decide:1"
+    ]
+    assert all(not path.exists() for path in lab.images)
+    assert [lab.where(i).read_bytes() for i in range(5)] == originals
+    assert all(lab.session.state_of(lab.key(i)) is ItemState.ARCHIVED for i in range(5))
+
+
+def test_one_failing_image_does_not_stop_the_rest_of_a_batch(tmp_path):
+    lab = Archiving(tmp_path, count=3, busy=set())
+    lab.busy.add(
+        arc._norm(lab.images[1])
+    )  # the queue is using the middle image: its move is refused
+    lab.session.set_items(lab.images)
+
+    lab.session.decide_many([lab.key(i) for i in range(3)], "discard")
+
+    assert not lab.images[0].exists() and not lab.images[2].exists()
+    assert lab.images[1].exists()
+    assert lab.session.facts_of(lab.key(1)).location == LOC_IN_PLACE
+
+
+def test_two_discards_from_one_path_are_both_restored_without_overwriting(lab):
+    image, key = lab.images[0], lab.key(0)
+    first_bytes = image.read_bytes()
+    lab.session.set_items(lab.images)
+    assert lab.session.decide(key, "discard")
+    second_bytes = image_file(image, 90).read_bytes()
+    fresh = lab.new_session(_inline())
+    fresh.set_items(lab.images)
+    assert fresh.decide(key, "discard")
+    assert not image.exists()
+
+    assert fresh.restore(key)
+
+    assert image.read_bytes() == second_bytes
+    restored = [p for p in image.parent.iterdir() if ".restored-" in p.name]
+    assert [p.read_bytes() for p in restored] == [first_bytes]
+    assert arc.archived_variants(image, output_root=lab.output) == []
+
+
+def test_earlier_copy_is_never_moved_over_an_existing_file(lab, tmp_path):
+    image = lab.images[0]
+    lab.session.set_items(lab.images)
+    assert lab.session.decide(lab.key(0), "discard")
+    first = lab.where(0)
+    # A different file now holds the path, and another one holds the name the earlier copy would be given.
+    image_file(image, 50)
+    taken = arc.free_name(image, _sha(first))
+    image_file(taken, 60)
+    before = {p: p.read_bytes() for p in (image, taken, first)}
+
+    restored = arc.restore_earlier_copies(image, output_root=lab.output)
+
+    assert len(restored) == 1 and restored[0] not in (image, taken)
+    assert image.read_bytes() == before[image] and taken.read_bytes() == before[taken]
+    assert restored[0].read_bytes() == before[first]

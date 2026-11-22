@@ -219,6 +219,9 @@ Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 ## 7. J3: keyboard triage of a real run (621; no Forge)
 
 Precondition: open a folder under `$Copy` with at least 5 images; filter is **Active**; focus is in the image list.
+(Since PR-REVIEW-FIXES-625 the keys also work when focus is on any other non-text control of the Review tab, such as a
+button or the preview; they never act while you are typing in a text box, entry, spinbox or drop-down, and `Ctrl`/`Alt`
+combinations are ignored. In the 2026-11-22 run they worked only with the list focused.)
 
 **J3.1** Do: press `R` on image 1, `D` on image 2, `W` on image 3, `R` on image 4, `U` on image 4 (lowercase or uppercase).
 Expected: `R` Retain, `D` Discard, `W` Re-work, `U` Undo (code binds `r d w u`, both cases); after each decision
@@ -237,8 +240,15 @@ Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 ## 8. Learning evidence (622) with J3
 
 **L1** Precondition: J3.1 done; note the Learning Analytics totals **before** J3 if you can (do this step set once, with
-this order: open **Learning** -> **View Analytics**, record `Total Experiments` and `Total Ratings`, close it; then run J3).
-Do: after J3, open **Learning** -> **View Analytics** again.
+this order: open the Learning Analytics window, record `Total Experiments` and `Total Ratings`, close it; then run J3).
+The Learn tab has no top-level **View Analytics** button (the 2026-11-22 run looked for one and found none). The number
+`Total Ratings` is shown only in the **Learning Analytics** window (`learning_analytics_panel.py`, text line
+`Total Ratings: N`), which the **View Analytics** button in the **Recommendations** box of the Learning review pane opens;
+that pane exists only after you open an experiment at its **Compare** or **Rate** step (it is not part of the Design,
+Preview or Run steps). If you have no experiment to open, mark the on-screen part of L1 **not applicable** and use the
+read-only helper to compute the totals from the Learning file (the 2026-11-22 run did: 293 ratings, 22 scored
+dispositions excluded).
+Do: after J3, open the Learning Analytics window again (same route).
 Expected: `Total Ratings` unchanged by Retain/Discard/Re-work (dispositions are excluded from analytics:
 `learning_analytics.py` skips `record_kind == "review_disposition"`); the explicit **Save rating** rows from J1 do count.
 Check: the helper shows the Retain row with `user_rating=4.0`, `user_rating_source=review_disposition_soft_score`, and the
@@ -272,8 +282,11 @@ Get-FileHash -Algorithm SHA256 "$Copy\_archive\<rel>"
 
 Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 
-**AR2** [uses S1] Do: with `A` archived, open **History** for the S1 job.
-Expected: History's artifact projection says "archived by Review; Restore to use it" (the text is `ARCHIVED_MESSAGE`) and
+**AR2** [uses S1] Precondition: `A` must be a **txt2img** primary image (a job whose recorded primary output is the
+archived file).
+Do: with `A` archived, open **History** for the S1 job.
+Expected: History's artifact projection says "archived by Review; Restore to use it" (the text is `ARCHIVED_MESSAGE`; Job
+History shows "Recorded image file was archived by Review; Restore to use it.") and
 uses nothing; **Compare with Parent** and Replay on a job whose input is `A` report the same. The archived copy is never
 opened. (For History's exact visible placement of the message: not established by this runbook; record the wording.)
 Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
@@ -412,7 +425,8 @@ Result: [ ] pass  [ ] fail  [ ] note   Evidence: ______  Notes: ______
 ### J8: prompts shown, "not recorded", SFW (621; no Forge)
 
 Do: select (a) an image with a StableNew payload, (b) an image without one (e.g. an old or foreign file from the copy),
-(c) an ADetailer output; open **Prompts and provenance**.
+(c) an ADetailer output; read the **Prompts and provenance** box (a read-only text box in the Review panel, not a button
+or a window; it fills when an image is selected).
 Expected: original and final prompts per stage and the ADetailer prompts are shown; anything missing reads
 **not recorded**; an image with no payload shows the prompt "as sent" (baseline source `fallback`). In SFW mode all prompt
 text is redacted (switch SFW via the app's content-visibility control; its label is not verified here, record it); switch back
