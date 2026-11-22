@@ -5,12 +5,22 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 from pathlib import Path
 
-SHA = re.compile(r"[0-9a-f]{64}")
+from tools.qualification.ai111 import worker_evidence
+from tools.qualification.ai111.worker_evidence import (
+    closed as _closed,
+)
+from tools.qualification.ai111.worker_evidence import (
+    count as _count,
+)
+from tools.qualification.ai111.worker_evidence import (
+    digest as _digest,
+)
+from tools.qualification.ai111.worker_quiescence import EVENTS, METHOD, OUTCOMES
+
 LIMIT = 1024 * 1024
-SCHEMA = "stablenew.ai111.worker-preflight/1"
+SCHEMA = "stablenew.ai111.worker-preflight/2"
 IDENTITIES = frozenset(
     {
         "host_boot",
@@ -34,8 +44,10 @@ CHECKS = {
             "ipv4_tcp",
             "ipv6_tcp",
             "udp_dns",
-            "dhcpv4_acquisition_and_renewal",
-            "dhcp_scope_enforced",
+            "static_ipv4_binding",
+            "dhcp_disabled_both_families",
+            "pre_guest_exceptions_resolved",
+            "existing_flows_scoped_to_ssh",
             "other_outbound",
             "no_preexisting_egress",
             "continuous_attribution",
@@ -76,20 +88,7 @@ EVIDENCE_FILES = (
     "quiescence.json",
     "provenance.json",
 )
-CATEGORIES = frozenset({"success", "invalid_request", "cancellation"})
-EVENTS = ("admitted", "populated", "terminal", "empty")
-
-
-def _digest(value: object) -> bool:
-    return isinstance(value, str) and SHA.fullmatch(value) is not None
-
-
-def _closed(value: object, keys: frozenset[str] | set[str]) -> bool:
-    return isinstance(value, dict) and value.keys() == keys
-
-
-def _count(value: object) -> bool:
-    return type(value) is int and value >= 0
+CATEGORIES = frozenset(OUTCOMES)
 
 
 def _check_attestations(section: str, evidence: object) -> list[tuple[str, str]]:
@@ -108,11 +107,15 @@ def _check_attestations(section: str, evidence: object) -> list[tuple[str, str]]
 
 
 def _check_quiescence(evidence: object) -> list[tuple[str, str]]:
-    if not _closed(evidence, {"method", "event_loss", "other_clients", "events"}):
+    if not _closed(
+        evidence, {"method", "observer_complete", "event_loss", "other_clients", "events"}
+    ):
         return [("INCONCLUSIVE", "quiescence.schema")]
-    if evidence["method"] != "owned_cgroup_v2_teardown":
+    if evidence["method"] != METHOD:
         return [("INCONCLUSIVE", "quiescence.observer")]
     issues = []
+    if evidence["observer_complete"] is not True:
+        issues.append(("INCONCLUSIVE", "quiescence.observer_incomplete"))
     for key in ("event_loss", "other_clients"):
         if not _count(evidence[key]):
             issues.append(("INCONCLUSIVE", f"quiescence.{key}"))
@@ -137,6 +140,7 @@ def _check_quiescence(evidence: object) -> list[tuple[str, str]]:
                     "invocation",
                     "cgroup",
                     "event",
+                    "outcome",
                 },
             )
             for event in lifecycle
@@ -165,6 +169,14 @@ def _check_quiescence(evidence: object) -> list[tuple[str, str]]:
                 or not _count(event["monotonic_ns"])
                 or event["monotonic_ns"] <= last_time
                 or event["event"] != expected
+                or (
+                    (
+                        not isinstance(event["outcome"], str)
+                        or event["outcome"] not in OUTCOMES[first["category"]]
+                    )
+                    if expected == "terminal"
+                    else event["outcome"] is not None
+                )
                 or any(
                     event[key] != first[key]
                     for key in ("request", "invocation", "cgroup", "category")
@@ -234,7 +246,8 @@ def score(directory: Path, accepted_manifest_sha256: str, current: object) -> di
     identity_sha256 = hashlib.sha256(
         json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("ascii")
     ).hexdigest()
-    for name in sorted(set(EVIDENCE_FILES) - {"identity.json"}):
+    requests: dict[str, str] = {}
+    for name in ("quiescence.json", "egress.json", "privacy.json", "provenance.json"):
         section = name.removesuffix(".json")
         record = records[name]
         if not _closed(record, {"identity_sha256", "observations"}) or (
@@ -251,8 +264,28 @@ def score(directory: Path, accepted_manifest_sha256: str, current: object) -> di
                 for event in observations["events"]
             ):
                 issues.append(("INCONCLUSIVE", "quiescence.outside_policy_window"))
-        else:
+            elif not problems:
+                requests = {
+                    event["category"]: event["request"]
+                    for event in observations["events"]
+                    if event["event"] == "admitted"
+                }
+        elif section == "egress":
             issues.extend(_check_attestations(section, observations))
+        elif not _closed(observations, {"attestations", "evidence"}):
+            issues.append(("INCONCLUSIVE", f"{section}.schema"))
+        else:
+            issues.extend(_check_attestations(section, observations["attestations"]))
+            if section == "privacy":
+                issues.extend(
+                    worker_evidence.privacy(
+                        observations["evidence"], identity["bindings"], requests
+                    )
+                )
+            else:
+                issues.extend(
+                    worker_evidence.provenance(observations["evidence"], identity["bindings"])
+                )
     # Observation references are not yet resolved to independently reviewed
     # physical evidence. A self-consistent bundle cannot grant readiness.
     issues.append(("INCONCLUSIVE", "bundle.physical_evidence_verifier_unavailable"))

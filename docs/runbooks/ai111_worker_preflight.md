@@ -35,152 +35,101 @@ datacenter host policy ACCEPT in both directions. The proposed guest policy
 defaults to DROP and allows IPv4 SSH from the single approved desktop.
 No guest outbound rule is added. Loopback remains inside the guest.
 
-### Approved DHCP scope
+### Static baseline and containment scope
 
-The owner approved a scoped DHCP exception on 2026-11-21 to preserve the
-router reservation for CT 110 at 192.168.1.22. Apply it only to the guest
-interface associated with that reservation. The scope is IPv4 DHCP client
-traffic from UDP 68 to 67, including the local limited broadcast needed for
-address acquisition and rebinding and unicast renewal to the identified
-router DHCP server. Permit replies from that server from UDP 67 to 68 to
-the reserved address or the local limited broadcast. Verify the interface,
-reservation MAC and DHCP server identity before constructing any candidate
-that enables the exception. DHCPv6 and broader UDP destinations are outside
-the approval.
+The operator verified the static conversion on 2026-11-21. CT 110 has
+`192.168.1.22/24` with permanent lifetime, gateway `192.168.1.1`, and no
+reported IPv6 default route. Windows reached guest SSH and the persistent
+forward at `127.0.0.1:11435`. Ollama 0.40.16 was active and both models
+were listed through the tunnel. This is connectivity evidence from before
+containment activation.
 
-### Supplemental CT 110 filter
-
-The owner authorized design, implementation and validation preparation for
-the supplemental host filter on 2026-11-21. The draft keeps `dhcp: 0`.
-The upstream native guest option runs before custom guest rules and its
-allowance includes DHCPv6. Activate native DHCP only after independent
-verification of the supplemental filter and a separate activation decision.
-[Upstream guest rule order](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/src/firewall.rs#L328)
-[Upstream DHCP chains](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/resources/proxmox-firewall.nft#L300)
-
-Render with the measured inputs, then retain the exact bytes and SHA-256 for
-review. The tool prints a two-table nftables candidate and performs no writes
-to the host.
-
-```powershell
-python -m tools.qualification.ai111.worker_dhcp_guard --port veth110i0 --ifindex <observed-index> --bridge <observed-linux-bridge> --server-ipv4 <verified-server-ip> --server-mac <verified-server-mac> --ssh-ipv4 <approved-desktop-ip>
+```text
+net0: name=eth0,bridge=vmbr0,firewall=1,gw=192.168.1.1,hwaddr=BC:24:11:41:59:B1,ip=192.168.1.22/24,type=veth
 ```
 
-The supported topology is CT 110's sole `net0` attached directly to a
-Linux bridge, with guest MAC `bc:24:11:41:59:b1`. Reconcile the installed
-CT config, guest peer ifindex, host ifindex and bridge master. Verify the
-DHCP server IP and MAC from the approved lease and network authority.
-The renderer restricts local broadcast and server unicast DHCPv4, permits
-SSH only for the approved desktop, and permits ARP needed for address
-ownership checks and those neighbors. IP and MAC matching presumes trusted
-LAN source identities. If the segment permits source impersonation, show
-the applicable anti-spoofing control before accepting server identity.
+The static design keeps native `dhcp: 0` for DHCPv4 and DHCPv6. The
+supplemental DHCP guard is retired. Its reviewed implementation and tests
+remain in Git at `99fdab51ffe6cd5c75c745cdea2851bca26bec29`.
 
-The netdev ingress chain on the host veth screens guest-originated Ethernet
-before the bridge can consume link-local frames. The bridge prerouting and
-postrouting chains add direction-specific DHCP, ARP and conntrack policy.
-The indexed and named bridge selectors detect a change to either identifier
-alone. Unrelated bridge ports use the existing chains. Confirm native
-untagged veth traffic, bridge conntrack availability and actual hook ordering
-against the installed versions. The candidate deliberately refuses alternate
-ports and topologies.
-[Linux bridge receive path](https://github.com/torvalds/linux/blob/master/net/bridge/br_input.c)
-[Bridge conntrack](https://github.com/torvalds/linux/blob/master/net/bridge/netfilter/nf_conntrack_bridge.c)
-[Proxmox guest hooks](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/resources/proxmox-firewall.nft#L353)
+The native guest candidate applies DROP in both directions, uses MAC and IP
+filtering, disables DHCP, NDP, and router advertisements, and explicitly
+allows TCP/22 only from the approved on-link desktop to the static guest
+address on `net0`. Established SSH responses rely on the installed
+conntrack path. The worker API remains on guest loopback. The host opts out
+of host firewall rules and retains ACCEPT defaults at datacenter scope.
+Verify from the compiled output that enabling the backend leaves all
+unrelated guests and global rules unaffected.
 
-**Activation interlock.** Establish an independent, console-recoverable
-CT-only fence that keeps the path closed when either guard table is absent,
-when the veth is replaced, and during firewall or topology transitions.
-Prevent simultaneous name/index replacement and second-port attachment
-from creating an unguarded path. The renderer does not implement that fence.
-A poll or a reload-event alarm cannot stop the first packet during a gap.
-The point evidence verifier rejects missing/altered tables, boot or interface
-drift, native policy drift, event loss and observed reloads. It supplies no
-packet-level interlock.
+**Native-policy blocker.** Upstream Proxmox evaluates ICMP error
+acceptance before guest dispatch. Its guest defaults can also accept
+established and related traffic before custom rules. Check the exact
+installed compiler and skeleton before presenting activation. Any
+outbound exception outside the approved SSH return and necessary local
+Ethernet address resolution must be resolved. The absence of an IPv6 default
+route does not prove IPv6 denial. A guest DROP default cannot prove that a
+packet reached the guest chain. Verify worker-to-host and link-local paths
+as well as routed IP. The upstream guest compiler permits outgoing ARP
+before custom rules.
+[Upstream Proxmox guest hooks](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/resources/proxmox-firewall.nft#L337)
+[Guest options and ARP](https://github.com/proxmox/proxmox-firewall/blob/master/proxmox-firewall/src/firewall.rs#L646-L713)
 
-Before presenting an activation decision, reproduce the exact installed
-Proxmox, nftables and kernel versions in an isolated Linux bridge lab. Run
-`nft --check --file <reviewed-batch>`, review the compiled native rules
-beside both supplemental tables, and rehearse the console sequence there.
-Compare the rule-preserving JSON fingerprint from both named table listings
-and independently verify the topology and observer epochs. Run
-`python -m tools.qualification.ai111.worker_guard_validation fingerprint`
-with `--bridge-rules` and `--link-rules` pointing to the separate named
-table JSON exports. Use the `compare` subcommand with those two current
-exports, `--reviewed-sha256`, `--reviewed-observation` and
-`--current-observation`. A snapshot match alone cannot authorize a
-transition. Review distinct
-approved native-state identities for the DHCP-disabled and enabled stages.
-The progress sequence for a later approved activation is to keep native
-DHCP disabled and the CT path fenced, install and verify both guard tables,
-then verify the independently compiled native allowance before exposing the
-path. On any uncertainty keep the CT path fenced and native DHCP disabled.
-Neither this runbook nor the evidence checker authorizes a state change.
+### Console activation proposal and rollback
 
-Proxmox documents a guest restart when switching firewall backends. Record
-a maintenance window and console recovery path and obtain separate restart
-authorization. If another guest requires a change or restart, stop under
-the CT 110 scope. Verify a fresh lease and its renewal, continued SSH
-forwarding and denial of DHCPv6 and traffic outside the approved DHCPv4
-scope before accepting the policy. A currently valid lease is insufficient.
+This proposal is for separate authorization. Use the rendered file contents
+as a proposed change set, with the exact installed backend package and
+kernel reproduced in an isolated environment for compile, packet-path, and
+rollback review. Review the Proxmox skeleton and generated JSON together.
+Confirm all physical CT interfaces are covered, SSH reply attribution and
+unapproved conntrack state are resolved, the installed options are valid,
+and no other guests or host paths acquire new policy. Proxmox documents a
+guest restart for the backend switch. Stop if that requires changing any
+guest outside CT 110.
 [Proxmox firewall guide](https://pve.proxmox.com/pve-docs/chapter-pve-firewall.html)
 
-Before an activation decision, use a disposable matching Proxmox environment
-or an approved offline copy of the installed compiler and its configuration.
-Inspect both the native compiler output and its skeleton. Confirm the node and
-host/other guest hook behavior, CT maps and all interface coverage. Verify the
-effective default chains, including established and related traffic, ARP, IPv6
-discovery, and ICMP error classes. The upstream skeleton has control-protocol
-exceptions ahead of guest dispatch. Any installed exception outside the
-approved policy must be resolved before activation. Time-bounded, loss-accounted
-reconciliation must account for conntrack state already present at activation.
-Rule text and a quiet firewall log are insufficient.
+1. From the verified host console, close qualification admission and any
+   evidence window. Record exact before-state bytes and hashes or verified
+   absence for `/etc/pve/firewall/cluster.fw`,
+   `/etc/pve/nodes/pve-g16/host.fw`, `/etc/pve/firewall/110.fw`, and
+   CT 110's configuration. Record the active ruleset, affected net0
+   identity, and controller/observer epochs. The absence baseline must
+   match the earlier discovery. Stop for drift or unexpected scope.
+2. In the separately approved maintenance window, use the CT-specific
+   `net0 link_down=1` transition, preserving the rest of the static
+   definition byte-for-byte where supported. Rehearse the installed
+   operation and prove the path is disconnected even across any required
+   CT restart. Observe the host veth down and detached from the bridge.
+   Verify the Proxmox management console remains available.
+   Keep the link disconnected if that proof is unavailable.
+   [CT network options](https://github.com/proxmox/pve-docs/blob/master/generated/pct.conf.5-opts.adoc)
+3. With the CT path disconnected, stage the reviewed guest file and node
+   file. Apply the datacenter enablement last, only after review of its
+   broader effects. If a restart was separately approved, retain the
+   link-down fence across it. Verify exact loaded chains, CT interface
+   mapping, observation health, and backend identity. Rehearse that reconnect
+   cannot attach the port before its policy is established. Present a separate
+   decision to lift the fence for the approved physical validation.
+4. On any failure, keep the link disconnected. From the console, restore
+   only the reviewed changes to the three firewall paths and the backend
+   state while the link stays down. Check the candidate hash before
+   replacing or removing a file. Preserve unrelated rules and conntrack
+   state. Reestablish the static net0 bytes with the link still down, then
+   verify the restored state. Reopening the ordinary network path after
+   rolling back to an unenforced baseline is a separate explicit recovery
+   decision. A stopped or unknown observer never authorizes reopening.
+5. After a separately approved reconnect, check guest loopback Ollama,
+   Proxmox management, desktop SSH, and the existing forwarded listener.
+   Perform authorized negative canaries for IPv4 and IPv6 TCP, UDP/DNS,
+   DHCPv4 and DHCPv6, ICMP and other applicable unapproved protocols and
+   LAN paths. Correlate every result to the actual CT port, backend
+   counters and loss-accounted observations. Rule drift, loss, or
+   attribution gaps invalidate evidence. A successful rollback returns the
+   worker to its pre-change state and invalidates current-policy readiness.
 
-### Console recovery plan
-
-Before any authorized activation, use the host console and an operator-owned
-evidence location:
-
-1. Record whether each of these paths exists:
-   `/etc/pve/firewall/cluster.fw`, `/etc/pve/nodes/pve-g16/host.fw`, and
-   `/etc/pve/firewall/110.fw`. Save any
-   existing bytes and permissions, the CT network configuration, the backend
-   setting and the loaded rule sets. Hash retained artifacts. The proposed
-   files assume the recorded absent baseline. Stop if any path has appeared
-   or if host/guest scope differs.
-2. Review and record a console-only reversal for the exact accepted change
-   set. For the absent baseline, it removes only the CT 110, node and cluster
-   files created in this operation, in that order. Verify the recorded
-   candidate identity before removing each file. If a file changed
-   independently, stop and reconcile it from the console. Do not flush
-   unrelated rule sets or conntrack state. Include any approved address or
-   backend-restart reversal in the same scoped plan.
-3. Rehearse recovery before collecting readiness evidence. Verify the
-   pre-change configuration and effective policy, the guest address, Proxmox
-   administration, guest SSH, and the desktop forward. Record failures and
-   stop. Perform restoration only after closing any active evidence session
-   and stopping qualification admissions. A change in the effective policy
-   invalidates readiness for the current worker until evidence is re-established.
-
-For a later separately authorized network test, confirm a loaded and effective
-policy, working loopback and SSH, and explicit denial of the approved IPv4,
-IPv6, UDP/DNS and other outbound test classes. Bind each result to the actual
-CT interface and observation window. Require loss-accounted event capture and
-independent accounting through that window. Treat unexplained loss, rule drift,
-attribution gaps or monitor failure as invalidating the evidence. The renderer
-and snapshot collector do not provide this observation.
-
-For the supplemental filter, close admission and end any evidence session.
-Use the verified host console. With both guards still enforcing, restore
-native `dhcp: 0` and independently confirm effective denial of both DHCP
-families before removing either guard. If a guard or its interface identity
-is missing, quarantine the CT path first and keep it closed until the state
-is reconciled. Delete only the reviewed `bridge stablenew_ai111_ct110`
-and `netdev stablenew_ai111_ct110_link` tables in one nft transaction after
-confirming both identities. Recheck the original firewall baseline, CT
-address, administrative path, SSH forward and Ollama availability. A
-rollback decision-table fixture exercises this order; the console rehearsal
-on the matching Proxmox version remains a prerequisite.
+The decision-table fixture covers disconnect-before-mutation and
+no-automatic-reconnect. The matching-version console rehearsal and installed
+rule and packet-path tests remain prerequisites. No activation or worker
+probe is performed by the renderer.
 
 ## Owned runtime and privacy
 
@@ -193,7 +142,10 @@ delegation or migration. Confirm these properties on the installed LXC before
 admitting anything. The client must have one controlled admission path and
 must not retry an ambiguous dispatch.
 
-The Linux cgroup reader pins the directory across observations, binds its
+The recorder enforces one active request at a time and checks the current
+systemd invocation around each recursive population read. A wrong terminal
+outcome or observer error stops further admissions. The Linux cgroup reader
+pins the directory across observations, binds its
 identity to boot and invocation, and reads recursive population. The controller
 must observe the unit populated, record the request's terminal outcome, stop
 the same owned unit and capture zero recursive population before admitting
@@ -239,6 +191,17 @@ references require independent corroboration.
 ```text
 python -m tools.qualification.ai111.worker_preflight <run-dir> --accepted-manifest-sha256 <pin> --current-bindings <identity-file>
 ```
+
+The static design uses the version 2 bundle schema. Egress checks bind the
+static address and require DHCP denial, resolution of pre-guest exceptions,
+and SSH-only established-flow evidence. Quiescence events carry the closed
+terminal outcome for each authorized lifecycle category. Privacy evidence
+records source revision, before/after logging identity, request and response
+marker coverage tied to each recorded request identity, and per-sink
+content-free scans. Provenance evidence binds
+publisher proof, exact executable and linked runtime, selected manifest and
+layers, and an explicit license decision. The historical collector snapshot
+and logging checks remain reusable evidence of their original scope.
 
 The offline implementation reports integrity errors, explicit failures and
 missing evidence. Until physical collectors are reviewed and integrated, an
