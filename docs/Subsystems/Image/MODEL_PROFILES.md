@@ -13,6 +13,8 @@ How to keep this true:
 
 Covered: the two exact profiles (FLUX.2 Klein 4B FP8 v1/v2, Z-Image-Turbo FP8 v1), the refusal of Klein Base 9B, `ModelPolicy`, operation compatibility, effective-config adaptation and global-positive ownership, local asset evidence as it gates dispatch, readiness, and Model Comparison where it touches profiles. Not covered: SDXL ordinary work (generic path), OpenPose (IMAGE_PIPELINE 3.1), video.
 
+SDXL backend row (PR-IMG-COMFY-381): a registry-classified SDXL checkpoint (`_sdxl_policy`) is allowed on `forge_webui`, `a1111_webui` (every feature as before) and `comfyui` (txt2img only: sampler/scheduler mapped by `comfy_sdxl_mapping`, `<lora:>` tags turned into `LoraLoader` nodes resolved by registry SHA, negative prompt and CLIP skip supported; hires, refiner, ADetailer, img2img, upscale and ControlNet refused at Preview). The ComfyUI leg is offline-tested only and not physically qualified; the Forge-vs-ComfyUI comparison is a separate owner-gated run.
+
 Four concepts stay separate (a fifth, advisory recommended generation profiles, is in section 17); most bugs here come from mixing them (`model_policy.py` module docstring):
 
 | Concept | Authority | Never |

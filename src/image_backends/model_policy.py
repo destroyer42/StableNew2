@@ -80,6 +80,7 @@ from src.image_backends.forge_zimage_profile import (
 )
 from src.image_backends.image_backend_types import (
     A1111_IMAGE_BACKEND_ID,
+    COMFY_IMAGE_BACKEND_ID,
     FORGE_IMAGE_BACKEND_ID,
     normalize_image_backend_options,
     resolve_image_backend_id,
@@ -133,11 +134,26 @@ CONTROL_STEPS = "steps"
 CONTROL_CFG = "cfg_scale"
 CONTROL_VAE = "vae"
 CONTROL_GEOMETRY = "geometry"
-VALUE_CONTROLS = (CONTROL_SAMPLER, CONTROL_SCHEDULER, CONTROL_STEPS, CONTROL_CFG, CONTROL_VAE, CONTROL_GEOMETRY)
+VALUE_CONTROLS = (
+    CONTROL_SAMPLER,
+    CONTROL_SCHEDULER,
+    CONTROL_STEPS,
+    CONTROL_CFG,
+    CONTROL_VAE,
+    CONTROL_GEOMETRY,
+)
 
 #: Optional features a policy states a position on.
 FEATURES = (
-    "negative_prompt", "prompt_optimizer", "embeddings", "lora", "hires", "refiner", "adetailer", "controlnet", "upscale",
+    "negative_prompt",
+    "prompt_optimizer",
+    "embeddings",
+    "lora",
+    "hires",
+    "refiner",
+    "adetailer",
+    "controlnet",
+    "upscale",
 )
 
 
@@ -254,7 +270,8 @@ class ModelPolicy:
         """Whether any value control is fixed or unsupported (the Base Generation panel must project it)."""
 
         return any(
-            self.control(name).mode is not ControlMode.CONFIGURABLE or bool(self.control(name).allowed)
+            self.control(name).mode is not ControlMode.CONFIGURABLE
+            or bool(self.control(name).allowed)
             for name in VALUE_CONTROLS
         )
 
@@ -266,8 +283,10 @@ class ModelPolicy:
         """
 
         names = [
-            name for name in VALUE_CONTROLS
-            if self.control(name).mode is ControlMode.CONFIGURABLE and not self.control(name).allowed
+            name
+            for name in VALUE_CONTROLS
+            if self.control(name).mode is ControlMode.CONFIGURABLE
+            and not self.control(name).allowed
         ]
         if self.feature("lora").supported:
             names.append("lora_strength")
@@ -297,29 +316,45 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
         return _flux1_policy(profile)
     if isinstance(profile, ZImageProfile):
         return ModelPolicy(
-            policy_id=profile.profile_id, family="z_image", display_name=profile.display_name,
-            evidence=EVIDENCE_PROFILE, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
-            profile_ref=profile.reference(), stages=(STAGE_TXT2IMG,), modes=profile.modes,
+            policy_id=profile.profile_id,
+            family="z_image",
+            display_name=profile.display_name,
+            evidence=EVIDENCE_PROFILE,
+            allowed_backends=(profile.backend_id,),
+            required_backend=profile.backend_id,
+            profile_ref=profile.reference(),
+            stages=(STAGE_TXT2IMG,),
+            modes=profile.modes,
             controls=_controls(
-                sampler=ControlPolicy(fixed, profile.sampler), scheduler=ControlPolicy(fixed, profile.scheduler),
-                steps=ControlPolicy(fixed, profile.steps), cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
-                vae=ControlPolicy(fixed, ""), geometry=ControlPolicy(fixed, (1024, 1024), allowed=profile.geometries),
+                sampler=ControlPolicy(fixed, profile.sampler),
+                scheduler=ControlPolicy(fixed, profile.scheduler),
+                steps=ControlPolicy(fixed, profile.steps),
+                cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
+                vae=ControlPolicy(fixed, ""),
+                geometry=ControlPolicy(fixed, (1024, 1024), allowed=profile.geometries),
             ),
-            features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
-            note=("Z-Image-Turbo FP8 limited support: exact three-file bundle, managed pinned Forge, txt2img only; "
-                  "one 1024x1024 image, Euler/Beta/9 steps/CFG 1/shift 9 (distilled_cfg_scale). "
-                  "PromptPack compilation adapts weighted prose and omits structured LoRAs, embeddings, negative prompts and the "
-                  "global negative; PromptPack, generic Pipeline and Model Comparison compilation compose enabled global positive "
-                  "terms into the prompt and replace inherited sampling, CLIP skip and prompt-optimizer settings with the "
-                  "profile's own (manual prompts are validated, not adapted). "
-                  "Saved packs are preserved; adaptation is recorded in the queued job. "
-                  "Optional stages/modifiers and unresolved inline adapter/embedding tokens remain unsupported. "
-                  "One physical generation was observed; clean-shutdown qualification and repeated-run stability remain incomplete. "
-                  "32-GB-class total RAM is required; available RAM/commit are observational, without floors."),
+            features=_features(_UNSUPPORTED),
+            prompt_dialect=DIALECT_NATURAL_LANGUAGE,
+            note=(
+                "Z-Image-Turbo FP8 limited support: exact three-file bundle, managed pinned Forge, txt2img only; "
+                "one 1024x1024 image, Euler/Beta/9 steps/CFG 1/shift 9 (distilled_cfg_scale). "
+                "PromptPack compilation adapts weighted prose and omits structured LoRAs, embeddings, negative prompts and the "
+                "global negative; PromptPack, generic Pipeline and Model Comparison compilation compose enabled global positive "
+                "terms into the prompt and replace inherited sampling, CLIP skip and prompt-optimizer settings with the "
+                "profile's own (manual prompts are validated, not adapted). "
+                "Saved packs are preserved; adaptation is recorded in the queued job. "
+                "Optional stages/modifiers and unresolved inline adapter/embedding tokens remain unsupported. "
+                "One physical generation was observed; clean-shutdown qualification and repeated-run stability remain incomplete. "
+                "32-GB-class total RAM is required; available RAM/commit are observational, without floors."
+            ),
         )
     lora = (
-        FeaturePolicy(Support.SUPPORTED, limit=profile.max_loras, compatibility_policy=LORA_POLICY_KLEIN_4B_EXPLICIT,
-                      stages=(STAGE_TXT2IMG,))
+        FeaturePolicy(
+            Support.SUPPORTED,
+            limit=profile.max_loras,
+            compatibility_policy=LORA_POLICY_KLEIN_4B_EXPLICIT,
+            stages=(STAGE_TXT2IMG,),
+        )
         if profile.max_loras > 0
         else _UNSUPPORTED
     )
@@ -342,14 +377,19 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
         allowed_backends=(profile.backend_id,),
         required_backend=profile.backend_id,
         profile_ref=profile.reference(),
-        stages=(STAGE_TXT2IMG, STAGE_IMG2IMG),  # img2img only as the single-reference edit mode, never free-form
+        stages=(
+            STAGE_TXT2IMG,
+            STAGE_IMG2IMG,
+        ),  # img2img only as the single-reference edit mode, never free-form
         modes=tuple(profile.modes),
         controls=_controls(
             sampler=ControlPolicy(fixed, profile.sampler),
             scheduler=ControlPolicy(fixed, profile.scheduler),
             steps=ControlPolicy(fixed, profile.steps),
             cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
-            vae=ControlPolicy(fixed, ""),  # the profile loads its own VAE module; no separate selection
+            vae=ControlPolicy(
+                fixed, ""
+            ),  # the profile loads its own VAE module; no separate selection
             # A restricted choice, not a single value: the qualified sizes are selectable; the first is the default.
             geometry=ControlPolicy(ControlMode.CONFIGURABLE, allowed=tuple(profile.geometries)),
         ),
@@ -359,9 +399,11 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
         ),
         prompt_dialect=DIALECT_NATURAL_LANGUAGE,
         note=note,
-        stage_controls={STAGE_IMG2IMG: {
-            "denoise_strength": ControlPolicy(fixed, profile.edit_denoising_strength),
-        }},
+        stage_controls={
+            STAGE_IMG2IMG: {
+                "denoise_strength": ControlPolicy(fixed, profile.edit_denoising_strength),
+            }
+        },
     )
 
 
@@ -370,24 +412,40 @@ def _ideogram4_policy(profile: Ideogram4Profile) -> ModelPolicy:
 
     fixed = ControlMode.FIXED
     return ModelPolicy(
-        policy_id=profile.profile_id, family=FAMILY_IDEOGRAM4, display_name=profile.display_name,
-        evidence=EVIDENCE_PROFILE, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
-        profile_ref=profile.reference(), stages=(STAGE_TXT2IMG,), modes=profile.modes,
+        policy_id=profile.profile_id,
+        family=FAMILY_IDEOGRAM4,
+        display_name=profile.display_name,
+        evidence=EVIDENCE_PROFILE,
+        allowed_backends=(profile.backend_id,),
+        required_backend=profile.backend_id,
+        profile_ref=profile.reference(),
+        stages=(STAGE_TXT2IMG,),
+        modes=profile.modes,
         controls=_controls(
-            sampler=ControlPolicy(fixed, profile.sampler), scheduler=ControlPolicy(fixed, profile.scheduler),
+            sampler=ControlPolicy(fixed, profile.sampler),
+            scheduler=ControlPolicy(fixed, profile.scheduler),
             # A restricted choice: each allowed step count is one official preset (the first listed is the default).
-            steps=ControlPolicy(ControlMode.CONFIGURABLE, allowed=(profile.default_steps, *(
-                s for s in profile.allowed_steps if s != profile.default_steps))),
-            cfg_scale=ControlPolicy(fixed, profile.cfg_scale), vae=ControlPolicy(fixed, ""),
+            steps=ControlPolicy(
+                ControlMode.CONFIGURABLE,
+                allowed=(
+                    profile.default_steps,
+                    *(s for s in profile.allowed_steps if s != profile.default_steps),
+                ),
+            ),
+            cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
+            vae=ControlPolicy(fixed, ""),
             geometry=ControlPolicy(ControlMode.CONFIGURABLE, allowed=profile.geometries),
         ),
-        features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
-        note=("Ideogram 4 NF4 runs in its own contained Diffusers process, one job at a time, after StableNew releases "
-              "its own Forge/A1111, Comfy and SVD runtimes. Steps choose the official preset: 12 Turbo, 20 Default, "
-              "48 Quality; sizes are the tested 1024x1024, 768x1024, 1024x768, 768x768 and 512x512; 1-4 images per job. "
-              "Write plain text, or paste an Ideogram JSON caption (checked against the official caption schema before "
-              "queueing). No negative prompt, LoRA, embeddings or extra stages. Each job loads the model again "
-              "(about 20 s). Non-commercial licence. Not yet physically qualified in StableNew."),
+        features=_features(_UNSUPPORTED),
+        prompt_dialect=DIALECT_NATURAL_LANGUAGE,
+        note=(
+            "Ideogram 4 NF4 runs in its own contained Diffusers process, one job at a time, after StableNew releases "
+            "its own Forge/A1111, Comfy and SVD runtimes. Steps choose the official preset: 12 Turbo, 20 Default, "
+            "48 Quality; sizes are the tested 1024x1024, 768x1024, 1024x768, 768x768 and 512x512; 1-4 images per job. "
+            "Write plain text, or paste an Ideogram JSON caption (checked against the official caption schema before "
+            "queueing). No negative prompt, LoRA, embeddings or extra stages. Each job loads the model again "
+            "(about 20 s). Non-commercial licence. Not yet physically qualified in StableNew."
+        ),
     )
 
 
@@ -396,30 +454,47 @@ def _flux1_policy(profile: Flux1Profile) -> ModelPolicy:
 
     fixed = ControlMode.FIXED
     return ModelPolicy(
-        policy_id=profile.profile_id, family=FAMILY_FLUX1, display_name=profile.display_name,
-        evidence=EVIDENCE_STRUCTURAL, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
-        profile_ref=profile.reference(), stages=(STAGE_TXT2IMG,), modes=profile.modes,
+        policy_id=profile.profile_id,
+        family=FAMILY_FLUX1,
+        display_name=profile.display_name,
+        evidence=EVIDENCE_STRUCTURAL,
+        allowed_backends=(profile.backend_id,),
+        required_backend=profile.backend_id,
+        profile_ref=profile.reference(),
+        stages=(STAGE_TXT2IMG,),
+        modes=profile.modes,
         controls=_controls(
-            sampler=ControlPolicy(fixed, profile.sampler), scheduler=ControlPolicy(fixed, profile.scheduler),
-            steps=ControlPolicy(fixed, profile.steps), cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
+            sampler=ControlPolicy(fixed, profile.sampler),
+            scheduler=ControlPolicy(fixed, profile.scheduler),
+            steps=ControlPolicy(fixed, profile.steps),
+            cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
             vae=ControlPolicy(fixed, ""),
             geometry=ControlPolicy(ControlMode.CONFIGURABLE, allowed=profile.geometries),
         ),
-        features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
-        note=(f"FLUX.1 [dev]-class transformer on the managed Forge: {profile.sampler} / {profile.scheduler} / "
-              f"{profile.steps} steps / CFG {profile.cfg_scale:g} / distilled guidance {profile.distilled_cfg_scale:g}, "
-              "one image, txt2img only. Any transformer-only file with the FLUX.1 [dev] layout runs under this profile "
-              "(fine-tunes included; its SHA-256 is recorded, not required). CLIP-L, T5-XXL FP8 and the FLUX.1 VAE must be "
-              "the exact pinned files. No negative prompt, LoRA, embeddings or extra stages. Non-commercial licence. "
-              "Not yet physically qualified in StableNew."),
+        features=_features(_UNSUPPORTED),
+        prompt_dialect=DIALECT_NATURAL_LANGUAGE,
+        note=(
+            f"FLUX.1 [dev]-class transformer on the managed Forge: {profile.sampler} / {profile.scheduler} / "
+            f"{profile.steps} steps / CFG {profile.cfg_scale:g} / distilled guidance {profile.distilled_cfg_scale:g}, "
+            "one image, txt2img only. Any transformer-only file with the FLUX.1 [dev] layout runs under this profile "
+            "(fine-tunes included; its SHA-256 is recorded, not required). CLIP-L, T5-XXL FP8 and the FLUX.1 VAE must be "
+            "the exact pinned files. No negative prompt, LoRA, embeddings or extra stages. Non-commercial licence. "
+            "Not yet physically qualified in StableNew."
+        ),
     )
 
 
 def _flux_refused_policy(variant: str) -> ModelPolicy:
     """A FLUX layout class with no executable profile: labelled precisely, every feature unsupported, refused."""
 
-    family = FAMILY_FLUX1 if variant == VARIANT_FLUX1_SCHNELL else (
-        FAMILY_FLUX2_KLEIN if variant in (VARIANT_FLUX2_KLEIN_4B, VARIANT_FLUX2_KLEIN_9B) else FAMILY_FLUX
+    family = (
+        FAMILY_FLUX1
+        if variant == VARIANT_FLUX1_SCHNELL
+        else (
+            FAMILY_FLUX2_KLEIN
+            if variant in (VARIANT_FLUX2_KLEIN_4B, VARIANT_FLUX2_KLEIN_9B)
+            else FAMILY_FLUX
+        )
     )
     refusal = flux_variant_refusal(variant)
     return ModelPolicy(
@@ -462,16 +537,21 @@ def _qwen_image_policy(profile: QwenImageProfile) -> ModelPolicy:
 
 
 def _sdxl_policy(evidence: str) -> ModelPolicy:
-    """Existing StableNew behavior for an SDXL-family checkpoint: nothing narrowed, nothing newly claimed qualified."""
+    """Existing StableNew behavior for an SDXL-family checkpoint: nothing narrowed, nothing newly claimed qualified.
+
+    ``comfyui`` is allowed for txt2img (PR-IMG-COMFY-381): the backend itself refuses hires fix, refiner, ADetailer,
+    img2img, upscale and ControlNet there with guidance to switch to Forge (never a silent fallback)."""
 
     return ModelPolicy(
         policy_id=POLICY_ID_SDXL,
         family=FAMILY_SDXL,
         display_name="SDXL",
         evidence=evidence,
-        allowed_backends=(FORGE_IMAGE_BACKEND_ID, A1111_IMAGE_BACKEND_ID),
+        allowed_backends=(FORGE_IMAGE_BACKEND_ID, A1111_IMAGE_BACKEND_ID, COMFY_IMAGE_BACKEND_ID),
         controls=_controls(),
-        features=_features(_SUPPORTED, controlnet=_UNSUPPORTED),  # the image path exposes no ControlNet
+        features=_features(
+            _SUPPORTED, controlnet=_UNSUPPORTED
+        ),  # the image path exposes no ControlNet
         prompt_dialect=DIALECT_WEIGHTED_TAGS,
     )
 
@@ -480,9 +560,13 @@ def _unverified_policy(family: str, evidence: str) -> ModelPolicy:
     """Conservative projection: generic WebUI usability exactly as before, no capability claims, no family guess."""
 
     return ModelPolicy(
-        policy_id=POLICY_ID_UNVERIFIED if family == FAMILY_UNKNOWN else f"{POLICY_ID_UNVERIFIED}:{family}",
+        policy_id=POLICY_ID_UNVERIFIED
+        if family == FAMILY_UNKNOWN
+        else f"{POLICY_ID_UNVERIFIED}:{family}",
         family=family,
-        display_name="Unclassified model" if family == FAMILY_UNKNOWN else f"{family.upper()} (unqualified)",
+        display_name="Unclassified model"
+        if family == FAMILY_UNKNOWN
+        else f"{family.upper()} (unqualified)",
         evidence=evidence,
         allowed_backends=(FORGE_IMAGE_BACKEND_ID, A1111_IMAGE_BACKEND_ID),
         controls=_controls(),
@@ -515,7 +599,9 @@ def resolve_model_profile_for_policy(policy: ModelPolicy) -> ExactModelProfile |
     return resolve_model_profile({"image": {"model_profile": dict(policy.profile_ref)}})
 
 
-def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup | None = None) -> ModelPolicy:
+def resolve_model_policy(
+    model_name: str | None, *, family_lookup: FamilyLookup | None = None
+) -> ModelPolicy:
     """The policy for a selected checkpoint: exact qualified profile, else registry evidence, else unverified.
 
     The exact Klein identity (whole-name match, never a substring) is consulted before any family inference.
@@ -542,9 +628,9 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
     status = getattr(getattr(compat, "status", None), "value", "")
     if status == "conflicting":
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_CONFLICTING)
-    if getattr(compat, "structural_error", None) or getattr(compat, "checkpoint_architecture", None) in (
-        "sdxl_refiner", "sdxl_inpaint"
-    ):
+    if getattr(compat, "structural_error", None) or getattr(
+        compat, "checkpoint_architecture", None
+    ) in ("sdxl_refiner", "sdxl_inpaint"):
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_UNKNOWN)
     family = getattr(compat, "family", None)
     if status != "resolved" or family is None:
@@ -560,7 +646,9 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
             if layout[0] == VARIANT_FLUX1_DEV:
                 return policy_for_profile(FLUX1_DEV_PROFILE_V1)
             return _flux_refused_policy(layout[0])
-    return _unverified_policy(family_value, EVIDENCE_REGISTRY)  # sd1/sd2/sd3/flux: labelled, never qualified
+    return _unverified_policy(
+        family_value, EVIDENCE_REGISTRY
+    )  # sd1/sd2/sd3/flux: labelled, never qualified
 
 
 def _model_key(name: str) -> str:
@@ -583,7 +671,9 @@ class RegistryFamilyLookup:
     bounded lookup never falls back to another file with the same basename.
     """
 
-    def __init__(self, registry: Any | None = None, *, model_paths: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, registry: Any | None = None, *, model_paths: dict[str, Any] | None = None
+    ) -> None:
         self._registry = registry
         self._model_paths = model_paths
 
@@ -612,24 +702,36 @@ class RegistryFamilyLookup:
             if record.compatibility is None:
                 continue
             if any(
-                (location.path == Path(exact) if exact is not None else _model_key(location.path.name) == key)
+                (
+                    location.path == Path(exact)
+                    if exact is not None
+                    else _model_key(location.path.name) == key
+                )
                 for location in record.locations
                 if location.kind is AssetKind.CHECKPOINT
             ):
                 found.append(record.compatibility)
         if not found:
             return None
-        outcomes = {(item.status, item.family,
-                     item.checkpoint_architecture in ("sdxl_refiner", "sdxl_inpaint"),
-                     bool(item.structural_error),
-                     # Two same-named files of different FLUX layouts are a conflict, never a pick.
-                     variant_from_architecture(item.checkpoint_architecture)) for item in found}
+        outcomes = {
+            (
+                item.status,
+                item.family,
+                item.checkpoint_architecture in ("sdxl_refiner", "sdxl_inpaint"),
+                bool(item.structural_error),
+                # Two same-named files of different FLUX layouts are a conflict, never a pick.
+                variant_from_architecture(item.checkpoint_architecture),
+            )
+            for item in found
+        }
         if len(outcomes) > 1:
             return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, ())
         return found[0]
 
 
-def registry_variant_lookup(family_lookup: FamilyLookup) -> Callable[[str], tuple[str, bool] | None]:
+def registry_variant_lookup(
+    family_lookup: FamilyLookup,
+) -> Callable[[str], tuple[str, bool] | None]:
     """Adapt a family lookup to the FLUX structural-variant seam ``forge_flux1_profile.install_variant_lookup`` takes.
 
     Only a resolved FLUX family with a recorded layout answers; conflicting or unknown evidence answers ``None``.
@@ -743,9 +845,13 @@ class ModelPolicyResult:
             return _project_zimage_flat(payload)
         if isinstance(resolve_model_profile(payload.get("backend_options")), ZImageProfile):
             raise ValueError("The frozen Z-Image profile requires its exact selected checkpoint")
-        if ideogram4_selected(payload) or frozen_profile_is_ideogram4(payload.get("backend_options")):
+        if ideogram4_selected(payload) or frozen_profile_is_ideogram4(
+            payload.get("backend_options")
+        ):
             return apply_ideogram4_compile_policy(payload)
-        if qwen_image_selected(payload) or frozen_qwen_image_profile(payload.get("backend_options")):
+        if qwen_image_selected(payload) or frozen_qwen_image_profile(
+            payload.get("backend_options")
+        ):
             return apply_qwen_image_compile_policy(payload)
         if klein_selected(payload):
             return _project_klein_flat(payload)
@@ -767,16 +873,28 @@ def compile_model_policy(config: dict[str, Any]) -> ModelPolicyResult:
 def _project_zimage_flat(payload: dict[str, Any]) -> dict[str, Any]:
     validate_zimage_config(payload)
     p = ZIMAGE_PROFILE_V1
-    options = normalize_image_backend_options(payload.get("backend_options"), model_name=p.transformer.filename)
+    options = normalize_image_backend_options(
+        payload.get("backend_options"), model_name=p.transformer.filename
+    )
     if resolve_image_backend_id(options) != p.backend_id or resolve_model_profile(options) is not p:
-        raise ZImageProfileError("Z-Image requires Forge and its exact v1 profile; no backend switch or profile upgrade")
+        raise ZImageProfileError(
+            "Z-Image requires Forge and its exact v1 profile; no backend switch or profile upgrade"
+        )
     payload["backend_options"] = options
     stage = payload.setdefault("txt2img", {})
     defaults: dict[str, Any] = {
-        "model": p.transformer.filename, "sampler": p.sampler, "sampler_name": p.sampler,
-        "scheduler": p.scheduler, "steps": p.steps, "cfg_scale": p.cfg_scale,
-        "width": p.geometries[0][0], "height": p.geometries[0][1], "distilled_cfg_scale": p.distilled_cfg_scale,
-        "negative_prompt": "", "prompt_optimizer": {"enabled": False}, "clip_skip": FIXED_CLIP_SKIP,
+        "model": p.transformer.filename,
+        "sampler": p.sampler,
+        "sampler_name": p.sampler,
+        "scheduler": p.scheduler,
+        "steps": p.steps,
+        "cfg_scale": p.cfg_scale,
+        "width": p.geometries[0][0],
+        "height": p.geometries[0][1],
+        "distilled_cfg_scale": p.distilled_cfg_scale,
+        "negative_prompt": "",
+        "prompt_optimizer": {"enabled": False},
+        "clip_skip": FIXED_CLIP_SKIP,
     }
     for target in (payload, stage):
         for key, value in defaults.items():
@@ -822,7 +940,10 @@ def _project_klein_flat(payload: dict[str, Any]) -> dict[str, Any]:
         if flat in payload:
             payload[flat] = value
     optimizer = payload.get("prompt_optimizer")
-    payload["prompt_optimizer"] = {**(optimizer if isinstance(optimizer, Mapping) else {}), "enabled": False}
+    payload["prompt_optimizer"] = {
+        **(optimizer if isinstance(optimizer, Mapping) else {}),
+        "enabled": False,
+    }
     pipeline = dict(payload.get("pipeline") or {})
     pipeline["apply_global_positive_txt2img"] = False
     for key in (

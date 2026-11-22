@@ -11,8 +11,14 @@ from typing import Any
 from src.video.motion_source_preparation import sha256_file
 
 
-def model_folders(command: Sequence[str], working_dir: str | None) -> dict[str, list[Path]]:
-    """Read Comfy's standard local roots and explicit extra-model-path files, without executing them."""
+def model_folders(
+    command: Sequence[str], working_dir: str | None, *, extra_kinds: Sequence[str] = ()
+) -> dict[str, list[Path]]:
+    """Read Comfy's standard local roots and explicit extra-model-path files, without executing them.
+
+    ``extra_kinds`` adds further model folder kinds (``checkpoints``, ``loras``) beside the video workflow kinds; the
+    default returns exactly the video kinds, unchanged.
+    """
     if not working_dir:
         raise ValueError(
             "Managed Comfy source directory is unknown; local model identity cannot be verified."
@@ -35,7 +41,8 @@ def model_folders(command: Sequence[str], working_dir: str | None) -> dict[str, 
             "Use separate arguments for Comfy model-path flags so model identity can be verified."
         )
     roots = {
-        key: [model_base / "models" / key] for key in ("diffusion_models", "text_encoders", "vae")
+        key: [model_base / "models" / key]
+        for key in ("diffusion_models", "text_encoders", "vae", *extra_kinds)
     }
     roots["diffusion_models"].append(model_base / "models" / "unet")
     roots["text_encoders"].append(model_base / "models" / "clip")
