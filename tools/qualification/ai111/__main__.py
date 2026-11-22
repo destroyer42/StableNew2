@@ -14,6 +14,7 @@ from pathlib import Path
 
 from tools.qualification.ai111 import plan as plan_module
 from tools.qualification.ai111.corpus import build_corpus, corpus_digest, to_jsonl
+from tools.qualification.eval_plan_output import plan_output
 
 
 def authorization_request(plan: dict, free_bytes: int) -> dict:
@@ -57,8 +58,9 @@ def authorization_request(plan: dict, free_bytes: int) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
+    args.out = plan_output(parser, args.out, "ai111")
     args.out.mkdir(parents=True)  # a new destination only: earlier evidence is never overwritten
     plan = plan_module.frozen_plan()
     cases = build_corpus(plan["corpus"]["seed"], plan["corpus"]["counts"])
