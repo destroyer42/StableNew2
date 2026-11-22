@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.utils.config import ConfigManager
 from src.utils.managed_process import ManagedProcess
+from src.utils.process_observation import observe_owned_tcp_listener
 from src.video.comfy_healthcheck import probe_comfy_endpoint, wait_for_comfy_ready
 from src.video.comfy_runtime_setup import ComfyLaunchFacts
 from src.video.managed_comfy_runtime import (
@@ -144,8 +145,6 @@ class ComfyProcessManager:
     def verified_a14b_endpoint(self, base_url: str) -> str:
         """Use a numeric local endpoint served exclusively by this live launch tree."""
 
-        import psutil
-
         pid = self.pid
         if pid is None or not self.is_running():
             raise ComfyStartupError(
@@ -153,9 +152,10 @@ class ComfyProcessManager:
             )
         try:
             url = urlsplit(base_url)
+            host = url.hostname
             if (
                 url.scheme not in {"http", "https"}
-                or url.hostname is None
+                or host is None
                 or url.username is not None
                 or url.path.rstrip("/")
                 or url.query
@@ -165,33 +165,16 @@ class ComfyProcessManager:
             port = url.port or (443 if url.scheme == "https" else 80)
             addresses = (
                 [ip_address("127.0.0.1"), ip_address("::1")]
-                if url.hostname == "localhost"
-                else [ip_address(url.hostname)]
+                if host == "localhost"
+                else [ip_address(host)]
             )
-            root = psutil.Process(pid)
-            # A Windows venv launcher can start the serving Python interpreter as its child.
-            tree = [root, *root.children(recursive=True)] if self.contained else [root]
-            owned = {member.pid for member in tree if member.is_running()}
-            listeners = [
-                (ip_address(connection.laddr.ip), connection.pid)
-                for connection in psutil.net_connections(kind="tcp")
-                if connection.status == psutil.CONN_LISTEN and connection.laddr.port == port
-            ]
-            for address in addresses:
-                owners = {
-                    owner
-                    for listener, owner in listeners
-                    if listener == address
-                    or (
-                        address.is_loopback
-                        and listener.is_unspecified
-                        and listener.version == address.version
-                    )
-                }
-                if owners and owners <= owned and self.pid == pid and self.is_running():
-                    host = str(address) if address.version == 4 else f"[{address}]"
-                    return f"{url.scheme}://{host}:{port}"
-        except (ValueError, OSError, psutil.Error) as exc:
+            address = observe_owned_tcp_listener(
+                pid, addresses, port, include_descendants=self.contained
+            )
+            if address is not None and self.pid == pid and self.is_running():
+                host = str(address) if address.version == 4 else f"[{address}]"
+                return f"{url.scheme}://{host}:{port}"
+        except (ValueError, OSError) as exc:
             raise ComfyStartupError("Could not verify the owned A14B ComfyUI listener.") from exc
         raise ComfyStartupError(
             "The configured A14B ComfyUI endpoint is not served by the owned launch."

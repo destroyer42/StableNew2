@@ -950,7 +950,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `os_shell.py`: Open a file in the system viewer or reveal it in the file manager (PR-VID-UX-314)
 - `process_container_v2.py`: OS-level process container helpers (job objects / cgroup v2) for StableNew
 - `process_inspector_v2.py`: Utilities for inspecting and describing Python processes
-- `process_observation.py`: Read-only snapshots of a bounded child's owned container; no lifecycle authority
+- `process_observation.py`: Read-only observations scoped to owned processes and containers
 - `prompt_pack_utils.py`: Utilities for reading metadata from native JSON PromptPacks
 - `prompt_packs.py`: Prompt pack discovery and descriptors for Architecture_v2
 - `prompt_templates.py`: (no docstring)

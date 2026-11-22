@@ -686,7 +686,7 @@ def build_wan_a14b_ck_launch_spec() -> WorkflowSpec:
 def a14b_launch_attention(spec: WorkflowSpec) -> str | None:
     """Resolve launch mode from the immutable workflow identity, including old baseline jobs."""
 
-    if spec.workflow_version == WAN_A14B_VERSION:
+    if getattr(spec, "workflow_version", None) == WAN_A14B_VERSION:
         if spec.workflow_id == WAN_A14B_ID:
             return "baseline"
         if spec.workflow_id == WAN_A14B_CK_LAUNCH_ID:
