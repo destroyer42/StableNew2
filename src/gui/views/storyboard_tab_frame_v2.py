@@ -75,6 +75,7 @@ class StoryboardTabFrameV2(ttk.Frame):
         self._refresh_after: str | None = None
         self._frame_path = ""
         self._ai_tooltip_text = ""
+        self.target: tuple[str, int | None] | None = None
         self.compare_preview_fn: Any = prepare_review_preview
         self.compare_windows: list[StoryboardCompareWindowV2] = []
         self.status_var = tk.StringVar(
@@ -498,7 +499,7 @@ class StoryboardTabFrameV2(ttk.Frame):
     # ------------------------------------------------------------------ the Continue panel (B4)
 
     def _build_continue_panel(self, host: ttk.Frame) -> None:
-        self.target: tuple[str, int | None] | None = None
+        self.target = None
         self._row_widgets: list[_RowWidgets] = []
         self._busy = False
         self.continue_title_var = tk.StringVar(value="Continue")
