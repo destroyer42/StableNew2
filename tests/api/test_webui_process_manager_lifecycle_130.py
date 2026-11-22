@@ -253,6 +253,37 @@ def test_startup_wait_reports_an_early_exit_without_waiting_for_the_timeout(monk
     assert probe.call_count == 1  # one bounded slice, then the exit was reported, not 60 s of polling
 
 
+def test_startup_wait_ends_quietly_when_stablenew_releases_the_booting_process(monkeypatch):
+    # A ComfyUI job dispatched while Forge boots releases it through stop_webui (runtime transition). The startup
+    # wait must stop polling a process StableNew deliberately ended instead of failing after the full timeout.
+    manager, _process = _started_manager(monkeypatch)
+    calls = {"count": 0}
+
+    def probe(url, *, timeout, poll_interval):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            manager.stop_webui(grace_seconds=0.1)
+        raise healthcheck.WebUIHealthCheckTimeout("not ready")
+
+    wpm.wait_for_managed_startup(manager, URL, timeout_s=60.0, probe=probe)
+
+    assert calls["count"] == 1
+    assert manager.deliberate_stop_count == 1
+    assert manager.ready_epoch == 0  # a released process is never published as ready
+
+
+def test_a_crash_after_launch_is_not_mistaken_for_a_deliberate_release(monkeypatch):
+    manager, process = _started_manager(monkeypatch, pid=31338)
+    process._returncode = 1
+
+    probe = mock.Mock(side_effect=healthcheck.WebUIHealthCheckTimeout("not ready"))
+
+    with pytest.raises(WebUIStartupError):
+        wpm.wait_for_managed_startup(manager, URL, timeout_s=60.0, probe=probe)
+
+    assert manager.deliberate_stop_count == 0
+
+
 def test_startup_timeout_with_a_live_process_keeps_truthful_ownership(monkeypatch):
     manager, _process = _started_manager(monkeypatch)
     clock = {"now": 0.0}

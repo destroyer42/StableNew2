@@ -387,18 +387,13 @@ def test_new_installation_and_attestation_are_rechecked_without_restart(journey)
     assert j.flow.button.instate(["!disabled"])
 
 
-def test_target_choices_use_actual_picker_policy_and_visibility(monkeypatch):
+def test_target_choices_use_actual_picker_policy_and_visibility():
     from src.gui import prompt_ai_targets as choices
 
-    def project(name, backend):
-        assert backend == "forge_webui"
-        return _projection(name)
-
-    monkeypatch.setattr(choices, "configured_image_backend_id", lambda: "forge_webui")
-    monkeypatch.setattr(choices, "project_model_selection", project)
     base = SimpleNamespace(
         _model_combo={"values": (SDXL, KLEIN, "mystery.safetensors")},
         _normalize_model_name=lambda name: name,
+        project_checkpoint_candidates=lambda names: map(_projection, names),
     )
     offered = choices.prompt_ai_targets(base, "sfw")
     assert tuple(key for key, _label in offered) == (SDXL, KLEIN)
@@ -422,7 +417,9 @@ def test_real_application_and_window_bind_one_dormant_service(tk_root, tmp_path,
     monkeypatch.setattr(controller_module, "AiAssistIntegration", create)
     jobs, queue, _ = make_stubbed_job_service_with_queue()
     controller = controller_module.AppController(None, threaded=False, job_service=jobs)
-    controller._shutdown_webui = Mock()  # runtime state is outside this GUI wiring test
+    controller._shutdown_webui = Mock(
+        return_value="unowned_or_absent"
+    )  # runtime state is outside this GUI wiring test
     window = MainWindowV2(
         tk_root,
         app_state=controller.app_state,

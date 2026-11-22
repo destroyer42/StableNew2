@@ -73,24 +73,21 @@ class SystemWatchdogV2:
         with self._ACTIVE_LOCK:
             self.__class__._ACTIVE_THREAD = t
 
-    def stop(self) -> None:
-        """Stop the watchdog thread gracefully.
-
-        PR-WATCHDOG-001: Increased timeout from 2s to 10s for clean shutdown.
-        """
+    def begin_shutdown(self) -> None:
         self._stop.set()
-        if self._thread and self._thread.is_alive():
-            # PR-WATCHDOG-001: Increased timeout for reliable shutdown
-            self._thread.join(timeout=10.0)
+
+    def stop(self, timeout: float = 10.0) -> bool:
+        """Stop monitoring within the given budget. Its diagnostics workers are tracked separately."""
+        self.begin_shutdown()
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=max(0.0, timeout))
+            if thread.is_alive():
+                return False
         with self._ACTIVE_LOCK:
-            if self.__class__._ACTIVE_THREAD is self._thread:
+            if self.__class__._ACTIVE_THREAD is thread:
                 self.__class__._ACTIVE_THREAD = None
-        wait_for_idle = getattr(self.diagnostics, "wait_for_idle", None)
-        if callable(wait_for_idle):
-            try:
-                wait_for_idle(timeout_s=5.0)
-            except Exception:
-                pass
+        return True
 
     def _loop(self) -> None:
         """Main watchdog loop - monitors system health.

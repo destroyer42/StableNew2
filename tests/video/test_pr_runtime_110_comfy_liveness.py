@@ -128,7 +128,7 @@ class _Harness:
         clock.after_sleep = self._tick
         monkeypatch.setattr(
             "src.video.comfy_workflow_backend.time",
-            SimpleNamespace(time=clock.time, sleep=clock.sleep),
+            SimpleNamespace(monotonic=clock.time, sleep=clock.sleep),
         )
 
     def _tick(self, elapsed: float) -> None:

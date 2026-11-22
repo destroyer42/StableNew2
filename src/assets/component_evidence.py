@@ -33,6 +33,7 @@ COMPONENT_CONTRACT = "component_evidence/1"
 ROLE_TRANSFORMER = "transformer"  # diffusion transformer without a bundled text encoder/VAE (dependency-bearing)
 ROLE_TEXT_ENCODER = "text_encoder"
 ROLE_VAE = "vae"
+ROLE_PREVIEW_DECODER = "preview_decoder"
 ROLE_BUNDLED = "bundled_checkpoint"  # a self-contained checkpoint (for example an SDXL UNet checkpoint)
 ROLE_UNRECOGNIZED = "unrecognized"
 
@@ -358,17 +359,42 @@ def _vae(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) -> Componen
     return ComponentEvidence(ROLE_VAE, ARCH_FLUX_VAE if conv_in[1] in (16, 32) else "vae", facts)
 
 
+def _standalone_encoder(shapes: Mapping[str, list[int]], _dtypes: Mapping[str, str]) -> ComponentEvidence | None:
+    # Paired embedding and attention keys identify standalone CLIP or T5 without relying on a filename.
+    for embedding, attention, architecture in (
+        ("text_model.embeddings.token_embedding.weight", "text_model.encoder.layers.0.self_attn.", "clip_text"),
+        ("token_embedding.weight", "transformer.resblocks.0.attn.", "clip_text"),
+        ("shared.weight", "encoder.block.0.layer.0.SelfAttention.", "t5_text"),
+        ("encoder.embed_tokens.weight", "encoder.block.0.layer.0.SelfAttention.", "t5_text"),
+    ):
+        if embedding in shapes and _prefixed(shapes, attention):
+            return ComponentEvidence(ROLE_TEXT_ENCODER, architecture)
+    return None
+
+
+def _preview_decoder(shapes: Mapping[str, list[int]], _dtypes: Mapping[str, str]) -> ComponentEvidence | None:
+    if _prefixed(shapes, "taesd_decoder.") or (
+        "decoder.0.weight" in shapes and "decoder.1.conv.0.weight" in shapes
+    ) or (
+        "0.weight" in shapes and "1.conv.0.weight" in shapes and "3.weight" in shapes
+    ):
+        return ComponentEvidence(ROLE_PREVIEW_DECODER, "taesd")
+    return None
+
+
 def classify_tensor_table(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) -> ComponentEvidence:
     """Classify an already-validated header. First matching structural signature wins; otherwise unrecognized."""
 
     precision = precision_facts(shapes, dtypes)
-    for classify in (_flux_transformer, _z_image_dit, _qwen_image_dit, _qwen3, _qwen3_vl, _qwen_image_vae, _vae,
-                     _unrecognized_dit):
+    for classify in (
+        _flux_transformer, _z_image_dit, _qwen_image_dit, _unrecognized_dit,
+        _qwen3, _qwen3_vl, _standalone_encoder, _qwen_image_vae, _vae, _preview_decoder,
+    ):
         found = classify(shapes, dtypes)
         if found is not None:
             return replace(found, facts={**found.facts, **precision})
-    if _prefixed(shapes, "model.diffusion_model.input_blocks.") and _prefixed(shapes, "first_stage_model."):
-        shape_architecture, _error = classify_checkpoint_shapes(dict(shapes))
+    shape_architecture, _error = classify_checkpoint_shapes(dict(shapes))
+    if shape_architecture != "unrecognized" or _prefixed(shapes, "model.diffusion_model.input_blocks."):
         architecture = (
             ARCH_SDXL_UNET if shape_architecture == "sdxl_base"
             else ARCH_UNET_BUNDLE_UNRECOGNIZED if shape_architecture == "unrecognized"
@@ -446,6 +472,7 @@ __all__ = [
     "ROLE_TRANSFORMER",
     "ROLE_UNRECOGNIZED",
     "ROLE_VAE",
+    "ROLE_PREVIEW_DECODER",
     "classify_gguf_evidence",
     "classify_tensor_table",
     "inspect_component_file",

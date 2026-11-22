@@ -178,7 +178,7 @@ def test_constructor_failure_and_failed_quiescence_are_observable(tmp_path, monk
     assert owner.shutdown()
     owner.service = SimpleNamespace(begin_shutdown=Mock(), shutdown=Mock(return_value=False))
     assert owner.shutdown() is False
-    assert not shutdown_coordinator.ai_is_quiescent(SimpleNamespace(ai_assist=owner))
+    assert owner.quiescent is False
     assert "did not quiesce" in caplog.text and "PRIVATE_CANARY" not in caplog.text
 
 
@@ -192,11 +192,11 @@ def test_shutdown_entry_fences_ai_and_queue_before_repository_close():
         is_quiescent=lambda: True,
         history_store=SimpleNamespace(close=lambda: events.append("repository-close")),
     )
-    controller = SimpleNamespace(ai_assist=ai, job_service=jobs)
-    shutdown_coordinator.fence_application_admission(controller)
-    assert events == ["ai-fence", "queue-fence"]
-    shutdown_coordinator.shutdown_owned_services(controller)
-    assert events == ["ai-fence", "queue-fence", "ai-join", "repository-close"]
+    assert shutdown_coordinator.fence_queue_admission(jobs)
+    ai.begin_shutdown()
+    ai.shutdown()
+    assert shutdown_coordinator.close_repository_when_quiescent(jobs)
+    assert events == ["queue-fence", "ai-fence", "ai-join", "repository-close"]
 
 
 def test_service_shutdown_after_admission_before_worker_publish_cannot_launch(

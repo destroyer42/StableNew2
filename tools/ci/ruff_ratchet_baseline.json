@@ -386,8 +386,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1187,
-      "S110": 467,
+      "BLE001": 1170,
+      "S110": 456,
       "S112": 34
     },
     "counts": {
@@ -423,8 +423,8 @@
         "BLE001": 18
       },
       "src/controller/app_controller.py": {
-        "BLE001": 94,
-        "S110": 41,
+        "BLE001": 81,
+        "S110": 32,
         "S112": 3
       },
       "src/controller/app_controller_services/application_runtime_coordinator.py": {
@@ -434,9 +434,6 @@
       "src/controller/app_controller_services/run_submission_service.py": {
         "BLE001": 1,
         "S110": 1
-      },
-      "src/controller/app_controller_services/shutdown_coordinator.py": {
-        "BLE001": 1
       },
       "src/controller/core_pipeline_controller.py": {
         "BLE001": 13,
@@ -891,8 +888,8 @@
         "BLE001": 2
       },
       "src/services/watchdog_system_v2.py": {
-        "BLE001": 5,
-        "S110": 2
+        "BLE001": 4,
+        "S110": 1
       },
       "src/state/output_routing.py": {
         "BLE001": 4,
@@ -941,10 +938,6 @@
       "src/utils/gpu_survivor_telemetry.py": {
         "BLE001": 7,
         "S110": 2
-      },
-      "src/utils/graceful_exit.py": {
-        "BLE001": 2,
-        "S110": 1
       },
       "src/utils/image_metadata.py": {
         "BLE001": 11

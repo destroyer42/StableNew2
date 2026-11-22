@@ -24,10 +24,15 @@ from src.ai_assist.contracts import (
     PlanStep,
     SuggestionKind,
 )
+from src.ai_assist.framing import render_prompt
 from src.ai_assist.preview import PREVIEW_LABEL
 from src.ai_assist.service import Submission
+from src.assets import AssetKind
+from src.assets.compatibility import CompatibilityProfile, CompatibilityStatus, ModelFamily
 from src.controller.app_controller_services.ai_assist_integration import AiAssistIntegration
+from src.gui.model_policy_panel_projection import ModelPolicyPanelProjection
 from src.gui.prompt_ai_plan_sources import build_plan_snapshot, controller_preflight
+from src.gui.prompt_ai_targets import prompt_ai_targets
 from src.gui_v2 import ai_plan_advice
 from src.gui_v2.ai_plan_advice import (
     PLAN_ADVICE_NOTICE,
@@ -46,10 +51,13 @@ from src.gui_v2.ai_plan_advice import (
     judge_step,
     outcome_plan_text,
     plan_review,
+    planning_for_text,
     review_text,
     unavailable_plan_review,
 )
 from src.gui_v2.ai_suggestion_view import OUTCOME_TEXT
+from src.gui_v2.model_policy_projection import project_model_selection
+from src.image_backends.model_policy import GENERIC_IMAGE_STAGES, RegistryFamilyLookup
 
 TARGETS = (("model-a", "Model A (SDXL)"), ("model-b", "Model B (Flux)"))
 WORKFLOWS = (("wf-a", "Wan A"), ("wf-x", "Wan Experimental"), ("wf-off", "Wan Off"))
@@ -376,15 +384,29 @@ class FakeVideoController:
         return SimpleNamespace(gates=self.gates)
 
 
-@pytest.fixture
-def sources(monkeypatch):
-    monkeypatch.setattr(
-        "src.gui.prompt_ai_plan_sources.configured_image_backend_id", lambda: "forge_webui"
-    )
+KLEIN = "flux-2-klein-4b-fp8"
+SDXL_WITHOUT_EVIDENCE = "juggernautXL_v9.safetensors"
+JUGGERNAUT = "juggernautXL_ragnarokBy"
+PHOTO_MOMENTUM = "photoMomentumSDXLNSFW_v20"
+
+
+def _picker(names, family_lookup, *, backend="forge_webui", selected=""):
+    display_to_id = {f"{name} [picker]": name for name in names}
     panel = SimpleNamespace(
-        _model_combo={"values": ["juggernautXL_v9.safetensors", "mystery.ckpt"]},
-        _normalize_model_name=lambda name: name,
+        _model_combo={"values": tuple(display_to_id)},
+        _normalize_model_name=lambda name: display_to_id.get(name, name),
+        model_var=SimpleNamespace(get=lambda: f"{selected} [picker]" if selected else ""),
     )
+    policy_panel = ModelPolicyPanelProjection(
+        panel, family_lookup=family_lookup, backend_id_provider=lambda: backend
+    )
+    panel.project_checkpoint_candidates = policy_panel.project_checkpoint_candidates
+    return panel, policy_panel
+
+
+@pytest.fixture
+def sources():
+    panel, _ = _picker([KLEIN, SDXL_WITHOUT_EVIDENCE], lambda _name: None)
     records = [
         {
             "workflow_id": "wf-a",
@@ -415,10 +437,8 @@ def test_snapshot_lists_come_from_the_picker_and_the_catalogue(sources) -> None:
     snapshot = build_plan_snapshot(panel, app, "all")
     assert snapshot.workflows == (("wf-a", "Wan A"),)
     assert snapshot.facts.workflows["wf-a"] == WorkflowFact("Wan A", "1.3.0", "approved")
-    assert set(snapshot.facts.targets) == {key for key, _label in snapshot.targets}
-    assert ("video" in snapshot.stages) and all(
-        fact.stages for fact in snapshot.facts.targets.values()
-    )
+    assert tuple(snapshot.facts.targets) == (KLEIN,)
+    assert snapshot.stages == ("txt2img", "img2img", "video")
     blocked, unknown = snapshot.facts.preflight("wf-a", "1.3.0")
     assert blocked == ("Model files: weights missing",) and unknown == ("Endpoint: not serving",)
     assert video_controller.asked == [("wf-a", "1.3.0")]
@@ -441,22 +461,8 @@ def test_controller_preflight_adapter_never_reports_ok_gates_as_problems() -> No
 # -- AI-211: the plan knows the model the operator selected -----------------------------------------------------------------
 
 
-def _projection(model_name, policy_id="sdxl"):
-    return SimpleNamespace(model_name=model_name, policy=SimpleNamespace(policy_id=policy_id))
-
-
-#: The one id in this fake picker that the real model policy knows explicitly (so it is in the closed list); the other,
-#: an ordinary SDXL checkpoint, has only the unverified generic policy and is filtered out of the closed list.
-KLEIN = "flux-2-klein-4b-fp8"
-SDXL_CHECKPOINT = "juggernautXL_v9.safetensors"
-
-
 def _snapshot_with(sources, selection):
     panel, records = sources
-    panel = SimpleNamespace(
-        _model_combo={"values": [KLEIN, SDXL_CHECKPOINT]},
-        _normalize_model_name=lambda name: name,
-    )
     app = SimpleNamespace(get_video_workflow_controller=lambda: FakeVideoController(records, ()))
     return build_plan_snapshot(panel, app, "all", selection)
 
@@ -464,7 +470,7 @@ def _snapshot_with(sources, selection):
 def test_snapshot_anchors_to_the_selected_and_allowed_model(sources) -> None:
     (key, label), *rest = _snapshot_with(sources, None).targets
     assert key == KLEIN and not rest
-    snapshot = _snapshot_with(sources, _projection(key, "flux2_klein_4b_fp8"))
+    snapshot = _snapshot_with(sources, project_model_selection(key, "forge_webui"))
     assert snapshot.current_target == key and snapshot.current_target_label == label
     assert snapshot.target_policy_id == "flux2_klein_4b_fp8"
     assert snapshot.facts.current_target == key
@@ -477,13 +483,10 @@ def test_snapshot_anchors_to_the_selected_and_allowed_model(sources) -> None:
 
 def test_snapshot_sends_no_selection_when_it_is_not_in_the_allowed_list(sources) -> None:
     for selection in (
-        _projection(
-            SDXL_CHECKPOINT, "unverified_generic"
-        ),  # selected, but it has no verified policy
-        _projection("not-in-the-picker.safetensors"),
-        _projection(""),
+        project_model_selection(SDXL_WITHOUT_EVIDENCE, "forge_webui"),
+        project_model_selection("not-in-the-picker.safetensors", "forge_webui"),
+        project_model_selection("", "forge_webui"),
         None,
-        SimpleNamespace(),
     ):
         snapshot = _snapshot_with(sources, selection)
         assert snapshot.current_target == "" and snapshot.current_target_label == ""
@@ -500,26 +503,167 @@ def test_a_model_hidden_by_the_visibility_mode_is_not_sent(sources, monkeypatch)
     )
     panel, records = sources
     app = SimpleNamespace(get_video_workflow_controller=lambda: FakeVideoController(records, ()))
-    snapshot = build_plan_snapshot(panel, app, "sfw", _projection(key))
+    snapshot = build_plan_snapshot(panel, app, "sfw", project_model_selection(key, "forge_webui"))
     assert snapshot.targets == () and snapshot.current_target == ""
 
 
 def test_the_goal_text_never_selects_a_model(sources) -> None:
     key = KLEIN
-    snapshot = _snapshot_with(sources, _projection(""))
+    snapshot = _snapshot_with(sources, None)
     request = build_plan_request(
         "r1",
-        f"please use {key}",
+        f"please use {key} or invented-checkpoint",
         targets=snapshot.targets,
         workflows=snapshot.workflows,
         stages=snapshot.stages,
         current_target=snapshot.current_target,
     )
     assert request.current_target == ""
+    assert request.allowed_targets == (key,)
+
+
+@pytest.fixture
+def registry_lookup():
+    sdxl = CompatibilityProfile(CompatibilityStatus.RESOLVED, ModelFamily.SDXL, ())
+    sd1 = CompatibilityProfile(CompatibilityStatus.RESOLVED, ModelFamily.SD1, ())
+    profiles = (
+        (JUGGERNAUT, sdxl),
+        (PHOTO_MOMENTUM, sdxl),
+        ("same_name", sdxl),
+        ("same_name", sd1),
+        ("bad_structure", dataclasses.replace(sdxl, structural_error="invalid_header")),
+        ("refiner", dataclasses.replace(sdxl, checkpoint_architecture="sdxl_refiner")),
+        ("inpaint", dataclasses.replace(sdxl, checkpoint_architecture="sdxl_inpaint")),
+        (
+            "unapproved_variant",
+            CompatibilityProfile(
+                CompatibilityStatus.RESOLVED,
+                ModelFamily.FLUX,
+                (),
+                checkpoint_architecture="flux1_schnell",
+            ),
+        ),
+        ("unsupported_family", sd1),
+    )
+    records = tuple(
+        SimpleNamespace(
+            compatibility=profile,
+            locations=(
+                SimpleNamespace(
+                    path=Path(str(index)) / f"{name}.safetensors", kind=AssetKind.CHECKPOINT
+                ),
+            ),
+        )
+        for index, (name, profile) in enumerate(profiles)
+    )
+    registry = SimpleNamespace(
+        webui_root=Path("unused"),
+        cached_snapshot=lambda: SimpleNamespace(
+            records_for=lambda kind: records if kind is AssetKind.CHECKPOINT else ()
+        ),
+    )
+    return RegistryFamilyLookup(registry)
+
+
+@pytest.mark.parametrize("selected", [JUGGERNAUT, PHOTO_MOMENTUM])
+def test_registry_verified_checkpoints_are_distinct_and_anchor_the_request(
+    registry_lookup, selected
+):
+    looked_up = []
+
+    def lookup(name):
+        looked_up.append(name)
+        return registry_lookup(name)
+
+    panel, policy_panel = _picker(
+        [
+            JUGGERNAUT,
+            PHOTO_MOMENTUM,
+            SDXL_WITHOUT_EVIDENCE,
+            "same_name",
+            "bad_structure",
+            "refiner",
+            "inpaint",
+            "unapproved_variant",
+            "unsupported_family",
+        ],
+        lookup,
+        selected=selected,
+    )
+    picker_values = panel._model_combo["values"]
+    panel._model_combo["values"] += picker_values[:1]
+    selection = policy_panel.refresh()
+    assert selection.policy.policy_id == "sdxl"
+    assert selection.policy.evidence == "registry_evidence"
+    assert selection.policy.explicit_capabilities
+    looked_up.clear()
+
+    snapshot = build_plan_snapshot(panel, None, "nsfw", selection)
+    assert tuple(dict(snapshot.targets)) == (JUGGERNAUT, PHOTO_MOMENTUM)
+    assert snapshot.current_target == snapshot.facts.current_target == selected
+    assert snapshot.target_policy_id == selection.policy.policy_id
+    assert snapshot.current_target_stages == selection.policy.stages == GENERIC_IMAGE_STAGES
+    assert all(fact.stages == selection.policy.stages for fact in snapshot.facts.targets.values())
+    assert panel.model_var.get() == f"{selected} [picker]"
+    assert panel._model_combo["values"] == picker_values + picker_values[:1]
+    assert policy_panel.last_projection is selection
+    assert len(looked_up) == len(set(looked_up)) == len(picker_values)
+    assert prompt_ai_targets(panel, "nsfw") == snapshot.targets
+
+    request = build_plan_request(
+        "registry-plan",
+        "Create an image.",
+        targets=snapshot.targets,
+        workflows=snapshot.workflows,
+        stages=snapshot.stages,
+        target_policy_id=snapshot.target_policy_id,
+        current_target=snapshot.current_target,
+        current_target_label=snapshot.current_target_label,
+        current_target_stages=snapshot.current_target_stages,
+    )
+    assert request.allowed_targets == (JUGGERNAUT, PHOTO_MOMENTUM)
+    assert request.current_target == selected and request.target_policy_id == "sdxl"
+    assert request.current_target_stages == GENERIC_IMAGE_STAGES
+    assert request.current_target_label == f"{selected} (SDXL)"
+    assert planning_for_text(request) == f"Planning for: {selected} (SDXL) (selected in Pipeline)"
+    assert f"Use this id for it: {selected}." in render_prompt(request)
+
+
+def test_hidden_conflicting_and_incompatible_selections_are_unanchored(registry_lookup):
+    panel, _ = _picker(
+        [JUGGERNAUT, PHOTO_MOMENTUM, KLEIN, "same_name"], registry_lookup, backend="a1111_webui"
+    )
+    for name in (PHOTO_MOMENTUM, KLEIN, "same_name"):
+        selection = project_model_selection(name, "a1111_webui", family_lookup=registry_lookup)
+        snapshot = build_plan_snapshot(panel, None, "sfw", selection)
+        assert tuple(dict(snapshot.targets)) == (JUGGERNAUT,)
+        assert (snapshot.current_target, snapshot.target_policy_id) == ("", "")
+
+
+def test_a_stale_selection_with_different_policy_stays_unanchored(registry_lookup):
+    panel, _ = _picker([JUGGERNAUT], registry_lookup)
+    current = project_model_selection(JUGGERNAUT, "forge_webui", family_lookup=registry_lookup)
+    for stale in (
+        project_model_selection(JUGGERNAUT, "forge_webui"),
+        dataclasses.replace(
+            current, policy=dataclasses.replace(current.policy, stages=("txt2img",))
+        ),
+        dataclasses.replace(current, blocking="Backend changed"),
+    ):
+        snapshot = build_plan_snapshot(panel, None, "sfw", stale)
+        assert tuple(dict(snapshot.targets)) == (JUGGERNAUT,)
+        assert (snapshot.current_target, snapshot.target_policy_id) == ("", "")
+
+
+def test_target_bound_excludes_the_rest_in_picker_order(registry_lookup):
+    names = [f"checkpoint-{index}" for index in range(257)]
+    panel, _ = _picker(names, lambda _name: registry_lookup(JUGGERNAUT))
+    snapshot = build_plan_snapshot(panel, None, "sfw")
+    assert tuple(dict(snapshot.targets)) == tuple(names[:256])
 
 
 def test_the_request_and_dialog_line_state_what_was_sent() -> None:
-    from src.gui_v2.ai_plan_advice import UNANCHORED_NOTICE, planning_for_text
+    from src.gui_v2.ai_plan_advice import UNANCHORED_NOTICE
 
     anchored = build_plan_request(
         "r1",

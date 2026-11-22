@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.assets.picker_compatibility import VaeCatalog
 from src.generation_profiles.application import (
     NOTE_NOT_OFFERED,
     NOTE_POLICY,
@@ -152,6 +153,20 @@ def test_custom_profile_is_saved_selected_restorable_and_policy_values_excluded(
         and "steps" not in klein_saved.settings
     )
     assert klein_saved.unavailable["steps"]
+
+
+def test_unverified_vae_is_never_auto_applied_by_a_favorite(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    saved_vae = "ambiguous.safetensors"
+    saved = service.save_custom("Favorite", SDXL_MODEL, {**WORKING, "vae": saved_vae})
+    service.set_favorite(SDXL_MODEL, saved.ref)
+    offered = VaeCatalog(offered=(saved_vae,), verified=(), listed=(saved_vae,))
+    working = {**WORKING, "vae": ""}
+    automatic, _ = service.on_model_changed(SDXL_MODEL, working, vae_options=offered)
+    explicit, _ = service.select(SDXL_MODEL, saved.ref, working, vae_options=offered)
+    assert "vae" not in automatic.changes
+    assert automatic.note_for("vae").status == NOTE_UNAVAILABLE
+    assert explicit.changes["vae"] == saved_vae
 
 
 def test_favorite_becomes_preferred_and_a_missing_favorite_falls_back_with_disclosure(

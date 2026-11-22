@@ -453,9 +453,10 @@ def test_the_backend_reuses_one_owner_object_after_the_global_is_cleared(
 def test_relaunch_after_stop_reregisters_the_global_owner(monkeypatch) -> None:
     class _Proc:
         pid = 55
+        returncode = None
 
         def poll(self):
-            return None
+            return self.returncode
 
     class _Managed:
         def __init__(self, *_a, **_k) -> None:
@@ -469,6 +470,7 @@ def test_relaunch_after_stop_reregisters_the_global_owner(monkeypatch) -> None:
             return self.process
 
         def stop(self, *, grace_seconds: float = 5.0) -> None:
+            self.process.returncode = 0
             self.process = None
 
         def is_running(self) -> bool:

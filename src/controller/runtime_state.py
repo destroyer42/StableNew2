@@ -44,6 +44,10 @@ class CancelToken:
     def is_cancelled(self) -> bool:
         return self._cancelled.is_set()
 
+    def wait(self, timeout: float) -> bool:
+        """Wait for cancellation or until the current polling interval expires."""
+        return self._cancelled.wait(timeout)
+
     def check_cancelled(self) -> None:
         if self._cancelled.is_set():
             raise CancellationError("Operation cancelled by user")

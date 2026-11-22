@@ -39,6 +39,7 @@ class BackgroundTaskCoordinator:
         self._run_inline = bool(run_inline)
         self._logger = logger or logging.getLogger(__name__)
         self._lock = threading.RLock()
+        self.shutdown_event = threading.Event()
         self._latest_generation: dict[str, int] = {}
         self._inflight_generation: dict[str, int] = {}
         self._pending: dict[str, _TaskSpec[Any]] = {}
@@ -58,6 +59,8 @@ class BackgroundTaskCoordinator:
         purpose: str | None = None,
     ) -> int:
         with self._lock:
+            if self.shutdown_event.is_set():
+                return 0
             generation = self._latest_generation.get(key, 0) + 1
             self._latest_generation[key] = generation
             self._submitted += 1
@@ -78,6 +81,16 @@ class BackgroundTaskCoordinator:
         self._start(spec)
         return generation
 
+    def begin_shutdown(self) -> None:
+        """Close admission and cancel pending work. In-flight work may observe shutdown_event."""
+        with self._lock:
+            self.shutdown_event.set()
+            self._pending.clear()
+
+    def is_quiescent(self) -> bool:
+        with self._lock:
+            return not self._inflight_generation
+
     def get_metrics_snapshot(self) -> dict[str, Any]:
         with self._lock:
             return {
@@ -90,39 +103,53 @@ class BackgroundTaskCoordinator:
             }
 
     def _start(self, spec: _TaskSpec[T]) -> None:
-        if self._run_inline:
-            self._run(spec)
-            return
-        self._thread_registry.spawn(
-            target=self._run,
-            args=(spec,),
-            name=spec.name,
-            purpose=spec.purpose,
-        )
+        with self._lock:
+            if self.shutdown_event.is_set():
+                self._inflight_generation.pop(spec.key, None)
+                return
+            if not self._run_inline:
+                try:
+                    self._thread_registry.spawn(
+                        target=self._run,
+                        args=(spec,),
+                        name=spec.name,
+                        purpose=spec.purpose,
+                    )
+                except Exception:
+                    self._inflight_generation.pop(spec.key, None)
+                    raise
+                return
+        self._run(spec)
 
     def _run(self, spec: _TaskSpec[T]) -> None:
         result: T | None = None
         error: Exception | None = None
         try:
-            result = spec.work()
+            if not self.shutdown_event.is_set():
+                result = spec.work()
         except Exception as exc:  # noqa: BLE001
             error = exc
-
-        with self._lock:
-            self._completed += 1
-            latest_generation = self._latest_generation.get(spec.key, 0)
-            is_latest = spec.generation == latest_generation
-            if not is_latest:
-                self._stale_dropped += 1
-            self._inflight_generation.pop(spec.key, None)
-            next_spec = self._pending.pop(spec.key, None)
-            if next_spec is not None:
-                self._inflight_generation[spec.key] = next_spec.generation
+        finally:
+            with self._lock:
+                self._completed += 1
+                latest_generation = self._latest_generation.get(spec.key, 0)
+                is_latest = spec.generation == latest_generation
+                if not is_latest:
+                    self._stale_dropped += 1
+                self._inflight_generation.pop(spec.key, None)
+                next_spec = self._pending.pop(spec.key, None)
+                if next_spec is not None:
+                    self._inflight_generation[spec.key] = next_spec.generation
 
         if next_spec is not None:
             self._start(next_spec)
 
+        if self.shutdown_event.is_set():
+            return
+
         def _deliver() -> None:
+            if self.shutdown_event.is_set():
+                return
             if error is not None:
                 if is_latest and callable(spec.on_error):
                     spec.on_error(error)

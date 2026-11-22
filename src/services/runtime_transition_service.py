@@ -64,10 +64,13 @@ contention that was otherwise being resolved by asking the operator to close the
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 RUNTIME_A1111_WEBUI = "a1111_webui"
 RUNTIME_FORGE_WEBUI = "forge_webui"
@@ -176,6 +179,12 @@ def _default_svd_service() -> Any:
     return SVDService()
 
 
+def _default_end_warm_hold(reason: str) -> Any:
+    from src.services.runtime_warm_hold import end_runtime_warm_hold
+
+    return end_runtime_warm_hold(reason)
+
+
 def _load_settings_mapping() -> Any:
     """The settings backend/endpoint selection reads; unreadable settings fail closed (no endpoint is guessed)."""
 
@@ -238,6 +247,7 @@ class RuntimeTransitionCoordinator:
     webui_endpoint_present: Callable[[], bool] = field(default=_default_webui_endpoint_presence)
     webui_endpoint_identity: Callable[[], str] = field(default=_default_webui_endpoint_identity)
     comfy_endpoint_present: Callable[[], bool] = field(default=_default_comfy_endpoint_presence)
+    warm_hold_ender: Callable[[str], Any] = field(default=_default_end_warm_hold)
 
     def external_comfy_blocker(self) -> str | None:
         """Observe a conflicting Comfy runtime without releasing any owned residency."""
@@ -258,6 +268,14 @@ class RuntimeTransitionCoordinator:
 
         if target not in KNOWN_TRANSITION_TARGETS:
             raise ValueError(f"Unknown runtime transition target '{target}'")
+
+        # VID-WARM-373: an idle warm hold belongs to the gap between jobs, and a job preparing a runtime has ended
+        # that gap. A job that wanted the held process claimed it before preparing, so whatever is still held here
+        # is released through the owner it registered (an owned process only), before anything else is decided.
+        try:
+            self.warm_hold_ender(f"runtime transition to {target}")
+        except Exception:  # noqa: BLE001 - never raises; the conflict release below still runs
+            logger.exception("Ending the idle runtime warm hold failed")
 
         conflicts = list(_CONFLICTING_MANAGED_RUNTIMES[target])
         ownership: dict[str, RuntimeOwnershipState] = {}

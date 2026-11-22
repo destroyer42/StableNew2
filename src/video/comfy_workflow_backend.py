@@ -10,6 +10,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from src.api.http_transport import DispatchOutcomeUnknown, HttpTransportError
 from src.controller.runtime_state import CancellationError
 from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.pipeline.secondary_motion_retirement import require_secondary_motion_block_disabled
@@ -18,7 +19,9 @@ from src.services.runtime_transition_service import (
     RuntimeTransitionCoordinator,
     RuntimeTransitionError,
 )
+from src.services.runtime_warm_hold import RuntimeWarmHold, WarmHoldClaim, get_runtime_warm_hold
 from src.utils.atomic_io import atomic_write_json
+from src.utils.thread_registry import get_thread_registry
 from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.comfy_healthcheck import wait_for_comfy_ready
@@ -93,6 +96,18 @@ def shared_comfy_process_manager() -> ComfyProcessManager | None:
 def _release_owned_runtime_after_job(spec: Any) -> bool:
     policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
     return isinstance(policy, Mapping) and policy.get("release_owned_runtime_after_job") is True
+
+
+def _keep_warm_seconds(spec: Any) -> float:
+    """Idle grace (seconds) a release-after-job workflow keeps its owned runtime warm for the next job; 0 = none."""
+
+    policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
+    if not isinstance(policy, Mapping):
+        return 0.0
+    value = policy.get("keep_warm_between_jobs_seconds")
+    if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
+        return 0.0
+    return float(value)
 
 
 def _is_generated_output(descriptor: Mapping[str, Any]) -> bool:
@@ -464,6 +479,7 @@ class ComfyWorkflowVideoBackend:
         process_manager: ComfyProcessManager | None = None,
         readiness: WorkflowResourceReadiness | None = None,
         transition: RuntimeTransitionCoordinator | None = None,
+        warm_hold: RuntimeWarmHold | None = None,
         base_url: str = "http://127.0.0.1:8188",
         history_poll_interval: float = 0.5,
         history_timeout: float = 120.0,
@@ -479,6 +495,8 @@ class ComfyWorkflowVideoBackend:
         self._managed_process_manager: ComfyProcessManager | None = None
         #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one).
         self._sequence_warm_pid: int | None = None
+        #: The process-wide idle hold between consecutive jobs of one workflow (VID-WARM-373).
+        self._warm_hold = warm_hold or get_runtime_warm_hold()
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
         self._history_poll_interval = max(history_poll_interval, 0.1)
         self._history_timeout = max(history_timeout, 5.0)
@@ -505,6 +523,7 @@ class ComfyWorkflowVideoBackend:
             )
 
     def execute(self, pipeline: Any, request: VideoExecutionRequest) -> VideoExecutionResult | None:
+        _raise_if_cancelled(request.cancel_token, "before backend initialization")
         stage_config = deepcopy(dict(request.stage_config or {}))
         request.stage_config = stage_config
         workflow_id = str(
@@ -550,14 +569,33 @@ class ComfyWorkflowVideoBackend:
         # runtime or an unknown frame rate fails here, not after the clip has been generated.
         if normalize_interpolation_request(stage_config.get("interpolation")) is not None:
             _interpolation_source_fps(spec, stage_config)
+        # VID-WARM-373: take the process-wide warm hold before anything touches the runtime. The same workflow on
+        # the very owned process that served the previous job reuses it; anything else held is released first,
+        # so this job starts exactly as it would have without the hold (including the launch-flag check below,
+        # which then judges a fresh launch rather than another workflow's held process).
+        _raise_if_cancelled(request.cancel_token, "before claiming the runtime")
+        warm_key = (str(spec.workflow_id), str(spec.workflow_version))
+        claim = self._warm_hold.claim(
+            runtime=RUNTIME_COMFY, key=warm_key, current_pid=self._owned_running_pid
+        )
+        if claim.status != "none":
+            logger.info("Workflow '%s' warm-hold claim: %s", spec.workflow_id, claim.to_dict())
+
         # A declared launch requirement (e.g. the qualified pinned-memory-off policy) must be
         # provable from StableNew's own managed launch configuration before anything starts.
-        self._verify_required_launch_flags(spec)
+        try:
+            self._verify_required_launch_flags(spec)
+        except BaseException:
+            if claim.warm and _release_owned_runtime_after_job(spec):
+                self._release_owned_runtime()  # the claimed process is neither held nor used: release it
+            raise
 
         if request.hold_runtime or not _release_owned_runtime_after_job(spec):
             # A sequence segment (hold_runtime) leaves the owned runtime warm for the next segment;
             # the sequence's own end-of-job release (release_for_sequence) is the only one.
-            result = self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+            result = self._execute_on_runtime(
+                pipeline, request, spec, stage_config, workflow_id, warm_claim=claim
+            )
             if request.hold_runtime:
                 # Remember which owned process now holds the model, so the next segment is judged warm only if
                 # it is still that very process.
@@ -570,15 +608,57 @@ class ComfyWorkflowVideoBackend:
         # stopped.  BaseException, so an interrupt cannot leave a resident runtime behind; the
         # original exception always propagates unchanged.
         try:
-            result = self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+            result = self._execute_on_runtime(
+                pipeline, request, spec, stage_config, workflow_id, warm_claim=claim
+            )
         except BaseException:
             self._release_owned_runtime()
             raise
-        release = self._release_owned_runtime()
+        # VID-WARM-373: a workflow that declares an idle grace keeps the owned process warm after a successful
+        # job instead of stopping it; the hold ends on the next claim, another runtime's preparation, or the grace.
+        release = self._hold_owned_runtime(spec, warm_key) or self._release_owned_runtime()
         if result is not None:
             result.backend_metadata["runtime_release"] = dict(release)
             result.diagnostic_payload["runtime_release"] = dict(release)
+            if claim.status != "none":
+                result.backend_metadata["runtime_reuse"] = claim.to_dict()
+                result.diagnostic_payload["runtime_reuse"] = claim.to_dict()
         return result
+
+    def _hold_owned_runtime(self, spec: Any, key: tuple[str, str]) -> dict[str, Any] | None:
+        """Arm the warm hold for the owned process that just served ``spec``; ``None`` means release as usual."""
+
+        seconds = _keep_warm_seconds(spec)
+        if seconds <= 0:
+            return None
+        pid = self._owned_running_pid()
+        if pid is None:
+            return None  # nothing StableNew owns is running: there is nothing to keep warm
+
+        def release_if_same_process() -> dict[str, Any]:
+            if self._owned_running_pid() != pid:
+                return {
+                    "policy": "keep_warm_between_jobs",
+                    "pid": pid,
+                    "released": False,
+                    "reason": "the held process is no longer the one StableNew owns",
+                }
+            return self._release_owned_runtime()
+
+        held = self._warm_hold.hold(
+            runtime=RUNTIME_COMFY, key=key, pid=pid, seconds=seconds, release=release_if_same_process
+        )
+        if not held.get("held"):
+            logger.info("Warm hold not armed (%s); releasing as usual", held.get("reason"))
+            return None
+        return {
+            "policy": "keep_warm_between_jobs",
+            "ownership": "owned",
+            "pid": pid,
+            "released": False,
+            "held": True,
+            "idle_release_seconds": seconds,
+        }
 
     def _execute_on_runtime(
         self,
@@ -587,17 +667,24 @@ class ComfyWorkflowVideoBackend:
         spec: Any,
         stage_config: dict[str, Any],
         workflow_id: str,
+        *,
+        warm_claim: WarmHoldClaim | None = None,
     ) -> VideoExecutionResult | None:
         # Release conflicting StableNew-owned runtime residency (owned A1111, cached SVD state)
         # before Comfy starts/serves; never touches an external runtime.  See PR-RUNTIME-100.
+        token = request.cancel_token
+        _raise_if_cancelled(token, "before the runtime transition")
         transition = self._transition.prepare_for(RUNTIME_COMFY)
+        _raise_if_cancelled(token, "during the runtime transition")
         if not transition.ready:
             raise RuntimeTransitionError(transition)
 
-        runtime_base_url = self._ensure_runtime_ready(_required_launch_flags(spec))
+        runtime_base_url = self._ensure_runtime_ready(_required_launch_flags(spec), cancel_token=token)
+        _raise_if_cancelled(token, "during runtime startup")
         client = self._client or ComfyApiClient(base_url=runtime_base_url)
 
         object_info = client.get_object_info()
+        _raise_if_cancelled(token, "during the dependency request")
         probe = self._dependency_probe or ComfyDependencyProbe(client)
         dependency_result = probe.probe_workflow(spec, object_info=object_info)
         if not dependency_result.ready:
@@ -609,20 +696,31 @@ class ComfyWorkflowVideoBackend:
         actual_runtime: dict[str, str] = {}
         version_warning: str | None = None
         if self._readiness.policy_for(spec) is not None:
+            _raise_if_cancelled(token, "before resource readiness")
             system_stats = client.get_system_stats()
+            _raise_if_cancelled(token, "during the resource request")
             actual_runtime = _actual_runtime_identity(system_stats)
             version_warning = runtime_version_warning(spec, actual_runtime.get("comfyui_version"))
             if version_warning:
                 logger.warning(version_warning)
             warm_pid = self._sequence_warm_pid
+            sequence_warm = bool(
+                request.hold_runtime
+                and warm_pid is not None
+                and self._owned_running_pid() == warm_pid
+            )
+            # Check that the claimed warm process is still the owned process after startup and handoff.
+            held_warm = bool(
+                warm_claim is not None
+                and warm_claim.warm
+                and warm_claim.pid is not None
+                and self._owned_running_pid() == warm_claim.pid
+            )
             readiness = self._readiness.evaluate(
                 spec,
                 system_stats=system_stats,
-                warm_sequence=bool(
-                    request.hold_runtime
-                    and warm_pid is not None
-                    and self._owned_running_pid() == warm_pid
-                ),
+                warm_sequence=sequence_warm or held_warm,
+                owned_warm_reuse=held_warm and not request.hold_runtime,
             )
             # Record the measurements and RAM advisories even if allocation or dispatch later fails.
             logger.info(
@@ -633,13 +731,16 @@ class ComfyWorkflowVideoBackend:
                     f"Workflow '{spec.workflow_id}' is not resource-ready: {readiness.message}"
                 )
 
+        _raise_if_cancelled(token, "after resource readiness")
         conditioning = self._resolve_conditioning_inputs(
             spec=spec,
             request=request,
             object_info=object_info,
         )
 
+        _raise_if_cancelled(token, "after preparing conditioning")
         compiled = self._compiler.compile(spec, request)
+        _raise_if_cancelled(token, "after compiling the workflow")
         queue_payload = self._build_queue_payload(
             compiled,
             request,
@@ -649,7 +750,12 @@ class ComfyWorkflowVideoBackend:
         # A job cancelled while it was still preparing must not dispatch anything.
         _raise_if_cancelled(request.cancel_token, "before the workflow was queued")
         # Not retried: a DispatchOutcomeUnknown here means Comfy may already be running this prompt.
-        queue_response = client.queue_prompt(queue_payload)
+        try:
+            queue_response = client.queue_prompt(queue_payload)
+        except DispatchOutcomeUnknown:
+            if _is_cancelled(token):
+                logger.warning("Comfy dispatch outcome is unknown during cancellation; no prompt ID was acknowledged")
+            raise
         prompt_id = str(queue_response.get("prompt_id") or "").strip()
         if not prompt_id:
             raise RuntimeError("Comfy queue response did not include prompt_id")
@@ -663,8 +769,9 @@ class ComfyWorkflowVideoBackend:
         )
         if str(spec.backend_defaults.get("output_transport") or "") == "comfy_view":
             history_entry = self._localize_comfy_outputs(
-                client, history_entry, Path(request.output_dir)
+                client, history_entry, Path(request.output_dir), cancel_token=token,
             )
+        _raise_if_cancelled(token, "before finalizing workflow outputs")
         resolved_outputs = self._resolve_output_paths(
             history_entry=history_entry,
             compiled_outputs=compiled.compiled_outputs,
@@ -1043,6 +1150,8 @@ class ComfyWorkflowVideoBackend:
         raises: a release problem is reported, not allowed to mask the job's own outcome.
         """
 
+        if get_thread_registry().is_shutdown_requested():
+            return {"policy": "release_owned_runtime_after_job", "released": False, "deferred": "app_shutdown"}
         manager = self._resolve_process_manager()
         if manager is None:
             return {"policy": "release_owned_runtime_after_job", "ownership": "none", "released": False}
@@ -1080,11 +1189,14 @@ class ComfyWorkflowVideoBackend:
             "released": released,
         }
 
-    def _ensure_runtime_ready(self, required_flags: Sequence[str] = ()) -> str:
+    def _ensure_runtime_ready(
+        self, required_flags: Sequence[str] = (), *, cancel_token: Any = None,
+    ) -> str:
+        options = {"cancel_token": cancel_token} if cancel_token is not None else {}
         manager = self._resolve_process_manager()
         if manager is None:
             if self._client is not None and not required_flags:
-                wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
+                wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5, **options)
                 return self._base_url
             default_config = build_default_comfy_process_config()
             if default_config is not None:
@@ -1094,8 +1206,10 @@ class ComfyWorkflowVideoBackend:
                 raise ComfyStartupError("A StableNew-managed ComfyUI launch command is required.")
             else:
                 try:
-                    wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
+                    wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5, **options)
                     return self._base_url
+                except CancellationError:
+                    raise
                 except Exception as exc:
                     raise RuntimeError(_build_missing_runtime_message(self._base_url, exc)) from exc
         if manager is not None:
@@ -1104,17 +1218,16 @@ class ComfyWorkflowVideoBackend:
             if isinstance(config, ComfyProcessConfig) and not config.autostart_enabled and not manager.is_running():
                 if required_flags:
                     raise ComfyStartupError("This workflow requires a StableNew-owned ComfyUI, but automatic start is off.")
-                wait_for_comfy_ready(base_url or self._base_url, timeout=15.0, poll_interval=0.5)
+                wait_for_comfy_ready(base_url or self._base_url, timeout=15.0, poll_interval=0.5, **options)
                 return base_url or self._base_url
-            ready = (
-                manager.ensure_running(required_flags=required_flags)
-                if required_flags
-                else manager.ensure_running()
-            )
+            launch_options: dict[str, Any] = dict(options) if isinstance(manager, ComfyProcessManager) else {}
+            if required_flags:
+                launch_options["required_flags"] = required_flags
+            ready = manager.ensure_running(**launch_options)
             if not ready:
                 raise RuntimeError("Managed ComfyUI process failed to become healthy")
             return base_url or self._base_url
-        wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
+        wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5, **options)
         return self._base_url
 
     def _build_queue_payload(
@@ -1135,6 +1248,7 @@ class ComfyWorkflowVideoBackend:
         spec = self._workflow_registry.get(compiled.workflow_id, compiled.workflow_version,
                                           allow_experimental=bool(request.experimental_opt_in))
         verify_exact_dispatch_inputs(spec, request)
+        _raise_if_cancelled(request.cancel_token, "after verifying workflow inputs")
         if stage_config.get("pose_video_path"):
             self._verify_driving_video_source(
                 stage_config["pose_video_path"],
@@ -1144,6 +1258,7 @@ class ComfyWorkflowVideoBackend:
             prompt_payload,
             client=client,
             object_info=object_info,
+            cancel_token=request.cancel_token,
             input_hashes={
                 str(request.input_image_path): (stage_config.get("reference_identity") or {}).get("prepared_sha256"),
                 str(stage_config.get("pose_video_path")): stage_config.get("pose_video_sha256"),
@@ -1170,12 +1285,14 @@ class ComfyWorkflowVideoBackend:
         client: ComfyApiClient,
         object_info: Mapping[str, Any] | None = None,
         input_hashes: Mapping[str, str | None] | None = None,
+        cancel_token: Any = None,
     ) -> dict[str, Any]:
         prompt = deepcopy(dict(prompt_payload))
         info = dict(object_info or {})
         uploaded_cache: dict[str, str] = {}
 
         for node_id, node_payload in prompt.items():
+            _raise_if_cancelled(cancel_token, "during graph preparation")
             if not isinstance(node_payload, Mapping):
                 continue
             class_type = str(node_payload.get("class_type") or "").strip()
@@ -1207,6 +1324,7 @@ class ComfyWorkflowVideoBackend:
                         uploaded_cache,
                         expected_sha256=(input_hashes or {}).get(str(raw_value)),
                     )
+                    _raise_if_cancelled(cancel_token, "during a workflow input upload")
                     continue
                 declared_type = self._extract_declared_input_type(input_specs.get(input_name))
                 normalized_inputs[input_name] = self._coerce_comfy_input_value(
@@ -1338,17 +1456,24 @@ class ComfyWorkflowVideoBackend:
         timeout: float | None = None,
         cancel_token: Any = None,
     ) -> dict[str, Any]:
-        started = time.time()
+        started = time.monotonic()
         deadline = started + (timeout if timeout is not None else self._history_timeout)
         last_report: float | None = None
-        last_payload: dict[str, Any] | None = None
-        while time.time() < deadline:
+
+        def check_cancelled() -> None:
             if _is_cancelled(cancel_token):
                 self._cancel_prompt(client, prompt_id)
                 raise CancellationError(f"Comfy workflow cancelled (prompt_id '{prompt_id}')")
-            payload = client.get_history(prompt_id)
-            last_payload = dict(payload or {})
-            entry = _history_entry_from_payload(last_payload, prompt_id)
+
+        check_cancelled()
+        while time.monotonic() < deadline:
+            try:
+                payload = client.get_history(prompt_id)
+            except HttpTransportError:
+                check_cancelled()
+                raise
+            check_cancelled()
+            entry = _history_entry_from_payload(dict(payload or {}), prompt_id)
             if entry is not None and _history_failed(entry):
                 detail = _history_failure_detail(entry)
                 raise RuntimeError(
@@ -1357,7 +1482,7 @@ class ComfyWorkflowVideoBackend:
                 )
             if entry and _history_ready(entry):
                 return entry
-            now = time.time()
+            now = time.monotonic()
             if (
                 report_liveness is not None
                 and (last_report is None or now - last_report >= _LIVENESS_REPORT_INTERVAL_S)
@@ -1368,7 +1493,13 @@ class ComfyWorkflowVideoBackend:
             ):
                 last_report = now
                 report_liveness(now - started)
-            time.sleep(self._history_poll_interval)
+            delay = max(0.0, min(self._history_poll_interval, deadline - time.monotonic()))
+            wait = getattr(cancel_token, "wait", None)
+            if callable(wait):
+                wait(delay)
+            else:
+                time.sleep(delay)
+            check_cancelled()
         raise TimeoutError(
             f"Timed out waiting for Comfy workflow history for prompt_id '{prompt_id}'"
         )
@@ -1381,17 +1512,19 @@ class ComfyWorkflowVideoBackend:
         in Comfy's queue is removed from it.  Anything else (finished, unknown) needs no action."""
 
         try:
-            state = _queue_membership(client.get_queue(), prompt_id)
+            options = {"timeout": (0.5, 1.5)} if isinstance(client, ComfyApiClient) else {}
+            state = _queue_membership(client.get_queue(**options), prompt_id)
             if state == "running":
-                client.interrupt(prompt_id)
+                client.interrupt(prompt_id, **options)
             elif state == "pending":
-                client.delete_from_queue([prompt_id])
+                client.delete_from_queue([prompt_id], **options)
         except Exception as exc:  # noqa: BLE001 - cancellation must proceed even if Comfy is unreachable
             logger.warning("Could not ask Comfy to stop prompt %s: %s", prompt_id, exc)
 
     @staticmethod
     def _localize_comfy_outputs(
-        client: ComfyApiClient, history_entry: Mapping[str, Any], output_dir: Path
+        client: ComfyApiClient, history_entry: Mapping[str, Any], output_dir: Path,
+        *, cancel_token: Any = None,
     ) -> dict[str, Any]:
         """Fetch Comfy-side outputs into the StableNew run directory (which stays the artifact
         authority) and point the history descriptors at the local copies."""
@@ -1412,12 +1545,18 @@ class ComfyWorkflowVideoBackend:
                         continue
                     if not _is_generated_output(descriptor):
                         continue
+                    _raise_if_cancelled(cancel_token, "before downloading workflow outputs")
                     name = str(descriptor["filename"])
+                    options: dict[str, Any] = (
+                        {"check_cancelled": lambda: _raise_if_cancelled(cancel_token, "during output download")}
+                        if cancel_token is not None and isinstance(client, ComfyApiClient) else {}
+                    )
                     local = client.download_view(
                         name,
                         output_dir / Path(name).name,
                         subfolder=str(descriptor.get("subfolder") or ""),
                         file_type=str(descriptor.get("type") or "output"),
+                        **options,
                     )
                     # Absolute, so a relative run directory is never joined onto itself.
                     descriptor["filename"] = str(Path(local).resolve())

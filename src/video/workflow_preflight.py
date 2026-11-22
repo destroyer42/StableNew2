@@ -299,6 +299,13 @@ def _dependency_gates(
         for key in result.missing_required
         if details[key]["dependency_kind"] == "stock_node"
     )
+    # A stock node that is present but does not offer the option the graph sets (VID-A14B-SPEED-374).
+    hints = {d.dependency_id: d.version_hint for d in spec.dependency_specs}
+    missing_options = sorted(
+        f"{hints.get(key) or 'node option'} '{details[key]['locator']}'"
+        for key in result.missing_required
+        if details[key]["dependency_kind"] == "node_option"
+    )
     missing_files = sorted(
         details[key]["locator"]
         for key in result.missing_required
@@ -313,6 +320,14 @@ def _dependency_gates(
             "Use a ComfyUI release that provides them (the managed install does).",
         )
         if missing_nodes
+        else PreflightGate(
+            "nodes",
+            "Workflow nodes",
+            GATE_BLOCKED,
+            f"this ComfyUI does not offer {', '.join(missing_options)}.",
+            "Use a ComfyUI build and GPU that offer it, or choose another workflow version.",
+        )
+        if missing_options
         else PreflightGate("nodes", "Workflow nodes", GATE_OK, f"{len(nodes)} stock nodes present.")
     )
     file_gate = (
@@ -407,7 +422,9 @@ def _resource_gates(spec: Any, probes: PreflightProbes, state: str) -> tuple[Pre
                 "GPU memory",
                 GATE_ADVISORY if vram_blocks else GATE_OK,
                 (vram_blocks[0] if vram_blocks else detail)
-                + " GPU readiness is checked again after runtime handoff and ComfyUI startup, before dispatch."
+                + " Execution checks GPU readiness after runtime handoff and before dispatch."
+                " Consecutive standalone jobs skip that check when StableNew verifies reuse"
+                " of the same held ComfyUI process."
                 + (
                     " StableNew releases its own conflicting runtime; external processes stay untouched."
                     if vram_blocks

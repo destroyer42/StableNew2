@@ -8,7 +8,6 @@ import re
 import secrets
 import time
 from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -24,6 +23,7 @@ from src.app.site_output_routes import read as read_output
 from src.app.site_pack_catalog import PreparePack, SitePackCatalog
 from src.pipeline.reprocess_builder import extract_reprocess_output_paths
 from src.queue.job_history_store import JobHistoryEntry
+from src.utils.thread_registry import get_thread_registry
 
 SITE_ORIGIN = "https://stablenew-b11960-review.stillbeacon3.chatgpt.site"
 LOOPBACK = "127.0.0.1"
@@ -628,17 +628,35 @@ class SiteListener:
         self._server = _LoopbackServer((LOOPBACK, port), make_handler(session, port))
         self._server.timeout = 0.25
         self._stop = Event()
-        self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="StableNewSite")
-        self._worker.submit(self._serve, session)
+        registry = get_thread_registry()
+        remove_listener = registry.add_shutdown_listener(self.begin_shutdown)
+        try:
+            registry.spawn(
+                target=self._serve,
+                args=(session, remove_listener),
+                name="StableNewSite",
+                purpose="Operator Site request and repository access",
+            )
+        except Exception:
+            remove_listener()
+            self._server.server_close()
+            raise
 
-    def _serve(self, session: SiteSession) -> None:
+    def _serve(self, session: SiteSession, remove_listener: Callable[[], None]) -> None:
         try:
             while not self._stop.is_set() and not session.expired:
                 self._server.handle_request()
         finally:
-            self._server.server_close()
+            try:
+                session.revoke()
+                self._server.server_close()
+            finally:
+                remove_listener()
+
+    def begin_shutdown(self) -> None:
+        """Signal the listener to stop and revoke its session in its worker."""
+        self._stop.set()
 
     def close(self) -> None:
+        self.begin_shutdown()
         self._session.revoke()
-        self._stop.set()
-        self._worker.shutdown(wait=False)

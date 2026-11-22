@@ -222,7 +222,7 @@ def test_destroy_stops_the_worker(tk_root: tk.Tk, repository: JobRepository) -> 
 
     panel.destroy()
 
-    assert panel._executor is None
+    assert panel._search_closed and panel._pending is None
 
 
 def test_resolve_history_search_needs_a_repository() -> None:

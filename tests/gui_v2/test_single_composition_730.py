@@ -155,24 +155,9 @@ class _Recorder:
 
 
 def _run_graceful_exit(monkeypatch, recorder: _Recorder, **kwargs) -> None:
-    class _Exit(BaseException):
-        pass
-
-    def fake_exit(code: int) -> None:
-        recorder.events.append(f"os._exit({code})")
-        raise _Exit
-
     monkeypatch.setattr(graceful_exit_module, "_shutdown_committed", False)
-    monkeypatch.setattr(graceful_exit_module.os, "_exit", fake_exit)
-    monkeypatch.setattr(
-        graceful_exit_module,
-        "stop_gpu_session_telemetry",
-        lambda label: recorder.events.append("gpu-telemetry"),
-    )
-    try:
-        graceful_exit_module.graceful_exit(logger=logging.getLogger("test"), **kwargs)
-    except _Exit:
-        pass
+    graceful_exit_module.graceful_exit(logger=logging.getLogger("test"), **kwargs)
+    graceful_exit_module.graceful_exit(logger=logging.getLogger("test"), **kwargs)
 
 
 class _Controller:
@@ -222,13 +207,11 @@ class _Lock:
 
 
 _CANONICAL_ORDER = [
-    "gpu-telemetry",
     "controller.shutdown_app",
     "window.cleanup",
     "root.quit",
     "root.destroy",
     "lock.release",
-    "os._exit(0)",
 ]
 
 

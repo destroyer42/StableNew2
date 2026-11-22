@@ -483,10 +483,22 @@ class VideoWorkflowBatchService:
             if isinstance(runtime_policy, Mapping) and runtime_policy.get(
                 "release_owned_runtime_after_job"
             ):
-                notes.append(
-                    "This workflow releases the StableNew-owned Comfy runtime after each job, "
-                    "so each job starts it again."
-                )
+                keep_warm = runtime_policy.get("keep_warm_between_jobs_seconds")
+                if (
+                    isinstance(keep_warm, int | float)
+                    and not isinstance(keep_warm, bool)
+                    and keep_warm > 0
+                ):
+                    notes.append(
+                        "This workflow keeps the StableNew-owned Comfy runtime warm for "
+                        f"{keep_warm:.0f} s after each job, so the next job of this workflow reuses it; "
+                        "any other job, a failure or the idle time passing releases it."
+                    )
+                else:
+                    notes.append(
+                        "This workflow releases the StableNew-owned Comfy runtime after each job, "
+                        "so each job starts it again."
+                    )
             if policy is not None and needed:
                 notes.append(
                     "Queueing a preview prepares source images: up to "

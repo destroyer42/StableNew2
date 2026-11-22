@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future
 from tkinter import ttk
 from typing import Any
 
@@ -25,6 +25,7 @@ from src.gui_v2.history_browser_model import (
 )
 from src.queue.history_query import DEFAULT_PAGE_SIZE, HistoryPage, HistoryQuery
 from src.queue.job_history_store import JobHistoryEntry
+from src.utils.thread_registry import get_thread_registry
 
 SearchFn = Callable[[HistoryQuery], HistoryPage]
 _POLL_MS = 50
@@ -62,9 +63,8 @@ class HistoryBrowserPanelV2(JobHistoryPanelV2):
             **kwargs,
         )
         self._search = search
-        self._executor: ThreadPoolExecutor | None = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="history-browser"
-        )
+        self._registry = get_thread_registry()
+        self._search_closed = False
         self._pending: tuple[Future[HistoryPage], bool] | None = None
         self._poll_after: str | None = None
         self._shown: list[JobHistoryEntry] = []
@@ -189,18 +189,38 @@ class HistoryBrowserPanelV2(JobHistoryPanelV2):
         self._submit(query, append=True)
 
     def _submit(self, query: HistoryQuery, *, append: bool) -> None:
-        executor = self._executor
-        if executor is None:
+        if self._search_closed or self._registry.is_shutdown_requested():
+            return
+        future: Future[HistoryPage] = Future()
+        search = self._search
+
+        def read() -> None:
+            if not future.set_running_or_notify_cancel():
+                return
+            try:
+                future.set_result(search(query))
+            except BaseException as exc:  # noqa: BLE001 - The Future transports worker failures to Tk.
+                future.set_exception(exc)
+
+        try:
+            self._registry.spawn(
+                read,
+                name="HistoryBrowserSearch",
+                purpose="Search the shared History repository",
+            )
+        except RuntimeError:
+            if not self._registry.is_shutdown_requested():
+                raise
             return
         self.summary_var.set("Searching...")
         self._set_busy(True)
-        self._pending = (executor.submit(self._search, query), append)
+        self._pending = future, append
         self._poll_after = self.after(_POLL_MS, self._poll)
 
     def _poll(self) -> None:
         self._poll_after = None
         pending = self._pending
-        if pending is None:
+        if pending is None or self._registry.is_shutdown_requested():
             return
         future, append = pending
         if not future.done():
@@ -237,9 +257,10 @@ class HistoryBrowserPanelV2(JobHistoryPanelV2):
             except tk.TclError:
                 pass
             self._poll_after = None
-        executor, self._executor = self._executor, None
-        if executor is not None:
-            executor.shutdown(wait=False, cancel_futures=True)
+        self._search_closed = True
+        pending, self._pending = self._pending, None
+        if pending is not None:
+            pending[0].cancel()
         super().destroy()
 
 

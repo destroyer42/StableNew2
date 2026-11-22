@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from src.controller import job_service as job_service_module
@@ -36,16 +37,17 @@ class DummyRunner:
         self.current_job = None
 
 
-class FakeWatchdog:
+class FakeWatchdog(threading.Thread):
     def __init__(
         self, job_id: str, metadata: Any, config: WatchdogConfig, violation_callback: Any
     ) -> None:
+        super().__init__()
         self.job_id = job_id
         self.metadata = metadata
         self.config = config
         self.violation_callback = violation_callback
 
-    def start(self) -> None:
+    def run(self) -> None:
         exc = WatchdogViolationError("Watchdog memory violation")
         envelope = wrap_exception(
             exc,
@@ -68,15 +70,18 @@ def test_watchdog_violation_triggers_cancel(monkeypatch) -> None:
     job_queue.submit(job)
 
     cancellation: list[tuple[str, str | None]] = []
+    cancelled = threading.Event()
 
     def fake_cancel(job_id: str, *, reason: str | None = None) -> None:
         cancellation.append((job_id, reason))
+        cancelled.set()
 
     monkeypatch.setattr(job_service_module, "JobWatchdog", FakeWatchdog)
     service.cancel_job = fake_cancel  # type: ignore[assignment]
 
     job_queue.mark_running(job.job_id)
 
+    assert cancelled.wait(timeout=2.0)
     assert cancellation == [("job-watchdog", "watchdog_memory")]
 
 
@@ -108,8 +113,6 @@ def test_real_watchdog_threshold_cancels_only_its_isolated_job(monkeypatch, tmp_
             return False
 
         monkeypatch.setattr(watchdog._stop_event, "wait", wait)
-        # Synchronous start drives the real run loop with no scheduling dependency.
-        monkeypatch.setattr(watchdog, "start", watchdog.run)
         watchdogs.append(watchdog)
         return watchdog
 
@@ -118,13 +121,19 @@ def test_real_watchdog_threshold_cancels_only_its_isolated_job(monkeypatch, tmp_
         queue.submit(make_queue_job("threshold-job"))
         queue.submit(make_queue_job("neighbor-job"))
         queue.mark_running("threshold-job")
+        assert len(watchdogs) == 1
+        watchdogs[0].join(timeout=2.0)
+        assert not watchdogs[0].is_alive()
         assert repository.get_job_model("threshold-job").status is JobStatus.CANCELLED
         assert repository.get_job_model("neighbor-job").status is JobStatus.QUEUED
         assert len(service._watchdog_event_history) == 1
         assert service._watchdog_event_history[0]["reason"] == "TIMEOUT"
         assert service._active_watchdogs == {}
-        assert len(watchdogs) == 1
         assert watchdogs[0]._stop_event.is_set()
     finally:
+        for watchdog in watchdogs:
+            watchdog.stop()
+            if watchdog.ident is not None:
+                watchdog.join(timeout=2.0)
         service.stop()
         repository.close()

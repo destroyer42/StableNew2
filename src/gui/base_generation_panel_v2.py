@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import math
 import tkinter as tk
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from tkinter import ttk
 from typing import Any
 
+from src.assets.picker_compatibility import picker_entry, picker_model_family, vae_catalog
 from src.config import app_config
 from src.gui.generation_profile_strip import GenerationProfileStrip
 from src.gui.help_text.stage_setting_help_v2 import BASE_GENERATION_SETTING_HELP
@@ -24,6 +25,8 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     SECONDARY_CONTROL_MIN_WIDTH,
     get_two_pair_form_column_specs,
 )
+from src.gui_v2.model_policy_projection import ModelControlProjection
+from src.image_backends.model_policy import CONTROL_VAE, ControlMode
 from src.utils.webui_resource_names import (
     normalize_vae_config_value,
     strip_webui_resource_suffix,
@@ -143,6 +146,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._steps_spin: ttk.Spinbox | None = None
         self._cfg_spin: ttk.Spinbox | None = None
         self._helper_label: ttk.Label | None = None
+        self._picker_resources: dict[str, list[Any]] = {}
+        self._vae_issue = ""
         self._compact_hint_labels: list[ttk.Label] = []
         self._dimension_validate_cmd = None
 
@@ -177,6 +182,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._model_policy_projection = ModelPolicyPanelProjection(self)
         self.model_var.trace_add("write", lambda *_: self._model_policy_projection.refresh())
         self._model_policy_projection.refresh()
+        if self._vae_combo is not None:
+            self._vae_combo.bind("<<ComboboxSelected>>", self._on_vae_chosen, add="+")
         # PR-IMG-MODELS-150: explicit, read-only, background readiness check (nothing runs until the button is pressed).
         self._model_readiness = ModelReadinessPresenter(self, self.body_frame, controller=self._controller)
 
@@ -429,12 +436,22 @@ class BaseGenerationPanelV2(BaseStageCardV2):
 
     def _on_model_chosen(self, _event: object = None) -> None:
         """The operator picked a checkpoint: let the profile controller apply that model's preferred profile."""
+        self._vae_issue = ""
         profiles = self._profile_controller()
         if profiles is not None:
             try:
                 profiles.on_model_chosen(self._normalize_model_name(self.model_var.get()))
             except Exception:  # noqa: BLE001 - a profile problem never blocks choosing a model
                 logger.debug("generation profile application failed", exc_info=True)
+
+        self._refresh_picker_status()
+
+    def _on_vae_chosen(self, _event: object = None) -> None:
+        self._vae_issue = ""
+        profiles = self._profile_controller()
+        if profiles is not None:
+            profiles.note_vae_chosen()
+        self._show_picker_status()
 
     def _on_value_changed(self) -> None:
         if not self._sync_enabled:
@@ -577,47 +594,50 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._update_current_config()
 
     def _apply_resource_catalogs(self, resources: dict[str, list[Any]]) -> None:
-        for key, mapping_attr, combo, variable in (
-            ("models", "_model_name_map", self._model_combo, self.model_var),
-            ("vaes", "_vae_name_map", self._vae_combo, self.vae_var),
-        ):
-            entries = resources.get(key)
-            if not entries:
-                continue
-            old_mapping = getattr(self, mapping_attr)
-            current = str(variable.get())
-            identity = old_mapping.get(current, current)
-            mapping = {"No VAE (model default)": ""} if key == "vaes" else {}
+        entries = resources.get("models")
+        if entries:
+            self._picker_resources["models"] = entries
+            current = self.model_var.get()
+            identity = self._normalize_model_name(current)
+            mapping: dict[str, str] = {}
             for entry in entries:
-                raw_display = (
-                    getattr(entry, "display_name", None)
-                    or getattr(entry, "name", None)
-                    or str(entry)
-                )
-                internal = getattr(entry, "name", None) or str(entry)
-                display = strip_webui_resource_suffix(raw_display)
-                if key == "vaes":
-                    display = normalize_vae_config_value(display) or "No VAE (model default)"
-                mapping[display] = str(internal)
-            if key == "models":
-                from src.image_backends.model_backend_routing import offered_backend_models
+                evidence = getattr(entry, "picker", None)
+                if evidence is not None and evidence.excluded:
+                    continue
+                internal = str(getattr(entry, "name", entry))
+                display = strip_webui_resource_suffix(getattr(entry, "display_name", internal))
+                if evidence is not None:
+                    if evidence.refusal:
+                        display += " (unsupported)"
+                    elif not evidence.recognized:
+                        display += " (unverified)"
+                if display in mapping and mapping[display] != internal:
+                    display = f"{display} [{internal}]"
+                mapping[display] = internal
+            from src.image_backends.model_backend_routing import offered_backend_models
 
-                for display, internal in offered_backend_models():
-                    mapping.setdefault(display, internal)
-            # Resolve identity against both API names and display labels, including hash aliases.
-            matches = [
-                display for display, internal in mapping.items()
-                if identity == internal or strip_webui_resource_suffix(identity) == display
-                or (key == "vaes" and vae_names_match(identity, internal))
-            ]
-            getattr(self, mapping_attr).clear()
-            getattr(self, mapping_attr).update(mapping)
-            self._update_combo(
-                combo, variable, mapping, selection=matches[0] if len(matches) == 1 else None
-            )
-            if key == "models" and current and not matches:
-                # Keep translation of the unavailable selection without offering it as an option.
-                self._model_name_map[current] = identity
+            for display, internal in offered_backend_models():
+                mapping.setdefault(display, internal)
+            matches = [display for display, internal in mapping.items() if identity == internal]
+            if not matches and identity:
+                entry = picker_entry(entries, identity)
+                if entry is not None and not getattr(getattr(entry, "picker", None), "excluded", False):
+                    name = str(getattr(entry, "name", entry))
+                    matches = [display for display, internal in mapping.items() if name == internal]
+            self._model_name_map = mapping
+            if self._model_combo is not None:
+                self._model_combo["values"] = tuple(mapping)
+                if len(matches) == 1:
+                    self.model_var.set(matches[0])
+                elif identity:
+                    # Preserve the saved internal name without offering the excluded or absent file.
+                    if current in mapping:
+                        self.model_var.set(identity)
+                    self._model_name_map[self.model_var.get()] = identity
+                elif mapping:
+                    self.model_var.set(next(iter(mapping)))
+        if resources.get("vaes"):
+            self._picker_resources["vaes"] = resources["vaes"]
         for key, combo, variable in (
             ("samplers", self._sampler_combo, self.sampler_var),
             ("schedulers", self._scheduler_combo, self.scheduler_var),
@@ -632,12 +652,60 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         projection = getattr(self, "_model_policy_projection", None)
         if projection is not None:
             projection.refresh()  # resource delivery must never unlock/overwrite fixed controls
+        self._refresh_picker_status()
+
+    def _refresh_picker_status(self) -> None:
+        model = self._normalize_model_name(self.model_var.get())
+        projection = getattr(self, "_model_policy_projection", None)
+        policy = projection.last_projection.policy if projection is not None else None
+        family = picker_model_family(self._picker_resources.get("models", ()), model, policy)
+        entries = self._picker_resources.get("vaes", ())
+        options = vae_catalog(entries, family)
+        if options is not None and self._vae_combo is not None:
+            default = "No VAE (model default)"
+            current = self._normalize_vae_name(self.vae_var.get())
+            mapping = {default: ""}
+            for entry in entries:
+                name = str(getattr(entry, "name", entry))
+                if name in options.offered:
+                    label = normalize_vae_config_value(getattr(entry, "display_name", name)) or name
+                    if name not in options.verified and getattr(entry, "picker", None) is not None:
+                        label += " (unverified)"
+                    if label in mapping and mapping[label] != name:
+                        label = f"{label} [{name}]"
+                    mapping[label] = name
+            self._vae_combo["values"] = tuple(mapping)
+            self._vae_name_map = mapping
+            if policy is None or policy.control(CONTROL_VAE).mode is ControlMode.CONFIGURABLE:
+                selected = options.resolve(current)
+                if selected is None:
+                    self._vae_issue = f"VAE '{current}' was reset to model default because it is incompatible or unavailable."
+                label = next((label for label, name in mapping.items() if name == selected), default)
+                if self.vae_var.get() != label:
+                    self.vae_var.set(label)
+        self._show_picker_status()
+
+    def _show_picker_status(self) -> None:
         helper = self._helper_label
-        if helper is not None and self._model_combo is not None:
-            if resources.get("models") and self.model_var.get() not in self._model_combo["values"]:
-                helper.configure(text=self._unavailable_model_message(self.model_var.get()))
-            elif str(helper.cget("text")).startswith("Selected model unavailable:"):
-                helper.configure(text=self.GEOMETRY_HELP)
+        if helper is None:
+            return
+        projection = getattr(self, "_model_policy_projection", None)
+        projected = projection.last_projection if projection is not None else None
+        entries = self._picker_resources.get("models", ())
+        model = self._normalize_model_name(self.model_var.get())
+        entry = picker_entry(entries, model) if model else None
+        refusal = getattr(getattr(entry, "picker", None), "refusal", "")
+        if projected and projected.constrained:
+            return  # The executable policy owns its controls and explanation.
+        if projected and projected.blocking:
+            text = projected.blocking
+        elif refusal:
+            text = refusal
+        elif entries and model and self._model_combo is not None and self.model_var.get() not in self._model_combo["values"]:
+            text = self._unavailable_model_message(self.model_var.get())
+        else:
+            text = self._vae_issue or self.GEOMETRY_HELP
+        helper.configure(text=text)
 
     @staticmethod
     def _unavailable_model_message(model: str) -> str:
@@ -912,6 +980,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         projection = getattr(self, "_model_policy_projection", None)
         if projection is not None:
             projection.refresh()
+        self._refresh_picker_status()
         self._update_current_config()
         if callable(self._on_change):
             try:
@@ -952,12 +1021,19 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         projection = getattr(self, "_model_policy_projection", None)
         if projection is not None:
             projection.refresh()
+        self._refresh_picker_status()
         self._update_current_config()
         if callable(self._on_change):
             try:
                 self._on_change()
             except Exception:  # noqa: BLE001
                 logger.debug("change callback failed after applying profile values", exc_info=True)
+
+    def project_checkpoint_candidates(
+        self, model_names: Iterable[str]
+    ) -> Iterator[ModelControlProjection]:
+        """Expose the Base Generation policy and backend authority for read-only candidate discovery."""
+        return self._model_policy_projection.project_checkpoint_candidates(model_names)
 
     def _normalize_model_name(self, raw: object) -> str:
         value = str(raw or "").strip()
@@ -969,8 +1045,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         value = str(raw or "").strip()
         if not value:
             return ""
-        resolved = self._vae_name_map.get(value, value)
-        return normalize_vae_config_value(resolved)
+        if value in self._vae_name_map:
+            return self._vae_name_map[value]
+        return normalize_vae_config_value(value)
 
     def _display_model_name(self, internal_name: object) -> str:
         value = str(internal_name or "").strip()
@@ -985,10 +1062,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         value = str(internal_name or "").strip()
         if not value:
             return "No VAE (model default)"
-        for display, internal in self._vae_name_map.items():
-            if vae_names_match(internal, value):
-                return display
-        return value
+        matches = [display for display, internal in self._vae_name_map.items() if internal == value]
+        if not matches:
+            matches = [display for display, internal in self._vae_name_map.items() if vae_names_match(internal, value)]
+        return matches[0] if len(matches) == 1 else value
 
     @staticmethod
     def _safe_int(value: object, default: int) -> int:

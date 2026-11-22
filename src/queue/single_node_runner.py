@@ -104,6 +104,10 @@ def _merge_stage_checkpoints(
 #: Longest an idle worker waits before re-checking on its own (queue changes wake it immediately).
 IDLE_HEARTBEAT_SECONDS = 1.0
 
+#: Dispatch bookkeeping between two jobs (hold release check, runtime preparation, claim) slower than this is
+#: logged with its per-phase breakdown, so dead time between consecutive jobs is attributable from the log alone.
+SLOW_DISPATCH_PHASE_SECONDS = 2.0
+
 
 class _WakingEvent(threading.Event):
     """A stop flag whose ``set`` also wakes the (event-driven) idle wait, so a stop never waits out the heartbeat."""
@@ -150,6 +154,8 @@ class SingleNodeJobRunner:
         self._current_job: Job | None = None
         self._cancel_current = threading.Event()
         self._current_cancel_token: CancelToken | None = None
+        self._launch_lock = threading.Lock()
+        self._manual_dispatch_pending = False
         self._cancel_return_to_queue = False
         # The job the run callable was last invoked for: the worker's own proof of whether a stop request found
         # the job before or after anything could have been dispatched.
@@ -285,6 +291,26 @@ class SingleNodeJobRunner:
         else:
             time.sleep(self.poll_interval)
 
+    def _log_slow_dispatch(
+        self, job: Job | None, *, hold_check_s: float, prepare_s: float, claim_s: float
+    ) -> None:
+        """Attribute slow between-job bookkeeping to its phase (observation only; never alters dispatch)."""
+
+        if max(hold_check_s, prepare_s, claim_s) <= SLOW_DISPATCH_PHASE_SECONDS:
+            return
+        log_with_ctx(
+            logger,
+            logging.WARNING,
+            "QUEUE_DISPATCH_SLOW | Between-job dispatch bookkeeping was slow",
+            ctx=LogContext(job_id=getattr(job, "job_id", None), subsystem="queue_runner"),
+            extra_fields={
+                "hold_check_ms": int(hold_check_s * 1000),
+                "prepare_runtime_ms": int(prepare_s * 1000),
+                "claim_ms": int(claim_s * 1000),
+                "claimed": job is not None,
+            },
+        )
+
     def _wake_queue(self) -> None:
         wake = getattr(self.job_queue, "wake_worker", None)
         if callable(wake):
@@ -339,23 +365,29 @@ class SingleNodeJobRunner:
         self._notify(settled, settled.status)
         return settled
 
-    def _launch_worker(self, mode: str, job: Job | None = None) -> None:
+    def _launch_worker(self, mode: str, job: Job | None = None) -> bool:
         """Start a worker thread of ``mode``; the caller holds ``_lifecycle_lock``."""
-        if not self._shutting_down:
-            self._stop_event.clear()
-        self._worker_mode = mode
-        self._worker_retiring = False
-        self._continue_after_once = False
-        # PR-THREAD-001: non-daemon thread with proper tracking
-        self._worker = threading.Thread(
-            target=self._worker_main,
-            args=(mode, job),
-            daemon=False,
-            name="QueueWorker" if mode == "continuous" else "QueueWorkerOnce",
-        )
-        self._workers = [worker for worker in self._workers if worker.is_alive()]
-        self._workers.append(self._worker)
-        self._worker.start()
+        with self._launch_lock:
+            if self._shutting_down:
+                if job is None:
+                    return False
+                # A claim that preceded the fence still needs durable settlement.
+            else:
+                self._stop_event.clear()
+            self._worker_mode = mode
+            self._worker_retiring = False
+            self._continue_after_once = False
+            # PR-THREAD-001: non-daemon thread with proper tracking
+            self._worker = threading.Thread(
+                target=self._worker_main,
+                args=(mode, job),
+                daemon=False,
+                name="QueueWorker" if mode == "continuous" else "QueueWorkerOnce",
+            )
+            self._workers = [worker for worker in self._workers if worker.is_alive()]
+            self._workers.append(self._worker)
+            self._worker.start()
+            return True
 
     def start(self) -> None:
         """Ensure continuous dispatch is running.
@@ -385,19 +417,20 @@ class SingleNodeJobRunner:
         with self._lifecycle_lock:
             if self._shutting_down or self.is_running() or self.job_queue.is_paused():
                 return False
-            # Operator intent: with auto-run off no worker loop is checking, so ask for a fresh readiness proof.
-            self._maybe_release_hold(force=True)
-            if self._prepare_runtime(force=True, allow_launch=False) == "launch_needed":
-                # The next image job's runtime must be launched: that waits on a process, so it never runs on the
-                # caller's (possibly GUI) thread. The one-shot worker prepares, then makes the usual atomic claim.
-                self._launch_worker("prepare_once")
-                return True
-            # One atomic claim: eligibility (WebUI hold) and QUEUED -> RUNNING cannot be separated by a hold change.
-            job = self.job_queue.claim_next_job()
-            if job is None:
-                return False
-            self._launch_worker("once", job)
-            return True
+            with self._launch_lock:
+                if self._shutting_down:
+                    return False
+                self._manual_dispatch_pending = True
+            try:
+                # With auto-run off there is no worker checking readiness.
+                self._maybe_release_hold(force=True)
+                if self._prepare_runtime(force=True, allow_launch=False) == "launch_needed":
+                    return self._launch_worker("prepare_once")
+                job = self.job_queue.claim_next_job()
+                return job is not None and self._launch_worker("once", job)
+            finally:
+                with self._launch_lock:
+                    self._manual_dispatch_pending = False
 
     def _worker_main(self, mode: str, job: Job | None) -> None:
         if mode == "prepare_once":
@@ -434,23 +467,27 @@ class SingleNodeJobRunner:
             # persisted FAILED, so keep draining and let the loop own later failures.
         self._worker_loop()
 
-    def begin_shutdown(self) -> None:
-        """Terminal admission fence for application shutdown (idempotent, cannot be undone).
-
-        Fences the queue first (the atomic claim boundary), then retires dispatch: no new worker starts, a
-        one-shot worker does not hand off to continuous draining, and a running worker leaves its loop after the
-        job it already owns. That job is untouched here (cancellation stays with ``cancel_current``). QUEUED jobs
-        stay durably QUEUED and the user's auto-run preference is not read or changed.
-        """
-        # Deliberately lock-free: the safety property is the queue's atomic fence, and a worker holds
-        # ``_lifecycle_lock`` while it evaluates the dispatch policy, which must never be able to delay shutdown.
-        self.job_queue.fence_dispatch()
+    def request_shutdown(self) -> None:
+        """Stop dispatch without waiting for a claim already writing to the repository."""
+        self.job_queue.request_dispatch_fence()
         self._shutting_down = True
         self._stop_event.set()
 
+    def begin_shutdown(self) -> None:
+        """Stop new dispatch and synchronize with the queue's atomic claim boundary."""
+        self.request_shutdown()
+        self.job_queue.fence_dispatch()
+
     def is_quiescent(self) -> bool:
         """True only when no worker thread this runner launched is alive (so none can touch the repository)."""
-        return not any(worker.is_alive() for worker in list(self._workers))
+        with self._launch_lock:
+            return not self._manual_dispatch_pending and not any(
+                worker.is_alive() for worker in self._workers
+            )
+
+    def active_worker_threads(self) -> tuple[threading.Thread, ...]:
+        with self._launch_lock:
+            return tuple(worker for worker in self._workers if worker.is_alive())
 
     def stop(self, timeout: float = 10.0) -> bool:
         """Ask the worker to stop and wait at most ``timeout`` seconds in total.
@@ -463,7 +500,7 @@ class SingleNodeJobRunner:
         """
         self._stop_event.set()
         deadline = time.monotonic() + max(0.0, float(timeout))
-        for worker in list(self._workers):
+        for worker in self.active_worker_threads():
             if worker is threading.current_thread():
                 continue
             worker.join(timeout=max(0.0, deadline - time.monotonic()))
@@ -483,13 +520,22 @@ class SingleNodeJobRunner:
                     break
             self._cancel_current.clear()
             self._cancel_return_to_queue = False
+            phase_started = time.monotonic()
             self._maybe_release_hold()
+            hold_checked = time.monotonic()
             self._prepare_runtime()
+            prepared = time.monotonic()
             # Clear before claiming: a change that lands between the claim and the wait leaves the event set.
             clear_wake = getattr(self.job_queue, "clear_wake", None)
             if callable(clear_wake):
                 clear_wake()
             job = self.job_queue.claim_next_job()
+            self._log_slow_dispatch(
+                job,
+                hold_check_s=hold_checked - phase_started,
+                prepare_s=prepared - hold_checked,
+                claim_s=time.monotonic() - prepared,
+            )
             if job is None:
                 self._idle_wait()
                 continue
@@ -522,6 +568,9 @@ class SingleNodeJobRunner:
             self._current_job = job
             self._current_cancel_token = CancelToken()
             job._cancel_token = self._current_cancel_token
+            if self._shutting_down:
+                self._cancel_current.set()
+                self._current_cancel_token.cancel()
             try:
                 if self._cancel_current.is_set():
                     self._settle_cancel(job)
@@ -584,6 +633,7 @@ class SingleNodeJobRunner:
                 if self._restore_if_undispatched(job, decision):
                     self._after_failure(decision)
                     continue
+                publish_started = time.monotonic()
                 published_job = self.job_queue.publish_result(
                     job.job_id,
                     status=notify_status,
@@ -591,6 +641,7 @@ class SingleNodeJobRunner:
                     stage_checkpoints=checkpoints,
                     error_message=error_msg,
                 )
+                publish_s = time.monotonic() - publish_started
                 if published_job is None:
                     durable_job = self.job_queue.get_job(job.job_id)
                     durable_status = durable_job.status if durable_job is not None else job.status
@@ -613,9 +664,27 @@ class SingleNodeJobRunner:
                     logging.INFO,
                     "QUEUE_JOB_DONE | Job execution completed",
                     ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
-                    extra_fields={**extra, "duration_ms": duration_ms, "status": status_value},
+                    extra_fields={
+                        **extra,
+                        "duration_ms": duration_ms,
+                        "publish_ms": int(publish_s * 1000),
+                        "status": status_value,
+                    },
                 )
+                notify_started = time.monotonic()
                 self._notify(job, notify_status)
+                notify_s = time.monotonic() - notify_started
+                if max(publish_s, notify_s) > SLOW_DISPATCH_PHASE_SECONDS:
+                    log_with_ctx(
+                        logger,
+                        logging.WARNING,
+                        "QUEUE_JOB_SLOW_FINISH | Result publication or completion handlers were slow",
+                        ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
+                        extra_fields={
+                            "publish_ms": int(publish_s * 1000),
+                            "notify_ms": int(notify_s * 1000),
+                        },
+                    )
                 self._after_failure(decision)
             except Exception as exc:  # noqa: BLE001
                 if self._cancel_current.is_set() or isinstance(exc, CancellationError):
@@ -674,6 +743,9 @@ class SingleNodeJobRunner:
         self._invoked_job_id = None
         self._current_cancel_token = CancelToken()
         job._cancel_token = self._current_cancel_token
+        if self._shutting_down:
+            self._cancel_current.set()
+            self._current_cancel_token.cancel()
         self._current_job = job
         already_claimed = job.status is JobStatus.RUNNING  # claimed atomically by run_next_once
         if (
@@ -792,8 +864,12 @@ class SingleNodeJobRunner:
     def cancel_current(self, *, return_to_queue: bool = False) -> None:
         self._cancel_return_to_queue = bool(return_to_queue)
         self._cancel_current.set()
-        if self._current_cancel_token is not None:
-            self._current_cancel_token.cancel()
+        token = self._current_cancel_token
+        if token is not None:
+            token.cancel()
+
+    def is_cancel_requested(self) -> bool:
+        return self._cancel_current.is_set()
 
     def is_running(self) -> bool:
         """True while a worker is alive and has not committed to retiring."""

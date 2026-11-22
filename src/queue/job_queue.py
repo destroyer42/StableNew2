@@ -78,7 +78,7 @@ class JobQueue:
         self._paused = False
         # Process-lifetime dispatch fence (PR-RUNTIME-SHUTDOWN-140). Never persisted: unlike ``_paused`` it
         # must not survive the process, so jobs left QUEUED resume under the normal startup policy.
-        self._dispatch_fenced = False
+        self._dispatch_fenced = Event()
         # Process-lifetime, in-memory WebUI dispatch hold (PR-QUEUE-WEBUI-171). Never persisted and never a
         # lifecycle status: held jobs stay durably QUEUED in their original order, and independent work (native
         # SVD / Comfy video) remains claimable. Distinct from ``_paused`` (the user's whole-queue pause).
@@ -152,22 +152,18 @@ class JobQueue:
                     heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
         self._notify_state_listeners()
 
-    def fence_dispatch(self) -> None:
-        """Irreversibly refuse every new QUEUED -> RUNNING transition (application shutdown).
+    def request_dispatch_fence(self) -> None:
+        """Refuse new claim attempts immediately, including ones waiting for the queue lock."""
+        self._dispatch_fenced.set()
 
-        The flag is read and written under the same lock that makes ``claim_next_job`` and ``mark_running``
-        atomic with their durable transition, so a claim either completed before this returns or sees the
-        fence: there is no check-then-claim window. Nothing else changes: QUEUED jobs stay durably QUEUED,
-        the active job is untouched, and the persisted pause setting is not used.
-        """
+    def fence_dispatch(self) -> None:
+        """Fence new claims and wait for any already-authorized claim to leave its critical section."""
+        self.request_dispatch_fence()
         with self._lock:
-            self._dispatch_fenced = True
+            pass
 
     def is_dispatch_fenced(self) -> bool:
-        with self._lock:
-            return self._dispatch_fenced
-
-    # -- WebUI dispatch hold (PR-QUEUE-WEBUI-171) ---------------------------------------------------------------
+        return self._dispatch_fenced.is_set()
 
     def hold_webui_dispatch(self, *, reason: str, incident_id: str | None = None) -> bool:
         """Stop claiming WebUI-dependent (and unresolved) work; independent video keeps flowing.
@@ -361,7 +357,7 @@ class JobQueue:
         """
 
         with self._lock:
-            if self._paused or self._dispatch_fenced:
+            if self._paused or self._dispatch_fenced.is_set():
                 return None
             for item in sorted(self._queue):
                 job = self._jobs.get(item[2])
@@ -373,7 +369,7 @@ class JobQueue:
     def get_next_job(self) -> Job | None:
         """Pop the next eligible job (held jobs are skipped without losing their place)."""
         with self._lock:
-            if self._paused or self._dispatch_fenced:
+            if self._paused or self._dispatch_fenced.is_set():
                 return None
             found = self._pop_next_eligible_locked()
             if found is None:
@@ -692,7 +688,7 @@ class JobQueue:
             if require_queued and job.status != JobStatus.QUEUED:
                 return None
             if status is JobStatus.RUNNING and job.status is JobStatus.QUEUED:
-                if self._dispatch_fenced or self._is_held_locked(job):
+                if self._dispatch_fenced.is_set() or self._is_held_locked(job):
                     return None
             candidate = self._candidate(job)
             if stage_checkpoints is not None:
@@ -765,7 +761,7 @@ class JobQueue:
         """Atomically claim the next runnable job for the single-node worker."""
         claimed: Job | None = None
         with self._repository.defer_emissions(), self._lock:
-            if self._paused or self._dispatch_fenced:
+            if self._paused or self._dispatch_fenced.is_set():
                 return None
             found = self._pop_next_eligible_locked()
             if found is not None:

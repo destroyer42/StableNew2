@@ -40,7 +40,6 @@ from typing import Any, TypedDict
 
 from src.api.webui_process_manager import (
     WebUIProcessManager,
-    clear_global_webui_process_manager,
     get_global_webui_process_manager,
 )
 from src.api.webui_resource_service import (
@@ -54,7 +53,6 @@ from src.app.optional_dependency_probes import OptionalDependencySnapshot
 from src.app.runtime_stack import RuntimeCompositionError
 from src.config.app_config import (
     get_jsonl_log_config,
-    is_debug_shutdown_inspector_enabled,
     set_webui_autostart_enabled,
     set_webui_health_initial_timeout_seconds,
     set_webui_health_retry_count,
@@ -151,6 +149,7 @@ from src.pipeline.reprocess_builder import (
 )
 from src.pipeline.training_njr_compiler import TrainingIntent, compile_training_intent
 from src.queue.job_model import Job, JobStatus
+from src.queue.job_repository import JobRepository
 from src.review.workflow_adapter import ReviewWorkflowAdapter
 from src.services.duration_stats_service import DurationStatsService
 from src.state.workspace_paths import workspace_paths
@@ -163,7 +162,6 @@ from src.utils import (
     log_with_ctx,
 )
 from src.utils.config import ConfigManager, LoraRuntimeConfig, normalize_lora_strengths
-from src.utils.debug_shutdown_inspector import log_shutdown_state
 from src.utils.diagnostics_bundle_v2 import build_crash_bundle
 from src.utils.error_envelope_v2 import (
     UnifiedErrorEnvelope,
@@ -540,7 +538,8 @@ class AppController:
             )
         )
         self._last_error_envelope: UnifiedErrorEnvelope | None = None
-        self._shutdown_started_at: float | None = None
+        self._shutdown_finished = threading.Event()
+        self._shutdown_outcome: shutdown_coordinator.ShutdownOutcome | None = None
         self._shutdown_completed = False
         self._shutdown_watchdog_thread: threading.Thread | None = None
         self.packs: list[PromptPackInfo] = []
@@ -705,44 +704,11 @@ class AppController:
             )
 
     def shutdown(self) -> None:
-        """Stop owned services, watchdog and tracked threads; close only a quiescent repository."""
-        self.detach_presentation_actions()
-        logger.info("[controller] shutdown(): Stopping system watchdog...")
-        if hasattr(self, "_system_watchdog") and self._system_watchdog:
-            try:
-                self._system_watchdog.stop()
-                logger.info("[controller] shutdown(): System watchdog stopped")
-            except Exception as e:
-                logger.error(f"[controller] shutdown(): Error stopping watchdog: {e}")
-
-        # PR-HB-004: Shutdown persistence worker
-        logger.info("[controller] shutdown(): Shutting down persistence worker...")
-        try:
-            from src.services.persistence_worker import shutdown_persistence_worker
-            shutdown_persistence_worker(timeout=5.0)
-            logger.info("[controller] shutdown(): Persistence worker shut down")
-        except Exception as e:
-            logger.error(f"[controller] shutdown(): Error shutting down persistence worker: {e}")
-
-        logger.info("[controller] shutdown(): Closing job repository (only after queue quiescence)...")
-        shutdown_coordinator.shutdown_owned_services(self)
-
-        # PR-THREAD-001: Join all tracked threads
-        logger.info("[controller] shutdown(): Joining all tracked threads...")
-        try:
-            stats = self._thread_registry.shutdown_all(timeout=10.0)
-            logger.info(
-                f"[controller] shutdown(): Thread shutdown complete - "
-                f"joined={stats['joined']}, timeout={stats['timeout']}, "
-                f"orphaned={stats['orphaned']}"
-            )
-            if stats['timeout'] > 0 or stats['orphaned'] > 0:
-                logger.warning(f"[controller] shutdown(): {stats['timeout']} threads timed out, {stats['orphaned']} daemon threads orphaned")
-        except Exception as e:
-            logger.error(f"[controller] shutdown(): Error during thread shutdown: {e}")
+        self.shutdown_app()
 
     def _ui_dispatch(self, fn: Callable[[], None]) -> None:
-        import threading
+        if getattr(self, "_is_shutting_down", False):
+            return
 
         ui_thread_id = getattr(self, "_ui_thread_id", None)
         if ui_thread_id is not None and threading.get_ident() == ui_thread_id:
@@ -774,7 +740,8 @@ class AppController:
 
     def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
         """Schedule the callable on the Tk main thread, safe from any thread."""
-        import threading
+        if getattr(self, "_is_shutting_down", False):
+            return
 
         ui_thread_id = getattr(self, "_ui_thread_id", None)
         if ui_thread_id is not None and threading.get_ident() == ui_thread_id:
@@ -2638,6 +2605,9 @@ class AppController:
             return []
         terminal_states = {JobStatus.COMPLETED, JobStatus.FAILED}
         try:
+            if isinstance(store, JobRepository):
+                return store.list_recent_jobs(limit=limit or 20, statuses=terminal_states,
+                                              stop=self._background_tasks.shutdown_event)
             if hasattr(store, "list_recent_jobs"):
                 return list(store.list_recent_jobs(limit=limit or 20, statuses=terminal_states))
             entries = store.list_jobs(limit=limit or 20)
@@ -3452,170 +3422,22 @@ class AppController:
         )
         self._append_log("[controller] Refresh started in background...")
 
-    def stop_all_background_work(self) -> None:
-        """Best-effort shutdown used by GUI teardown to avoid late Tk calls."""
-        try:
-            if self._cancel_token is not None:
-                self._cancel_token.cancel()
-        except Exception:
-            pass
-        worker_alive = self._worker_thread is not None and self._worker_thread.is_alive()
-        if worker_alive and self._worker_thread is not None:
-            try:
-                self._worker_thread.join(timeout=2.0)
-            except Exception:
-                pass
-            try:
-                self._worker_thread = None
-            except Exception:
-                pass
-        try:
-            self.state.lifecycle = LifecycleState.IDLE
-        except Exception:
-            pass
-        try:
-            if self.process_auto_scanner:
-                self.process_auto_scanner.stop()
-        except Exception:
-            pass
-        try:
-            self._diagnostics_coordinator.uninstall(main_window=self.main_window)
-        except Exception:
-            pass
-
     def shutdown_app(self, reason: str | None = None) -> None:
         """Centralized shutdown path invoked by GUI teardown or main_finally."""
         if self._is_shutting_down:
-            logger.info("[controller] shutdown_app: Already shutting down, skipping")
             return
         self._is_shutting_down = True
-        self.detach_presentation_actions()
-        label = reason or "shutdown"
-        logger.info("[controller] ===== SHUTDOWN_APP CALLED (%s) =====", label)
-
-        if self._shutdown_started_at is None:
-            self._shutdown_started_at = time.time()
-            self._shutdown_watchdog_thread = self._spawn_tracked_thread(
-                target=self._shutdown_watchdog,
-                name="ShutdownWatchdog",
-                daemon=True,
-                purpose="Monitor shutdown progress",
-            )
-
-        shutdown_coordinator.fence_application_admission(self)
-        try:
-            logger.info("[controller] Step 1/8: Cancelling active jobs...")
-            self._cancel_active_jobs(label)
-            logger.info("[controller] Step 1/8: Active jobs cancelled")
-        except Exception:
-            logger.exception("Error cancelling active jobs during shutdown")
-
-        try:
-            logger.info("[controller] Step 2/8: Stopping background work...")
-            self.stop_all_background_work()
-            logger.info("[controller] Step 2/8: Background work stopped")
-        except Exception:
-            logger.exception("Error stopping background work during shutdown")
-
-        try:
-            logger.info("[controller] Step 3/8: Shutting down learning hooks...")
-            self._shutdown_learning_hooks()
-            logger.info("[controller] Step 3/8: Learning hooks shutdown complete")
-        except Exception:
-            logger.exception("Error shutting down learning hooks")
-
-        try:
-            logger.info("[controller] Step 4/8: Shutting down WebUI process...")
-            self._shutdown_webui()
-            logger.info("[controller] Step 4/8: WebUI shutdown complete")
-        except Exception:
-            logger.exception("Error shutting down WebUI")
-        try:
-            logger.info("[controller] Step 5/8: Shutting down job service...")
-            self._shutdown_job_service()
-            logger.info("[controller] Step 5/8: Job service shutdown complete")
-        except Exception:
-            logger.exception("Error shutting down job service")
-
-        # Persist the final queue snapshot after activity quiesces, before repository close.
-        try:
-            logger.info("[controller] Step 5.25/8: Saving queue state...")
-            self._save_queue_state()
-            logger.info("[controller] Step 5.25/8: Queue state saved")
-        except Exception:
-            logger.exception("Error saving queue state during shutdown")
-
-        # PR-SHUTDOWN-001: Call enhanced shutdown() for watchdog and thread cleanup
-        try:
-            logger.info("[controller] Step 5.5/8: Running enhanced shutdown sequence...")
-            self.shutdown()
-            logger.info("[controller] Step 5.5/8: Enhanced shutdown complete")
-        except Exception:
-            logger.exception("Error during enhanced shutdown")
-
-        if is_debug_shutdown_inspector_enabled():
-            try:
-                logger.info("[controller] Step 6/8: Running shutdown inspector...")
-                log_shutdown_state(logger, label)
-                logger.info("[controller] Step 6/8: Shutdown inspector complete")
-            except Exception:
-                logger.exception("Error running shutdown inspector")
-
-        try:
-            logger.info("[controller] Step 7/8: Joining worker thread...")
-            self._join_worker_thread()
-            logger.info("[controller] Step 7/8: Worker thread joined")
-        except Exception:
-            logger.exception("Error waiting for worker thread during shutdown")
-
-        logger.info("[controller] Step 8/8: Closing API clients and finalizing shutdown...")
-
-        # Close API client resources
-        try:
-            if hasattr(self, "_api_client") and self._api_client:
-                self._api_client.close()
-        except Exception:
-            logger.exception("Error closing API client during shutdown")
-
-        # Clear WebUI process manager global reference
-        try:
-            clear_global_webui_process_manager()
-            logger.info("[controller] Global WebUI manager cleared")
-        except Exception:
-            logger.exception("Error clearing WebUI process manager during shutdown")
-
-        self._shutdown_completed = shutdown_coordinator.ai_is_quiescent(self)
-        self._await_shutdown_watchdog_exit()
-        logger.info("[controller] SHUTDOWN_APP quiescent=%s", self._shutdown_completed)
-
-        try:
+        self._shutdown_outcome = shutdown_coordinator.shutdown_app(self, reason or "shutdown")
+        if not self._shutdown_outcome.remaining_workers:
             close_all_structured_loggers()
-        except Exception:
-            pass
 
-    def _cancel_active_jobs(self, reason: str) -> None:
+    def _cancel_active_jobs(self, _reason: str) -> bool:
         if self._cancel_token is not None:
-            try:
-                self._append_log(f"[shutdown] Cancelling pipeline ({reason}).")
-                self._cancel_token.cancel()
-                self._cancel_token.clear_stop_requirement()
-            except Exception:
-                pass
+            self._cancel_token.cancel()
+            self._cancel_token.clear_stop_requirement()
         if self.job_service is not None:
-            try:
-                self.job_service.cancel_current()
-            except Exception:
-                logger.exception("Error cancelling job service current job")
-
-    def _join_worker_thread(self) -> None:
-        if self._worker_thread is None:
-            return
-        if self._worker_thread.is_alive():
-            try:
-                self._worker_thread.join(timeout=2.0)
-            except Exception:
-                pass
-        self._worker_thread = None
+            self.job_service.cancel_current()
+        return True
 
     def _shutdown_learning_hooks(self) -> None:
         learning_ctrl = getattr(self, "learning_controller", None)
@@ -3624,85 +3446,28 @@ class AppController:
         for attr in ("shutdown", "stop", "close"):
             method = getattr(learning_ctrl, attr, None)
             if callable(method):
-                try:
-                    method()
-                except Exception:
-                    logger.exception("Learning controller %s failed during shutdown", attr)
+                method()
                 break
 
-    def _shutdown_webui(self) -> None:
+    def _shutdown_webui(self, timeout: float = 10.0) -> str:
         manager = self.webui_process_manager or get_global_webui_process_manager()
-        if not manager:
-            logger.info("[controller] _shutdown_webui: No WebUI manager to shutdown")
-            return
-        if self.webui_process_manager is None:
-            self.webui_process_manager = manager
-            logger.info("[controller] _shutdown_webui: Using global WebUI manager fallback")
-        stop_fn = (
-            getattr(manager, "stop_webui", None)
-            or getattr(manager, "shutdown", None)
-            or getattr(manager, "stop", None)
-        )
-        if callable(stop_fn):
-            pid = getattr(manager, "pid", None)
-            logger.info("[controller] _shutdown_webui: Calling stop_webui for PID %s", pid)
-            try:
-                result = stop_fn()
-                running = manager.is_running() if hasattr(manager, "is_running") else None
-                exit_code = getattr(manager, "_last_exit_code", None)
-                logger.info(
-                    "[controller] _shutdown_webui: WebUI shutdown result: running=%s, last_exit_code=%s, stop_return=%s",
-                    running,
-                    exit_code,
-                    result,
-                )
-            except Exception:
-                logger.exception("Error stopping WebUI")
+        self.webui_process_manager = manager
+        return shutdown_coordinator.finish_webui(manager, timeout)
 
-    def _shutdown_job_service(self) -> bool:
-        return shutdown_coordinator.quiesce_job_service(getattr(self, "job_service", None))
+    def _start_shutdown_watchdog(self) -> threading.Thread:
+        thread = self._thread_registry.spawn(
+            self._shutdown_watchdog, name="ShutdownWatchdog", daemon=True,
+            purpose="Observe the application shutdown deadline", suppress_daemon_warning=True,
+        )
+        self._shutdown_watchdog_thread = thread
+        return thread
 
     def _shutdown_watchdog(self) -> None:
-        # PR-SHUTDOWN-002: Increased default from 8s to 15s to reduce false alarms
-        # Normal shutdown takes 8-12s (thread joins, WebUI stop, etc.)
-        # PR-SHUTDOWN-FIX: Poll shutdown_completed periodically instead of one long sleep
-        timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "15"))
-        hard_exit = os.environ.get("STABLENEW_HARD_EXIT_ON_SHUTDOWN_HANG", "0") == "1"
+        shutdown_coordinator.watch_shutdown(self)
 
-        # Poll every 0.5s for early exit when shutdown completes
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self._shutdown_completed:
-                return
-            time.sleep(0.5)
-
-        # Timeout reached - check if shutdown completed
-        if not self._shutdown_completed:
-            logger.error(
-                "Shutdown watchdog triggered after %.1fs (completed=%s)",
-                timeout,
-                self._shutdown_completed,
-            )
-            if hard_exit:
-                logger.error("Hard exit forced due to shutdown hang.")
-                os._exit(1)
-
-    def _await_shutdown_watchdog_exit(self, timeout: float = 1.0) -> None:
-        thread = getattr(self, "_shutdown_watchdog_thread", None)
-        if thread is None:
-            return
-        import threading
-
-        if thread is threading.current_thread():
-            return
-        try:
-            thread.join(max(0.0, float(timeout)))
-        except Exception:
-            return
-
-    # ------------------------------------------------------------------
-    # Packs
-    # ------------------------------------------------------------------
+    def _close_shutdown_api_client(self) -> None:
+        if self._api_client is not None:
+            self._api_client.close()
 
     def _on_pack_list_select(self, event: Any) -> None:
         if self.main_window is None:

@@ -20,6 +20,13 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.image_backends.sdxl_turbo_recipe import (
+    SDXL_TURBO_LABEL,
+    SDXL_TURBO_NOTE,
+    SDXL_TURBO_SETTINGS,
+    SDXL_TURBO_SOURCE,
+)
+
 STUDY_TYPE = "compatibility_probe"
 CONTRACT = "learning_compatibility_probe/1"
 VARIABLE = "Compatibility Recipe"
@@ -137,18 +144,13 @@ RECIPES: Mapping[str, ProbeRecipe] = {
             width=1024,
             height=1024,
         ),
-        _recipe(
+        ProbeRecipe(
             "sdxl_turbo",
-            "SDXL Turbo (512², Euler a SGM Uniform, 4 steps, CFG 1)",
+            SDXL_TURBO_LABEL,
             "sdxl",
-            "https://huggingface.co/stabilityai/sdxl-turbo",
-            "Publisher recipe is 1–4 steps without guidance (CFG 1 here); many steps or high CFG burn the image.",
-            sampler_name="Euler a",
-            scheduler="SGM Uniform",
-            steps=4,
-            cfg_scale=1.0,
-            width=512,
-            height=512,
+            SDXL_TURBO_SETTINGS,
+            SDXL_TURBO_SOURCE,
+            SDXL_TURBO_NOTE,
         ),
         _recipe(
             "flux",

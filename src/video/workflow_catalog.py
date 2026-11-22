@@ -5,7 +5,7 @@ from dataclasses import replace
 from typing import Any
 
 from src.video.workflow_catalog_fun_control import build_fun_control_spec
-from src.video.workflow_catalog_wan_a14b import build_wan_a14b_spec
+from src.video.workflow_catalog_wan_a14b import build_wan_a14b_specs
 from src.video.workflow_catalog_wan_animate2 import build_wan_animate2_specs
 from src.video.workflow_contracts import (
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
@@ -28,7 +28,7 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_wan22_ti2v_5b_i2v_720p_v1(),
         *build_wan_animate2_specs(),
         build_fun_control_spec(_build_wan22_ti2v_5b_i2v_v1_3()),
-        build_wan_a14b_spec(),
+        *build_wan_a14b_specs(),
     )
 
 

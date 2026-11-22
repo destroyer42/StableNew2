@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-791 of 946 modules have a docstring.
+794 of 949 modules have a docstring.
 
 ## src/
 
@@ -97,6 +97,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `inventory_report.py`: Deterministic, bounded, redacted operator report over the observational inventory (PR-IMG-MODELS-152)
 - `lora_preview.py`: Bounded, read-only local adapter preview access
 - `observation.py`: Tier-1 observational inventory (PR-IMG-MODELS-152): bounded, cancellable, header-only, no hashing
+- `picker_compatibility.py`: Observational component evidence and compatibility for Base Generation catalogs
 - `registry.py`: Offline local-file identity registry; never contacts A1111 or a network
 - `resource_catalog.py`: Checked-in, versioned catalog of curated model resources (PR-ASSET-130)
 - `resource_readiness.py`: Offline readiness projection of installed assets against the curated catalog (PR-ASSET-130)
@@ -200,7 +201,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
 - `run_submission_service.py`: (no docstring)
 - `runtime_projection_coordinator.py`: (no docstring)
-- `shutdown_coordinator.py`: Application-shutdown sequencing for the job queue (PR-RUNTIME-SHUTDOWN-140)
+- `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
 
 ## src/controller/pipeline_controller_services/
 
@@ -593,6 +594,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `openpose_capability.py`: Target eligibility for OpenPose ControlNet conditioning (PR-IMG-CNET-210)
 - `openpose_output.py`: Classify pinned Forge generated images before any artifact write (PR-IMG-CNET-211)
 - `operation_compatibility.py`: PR-IMG-MODELS-158: one pure, read-only "can this requested operation run on that resolved target?" projection
+- `sdxl_turbo_recipe.py`: Shared SDXL Turbo recipe for compatibility probes and advisory Research
 - `webui_family_backend.py`: Shared WebUI-family image backend: one StableNew stage translation for A1111 and Forge
 
 ## src/learning/
@@ -894,6 +896,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `operator_readiness_service.py`: Read-only operator readiness projection built from existing authorities
 - `persistence_worker.py`: PR-HB-004: Async Persistence Worker
 - `runtime_transition_service.py`: PR-RUNTIME-100: coordinate release of conflicting StableNew-owned GPU runtimes
+- `runtime_warm_hold.py`: One idle warm hold of a StableNew-owned runtime between consecutive jobs (VID-WARM-373)
 - `ui_state_store.py`: UI state persistence for StableNew v2.6
 - `watchdog_system_v2.py`: (no docstring)
 

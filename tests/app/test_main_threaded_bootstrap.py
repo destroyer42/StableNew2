@@ -61,7 +61,11 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "_register_emergency_cleanup", lambda _window: None)
     monkeypatch.setattr(main_module, "_async_bootstrap_webui", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(main_module, "graceful_exit", lambda *args, **kwargs: None)
-    monkeypatch.setattr(main_module.atexit, "register", emergency_callbacks.append)
+    monkeypatch.setattr(
+        main_module.atexit,
+        "register",
+        lambda callback, **kw: emergency_callbacks.append((callback, kw)),
+    )
     monkeypatch.setattr(
         site_connection_dialog, "install_site_connection_control", install_site_control
     )
@@ -77,7 +81,11 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
 
     assert captured["threaded"] is True
     assert captured["root"] is fake_root
-    assert emergency_callbacks == [main_module._emergency_comfy_cleanup]
+    lock_cleanup, comfy_cleanup, persistence_cleanup = emergency_callbacks
+    assert lock_cleanup[0].__self__.__class__ is _FakeSingleInstanceLock
+    assert comfy_cleanup == (main_module._emergency_comfy_cleanup, {})
+    assert persistence_cleanup[0].__name__ == "shutdown_persistence_worker"
+    assert persistence_cleanup[1] == {"timeout": None}
     if sys.platform == "win32":
         install_site_control.assert_called_once_with(
             fake_root, fake_controller, fake_window.header_zone

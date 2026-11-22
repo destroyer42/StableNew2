@@ -190,3 +190,30 @@ __all__ = [
     "ZIMAGE_RESEARCH_ID",
     "research_profiles",
 ]
+
+
+def turbo_research_profile(identity: ModelIdentity) -> GenerationProfile:
+    """Recommend the probe recipe for a single, already verified checkpoint identity."""
+    from src.image_backends.sdxl_turbo_recipe import (
+        SDXL_TURBO_NOTE,
+        SDXL_TURBO_SETTINGS,
+        SDXL_TURBO_SOURCE,
+    )
+
+    return GenerationProfile(
+        profile_id=f"research-sdxl-turbo-{identity.sha256}",
+        revision=1,
+        kind=KIND_RESEARCH,
+        name="SDXL Turbo",
+        model=identity,
+        settings=dict(SDXL_TURBO_SETTINGS),
+        evidence=(
+            EvidenceNote(
+                fields=tuple(SDXL_TURBO_SETTINGS),
+                source_class=SOURCE_OFFICIAL,
+                citation="SDXL Turbo compatibility-probe recipe",
+                reference=SDXL_TURBO_SOURCE,
+                rationale=SDXL_TURBO_NOTE,
+            ),
+        ),
+    )

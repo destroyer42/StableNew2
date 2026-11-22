@@ -392,10 +392,10 @@ class SitePhoneConnector:
         self._stopping.set()
         self._commands.put(lambda: None)
 
-    def close(self) -> None:
+    def close(self, timeout: float = 1.0) -> None:
         self._signal_stop()
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
+        if self._thread is not None and timeout > 0:
+            self._thread.join(timeout=timeout)
 
     def _apply_revocation(self) -> None:
         self._drop_presence()
