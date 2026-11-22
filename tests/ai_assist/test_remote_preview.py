@@ -11,7 +11,13 @@ from unittest.mock import Mock
 import pytest
 
 from src.ai_assist import remote_transport
-from src.ai_assist.contracts import AiCancelToken, AssistRequest, OutcomeCode, SuggestionKind
+from src.ai_assist.contracts import (
+    MAX_RUNTIME_DETAIL_BYTES,
+    AiCancelToken,
+    AssistRequest,
+    OutcomeCode,
+    SuggestionKind,
+)
 from src.ai_assist.events import EventLog
 from src.ai_assist.framing import build_json_schema
 from src.ai_assist.host import GenerationActivity
@@ -571,6 +577,30 @@ def test_non_transport_failures_never_use_local(installation, failure, expected,
     if failure in ("version", "digest"):
         assert all(body is None for _path, body in worker.calls)
     assert "private" not in caplog.text
+
+
+@pytest.mark.parametrize("failure", ["refused", "malformed", "ok", "timeout"])
+def test_remote_refusal_and_malformed_keep_bounded_in_memory_runtime_detail_only(
+    installation, failure, caplog
+):
+    worker = Worker()
+    service, _spy, _ = service_for(installation, worker)
+    if failure == "refused":
+        worker.output = '{"schema":"ai_assist.suggestion/1","status":"refused","refusal_reason":"private canary"}'
+    elif failure == "malformed":
+        worker.output = "private canary {invalid " + "x" * 5000
+    elif failure == "timeout":
+        worker.failures["/api/generate"] = "timeout"
+
+    outcome = service.run(assist_request())
+    detail = outcome.runtime_detail
+    if failure in ("refused", "malformed"):
+        assert detail is not None and "private canary" in detail.stdout_head
+        assert detail.reason == outcome.reason
+        assert len(detail.stdout_head.encode("utf-8")) <= MAX_RUNTIME_DETAIL_BYTES
+        assert "private" not in repr(outcome) and "private" not in caplog.text
+    else:
+        assert detail is None
 
 
 def test_present_but_damaged_approval_fails_closed_and_explicit_disable_allows_local(installation):

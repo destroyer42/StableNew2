@@ -33,7 +33,13 @@ VARIETY_LABEL = "Matrix slot variety (suggestions)"
 VARIETY_NOTICE = (
     "Suggestions only. A value is added to its matrix slot only when you select it and press Add selected value, and it "
     "is added exactly as if you had typed it at the end of that slot in the Matrix tab: the pack becomes modified and "
-    "unsaved. No slot is created, no existing value or prompt is changed, and nothing is saved, queued or generated."
+    "unsaved. No slot is created, no existing value or prompt is changed, and nothing is saved, queued or generated. "
+    "Values can only be suggested for slots that already exist in this pack's Matrix tab (listed below); to use a new "
+    "slot, add it in the Matrix tab first."
+)
+VARIETY_REFUSED_HINT = (
+    " If your goal does not fit any slot listed above, add a fitting slot in the Matrix tab and try again, or "
+    "describe the goal in terms of an existing slot."
 )
 #: The complete set of things a variety review lets the operator do.
 VARIETY_REVIEW_ACTIONS: tuple[str, ...] = ("add_selected_value",)
@@ -285,11 +291,32 @@ def variety_text(review: VarietyReview) -> str:
     return "\n".join(lines).rstrip()
 
 
+_SLOT_LINE_LIMIT = 12
+
+
+def slots_line(slots: Sequence[SlotState], *, is_visible: Callable[[str], bool]) -> str:
+    """One read-only line naming the matrix slots a request can add values to (the editable ones), so the limit is visible.
+
+    A name hidden by the current visibility mode is replaced, never shown; a long list is cut with a count."""
+
+    names = [slot.name for slot in slots if slot.editable]
+    if not names:
+        return "Slots the model can add values to: none. Add slots in the Matrix tab first."
+    shown = [name if is_visible(name) else HIDDEN_TEXT for name in names[:_SLOT_LINE_LIMIT]]
+    more = len(names) - len(shown)
+    tail = f" (+{more} more)" if more > 0 else ""
+    skipped = sum(not slot.editable for slot in slots)
+    note = f" {skipped} other slot(s) cannot take a new value." if skipped else ""
+    return f"Slots the model can add values to: {', '.join(shown)}{tail}.{note}"
+
+
 __all__ = [
     "HIDDEN_TEXT",
     "REASON_TEXT",
     "VARIETY_LABEL",
     "VARIETY_NOTICE",
+    "VARIETY_REFUSED_HINT",
+    "slots_line",
     "VARIETY_REVIEW_ACTIONS",
     "SlotState",
     "VarietyContext",
