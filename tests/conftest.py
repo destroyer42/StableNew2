@@ -295,6 +295,13 @@ def _isolate_generation_profile_user_state(monkeypatch: pytest.MonkeyPatch, tmp_
 
 
 @pytest.fixture(autouse=True)
+def _isolate_managed_ai_user_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Default app composition must not inherit real Ollama approvals or start a host health monitor."""
+
+    monkeypatch.setenv("STABLENEW_AI_DIR", str(tmp_path / "ManagedAi"))
+
+
+@pytest.fixture(autouse=True)
 def _hermetic_video_preflight_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Video Workflow tab probes runtime readiness on a worker (PR-VID-UX-311).
 
