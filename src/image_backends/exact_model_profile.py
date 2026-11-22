@@ -13,6 +13,7 @@ from src.image_backends.comfy_qwen_image_profile import (
     validate_qwen_image_config,
     validate_qwen_image_njr,
 )
+from src.image_backends.comfy_sdxl_profile import validate_sdxl_comfy_njr
 from src.image_backends.diffusers_ideogram4_profile import (
     IDEOGRAM4_PROFILE_V1,
     Ideogram4Profile,
@@ -22,7 +23,7 @@ from src.image_backends.diffusers_ideogram4_profile import (
     validate_ideogram4_njr,
 )
 from src.image_backends.forge_flux1_profile import (
-    FLUX1_PROFILE_ID,
+    FLUX1_PROFILE_IDS,
     Flux1Profile,
     resolve_flux1_reference,
     validate_flux1_intent,
@@ -60,7 +61,9 @@ def model_profile_for_model(name: str | None) -> dict[str, Any] | None:
     qwen = qwen_image_profile_for_model(name)
     if qwen is not None:
         return qwen.reference()
-    return ZIMAGE_PROFILE_V1.reference() if is_zimage_transformer_name(name) else klein_reference(name)
+    return (
+        ZIMAGE_PROFILE_V1.reference() if is_zimage_transformer_name(name) else klein_reference(name)
+    )
 
 
 def resolve_model_profile(options: Any) -> ExactModelProfile | None:
@@ -68,16 +71,23 @@ def resolve_model_profile(options: Any) -> ExactModelProfile | None:
     reference = image.get("model_profile") if isinstance(image, Mapping) else None
     if isinstance(reference, Mapping) and reference.get("id") == ZIMAGE_PROFILE_V1.profile_id:
         if type(reference.get("version")) is not int or reference != ZIMAGE_PROFILE_V1.reference():
-            raise ZImageProfileError("Unsupported Z-Image profile reference; only immutable v1 is supported")
+            raise ZImageProfileError(
+                "Unsupported Z-Image profile reference; only immutable v1 is supported"
+            )
         return ZIMAGE_PROFILE_V1
     if isinstance(reference, Mapping) and reference.get("id") == IDEOGRAM4_PROFILE_V1.profile_id:
-        if type(reference.get("version")) is not int or reference != IDEOGRAM4_PROFILE_V1.reference():
-            raise Ideogram4ProfileError("Unsupported Ideogram 4 profile reference; only immutable v1 is supported")
+        if (
+            type(reference.get("version")) is not int
+            or reference != IDEOGRAM4_PROFILE_V1.reference()
+        ):
+            raise Ideogram4ProfileError(
+                "Unsupported Ideogram 4 profile reference; only immutable v1 is supported"
+            )
         return IDEOGRAM4_PROFILE_V1
     qwen = qwen_image_profile_for_reference(reference)
     if qwen is not None:
         return qwen
-    if isinstance(reference, Mapping) and reference.get("id") == FLUX1_PROFILE_ID:
+    if isinstance(reference, Mapping) and reference.get("id") in FLUX1_PROFILE_IDS:
         return resolve_flux1_reference(reference)
     return resolve_klein(options)
 
@@ -91,6 +101,9 @@ def validate_profile_njr(njr: Any) -> None:
     validate_zimage_njr(njr)
     validate_ideogram4_njr(njr)
     validate_qwen_image_njr(njr)
+    validate_sdxl_comfy_njr(
+        njr
+    )  # PR-IMG-COMFY-381: an ordinary checkpoint bound for the comfyui backend
 
 
 def profile_prompt_refusal(profile: ExactModelProfile | None, text: str) -> str | None:
@@ -120,13 +133,17 @@ def validate_profile_intent(profile: ExactModelProfile, **intent: Any) -> str:
     if isinstance(profile, KleinProfile):
         return validate_klein_intent(profile, **intent)
     if isinstance(profile, QwenImageProfile):
-        if intent["backend_id"] != profile.backend_id or tuple(intent["stage_names"]) != profile.modes:
+        if (
+            intent["backend_id"] != profile.backend_id
+            or tuple(intent["stage_names"]) != profile.modes
+        ):
             raise QwenImageProfileError(
                 f"{profile.display_name} supports only txt2img on the '{profile.backend_id}' backend"
             )
         if intent.get("unsupported_features"):
             raise QwenImageProfileError(
-                f"{profile.display_name} unsupported features: " + "; ".join(intent["unsupported_features"])
+                f"{profile.display_name} unsupported features: "
+                + "; ".join(intent["unsupported_features"])
             )
         validate_qwen_image_config(
             profile,
@@ -139,23 +156,49 @@ def validate_profile_intent(profile: ExactModelProfile, **intent: Any) -> str:
     if isinstance(profile, Flux1Profile):
         return validate_flux1_intent(profile, **intent)
     if isinstance(profile, Ideogram4Profile):
-        if intent["backend_id"] != profile.backend_id or tuple(intent["stage_names"]) != profile.modes:
-            raise Ideogram4ProfileError(f"{profile.display_name} supports only txt2img on the '{profile.backend_id}' backend")
+        if (
+            intent["backend_id"] != profile.backend_id
+            or tuple(intent["stage_names"]) != profile.modes
+        ):
+            raise Ideogram4ProfileError(
+                f"{profile.display_name} supports only txt2img on the '{profile.backend_id}' backend"
+            )
         if intent.get("unsupported_features"):
             raise Ideogram4ProfileError(
-                f"{profile.display_name} unsupported features: " + "; ".join(intent["unsupported_features"])
+                f"{profile.display_name} unsupported features: "
+                + "; ".join(intent["unsupported_features"])
             )
-        validate_ideogram4_config({"model": intent["model_name"], "steps": intent["steps"], "width": intent["width"],
-                                   "height": intent["height"]}, negative=str(intent.get("negative_prompt") or ""))
+        validate_ideogram4_config(
+            {
+                "model": intent["model_name"],
+                "steps": intent["steps"],
+                "width": intent["width"],
+                "height": intent["height"],
+            },
+            negative=str(intent.get("negative_prompt") or ""),
+        )
         return "txt2img"
     if intent["backend_id"] != profile.backend_id or tuple(intent["stage_names"]) != profile.modes:
         raise ZImageProfileError("Z-Image supports only Forge txt2img")
     if intent.get("unsupported_features"):
-        raise ZImageProfileError("Z-Image unsupported features: " + "; ".join(intent["unsupported_features"]))
-    validate_zimage_config({"model": intent["model_name"], "sampler_name": intent["sampler"],
-                            "scheduler": intent["scheduler"], "steps": intent["steps"],
-                            "cfg_scale": intent["cfg_scale"], "width": intent["width"], "height": intent["height"]},
-                           negative=str(intent.get("negative_prompt") or ""))
-    if any(intent[key] is None for key in ("sampler", "scheduler", "steps", "cfg_scale", "width", "height")) or not is_zimage_transformer_name(intent["model_name"]):
+        raise ZImageProfileError(
+            "Z-Image unsupported features: " + "; ".join(intent["unsupported_features"])
+        )
+    validate_zimage_config(
+        {
+            "model": intent["model_name"],
+            "sampler_name": intent["sampler"],
+            "scheduler": intent["scheduler"],
+            "steps": intent["steps"],
+            "cfg_scale": intent["cfg_scale"],
+            "width": intent["width"],
+            "height": intent["height"],
+        },
+        negative=str(intent.get("negative_prompt") or ""),
+    )
+    if any(
+        intent[key] is None
+        for key in ("sampler", "scheduler", "steps", "cfg_scale", "width", "height")
+    ) or not is_zimage_transformer_name(intent["model_name"]):
         raise ZImageProfileError("Z-Image immutable sampling and model values are required")
     return "txt2img"

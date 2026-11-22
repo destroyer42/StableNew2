@@ -794,6 +794,9 @@ class ConfigManager:
             # docs/runbooks/managed_forge_runtime.md). Empty (the default) builds the canonical managed install's
             # profile from config/managed_forge_runtime.json. Ignored for an explicit a1111_webui.
             "forge_runtime_profile_path": "",
+            # Which still-image backend NEW work defaults to (PR-IMG-COMFY-381): "webui" follows webui_runtime_identity
+            # (Forge, or the A1111 rollback); "comfyui" selects StableNew's managed ComfyUI. No restart is needed.
+            "image_backend_default": "webui",
             "webui_workdir": str(app_config.get_webui_workdir() or ""),
             "webui_autostart_enabled": app_config.is_webui_autostart_enabled(),
             "webui_health_initial_timeout_seconds": app_config.get_webui_health_initial_timeout_seconds(),

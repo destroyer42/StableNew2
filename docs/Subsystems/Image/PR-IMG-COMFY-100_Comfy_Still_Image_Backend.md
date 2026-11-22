@@ -72,6 +72,10 @@ Qwen-Image (original, 20B MMDiT, Apache-2.0) and Qwen-Image-2512, in `Comfy-Org/
 | `qwen_2.5_vl_7b_fp8_scaled.safetensors` | 9,384,670,680 |
 | `qwen_image_vae.safetensors` | 253,806,246 |
 
+A subsequent header-only inventory found the original FP8 checkpoint and Qwen VAE under renamed files in
+the shared WebUI library. The original inventory scoped its search to the Comfy paths and Hugging Face cache,
+so it missed these copies. The Qwen2.5-VL-7B encoder was absent from the inspected model library.
+
 That set is about 30 GB of weights. Through core Comfy on 12 GB VRAM it runs only by offloading the 20 GB model
 to host RAM. On 31.8 GiB of host RAM that is the same kind of resource risk that made FLUX.2 Klein 9B BF16
 `NO_GO_RESOURCE_RISK`. The usual 12 GB answer, GGUF Q4/Q5, needs a custom node that policy `none` forbids.
@@ -300,6 +304,11 @@ Asked in this session with AskUserQuestion; answers recorded 2026-11-19.
 
 Exclusions: physical runs, weight download, reference edit, 2048-class geometry, Turbo LoRAs, LoRA, prompt
 enhancer, warm-runtime reuse, matched Forge comparison, default switch, shared Comfy-session extraction.
+
+> Superseded in part by owner request (2026-11-22, PR-IMG-COMFY-381): the "default switch" and "matched Forge comparison"
+> exclusions no longer apply. The operator can now choose ComfyUI as the default still-image backend (setting
+> `image_backend_default`), SDXL txt2img runs there, and a Forge-vs-ComfyUI comparison package exists. Forge stays the shipped
+> default; Qwen-Image behavior is unchanged.
 
 ## 14. Stop conditions and authorization boundaries
 

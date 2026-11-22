@@ -114,6 +114,7 @@ def loopback_request(
     client = http.client.HTTPConnection(HOST, PORT, timeout=POLL_SECONDS)
     client.auto_open = False  # Never reconnect and never retry a dispatched request.
     connection = _RequestSocket(token, deadline)
+    disconnected = "disconnected"
     try:
         with connection:
             connection.settimeout(_remaining(token, deadline))
@@ -123,6 +124,8 @@ def loopback_request(
             headers = {"Connection": "close", "Accept": "application/json"}
             if body is not None:
                 headers["Content-Type"] = "application/json"
+                # Once a POST may have reached Ollama, a disconnect cannot prove that it never started.
+                disconnected = "response_lost"
             client.request("GET" if body is None else "POST", path, body, headers)
             with client.getresponse() as response:
                 if response.status != 200:
@@ -133,21 +136,21 @@ def loopback_request(
                 if len(document) > limit:
                     raise TransportFailure("response_too_large")
                 if response.length:
-                    raise TransportFailure("disconnected")
+                    raise TransportFailure(disconnected)
                 _remaining(token, deadline)
                 return response.status, document
     except http.client.RemoteDisconnected:
-        raise TransportFailure("disconnected") from None
+        raise TransportFailure(disconnected) from None
     except http.client.IncompleteRead:
         # CPython also raises IncompleteRead for an invalid chunk-size line.
         reader = connection.reader
         raise TransportFailure(
-            "disconnected" if reader is not None and reader.eof else "invalid_http"
+            disconnected if reader is not None and reader.eof else "invalid_http"
         ) from None
     except TimeoutError:
         raise TransportFailure("timeout") from None
     except OSError as exc:
-        reason = "disconnected" if exc.errno in _DISCONNECT_ERRORS else "transport_error"
+        reason = disconnected if exc.errno in _DISCONNECT_ERRORS else "transport_error"
         raise TransportFailure(reason) from None
     except (http.client.HTTPException, ValueError):
         raise TransportFailure("invalid_http") from None

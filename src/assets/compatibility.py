@@ -20,6 +20,8 @@ class ModelFamily(str, Enum):
     SDXL = "sdxl"
     SD3 = "sd3"
     FLUX = "flux"
+    QWEN_IMAGE = "qwen_image"
+    Z_IMAGE = "z_image"
 
 
 class EvidenceConfidence(str, Enum):

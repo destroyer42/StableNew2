@@ -229,6 +229,8 @@ class PromptAiSuggestions:
             explanation = f"{label}. {explanation}"
         self.explanation.configure(text=explanation)
         self.button.configure(text="Suggest… (Preview)" if "Preview" in label else "Suggest…")
+        if self.preview_dialog is not None and self.preview_dialog.winfo_exists():
+            self.preview_dialog.refresh_remote(request_pending=self._active_id is not None)
         self.preview_button.state(["!disabled"] if self.owner is not None else ["disabled"])
         self.button.state(
             ["!disabled"] if code is None and self._active_id is None else ["disabled"]

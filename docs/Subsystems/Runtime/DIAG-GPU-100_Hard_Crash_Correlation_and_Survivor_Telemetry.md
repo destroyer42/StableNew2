@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded 2026-11-22.** The owner resolved device loss by forcing PCIe Gen4. See [DIAG-GPU-160](DIAG-GPU-160_PCIe_Gen4_Resolution.md).
+
 **DIAG-GPU-100 — COMPLETE / ACCEPTED / INTEGRATED.** This is not a
 root-cause verdict and does not authorize a BIOS, driver, power, memory,
 process-lifecycle, or GPU-workload change.

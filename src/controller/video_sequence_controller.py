@@ -12,14 +12,15 @@ A mixin so ``VideoWorkflowController`` keeps one surface while its own module st
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from functools import partial
 from typing import Any
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
-from src.video.sequence_admission import freeze_sequence_plan
 from src.video.sequence_history import read_ledger_progress
+from src.video.sequence_job_build import build_sequence_njr
 from src.video.sequence_locator import locate_ledger
-from src.video.sequence_plan import STAGE_VIDEO_WORKFLOW, SequencePlanError
+from src.video.sequence_plan import SequencePlan
 from src.video.sequence_resume import (
     SequenceResumeError,
     build_replay_njr,
@@ -29,10 +30,24 @@ from src.video.sequence_resume import (
 )
 from src.video.sequence_shots import build_sequence_intent
 from src.video.storyboard import StoryboardDraft, StoryboardError
-from src.video.storyboard_readiness import unsupported_controls, verify_images
-from src.video.video_workflow_intent import EXPERIMENTAL_OPT_IN_FIELD
-from src.video.video_workflow_njr_builder import VideoWorkflowBuild, VideoWorkflowNjrBuilder
-from src.video.workflow_frame_count import frame_count_policy
+from src.video.storyboard_readiness import verify_images
+from src.video.video_workflow_njr_builder import (
+    FrozenVideoInputs,
+    VideoWorkflowBuild,
+    VideoWorkflowNjrBuilder,
+)
+
+
+def _verify_draft_source(draft: StoryboardDraft, frozen: FrozenVideoInputs) -> None:
+    if frozen.source_sha256 != draft.source_sha256:
+        raise StoryboardError("Source changed during admission; nothing queued.")
+
+
+def _verify_draft_plan(draft: StoryboardDraft, plan: SequencePlan) -> None:
+    verify_images(draft)
+    for shot, segment in zip(draft.shots, plan.segments, strict=True):
+        if shot.keyframe_path and shot.keyframe_sha256 != segment.anchor_sha256:
+            raise StoryboardError("Authored anchor changed during admission; nothing queued.")
 
 
 class VideoSequenceControllerMixin:
@@ -54,77 +69,39 @@ class VideoSequenceControllerMixin:
         plan_origin: Mapping[str, Any] | None = None,
         storyboard: StoryboardDraft | None = None,
     ) -> VideoWorkflowBuild:
-        """Freeze the first segment's inputs and the typed plan, and build the one NJR; nothing is queued."""
+        """Freeze the first segment's inputs and the typed plan, and build the one NJR; nothing is queued.
 
-        form = dict(form_data)
+        The shared body is ``build_sequence_njr``; a displayed ``StoryboardDraft`` adds its agreement checks around
+        it (before it starts, once segment 0 is frozen, and once the plan is frozen)."""
+
+        check_frozen: Callable[[FrozenVideoInputs], None] | None = None
+        check_plan: Callable[[SequencePlan], None] | None = None
         if storyboard is not None:
             if (
                 storyboard.backend != "comfy"
                 or source_image_path != storyboard.source_path
                 or {k: v for k, v in sequence_intent.items() if k != "sequence_id"}
                 != build_sequence_intent(storyboard.shots, clip_name=storyboard.clip_name)
-                or (form.get("workflow_id"), form.get("workflow_version"))
+                or (form_data.get("workflow_id"), form_data.get("workflow_version"))
                 != (storyboard.workflow_id, storyboard.workflow_version)
             ):
                 raise StoryboardError(
                     "Displayed Storyboard and admission inputs disagree; refresh before queueing."
                 )
             verify_images(storyboard)
-        controls = unsupported_controls(form)
-        if controls:
-            raise SequencePlanError(" ".join(controls))
-        if (form.get("interpolation") or {}).get("enabled"):
-            raise SequencePlanError(
-                "RIFE smoothing is not applied inside a sequence; the sequence is assembled from each segment's "
-                "original frames"
-            )
-        segments = sequence_intent.get("segments")
-        first = segments[0] if isinstance(segments, (list, tuple)) and segments else {}
-        if isinstance(first, Mapping):
-            if first.get("seed") not in (None, ""):
-                form["seed"] = first["seed"]
-            if first.get("frame_count") not in (None, ""):
-                form["frame_count"] = first["frame_count"]
-        frozen = self._njr_builder.freeze_inputs(source_image_path, form, prompt_per_segment=True)
-        if storyboard is not None and frozen.source_sha256 != storyboard.source_sha256:
-            raise StoryboardError("Source changed during admission; nothing queued.")
-        spec = self._njr_builder.spec_for(form)
-        policy = frame_count_policy(spec)
-        if policy is None:
-            raise SequencePlanError(
-                f"workflow {spec.workflow_id} has no declared frame-count policy; it cannot run as a sequence"
-            )
-        dimensions = (frozen.source_preparation or {}).get("target_dimensions") or {}
-        target = (
-            (int(dimensions["width"]), int(dimensions["height"]))
-            if dimensions.get("width") and dimensions.get("height")
-            else None
-        )
-        plan = freeze_sequence_plan(
-            sequence_intent,
-            stage=STAGE_VIDEO_WORKFLOW,
-            fps=int(policy["fps"]),
-            base_prompt=str(form.get("prompt") or "").strip(),
-            # The value the job really carries (a blank form negative becomes the workflow's default), so the plan
-            # freezes what will be dispatched.
-            base_negative_prompt=self._njr_builder.resolved_negative_prompt(spec, form),
-            base_workflow=(spec.workflow_id, spec.workflow_version),
+            check_frozen = partial(_verify_draft_source, storyboard)
+            check_plan = partial(_verify_draft_plan, storyboard)
+        return build_sequence_njr(
+            njr_builder=self._njr_builder,
             registry=self._workflow_registry,
-            target_size=target,
-            segment_zero_seed=frozen.seed,
-            experimental_opt_in=form.get(EXPERIMENTAL_OPT_IN_FIELD) is True,
-            source={"path": frozen.prepared_source_path, "sha256": frozen.prepared_source_sha256},
+            source_image_path=source_image_path,
+            form_data=form_data,
+            sequence_intent=sequence_intent,
             continuity=continuity,
             plan_origin=plan_origin,
+            check_frozen=check_frozen,
+            check_plan=check_plan,
         )
-        if storyboard is not None:
-            verify_images(storyboard)
-            for shot, segment in zip(storyboard.shots, plan.segments, strict=True):
-                if shot.keyframe_path and shot.keyframe_sha256 != segment.anchor_sha256:
-                    raise StoryboardError(
-                        "Authored anchor changed during admission; nothing queued."
-                    )
-        return self._njr_builder.build_job(form, frozen, sequence_plan=plan.to_dict())
 
     def submit_sequence_job(
         self,

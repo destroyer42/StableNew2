@@ -19,11 +19,14 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from PIL import Image, ImageOps
 
 _COVER_CENTER_CROP = "cover_resize_center_crop"
+# A storyboard take starts from the exact PNG of an earlier clip: the record points at that file,
+# which is never resized or re-saved.  Readers compare dimensions, never this policy string.
+PASSTHROUGH_POLICY: Final = "exact_size_passthrough.v1"
 _EXIF_ORIENTATION_TAG = 0x0112
 
 # Input-pixel budget of the operator-facing readiness *preview* only.  Decoding, transposing and
@@ -283,6 +286,44 @@ def prepare_declared_workflow_source(
     )
 
 
+def passthrough_declared_workflow_source(
+    *,
+    source_path: str | Path,
+    policy: Mapping[str, Any],
+) -> PreparedWorkflowSource:
+    """Record a source that already is the workflow's target size, without touching it.
+
+    The declared target comes from ``resolve_declared_target``.  A source of any other size is
+    refused: a handoff frame is used exactly as generated, never resized.  Reads the image header
+    only and writes nothing; the record's prepared path is the source itself."""
+
+    source = Path(source_path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"Video workflow source image does not exist: {source}")
+    try:
+        with Image.open(source) as opened:
+            width, height = opened.size  # header only: the pixels are never decoded
+    except Exception as exc:
+        raise ValueError(f"Failed to open video workflow source image: {exc}") from exc
+    orientation, target, orientation_rule = resolve_declared_target(policy, width, height)
+    if (width, height) != (target["width"], target["height"]):
+        raise ValueError(
+            f"The handoff frame is {width}x{height}, not the workflow's target size "
+            f"{target['width']}x{target['height']}; it is used exactly as generated, never resized."
+        )
+    dimensions = {"width": int(width), "height": int(height)}
+    return PreparedWorkflowSource(
+        original_source_path=str(source),
+        prepared_image_path=str(source),
+        source_dimensions=dict(dimensions),
+        target_dimensions=dict(target),
+        prepared_dimensions=dict(dimensions),
+        orientation=orientation,
+        policy=PASSTHROUGH_POLICY,
+        orientation_rule=orientation_rule,
+    )
+
+
 def resolve_declared_target(
     policy: Mapping[str, Any], width: int, height: int
 ) -> tuple[str, dict[str, int], str]:
@@ -336,12 +377,14 @@ def _dimensions(value: Any, field_name: str) -> dict[str, int]:
 
 
 __all__ = [
+    "PASSTHROUGH_POLICY",
     "PREVIEW_MAX_SOURCE_PIXELS",
     "PreparedWorkflowSource",
     "SourceTooLargeForPreview",
     "TransformedWorkflowSource",
     "WorkflowSourceGeometry",
     "cover_crop_box",
+    "passthrough_declared_workflow_source",
     "prepare_declared_workflow_source",
     "prepared_source_destination",
     "preview_declared_workflow_source",

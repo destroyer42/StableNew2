@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -27,6 +28,12 @@ SEQUENCE_PLAN_SCHEMA: Final = "stablenew.video_sequence_plan.v1"
 #: The frozen execution policy a plan was admitted under (overlap semantics, anchor rules, assembly path). A runner
 #: that does not know the version refuses the plan rather than executing it under different rules.
 SEQUENCE_POLICY_VERSION: Final = "stablenew.video_sequence_policy.v1"
+#: Policy v2 (PR-VID-STORY-380): a storyboard take. The plan carries its ``StoryboardPlanLink``; an optional lead-in
+#: (the exact frame the take continues from) makes segment 0 overlap that handoff frame by one. v1 plans are untouched.
+SEQUENCE_POLICY_VERSION_V2: Final = "stablenew.video_sequence_policy.v2"
+SEQUENCE_POLICIES: Final = (SEQUENCE_POLICY_VERSION, SEQUENCE_POLICY_VERSION_V2)
+#: The parent of a take that starts from the storyboard's root (no lead-in).
+ROOT_PARENT: Final = "root"
 
 #: Segments one job may run, and the total generation budget (12 segments at the 81-frame Wan maximum).
 MAX_SEQUENCE_SEGMENTS: Final = 12
@@ -109,7 +116,14 @@ PLAN_KEYS: Final = frozenset(
         "plan_origin",
         "target_width",
         "target_height",
+        "storyboard",
     }
+)
+LEAD_IN_KEYS: Final = frozenset(
+    {"manifest_path", "manifest_sha256", "frame_count", "handoff_path", "handoff_sha256"}
+)
+STORYBOARD_LINK_KEYS: Final = frozenset(
+    {"storyboard_id", "parent_id", "take_ids", "handoff_index", "lead_in"}
 )
 
 
@@ -278,6 +292,90 @@ class SequenceColorMatch:
 
 
 @dataclass(frozen=True, slots=True)
+class StoryboardLeadIn:
+    """The exact parent frames a storyboard take continues from: the cut manifest and its handoff frame."""
+
+    manifest_path: str
+    manifest_sha256: str
+    #: K: the parent cut's frame count up to and including the handoff frame (the lead-in).
+    frame_count: int
+    handoff_path: str
+    handoff_sha256: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "manifest_path": self.manifest_path,
+            "manifest_sha256": self.manifest_sha256,
+            "frame_count": self.frame_count,
+            "handoff_path": self.handoff_path,
+            "handoff_sha256": self.handoff_sha256,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> StoryboardLeadIn:
+        if not isinstance(data, Mapping):
+            raise SequencePlanError("the storyboard lead-in must be a mapping")
+        _unknown("storyboard lead-in", data, LEAD_IN_KEYS)
+        try:
+            return cls(
+                manifest_path=str(data["manifest_path"]),
+                manifest_sha256=str(data["manifest_sha256"]),
+                frame_count=int(data["frame_count"]),
+                handoff_path=str(data["handoff_path"]),
+                handoff_sha256=str(data["handoff_sha256"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SequencePlanError(f"the storyboard lead-in is malformed: {exc}") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class StoryboardPlanLink:
+    """Where a v2 plan's takes sit in the storyboard tree: its parent, one take id per segment and the lead-in."""
+
+    storyboard_id: str
+    #: A take id, or ``ROOT_PARENT`` when the takes start from the storyboard's root.
+    parent_id: str
+    #: One take id per segment, in segment order.
+    take_ids: tuple[str, ...]
+    #: The 0-based index of the handoff frame in the parent cut (``None`` without a lead-in).
+    handoff_index: int | None
+    lead_in: StoryboardLeadIn | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "storyboard_id": self.storyboard_id,
+            "parent_id": self.parent_id,
+            "take_ids": list(self.take_ids),
+            "handoff_index": self.handoff_index,
+            "lead_in": None if self.lead_in is None else self.lead_in.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> StoryboardPlanLink:
+        if not isinstance(data, Mapping):
+            raise SequencePlanError("the storyboard link must be a mapping")
+        _unknown("storyboard link", data, STORYBOARD_LINK_KEYS)
+        raw_ids = data.get("take_ids")
+        if not isinstance(raw_ids, (list, tuple)):
+            raise SequencePlanError("the storyboard link take_ids must be a list")
+        lead_in = data.get("lead_in")
+        try:
+            return cls(
+                storyboard_id=str(data["storyboard_id"]),
+                parent_id=str(data["parent_id"]),
+                take_ids=tuple(str(item) for item in raw_ids),
+                handoff_index=None
+                if data.get("handoff_index") is None
+                else int(data["handoff_index"]),
+                lead_in=None if lead_in is None else StoryboardLeadIn.from_dict(lead_in),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            if isinstance(exc, SequencePlanError):
+                raise
+            raise SequencePlanError(f"the storyboard link is malformed: {exc}") from exc
+
+
+@dataclass(frozen=True, slots=True)
 class SequencePlan:
     sequence_id: str
     stage: str
@@ -302,6 +400,8 @@ class SequencePlan:
     target_height: int | None = None
     policy_version: str = SEQUENCE_POLICY_VERSION
     schema: str = SEQUENCE_PLAN_SCHEMA
+    #: The storyboard link of a v2 plan; ``None`` (and absent from the digest) for every v1 plan.
+    storyboard: StoryboardPlanLink | None = None
 
     @property
     def total_frames(self) -> int:
@@ -313,7 +413,7 @@ class SequencePlan:
         errors: list[str] = []
         if self.schema != SEQUENCE_PLAN_SCHEMA:
             errors.append(f"unsupported sequence plan schema {self.schema!r}")
-        if self.policy_version != SEQUENCE_POLICY_VERSION:
+        if self.policy_version not in SEQUENCE_POLICIES:
             errors.append(f"unsupported sequence execution policy {self.policy_version!r}")
         if not self.sequence_id.strip():
             errors.append("sequence_id must not be empty")
@@ -348,9 +448,84 @@ class SequencePlan:
             ):
                 errors.append("the sequence source needs a path and a SHA-256")
         max_seed = MAX_SEED_SVD if self.stage == STAGE_SVD_NATIVE else MAX_SEED_WORKFLOW
+        if self.policy_version == SEQUENCE_POLICY_VERSION_V2:
+            errors.extend(self._validate_storyboard())
+        elif self.storyboard is not None:
+            errors.append("only a v2 plan carries a storyboard link")
         for position, segment in enumerate(self.segments):
             errors.extend(self._validate_segment(position, segment, max_seed))
         return errors
+
+    def _has_lead_in(self) -> bool:
+        return (
+            self.policy_version == SEQUENCE_POLICY_VERSION_V2
+            and self.storyboard is not None
+            and self.storyboard.lead_in is not None
+        )
+
+    def _validate_storyboard(self) -> list[str]:
+        """The v2 rules: a complete link, one unique take per segment, assembled, no colour matching, exact handoff."""
+
+        link = self.storyboard
+        if link is None:
+            return ["a v2 plan needs its storyboard link"]
+        errors: list[str] = []
+        if not link.storyboard_id.strip():
+            errors.append("the storyboard link storyboard_id must not be empty")
+        if not link.parent_id.strip():
+            errors.append("the storyboard link parent_id must not be empty")
+        if len(link.take_ids) != len(self.segments):
+            errors.append(
+                f"a v2 plan needs one take id per segment: {len(link.take_ids)} take id(s) "
+                f"for {len(self.segments)} segment(s)"
+            )
+        if any(not take_id.strip() for take_id in link.take_ids):
+            errors.append("take ids must not be empty")
+        if len(set(link.take_ids)) != len(link.take_ids):
+            errors.append("take ids must be unique")
+        if not self.assembly.enabled:
+            errors.append("a storyboard take is always assembled")
+        if self.color_match.enabled:
+            errors.append("colour matching is off for storyboard takes")
+        lead_in = link.lead_in
+        if lead_in is None:
+            if link.handoff_index is not None:
+                errors.append("without a lead-in the storyboard link handoff_index must be empty")
+            return errors
+        if lead_in.frame_count < 1:
+            errors.append(f"the lead-in frame_count must be at least 1, got {lead_in.frame_count}")
+        if not lead_in.manifest_path.strip() or not lead_in.handoff_path.strip():
+            errors.append("the lead-in needs a manifest path and a handoff frame path")
+        if not _SHA256.match(lead_in.manifest_sha256):
+            errors.append("the lead-in manifest SHA-256 is malformed")
+        if not _SHA256.match(lead_in.handoff_sha256):
+            errors.append("the lead-in handoff SHA-256 is malformed")
+        if link.handoff_index != lead_in.frame_count - 1:
+            errors.append(
+                f"the storyboard link handoff_index must be {lead_in.frame_count - 1} "
+                f"(the lead-in's last frame), got {link.handoff_index}"
+            )
+        if not self._source_is_handoff(lead_in):
+            errors.append(
+                "segment 0 starts from the handoff frame: the sequence source must be exactly the "
+                "lead-in's handoff path and SHA-256"
+            )
+        if self.segments and self.segments[0].overlap_frames != 1:
+            errors.append(
+                "segment 0 overlaps the handoff frame by 1 frame, "
+                f"not {self.segments[0].overlap_frames}"
+            )
+        return errors
+
+    def _source_is_handoff(self, lead_in: StoryboardLeadIn) -> bool:
+        """The source is the handoff frame: hash exact, path compared as text (no file access)."""
+
+        if self.source is None:
+            return False
+        if self.source.get("sha256") != lead_in.handoff_sha256:
+            return False
+        recorded = os.path.normcase(os.path.normpath(str(self.source.get("path") or "")))
+        return recorded == os.path.normcase(os.path.normpath(lead_in.handoff_path))
 
     def _validate_segment(self, position: int, segment: SegmentSpec, max_seed: int) -> list[str]:
         label = f"segment {position}"
@@ -387,7 +562,7 @@ class SequencePlan:
             errors.append(f"{label} carries an anchor path or hash its anchor policy does not use")
         if segment.overlap_frames < 0:
             errors.append(f"{label} overlap_frames must not be negative")
-        elif position == 0 and segment.overlap_frames:
+        elif position == 0 and segment.overlap_frames and not self._has_lead_in():
             errors.append("segment 0 has nothing before it to overlap")
         elif segment.overlap_frames >= segment.frame_count:
             errors.append(
@@ -408,7 +583,7 @@ class SequencePlan:
         return errors
 
     def _content(self) -> dict[str, Any]:
-        return {
+        content: dict[str, Any] = {
             "schema": self.schema,
             "policy_version": self.policy_version,
             "sequence_id": self.sequence_id,
@@ -426,6 +601,10 @@ class SequencePlan:
             "target_width": self.target_width,
             "target_height": self.target_height,
         }
+        # Only a v2 plan has the key at all, so every v1 digest stays byte-identical to what it always was.
+        if self.storyboard is not None:
+            content["storyboard"] = self.storyboard.to_dict()
+        return content
 
     def plan_sha256(self) -> str:
         """Canonical digest of the whole plan: any change to any segment, anchor or setting changes it."""
@@ -467,6 +646,9 @@ class SequencePlan:
                 target_height=None
                 if data.get("target_height") is None
                 else int(data["target_height"]),
+                storyboard=None
+                if data.get("storyboard") is None
+                else StoryboardPlanLink.from_dict(data["storyboard"]),
             )
         except (KeyError, TypeError, ValueError) as exc:
             if isinstance(exc, SequencePlanError):
@@ -496,8 +678,11 @@ __all__ = [
     "MAX_SEED_WORKFLOW",
     "MAX_SEQUENCE_SEGMENTS",
     "MAX_SEQUENCE_TOTAL_FRAMES",
+    "ROOT_PARENT",
     "SEQUENCE_PLAN_SCHEMA",
+    "SEQUENCE_POLICIES",
     "SEQUENCE_POLICY_VERSION",
+    "SEQUENCE_POLICY_VERSION_V2",
     "SEQUENCE_STAGES",
     "STAGE_SVD_NATIVE",
     "STAGE_VIDEO_WORKFLOW",
@@ -506,6 +691,8 @@ __all__ = [
     "SequenceColorMatch",
     "SequencePlan",
     "SequencePlanError",
+    "StoryboardLeadIn",
+    "StoryboardPlanLink",
     "default_overlap",
     "sanitize_clip_name",
 ]
