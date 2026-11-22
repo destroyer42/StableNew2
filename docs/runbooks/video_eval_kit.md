@@ -54,7 +54,7 @@ Rules the loader enforces (`src/video/video_eval_suite.py`):
   `preprocess.target_width` the target follows each source's aspect, like the tab's Match Source Aspect.
 * `form` is merged over the Video Workflow tab's default form. The prompt, negative prompt and seed come from the
   case and the suite, so an arm may not set them. Wan2.2 TI2V-5B 1.2.0 and 1.3.0, the 720p workflow and I2V-A14B 1.0.0 are approved and need no opt-in. A workflow
-  that is still experimental (Wan-Animate-2, TI2V-5B 1.0.0 and 1.1.0) needs `"experimental_opt_in": true` in the arm:
+  that is still experimental (Wan-Animate-2, TI2V-5B 1.0.0 and 1.1.0, the I2V-A14B speed arms 1.1.0-1.3.0) needs `"experimental_opt_in": true` in the arm:
   the suite file is the per-job opt-in, and the queue confirmation names every arm that sets it.
 * Admission refuses anything the normal submission would refuse (frame count, missing opt-in, an SVD preflight
   block such as a missing local model).
@@ -238,3 +238,25 @@ file next to your own images and change `image` (and, ideally, pin `image_sha256
   Compare motion and identity, not duration.
 * This only queues and measures. It makes no claim that either candidate is better: that needs a separately authorized
   physical run and your ratings (sections 4 and 5). As of this writing no physical eval has been run.
+
+## 7. A14B speed-arm example suite (VID-A14B-SPEED-374)
+
+`docs/runbooks/examples/video_eval_a14b_speed_arms.suite.json` compares the approved I2V-A14B 4-step 1.0.0 (baseline)
+with its three experimental speed arms on eight identical cases (same images, prompts, seed 374 and 81 frames): a turn
+around, a walk toward the camera, a close-up face, a wave, a side step, wind in hair and clothing, a laugh and a landscape
+sit-down. 8 cases x 4 arms = 32 jobs. Its image names are synthetic placeholders: copy the file next to your own images
+(for example the VID-CLIP-371 Stage 2 full-body sources, which stay private and are not in the repository) and change
+`image`, ideally pinning `image_sha256`. Nothing is queued until you choose **Queue eval suite...** and confirm the plan.
+
+| Arm | Version | What changes against 1.0.0 |
+|---|---|---|
+| `a14b_base` (baseline) | 1.0.0, approved | Nothing: the promoted graph. |
+| `a14b_ck_attention` | 1.1.0, experimental | One `ModelAttentionBackend` ("comfy kitchen attention", INT8) per expert. Refused before dispatch if ComfyUI does not offer that option. |
+| `a14b_merged` | 1.2.0, experimental | lightx2v merged scaled-fp8 4-step experts, no LoRA nodes. Needs the two pinned 15 GB files in `models/diffusion_models`. |
+| `a14b_gpu_te` | 1.3.0, experimental | UMT5 text encoder on the GPU instead of the CPU; expected near pixel-identical, so compare speed first. |
+
+* The three candidate arms set `"experimental_opt_in": true`; the queue confirmation names them.
+* Versions never share a warm ComfyUI process (the warm hold keys on workflow id and version), so each change of arm
+  in the queue is a cold start. Compare generation time per arm from the job records, not across arm changes alone.
+* This only queues and measures. Whether any arm is faster without losing quality is your rating's call (sections 4
+  and 5); no physical run has been made.

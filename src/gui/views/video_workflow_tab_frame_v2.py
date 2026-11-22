@@ -61,6 +61,7 @@ from src.video.motion_library.handoff import (
     binding_for_submission,
 )
 from src.video.recent_video_outputs import RecentVideoOutput
+from src.video.workflow_frame_count import frame_count_advisory
 from src.video.workflow_picker import workflow_choices
 from src.video.workflow_tasks import (
     FIELD_ENGINE,
@@ -179,6 +180,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # when the selected workflow declares no frame-count policy.
         self.frame_count_var = tk.StringVar(value="")
         self._frame_count_labels: dict[str, int] = {}
+        # Inline advisory for a length above the workflow's declared advisory_above (VID-A14B-SPEED-374).
+        self.frame_count_advisory_var = tk.StringVar(value="")
         # Driving video for workflows that transfer a clip's motion (shown only for those).
         self.pose_video_var = tk.StringVar(value="")
         self.camera_preset_var = tk.StringVar(
@@ -317,6 +320,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.output_route_var,
         ):
             variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
+        self.frame_count_var.trace_add("write", lambda *_args: self._refresh_frame_count_advisory())
         self.smooth_var.trace_add("write", lambda *_args: self._refresh_advanced_status())
         self.smooth_var.trace_add("write", lambda *_args: self._refresh_suggested_line())
         self.negative_prompt_text.bind(
@@ -696,6 +700,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             width=22,
         )
         self.frame_count_combo.pack(side="left")
+        self.frame_count_advisory_label = ttk.Label(
+            self.frame_count_frame,
+            textvariable=self.frame_count_advisory_var,
+            style="Dark.TLabel",
+            wraplength=320,
+            justify="left",
+        )
+        self.frame_count_advisory_label.pack(side="left", padx=(8, 0))
         self._attach_setting_help(
             "frame_count",
             VIDEO_WORKFLOW_SETTING_HELP["frame_count"],
@@ -1419,6 +1431,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         panel = getattr(self, "sequence_panel", None)
         if panel is not None:
             panel.refresh_lengths()
+
+    def _refresh_frame_count_advisory(self) -> None:
+        """Show the selected workflow's advisory when the chosen length is above its advisory threshold."""
+
+        workflow_meta = self._workflow_map.get(self.workflow_var.get().strip(), {})
+        selected = self._frame_count_labels.get(self.frame_count_var.get())
+        self.frame_count_advisory_var.set(
+            frame_count_advisory(workflow_meta.get("frame_count"), selected)
+        )
 
     def _select_frame_count(self, frame_count: Any) -> None:
         for label, count in self._frame_count_labels.items():

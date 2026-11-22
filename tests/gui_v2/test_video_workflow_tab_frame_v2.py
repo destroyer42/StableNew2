@@ -273,6 +273,71 @@ def test_frame_count_selector_follows_the_selected_workflows_declared_lengths(tk
     assert tab.get_video_workflow_state()["frame_count"] == 17
 
 
+class _LongLengthControllerStub(_ControllerStub):
+    """VID-A14B-SPEED-374: a workflow that offers lengths above its advisory threshold."""
+
+    def build_video_workflow_defaults(self) -> dict[str, object]:
+        return {**super().build_video_workflow_defaults(), "workflow_id": "long_len"}
+
+    def get_video_workflow_specs(self) -> list[dict[str, object]]:
+        return [
+            {
+                "workflow_id": "long_len",
+                "workflow_version": "1.0.0",
+                "backend_id": "comfy",
+                "display_name": "Long length",
+                "form_visibility": {"frame_count": True, "seed": True},
+                "frame_count": {
+                    "default": 81,
+                    "fps": 16,
+                    "advisory_above": 81,
+                    "choices": [
+                        {"frames": 77, "seconds": 4.8},
+                        {"frames": 81, "seconds": 5.1},
+                        {"frames": 85, "seconds": 5.3},
+                        {"frames": 121, "seconds": 7.6},
+                    ],
+                },
+            },
+            {
+                "workflow_id": "variable_len",
+                "workflow_version": "1.1.0",
+                "backend_id": "comfy",
+                "display_name": "Variable length",
+                "form_visibility": {"frame_count": True, "seed": True},
+                "frame_count": {
+                    "default": 49,
+                    "fps": 24,
+                    "choices": [{"frames": 49, "seconds": 2.0}, {"frames": 81, "seconds": 3.4}],
+                },
+            },
+        ]
+
+
+@pytest.mark.gui
+def test_lengths_above_the_advisory_threshold_show_an_inline_advisory(tk_root) -> None:
+    tab = VideoWorkflowTabFrameV2(
+        tk_root, app_controller=_LongLengthControllerStub(), app_state=SimpleNamespace()
+    )
+    tab.workflow_var.set("long_len")
+
+    assert list(tab.frame_count_combo["values"])[-1] == "121 frames (~7.6 s)"
+    assert tab.frame_count_var.get() == "81 frames (~5.1 s)"  # default stays 81
+    assert tab.frame_count_advisory_var.get() == ""
+    tab.frame_count_var.set("121 frames (~7.6 s)")
+    assert tab.get_video_workflow_state()["frame_count"] == 121
+    advisory = tab.frame_count_advisory_var.get()
+    assert "longer run" in advisory and "RAM" in advisory and "loop back" in advisory
+    tab.frame_count_var.set("77 frames (~4.8 s)")
+    assert tab.frame_count_advisory_var.get() == ""
+    tab.frame_count_var.set("85 frames (~5.3 s)")
+    assert tab.frame_count_advisory_var.get()
+
+    tab.workflow_var.set("variable_len")  # no threshold declared: no advisory at its longest length
+    tab.frame_count_var.set("81 frames (~3.4 s)")
+    assert tab.frame_count_advisory_var.get() == ""
+
+
 class _DrivingVideoControllerStub(_ControllerStub):
     def build_video_workflow_defaults(self) -> dict[str, object]:
         return {**super().build_video_workflow_defaults(), "workflow_id": "drive"}

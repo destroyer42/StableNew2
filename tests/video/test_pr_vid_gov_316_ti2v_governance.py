@@ -70,6 +70,10 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
                 "1.4.0",
             ),  # VID-CLIP-370 eval candidate (720p; superseded by the approved 720p workflow id, VID-CLIP-372)
             *OLDER_TI2V,
+            # VID-A14B-SPEED-374 speed arms of the approved A14B 1.0.0.
+            ("wan22_i2v_a14b_4step_v1", "1.1.0"),
+            ("wan22_i2v_a14b_4step_v1", "1.2.0"),
+            ("wan22_i2v_a14b_4step_v1", "1.3.0"),
             *(
                 (wid, ver)
                 for wid in (WAN_ANIMATE2_PROMPT_ID, WAN_ANIMATE2_DRIVE_ID)
@@ -78,8 +82,8 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
         }
     )
     assert (
-        len(states) == 14
-    )  # Fun Control and the two VID-CLIP-370 candidates add identities; A14B was promoted by VID-CLIP-372.
+        len(states) == 17
+    )  # Fun Control, the VID-CLIP-370 candidates and the three VID-A14B-SPEED-374 arms add identities.
 
 
 def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_is_unchanged() -> (
@@ -90,7 +94,7 @@ def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
     ] == [A14B_APPROVED, TI2V_720P_APPROVED, APPROVED, APPROVED_FRAMES_OUT]
-    assert len(registry.list_offerable_specs("comfy")) == 14
+    assert len(registry.list_offerable_specs("comfy")) == 17  # + three A14B speed arms (VID-A14B-SPEED-374)
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:

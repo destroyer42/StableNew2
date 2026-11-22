@@ -47,6 +47,10 @@ EXPECTED_GOVERNANCE = {
     (WAN_ID, "1.3.0"): "approved",  # frames out (PR-VID-WAN-324), approved by the owner 2026-10-21
     (WAN_ID, "1.4.0"): "experimental",  # 704x1280 eval candidate (VID-CLIP-370)
     (A14B_ID, "1.0.0"): "approved",  # lightx2v 4-step, owner GO 2026-11-18 (VID-CLIP-372)
+    # VID-A14B-SPEED-374 speed arms: CK attention, merged lightx2v experts, GPU text encoder.
+    (A14B_ID, "1.1.0"): "experimental",
+    (A14B_ID, "1.2.0"): "experimental",
+    (A14B_ID, "1.3.0"): "experimental",
     **{
         (workflow_id, version): "experimental"
         for workflow_id in (WAN_ANIMATE2_PROMPT_ID, WAN_ANIMATE2_DRIVE_ID)
@@ -73,7 +77,13 @@ HISTORICAL_SPEC_SHA256 = {
     (WAN_ID, "1.4.0"): "2bbeb38b27c878afabf34afd993668aed3f0db864cf8588e5d35281fb685a59e",
     # VID-WARM-373 re-pinned A14B 1.0.0 deliberately (owner request 2026-11-21): its runtime policy gained
     # keep_warm_between_jobs_seconds; the graph is untouched (the template digest below did not move).
-    (A14B_ID, "1.0.0"): "06e8ae387ff7b902bc536cb778bc2a2b6274131b4e2ace5770245a1c0af54ab2",
+    # VID-A14B-SPEED-374 re-pinned it deliberately again (owner request 2026-11-21): its frame_count_policy maximum
+    # rose from 81 to 121 and gained advisory_above 81 (default stays 81); the template digest did not move.
+    (A14B_ID, "1.0.0"): "a3b4b46089335ac9a50285b722c5c9c9c1d251c77672ba5a12f7e061554d5850",
+    # VID-A14B-SPEED-374: the three experimental speed arms, pinned from their first registration.
+    (A14B_ID, "1.1.0"): "3026fb782f05e9f7f889246ec756b05cb7fa70f2f43e3aaab84f797f260aa022",
+    (A14B_ID, "1.2.0"): "0ede358d4ed8c318f44d1c6d18d500775cc732ad528429b96f40e99a4e10fc5e",
+    (A14B_ID, "1.3.0"): "ad3beade6f7f5ff94a5fbe4616f41defc9fd799c56bccc9a9ea9282883019bd7",
 }
 HISTORICAL_TEMPLATE_SHA256 = {
     (WAN_ID, "1.0.0"): "116e980387bc763c5a598641b81ead80201a2615ad19cdc625b4eb4da1484154",
@@ -85,6 +95,9 @@ HISTORICAL_TEMPLATE_SHA256 = {
     (WAN_ID, "1.3.0"): "5a62e121bde438e3e0613aec45473dffbf58105300ef82210ac0a5e5b8d9e352",
     (WAN_ID, "1.4.0"): "5a62e121bde438e3e0613aec45473dffbf58105300ef82210ac0a5e5b8d9e352",
     (A14B_ID, "1.0.0"): "704aee0ac7ea178307b577b8eb40c1d12e33aa65cb64c6a8a789ff9e8830c51a",
+    (A14B_ID, "1.1.0"): "ee1aec8cda0a1ef797fdffa17d35685162895aa4f7566a521bf2c219570f72c3",
+    (A14B_ID, "1.2.0"): "6b362d7c1d644ad17b116ec08d93317dd3bd12a98c661d58f93f5dd53c21acc9",
+    (A14B_ID, "1.3.0"): "d91c2b2acef9fdbd14c7884a0d593ea2aa1c466e873f644a7c4ec5bab8de815b",
 }
 
 
