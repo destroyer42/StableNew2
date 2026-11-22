@@ -418,7 +418,11 @@ def test_an_image_root_records_the_still_and_the_workflow_fps(tmp_path: Path) ->
     [
         ({"workflow_id": "wan_animate2_drive_i2v_v1", "workflow_version": "1.0.0"}, "experimental"),
         (
-            {"workflow_id": "wan22_i2v_a14b_4step_v1", "frame_count": 20},
+            {
+                "workflow_id": "wan22_i2v_a14b_4step_v1",
+                "workflow_version": "1.0.0",
+                "frame_count": 20,
+            },
             "cannot generate 20 frames",
         ),
         ({"frame_count": 81}, "needs a workflow"),
