@@ -6,6 +6,7 @@ from typing import Any
 
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
+from src.controller.storyboard_submission_service import StoryboardSubmissionService
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.video_workflow_mixins import VideoWorkflowMixins
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
@@ -58,6 +59,14 @@ class VideoWorkflowController(VideoWorkflowMixins):
         )
         self._experiments = VideoWorkflowExperimentService(self._njr_builder)
         self._batches = VideoWorkflowBatchService(self._njr_builder)
+        #: The Storyboard tab's submission service (reached through ``get_video_workflow_controller()``).
+        self.storyboards = StoryboardSubmissionService(
+            njr_builder=self._njr_builder,
+            workflow_registry=self._workflow_registry,
+            job_service=self._job_service,
+            repository=lambda: getattr(self._job_service(), "history_store", None),
+            output_root=lambda: getattr(self._app_controller, "output_dir", None) or "output",
+        )
 
     def list_workflow_specs(self) -> list[dict[str, Any]]:
         specs = latest_spec_per_workflow(
