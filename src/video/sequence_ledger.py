@@ -250,6 +250,8 @@ class SequenceLedger:
     #: Set on a full replay: how each recomputed final frame compares with the original run's (divergence is recorded,
     #: never a failure: a GPU re-run is not guaranteed to be byte-identical).
     replay: Mapping[str, Any] | None = None
+    #: A storyboard take's cut manifest ``{"path", "sha256"}`` as last written (policy v2 only; absent otherwise).
+    cut_manifest: Mapping[str, Any] | None = None
     schema: str = LEDGER_SCHEMA
 
     @property
@@ -265,7 +267,7 @@ class SequenceLedger:
         return None if self.completed_prefix >= self.total_segments else self.completed_prefix
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "schema": self.schema,
             "policy_version": self.policy_version,
             "sequence_id": self.sequence_id,
@@ -282,6 +284,10 @@ class SequenceLedger:
             "runtime_release": None if self.runtime_release is None else dict(self.runtime_release),
             "replay": None if self.replay is None else dict(self.replay),
         }
+        # Only a storyboard take has one; every other ledger keeps exactly its historical shape.
+        if self.cut_manifest is not None:
+            data["cut_manifest"] = dict(self.cut_manifest)
+        return data
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> SequenceLedger:
@@ -306,6 +312,7 @@ class SequenceLedger:
                 if data.get("runtime_release")
                 else None,
                 replay=dict(data["replay"]) if data.get("replay") else None,
+                cut_manifest=dict(data["cut_manifest"]) if data.get("cut_manifest") else None,
             )
         except (KeyError, TypeError, ValueError) as exc:
             if isinstance(exc, SequenceLedgerError):

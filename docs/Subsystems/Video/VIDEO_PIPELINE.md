@@ -350,6 +350,36 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   a new draft with provenance only. Homogeneous Comfy sequences with standard assembly/overlap are supported; native SVD model/settings, mixed workflows,
   per-shot negatives and custom assembly/color/overlap cannot be represented in this editor and are refused precisely. Existing SVD Resume/Replay is unchanged.
   [Operator guide and proposed suffix-regeneration boundary](STORYBOARDS.md).
+- **Storyboard takes (PR-VID-STORY-380, execution package)**: the execution half of the storyboard tree of takes
+  (spec `docs/superpowers/specs/2026-11-21-storyboard-tree-of-takes-design.md`). There is no Storyboard tab yet; that
+  is a later package. Nothing here adds a queue, runner, history authority or direct GUI-to-backend path. One Continue
+  is one `JobService.submit_njrs` call with 1-6 takes, each a normal sequence job; no watcher and no follow-up submission when a job finishes.
+  - *Policy v2*: `SEQUENCE_POLICY_VERSION_V2 = "stablenew.video_sequence_policy.v2"` (`src/video/sequence_plan.py`). v1 is unchanged
+    and a v1 plan's content digest is byte-identical to before (the `storyboard` key never appears in v1 content). A v2 plan may
+    carry a `StoryboardPlanLink` (storyboard id, take id, parent, handoff index) and a lead-in (the exact handoff PNG and its
+    SHA-256, plus the parent cut's frames to prefix). v2 always assembles and never colour-matches. Segment 0 of a take with a
+    lead-in must start from the handoff frame (same hash, same normalised path). Native SVD takes are refused.
+  - *Cut manifest* (`src/video/storyboard_cut.py`, `stablenew.storyboard_cut.v1`): the hashed list of frames that make up a
+    cut, with ranges naming where each came from (root, lead-in, a segment) and how many were trimmed. `verify_lead_in` re-hashes
+    every lead-in frame, so a moved or changed frame refuses before any GPU work. A take's own manifest is written in its run folder
+    and referenced from the job's `sequence_artifact` (`src/video/storyboard_cuts.py` resolves a job's parent cut).
+  - *Pass-through source*: a take with a lead-in starts from the exact handoff PNG. No source preparation runs and no substitute file
+    is made (`src/video/workflow_source_preparation.py`, `exact_source`); admission refuses a handoff PNG that is not exactly the
+    target size. Takes never inherit RIFE smoothing; a smoothed root uses its generated frames at the workflow's fps.
+  - *Executor*: the sequence executor assembles the lead-in prefix (referenced, never copied into the take's segments) plus the
+    take's segments, and the lead-in does not count against the 12-segment and 972-frame caps
+    (`src/pipeline/video_sequence_executor.py`).
+  - *Root preparation* (`src/video/storyboard_root.py`): a finished clip or an image becomes the storyboard root. Frames are decoded to
+    `<output root>/storyboards/<storyboard_id>/root/` with a root cut manifest; an existing `root/` is refused, and a smoothed clip
+    uses its generated frames at the workflow's fps with the fixed note about the smoothing.
+  - *Storyboard file* (`src/video/storyboard_tree.py`, `storyboard_tree_store.py`, `stablenew.storyboard-tree.v1`):
+    `%LOCALAPPDATA%/StableNew/storyboard_trees/<storyboard_id>.json`, written through `src/utils/atomic_io.py` with a revision
+    compare-and-swap, an exclusive `.lock` and a 2 MB cap. It holds the root, the takes (parent, label, attempts, marks, job ids)
+    and dispositions. Malformed or future-schema files are never rewritten. Drop only hides; no file is moved or deleted.
+  - *Submission service* (`src/controller/storyboard_submission_service.py`): builds the rows into NJRs and submits them in one call;
+    a failed submit keeps takes whose job id reached the repository and removes the rest (and their descendants). Opening a storyboard
+    reconciles take states from job records (`src/video/storyboard_reconcile.py`), skipping unreadable records.
+  - *Evidence*: unit and integration tests with fakes only. No physical GPU run is claimed for storyboard takes; native SVD takes are not supported.
 - **Not here**: selective middle-shot rerender or suffix reuse, first-last-frame anchors (FLF-322), crossfades between segments, new Wan models. `PR-VID-SEQ-330_Acceptance.md` is the physical procedure (runs A-C passed on the RTX 4070 Ti on 2026-10-22; native SVD was not run),
   `tools/acceptance/seq330_sequence_acceptance.py` drives it and `tools/acceptance/seq330_sequence_verification.py` re-verifies a finished run's ledger and
   artifacts.

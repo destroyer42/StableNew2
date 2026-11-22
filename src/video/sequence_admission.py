@@ -12,7 +12,8 @@ Supported today (anything else is refused, never approximated):
   policy across the sequence (today the Wan2.2 TI2V-5B versions).
 * ``svd_native``: native SVD XT, same model for every segment, per-segment seed and frame count.
 
-The module reads the files the plan names (hashing authored anchors) and nothing else; it starts no runtime.
+The module reads the files the plan names (hashing authored anchors, and verifying a storyboard take's lead-in against
+its cut manifest) and nothing else; it starts no runtime.
 """
 
 from __future__ import annotations
@@ -34,6 +35,8 @@ from src.video.sequence_plan import (
     BACKEND_FOR_STAGE,
     MAX_SEED_SVD,
     MAX_SEED_WORKFLOW,
+    SEQUENCE_POLICY_VERSION,
+    SEQUENCE_POLICY_VERSION_V2,
     STAGE_SVD_NATIVE,
     STAGE_VIDEO_WORKFLOW,
     SegmentSpec,
@@ -41,9 +44,11 @@ from src.video.sequence_plan import (
     SequenceColorMatch,
     SequencePlan,
     SequencePlanError,
+    StoryboardPlanLink,
     default_overlap,
     sanitize_clip_name,
 )
+from src.video.storyboard_cut import verify_lead_in
 
 INTENT_KEYS: Final = frozenset({"sequence_id", "assembly", "color_match", "segments"})
 SEGMENT_INTENT_KEYS: Final = frozenset(
@@ -73,6 +78,8 @@ SUPPORTED_REQUIRED_INPUTS: Final = frozenset(
         "ref_pad_image",
     }
 )
+#: A storyboard take with a lead-in: segment 0's first generated frame re-renders the handoff frame, so it is dropped.
+LEAD_IN_OVERLAP: Final = 1
 
 FileHasher = Callable[[str | Path], str]
 
@@ -254,6 +261,30 @@ def _segment_source(
     return {"path": str(path), "sha256": str(source.get("sha256") or hash_file(path))}
 
 
+def _admit_storyboard_take(
+    intent: Mapping[str, Any],
+    assembly: SequenceAssembly,
+    link: StoryboardPlanLink,
+    *,
+    target_size: tuple[int, int] | None,
+    fps: int,
+    hash_file: FileHasher,
+) -> None:
+    """The take-only refusals, before the plan exists: assembled, never colour matched, and an intact lead-in.
+
+    A ``CutManifestError`` from :func:`verify_lead_in` is a ``SequencePlanError`` and propagates as it is."""
+
+    if not assembly.enabled or SequenceColorMatch.from_value(intent.get("color_match")).enabled:
+        raise SequencePlanError("a storyboard take is always assembled without colour matching")
+    if link.lead_in is None:
+        return
+    if target_size is None:
+        raise SequencePlanError(
+            "a storyboard take with a lead-in needs the workflow's frozen target size"
+        )
+    verify_lead_in(link.lead_in, target_size=target_size, fps=fps, hash_file=hash_file)
+
+
 def freeze_sequence_plan(
     intent: Mapping[str, Any],
     *,
@@ -272,12 +303,18 @@ def freeze_sequence_plan(
     continuity: Mapping[str, Any] | None = None,
     plan_origin: Mapping[str, Any] | None = None,
     hash_file: FileHasher = sha256_file,
+    storyboard: StoryboardPlanLink | None = None,
 ) -> SequencePlan:
     """Validate ``intent`` and return the plan the NJR freezes. Raises ``SequencePlanError`` for anything wrong.
 
     ``base_*`` are the job's own frozen values: a segment that does not set a prompt or workflow uses them.
     ``segment_zero_seed`` is the seed already frozen for the job's first segment, so the plan and the single-clip
     inputs agree.
+
+    ``storyboard`` makes the plan a storyboard take (policy v2, PR-VID-STORY-380): Comfy video workflows only (a link
+    on ``svd_native`` is refused first), always assembled, never colour matched. With a lead-in, segment 0 overlaps
+    the handoff frame by ``LEAD_IN_OVERLAP`` and the lead-in is verified against its cut manifest (``verify_lead_in``)
+    before the plan is built; ``source`` must be the handoff frame.
     """
 
     if not isinstance(intent, Mapping):
@@ -285,6 +322,10 @@ def freeze_sequence_plan(
     _strict("sequence", intent, INTENT_KEYS)
     if stage not in (STAGE_VIDEO_WORKFLOW, STAGE_SVD_NATIVE):
         raise SequencePlanError(f"sequences run on video_workflow or svd_native, not {stage!r}")
+    if storyboard is not None and stage == STAGE_SVD_NATIVE:
+        raise SequencePlanError(
+            "storyboard takes run on Comfy video workflows only; native SVD has no prompt to vary"
+        )
     segment_intents = intent.get("segments")
     if not isinstance(segment_intents, (list, tuple)) or not segment_intents:
         raise SequencePlanError("a sequence needs a list of segments")
@@ -296,6 +337,7 @@ def freeze_sequence_plan(
                 "a workflow sequence needs the workflow registry and its first workflow"
             )
         base_spec = _resolve_workflow(registry, *base_workflow, label="the sequence's workflow")
+    has_lead_in = storyboard is not None and storyboard.lead_in is not None
 
     segments: list[SegmentSpec] = []
     errors: list[str] = []
@@ -372,11 +414,13 @@ def freeze_sequence_plan(
             )
         elif anchor.get("path"):
             raise SequencePlanError(f"{label}: anchor policy {policy!r} takes no image path")
-        overlap = (
-            default_overlap(policy, position)
-            if raw.get("overlap_frames") is None
-            else _whole(raw["overlap_frames"], label=label, field="overlap_frames")
-        )
+        if raw.get("overlap_frames") is not None:
+            # An explicit segment-0 value other than LEAD_IN_OVERLAP is refused by ``plan.validate()`` for a take.
+            overlap = _whole(raw["overlap_frames"], label=label, field="overlap_frames")
+        elif position == 0 and has_lead_in:
+            overlap = LEAD_IN_OVERLAP
+        else:
+            overlap = default_overlap(policy, position)
         segments.append(
             SegmentSpec(
                 index=position,
@@ -396,6 +440,12 @@ def freeze_sequence_plan(
     if not isinstance(assembly_raw, Mapping):
         raise SequencePlanError("the sequence assembly must be a mapping")
     assembly = SequenceAssembly.from_dict(assembly_raw) if assembly_raw else SequenceAssembly()
+    policy_version = SEQUENCE_POLICY_VERSION
+    if storyboard is not None:
+        _admit_storyboard_take(
+            intent, assembly, storyboard, target_size=target_size, fps=fps, hash_file=hash_file
+        )
+        policy_version = SEQUENCE_POLICY_VERSION_V2
     plan = SequencePlan(
         sequence_id=str(intent.get("sequence_id") or uuid.uuid4().hex).strip(),
         stage=stage,
@@ -411,6 +461,8 @@ def freeze_sequence_plan(
         color_match=SequenceColorMatch.from_value(intent.get("color_match")),
         target_width=None if target_size is None else int(target_size[0]),
         target_height=None if target_size is None else int(target_size[1]),
+        policy_version=policy_version,
+        storyboard=storyboard,
     )
     errors.extend(plan.validate())
     if errors:
@@ -453,6 +505,7 @@ def verify_provided_anchors(
 
 
 __all__ = [
+    "LEAD_IN_OVERLAP",
     "SUPPORTED_REQUIRED_INPUTS",
     "freeze_sequence_plan",
     "read_still_size",
