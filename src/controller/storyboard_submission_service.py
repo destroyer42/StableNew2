@@ -36,6 +36,7 @@ from src.video.sequence_plan import (
 from src.video.storyboard import timestamp
 from src.video.storyboard_cut import CutManifest
 from src.video.storyboard_cuts import read_job, root_cut, take_cut, write_lead_in
+from src.video.storyboard_projection import TakeView, first_missing_frame, project_storyboard
 from src.video.storyboard_reconcile import adopt_job
 from src.video.storyboard_root import (
     PreparedRoot,
@@ -57,6 +58,7 @@ from src.video.video_workflow_njr_builder import (
     VideoWorkflowBuild,
     VideoWorkflowNjrBuilder,
 )
+from src.video.workflow_contracts import WORKFLOW_GOVERNANCE_EXPERIMENTAL
 from src.video.workflow_frame_count import parse_frame_count
 
 #: How many of the newest repository jobs reconciliation reads (a bounded read; no new table or index).
@@ -211,6 +213,28 @@ class StoryboardSubmissionService:
                 f"{len(cut.frames)}-frame cut."
             )
         return cut.prefix(index + 1)
+
+    def project(self, tree: StoryboardTree) -> dict[str, TakeView]:
+        """Each take's state, progress, files and frame health, read back from the repository (read-only)."""
+
+        return project_storyboard(
+            tree,
+            self._repo(),
+            output_roots=[self._output_root()],
+            check_frames=first_missing_frame,
+        )
+
+    def needs_experimental_opt_in(self, tree: StoryboardTree) -> bool:
+        """True when the inherited workflow is experimental, so a Continue needs the job's own opt-in."""
+
+        try:
+            spec = self._njr_builder.spec_for(dict(tree.root.to_dict()["settings"]))
+        except (KeyError, ValueError):
+            return False
+        return getattr(spec, "governance_state", None) == WORKFLOW_GOVERNANCE_EXPERIMENTAL
+
+    def output_root(self) -> str:
+        return self._output_root()
 
     # ------------------------------------------------------------------------------------------ preview
 

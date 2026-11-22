@@ -164,6 +164,27 @@ class StoryboardTreeContract:
         self._trimmed = dict(trimmed or {})
         return owners
 
+    def apply_cut(self, ranges: Sequence[tuple[int, int, int]], cut_length: int) -> tuple[str, ...]:
+        """Adopt a loaded cut from its manifest ranges ``(start, end, trimmed)``.
+
+        Every non-root node on the path owns exactly one range, in order, at the end of the list; everything before
+        them is the root's frames. The manifest's own owner labels are not read.
+        """
+
+        path = self.path_to(self.selected_id)
+        nodes = path[1:]
+        if len(ranges) < len(nodes) + 1:
+            raise ValueError("The cut's ranges do not match the selected take's path in the tree.")
+        own = ranges[len(ranges) - len(nodes) :] if nodes else ()
+        lengths: dict[str, int] = {
+            ROOT_PARENT: sum(r[1] - r[0] + 1 for r in ranges[: len(ranges) - len(nodes)])
+        }
+        trimmed: dict[str, int] = {ROOT_PARENT: 0}
+        for node, (start, end, drop) in zip(nodes, own, strict=True):
+            lengths[node] = end - start + 1
+            trimmed[node] = drop
+        return self.selected_cut_owners(cut_length, lengths, trimmed)
+
     def _owners_of(self, node_id: str, lengths: Mapping[str, int]) -> tuple[str, ...]:
         if node_id == ROOT_PARENT:
             return (ROOT_PARENT,) * int(lengths.get(ROOT_PARENT, 0))
@@ -176,7 +197,9 @@ class StoryboardTreeContract:
         """Slider tick positions: the first frame of every owner after the first."""
 
         return tuple(
-            index for index in range(1, len(self._owners)) if self._owners[index] != self._owners[index - 1]
+            index
+            for index in range(1, len(self._owners))
+            if self._owners[index] != self._owners[index - 1]
         )
 
     def _own_position(self, index: int) -> tuple[str, int, int]:
@@ -189,9 +212,7 @@ class StoryboardTreeContract:
         """``frame 226 / 234 · A1b frame 78 of 81``; the owner's number counts its trimmed overlap frame."""
 
         owner, number, total = self._own_position(index)
-        return (
-            f"frame {index + 1} / {len(self._owners)} · {self.label(owner)} frame {number} of {total}"
-        )
+        return f"frame {index + 1} / {len(self._owners)} · {self.label(owner)} frame {number} of {total}"
 
     def continue_target(self, index: int) -> tuple[str, int]:
         """The node that owns frame ``index`` and the handoff index (the same index in that node's cut)."""

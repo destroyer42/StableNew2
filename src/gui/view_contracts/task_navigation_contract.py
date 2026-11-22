@@ -27,6 +27,7 @@ LEGACY_TAB_ORDER: tuple[str, ...] = (
     "character_training",
     "svd",
     "video_workflow",
+    "storyboard",
 )
 
 # Today's effective first tab: the Pipeline workspace is raised once the panels are attached.
@@ -89,6 +90,7 @@ TASK_GROUPS: tuple[NavGroup, ...] = (
         "Motion",
         (
             NavDestination("video_workflow", "Video Workflow", "motion"),
+            NavDestination("storyboard", "Storyboard", "motion"),
             NavDestination("svd", "SVD Img2Vid", "motion"),
             NavDestination("movie_clips", "Movie Clips", "motion"),
         ),

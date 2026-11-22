@@ -34,29 +34,61 @@ def _row(prompt: str, seed: str = "") -> _Row:
 
 def _root() -> TreeRoot:
     return TreeRoot(
-        kind="clip", job_id="j0", image_path="", image_sha256="", manifest_path="x", manifest_sha256="",
+        kind="clip",
+        job_id="j0",
+        image_path="",
+        image_sha256="",
+        manifest_path="x",
+        manifest_sha256="",
         settings=(("frame_count", 81), ("workflow_id", "wan22_i2v"), ("workflow_version", "1.0.0")),
-        fps=16, width=832, height=480, smoothing_text="",
+        fps=16,
+        width=832,
+        height=480,
+        smoothing_text="",
     )
 
 
 def _take(
-    take_id: str, parent: str, handoff: int | None, *, mark: str = "none", prompt: str = "p", position: int = 0
+    take_id: str,
+    parent: str,
+    handoff: int | None,
+    *,
+    mark: str = "none",
+    prompt: str = "p",
+    position: int = 0,
 ) -> Take:
     return Take(
-        take_id=take_id, parent_id=parent, handoff_index=handoff,
-        mode="sequential" if position else "parallel", batch_id="b", chain_position=position,
-        segment_index=position, prompt=prompt, negative_prompt="", seed_intent="", attempts=("j",),
-        replay_of=None, mark=mark, created_at=NOW,  # type: ignore[arg-type]
+        take_id=take_id,
+        parent_id=parent,
+        handoff_index=handoff,
+        mode="sequential" if position else "parallel",
+        batch_id="b",
+        chain_position=position,
+        segment_index=position,
+        prompt=prompt,
+        negative_prompt="",
+        seed_intent="",
+        attempts=("j",),
+        replay_of=None,
+        mark=mark,
+        created_at=NOW,  # type: ignore[arg-type]
     )
 
 
 def _view(take_id: str, *, ok: bool = True, state: str = "completed") -> TakeView:
     return TakeView(
-        take_id=take_id, state=state, status_text=state, shown_job_id="j",  # type: ignore[arg-type]
-        manifest=CutFrame("m.json", "0" * 64), stitched_path=None, clip_path=None, encoded=True,
-        frames_ok=ok, problem="" if ok else "frames missing or changed: C:/x/frame_0002.png",
-        can_resume=False, can_replay=True,
+        take_id=take_id,
+        state=state,
+        status_text=state,
+        shown_job_id="j",  # type: ignore[arg-type]
+        manifest=CutFrame("m.json", "0" * 64),
+        stitched_path=None,
+        clip_path=None,
+        encoded=True,
+        frames_ok=ok,
+        problem="" if ok else "frames missing or changed: C:/x/frame_0002.png",
+        can_resume=False,
+        can_replay=True,
     )
 
 
@@ -93,7 +125,12 @@ def test_columns_follow_depth_and_hide_dropped():
     titles = [col.title for col in c.columns(show_dropped=False)]
     assert titles == ["Shot 1", "Shot 2 · from A @ f78", "Shot 3 · from A1 @ f80"]
     assert [card.label for card in c.columns(show_dropped=False)[1].cards] == ["A1", "A3", "A4"]
-    assert [card.label for card in c.columns(show_dropped=True)[1].cards] == ["A1", "A2", "A3", "A4"]
+    assert [card.label for card in c.columns(show_dropped=True)[1].cards] == [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+    ]
     assert c.dropped_count() == 1
 
 
@@ -172,7 +209,9 @@ def test_continue_is_refused_from_missing_frames():
 
 def test_pending_takes_cannot_be_continued():
     tree, views = _diner()
-    views["t4"] = TakeView("t4", "pending", "pending", None, None, None, None, False, True, "", False, False)
+    views["t4"] = TakeView(
+        "t4", "pending", "pending", None, None, None, None, False, True, "", False, False
+    )
     assert StoryboardTreeContract(tree, views).continue_allowed("t4")[0] is False
 
 
@@ -183,7 +222,10 @@ def test_engine_line_is_the_inherited_settings():
 
 
 def test_contract_and_cache_modules_do_not_import_tk():
-    for module in ("src/gui/view_contracts/storyboard_tree_contract.py", "src/video/storyboard_frame_cache.py"):
+    for module in (
+        "src/gui/view_contracts/storyboard_tree_contract.py",
+        "src/video/storyboard_frame_cache.py",
+    ):
         tree = ast.parse(Path(module).read_text(encoding="utf-8"))
         imported = {
             alias.name.split(".")[0]
@@ -191,7 +233,9 @@ def test_contract_and_cache_modules_do_not_import_tk():
             if isinstance(node, ast.Import)
             for alias in node.names
         } | {
-            (node.module or "").split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+            (node.module or "").split(".")[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
         }
         assert "tkinter" not in imported, module
 
@@ -250,5 +294,3 @@ def test_cache_is_thread_safe(tmp_path):
 def test_cache_raises_oserror_for_a_missing_file(tmp_path):
     with pytest.raises(OSError):
         FrameCache().frame(str(tmp_path / "gone.png"))
-
-

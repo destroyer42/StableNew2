@@ -43,6 +43,7 @@ TAB_ATTRIBUTES = {
     "character_training": "character_training_tab",
     "svd": "svd_tab",
     "video_workflow": "video_workflow_tab",
+    "storyboard": "storyboard_tab",
 }
 
 
@@ -75,7 +76,7 @@ def _pump(window) -> None:
 # ------------------------------------------------------------------------------------------ identity and structure
 
 
-def test_all_nine_tabs_keep_their_ids_attributes_and_notebook_order(build) -> None:
+def test_all_ten_tabs_keep_their_ids_attributes_and_notebook_order(build) -> None:
     window = build().window
     assert set(window._tab_registry) == set(TAB_ATTRIBUTES)
     for tab_id, attribute in TAB_ATTRIBUTES.items():
@@ -233,7 +234,7 @@ def test_native_keyboard_tab_cycling_still_works_and_updates_the_highlight(build
         assert window.task_navigation.selected_tab_id == tab_id
     # every tab, including the HOLD one, is reachable by cycling alone
     seen = {_current(window)}
-    for _ in range(9):
+    for _ in range(10):
         root.tk.call("ttk::notebook::CycleTab", str(window.center_notebook), 1)
         _pump(window)
         seen.add(_current(window))
@@ -532,7 +533,7 @@ def test_a_tab_that_fails_to_be_added_is_not_registered_and_is_visibly_unavailab
         assert "review" not in window._tab_registry  # noqa: SLF001
         assert "cannot add review" in window.tab_failures()["review"]
         assert window.review_tab is not None  # the legacy attribute is still set
-        assert len(window.center_notebook.tabs()) == 8
+        assert len(window.center_notebook.tabs()) == 9
         bar = window.task_navigation
         assert bar.destination_button("review").instate(["disabled"])
         assert not bar.destination_button("pipeline").instate(["disabled"])

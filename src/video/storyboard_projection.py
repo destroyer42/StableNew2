@@ -60,6 +60,8 @@ class TakeView:
     problem: str
     can_resume: bool
     can_replay: bool
+    #: First frame this take owns (for its card thumbnail); ``None`` until it has a readable manifest.
+    thumbnail_path: str | None = None
 
 
 def _state(entry: Any) -> TakeState:
@@ -188,7 +190,13 @@ def project_take(
         problem=problem,
         can_resume=state in ("failed", "cancelled"),
         can_replay=terminal,
+        thumbnail_path=None if manifest is None else _thumbnail(manifest, take),
     )
+
+
+def _thumbnail(manifest: CutManifest, take: Take) -> str | None:
+    owned = [item for item in manifest.segment_ranges() if item.owner == take.take_id]
+    return manifest.frames[owned[0].start].path if owned else None
 
 
 def _end_of(manifest: CutManifest, take: Take) -> int:
