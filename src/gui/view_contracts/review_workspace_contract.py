@@ -130,6 +130,39 @@ class ReviewItem:
         return self.path.name
 
 
+_DECISION_WORDS = {"retain": "Retain", "discard": "Discard", "rework": "Re-work"}
+
+
+def undo_decision_text(name: str, undone: str, restored: str) -> str:
+    """The status line after Undo of a decision: which decision was undone and what the image is now."""
+
+    was = _DECISION_WORDS.get(undone, undone or "decision")
+    now = f"back to {_DECISION_WORDS.get(restored, restored)}" if restored else "undecided again"
+    return f"Undid the decision ({was}) on {name}: it is {now}. Nothing was deleted."
+
+
+def undo_rating_text(removed: int, image_paths: Sequence[Any]) -> str:
+    """The status line after Undo of a saved rating: the rating record was removed; the image file never changes."""
+
+    names = sorted({os.path.basename(str(path)) for path in image_paths if path})
+    target = f" for {names[0]}" if len(names) == 1 else f" for {len(names)} images" if names else ""
+    return (
+        f"Undid the last rating: removed {removed} saved rating record(s){target}. "
+        "The image file was not changed."
+    )
+
+
+def selection_label_text(total: int, shown: int, filter_label: str = "") -> str:
+    """The header count: what the list shows, and how many of the set the current filter hides."""
+
+    if not total:
+        return "No images selected"
+    if shown == total:
+        return f"{total} image(s) selected"
+    scope = f" ({filter_label} filter)" if filter_label else ""
+    return f"{shown} of {total} image(s) shown{scope}"
+
+
 def item_key(path: str | os.PathLike[str]) -> str:
     return os.path.normcase(os.path.abspath(str(path)))
 
@@ -436,6 +469,15 @@ class _WriteResult:
     outcome: ArchiveOutcome | None = None
     #: The file could not be put back, so nothing was recorded (the item stays discarded).
     blocked: bool = False
+
+
+@dataclass(frozen=True)
+class _WritePlan:
+    """One decision, ready to run: ``work`` on the worker, then ``done``/``failed`` on the Tk thread."""
+
+    work: Callable[[], _WriteResult]
+    done: Callable[[_WriteResult], None]
+    failed: Callable[[Exception], None]
 
 
 @dataclass(frozen=True)
@@ -891,7 +933,16 @@ class ReviewWorkspaceSession:
     def decide_many(self, keys: Sequence[str], disposition: str) -> int:
         """Record ``disposition`` for each image (one write and, for Discard, one move each); returns how many began."""
 
-        return sum(1 for key in dict.fromkeys(keys) if self.decide(key, disposition))
+        plans: list[_WritePlan] = []
+        for key in dict.fromkeys(keys):
+            gate = self.decide_state(key, disposition)
+            item = self.item(key)
+            if not gate.enabled or item is None:
+                self._say(gate.reason)
+                continue
+            plans.append(self._plan_write(item, self.facts_of(key), disposition, push_undo=True))
+        self._run_writes(plans)
+        return len(plans)
 
     def restore(self, key: str | None, *, use_alternative: bool = False) -> bool:
         """Bring an archived image back: move the file home, then a clearing row so it is to be reviewed again."""
@@ -928,7 +979,66 @@ class ReviewWorkspaceSession:
         use_alternative: bool = False,
         retry: UndoEntry | None = None,
     ) -> None:
+        self._run_writes(
+            [
+                self._plan_write(
+                    item,
+                    before,
+                    disposition,
+                    push_undo=push_undo,
+                    use_alternative=use_alternative,
+                    retry=retry,
+                )
+            ]
+        )
+
+    def _run_writes(self, plans: Sequence[_WritePlan]) -> None:
+        """Run the planned writes on ONE worker job, in order; each plan's result is applied on the Tk thread.
+
+        A multi-image Discard used to start one worker job per image. One job per call keeps the worker count
+        bounded however many images are decided, and the moves still happen one after another.
+        """
+
+        if not plans:
+            return
         self._writes += 1
+
+        def batch() -> list[tuple[bool, Any]]:
+            outcomes: list[tuple[bool, Any]] = []
+            for plan in plans:
+                try:
+                    outcomes.append((True, plan.work()))
+                except Exception as exc:  # noqa: BLE001 - one image's failure must not stop the others
+                    outcomes.append((False, exc))
+            return outcomes
+
+        def deliver(outcomes: list[tuple[bool, Any]]) -> None:
+            for plan, (succeeded, value) in zip(plans, outcomes, strict=True):
+                (plan.done if succeeded else plan.failed)(value)
+
+        def failed_all(error: Exception) -> None:
+            for plan in plans:
+                plan.failed(error)
+
+        self._runner.submit(
+            f"review:decide:{self._writes}",
+            batch,
+            on_result=deliver,
+            on_error=failed_all,
+            name="review-decision",
+            purpose="Record Review decisions as Learning evidence and move the files",
+        )
+
+    def _plan_write(
+        self,
+        item: ReviewItem,
+        before: ItemFacts,
+        disposition: str,
+        *,
+        push_undo: bool,
+        use_alternative: bool = False,
+        retry: UndoEntry | None = None,
+    ) -> _WritePlan:
         write = self._write
         assert write is not None
         self._pending[item.key] = disposition
@@ -987,6 +1097,8 @@ class ReviewWorkspaceSession:
                 and disposition != "discard"
             ):
                 self.add_items([outcome.target], after=item.key)
+            if outcome is not None and outcome.also_restored and disposition != "discard":
+                self.add_items(list(outcome.also_restored), after=item.key)
             self._changed()
 
         def failed(error: Exception) -> None:
@@ -995,14 +1107,7 @@ class ReviewWorkspaceSession:
                 self._undo.append(retry)
             self._say(f"The decision for {item.name} was not saved: {error}")
 
-        self._runner.submit(
-            f"review:decide:{self._writes}",
-            work,
-            on_result=done,
-            on_error=failed,
-            name="review-decision",
-            purpose="Record a Review decision as Learning evidence and move the file",
-        )
+        return _WritePlan(work, done, failed)
 
     def _location_after(
         self,
@@ -1030,6 +1135,12 @@ class ReviewWorkspaceSession:
         self.archive_notes.pop(item.key, None)
         if outcome is not None and outcome.status == "duplicate":
             self.message = f"{item.name}: {outcome.message}"
+        elif outcome is not None and outcome.also_restored:
+            names = ", ".join(path.name for path in outcome.also_restored)
+            self.message = (
+                f"{item.name} was restored. {len(outcome.also_restored)} earlier file(s) discarded from the "
+                f"same path were restored beside it as {names}; nothing was replaced."
+            )
         return LOC_IN_PLACE
 
     def _restore_blocked(self, item: ReviewItem, outcome: ArchiveOutcome | None) -> None:
@@ -1059,6 +1170,7 @@ class ReviewWorkspaceSession:
         restored = entry.previous or DISPOSITION_CLEARED
         before = self.facts_of(entry.key)
         self._submit_write(item, before, restored, push_undo=False, retry=entry)
+        self._say(undo_decision_text(item.name, before.disposition, entry.previous))
         return True
 
     def note_rating(self, key: str, rating: int | None) -> None:

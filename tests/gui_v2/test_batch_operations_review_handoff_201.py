@@ -45,7 +45,8 @@ def test_route_images_to_review_keeps_order_and_leaves_stage_toggles_alone(revie
     assert routed == [str(files[2]), str(files[0]), str(files[2]), str(files[1])]
     assert tab.selected_images == [files[2], files[0], files[1]]  # given order; duplicate collapsed
     assert tab.selection_label.cget("text") == "3 image(s) selected"
-    assert tab.workflow_hint_label.cget("text") == "from batch"
+    # PR-REVIEW-FIXES-625: a path offered twice is listed once, and the message says so.
+    assert tab.workflow_hint_label.cget("text") == "from batch 1 duplicate path(s) of an image already listed were skipped."
     assert window.center_notebook.selected == [tab]
     assert tab._active_handoff is None  # an older staged hand-off cannot attach to unrelated images
     assert tab.stage_img2img_var.get() is True and tab.stage_upscale_var.get() is True  # toggles untouched

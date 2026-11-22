@@ -43,6 +43,8 @@ from src.gui.view_contracts.review_workspace_contract import (
     ReviewWorkspaceSession,
     ViewFilter,
     item_key,
+    selection_label_text,
+    undo_rating_text,
 )
 from src.gui.views.review_set_picker import ReviewSetPicker
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
@@ -66,6 +68,7 @@ from src.review.archive import (
     active_input_paths,
     archive_file,
     archive_root,
+    archived_reason,
     configured_output_root,
     job_queue_of,
     restore_file,
@@ -106,6 +109,15 @@ try:
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
+
+#: Widgets where a letter is typed text, never a Review key (tk/ttk class names).
+TEXT_ENTRY_CLASSES = frozenset(
+    {"Entry", "TEntry", "Text", "Spinbox", "TSpinbox", "Combobox", "TCombobox"}
+)
+_CONTROL_MASK = 0x4
+_ALT_MASK = (
+    0x20000  # Windows reports Alt here; 0x8 is NumLock there, so it is not treated as a modifier
+)
 
 
 class ReviewTabFrame(ttk.Frame):
@@ -161,6 +173,10 @@ class ReviewTabFrame(ttk.Frame):
         self.quality_var = tk.StringVar(value="okay")
         self._effective_settings_var = tk.StringVar(value="Effective settings: select an image")
         self._prior_review_summary_var = tk.StringVar(value="Prior Review Summary: none")
+        #: Whether the status line holds a rating save/undo message (it ends when another image is shown).
+        self._rating_status_shown = False
+        #: ``(sequence, funcid)`` of the toplevel key bindings this tab added (removed on destroy).
+        self._workspace_keys: list[tuple[str, str]] = []
         self._feedback_undo_stack: list[list[dict[str, str]]] = []
         #: ``(image path, SHA-256)`` of each inspection saved from Inspect & Improve, for Undo (a clearing row).
         self._inspection_undo: list[tuple[str, str]] = []
@@ -402,8 +418,16 @@ class ReviewTabFrame(ttk.Frame):
             ("u", "undo"),
         ):
             handler = self._decision_key_handler(disposition)
+            workspace_handler = self._workspace_key_handler(disposition)
             for key in (sequence, sequence.upper()):
                 self.images_list.bind(f"<Key-{key}>", handler)
+                # The same keys work anywhere in this tab except where the operator is typing (see the handler).
+                self._workspace_keys.append(
+                    (
+                        f"<Key-{key}>",
+                        self.winfo_toplevel().bind(f"<Key-{key}>", workspace_handler, add="+"),
+                    )
+                )
 
         list_scroll = ttk.Scrollbar(left, orient="vertical", command=self.images_list.yview)
         list_scroll.grid(row=0, column=1, sticky="ns")
@@ -552,6 +576,28 @@ class ReviewTabFrame(ttk.Frame):
             return self._on_decision_key(value)
 
         return handle
+
+    def _workspace_key_handler(self, value: str) -> Callable[[tk.Event], str | None]:
+        def handle(event: tk.Event) -> str | None:
+            if not self._owns_decision_key(event):
+                return None  # not ours (another tab, a dialog) or the operator is typing: the key goes on unchanged
+            return self._on_decision_key(value)
+
+        return handle
+
+    def _owns_decision_key(self, event: tk.Event) -> bool:
+        """R/D/W/U act when focus is on a non-text widget inside this tab and no Control/Alt is held."""
+
+        try:
+            if not self.winfo_exists():
+                return False
+            widget = event.widget
+            inside = str(widget) == str(self) or str(widget).startswith(f"{self}.")
+            typing = widget.winfo_class() in TEXT_ENTRY_CLASSES
+        except (tk.TclError, AttributeError, KeyError):
+            return False
+        state = event.state if isinstance(event.state, int) else 0
+        return inside and not typing and not state & (_CONTROL_MASK | _ALT_MASK)
 
     def _build_decision_bar(self, parent: tk.Misc, *, row: int) -> None:
         """Retain / Discard / Re-work with the rating, right above the preview so triage never scrolls."""
@@ -1157,9 +1203,12 @@ class ReviewTabFrame(ttk.Frame):
         )
 
     def _restore_selection_label(self) -> None:
-        count = len(self.selected_images)
         self.selection_label.config(
-            text=f"{count} image(s) selected" if count else "No images selected"
+            text=selection_label_text(
+                len(self._session.items),
+                len(self._session.visible_items()),
+                FILTER_LABELS[self._session.filter],
+            )
         )
 
     def _publish_folder_scan(self, token: SelectionToken, scan: FolderScan) -> None:
@@ -1206,6 +1255,9 @@ class ReviewTabFrame(ttk.Frame):
         self._active_handoff = handoff
         self._pending_overlay = None
         self._edited_since_selection = False
+        # A banner about the previous set ("Editing the recorded image of History job ...") ends with that set;
+        # whoever accepted the new one writes its own hint afterwards.
+        self.workflow_hint_label.config(text=self._default_workflow_hint)
 
     def _on_clear(self) -> None:
         self._begin_selection_context(None)
@@ -1367,7 +1419,12 @@ class ReviewTabFrame(ttk.Frame):
             return 0
         self._set_selected_images(paths)
         if status_message:
-            self.workflow_hint_label.config(text=status_message)
+            # ``{count}`` is what the set actually holds: the same file named twice is listed once, and says so.
+            listed = len(self.selected_images)
+            text = status_message.replace("{count}", str(listed))
+            if listed != len(paths):
+                text += f" {len(paths) - listed} duplicate path(s) of an image already listed were skipped."
+            self.workflow_hint_label.config(text=text)
         return len(self.selected_images)
 
     def _set_selected_images(self, paths: list[Path], *, folder: Path | None = None) -> None:
@@ -1390,7 +1447,7 @@ class ReviewTabFrame(ttk.Frame):
         self._inspection_undo = []
         self._session.set_items(deduped, folder=folder)
         self.selected_images = self._session.paths()
-        self.selection_label.config(text=f"{len(self.selected_images)} image(s) selected")
+        self._restore_selection_label()
         first = self._session.visible_items()
         if first:
             self.images_list.selection_clear(0, tk.END)
@@ -1577,6 +1634,10 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_image_path = path
         self._selected_image_sha256 = ""
         self._reset_rating_controls()
+        if self._rating_status_shown:
+            # "Saved N feedback record(s)..." is about the image that was rated; it must not stay under another one.
+            self._rating_status_shown = False
+            self._feedback_status_var.set(self._session.archive_line(item_key(path)))
         self._image_ready = False
         self._edited_since_selection = False
         self._adetailer_pair = None
@@ -1856,6 +1917,15 @@ class ReviewTabFrame(ttk.Frame):
         if image_path is None:
             messagebox.showinfo("Metadata Inspector", "Select an image first.")
             return
+        if not os.path.lexists(image_path) and (
+            self._session.facts_of(item_key(image_path)).location == LOC_ARCHIVED
+            or archived_reason(image_path)
+        ):
+            # The file is in the archive folder, not at this path: say so instead of showing an empty summary.
+            messagebox.showinfo(
+                "Metadata Inspector", f"This image was {ARCHIVED_MESSAGE}.", parent=self
+            )
+            return
         learning_controller = self._resolve_learning_controller()
         inspector = (
             getattr(learning_controller, "inspect_artifact_metadata", None)
@@ -2032,7 +2102,9 @@ class ReviewTabFrame(ttk.Frame):
         frame = ttk.Frame(viewer, padding=6)
         frame.pack(fill=tk.BOTH, expand=True)
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
+        frame.rowconfigure(
+            2, weight=1
+        )  # the canvas row takes the space (row 1 is the one-line status)
 
         nav = ttk.Frame(frame, style="Panel.TFrame")
         nav.grid(row=0, column=0, sticky="ew", pady=(0, 6))
@@ -2121,6 +2193,12 @@ class ReviewTabFrame(ttk.Frame):
 
     def destroy(self) -> None:
         self._session.close()
+        for sequence, funcid in self._workspace_keys:
+            try:
+                self.winfo_toplevel().unbind(sequence, funcid)
+            except tk.TclError:
+                pass
+        self._workspace_keys.clear()
         if self._poll_id is not None:
             try:
                 self.after_cancel(self._poll_id)
@@ -3582,6 +3660,7 @@ class ReviewTabFrame(ttk.Frame):
         if record.metadata.get("recommendation_refresh_error") or summary_error:
             status += " Evidence is saved; refresh Learning recommendations and the Review summary."
         self._feedback_status_var.set(status)
+        self._rating_status_shown = True
 
     def _save_feedback_batch(self) -> None:
         learning_controller = self._resolve_learning_controller()
@@ -3679,6 +3758,7 @@ class ReviewTabFrame(ttk.Frame):
                     " Evidence is saved; refresh Learning recommendations and the Review summary."
                 )
             self._feedback_status_var.set(status)
+            self._rating_status_shown = True
 
         def failed_run(error: Exception) -> None:
             if not self.winfo_exists():
@@ -3755,8 +3835,10 @@ class ReviewTabFrame(ttk.Frame):
             self._feedback_status_var.set("Undo removed no matching feedback records.")
             messagebox.showwarning("Undo", "No matching feedback records were removed.")
             return
-        self._feedback_status_var.set(f"Undo removed {undone} feedback record(s).")
-        messagebox.showinfo("Undo complete", f"Removed {undone} feedback record(s).")
+        text = undo_rating_text(undone, [token.get("image_path") for token in action])
+        self._feedback_status_var.set(text)
+        self._rating_status_shown = True
+        messagebox.showinfo("Undo complete", text)
 
     def _rating_form(self) -> dict[str, Any]:
         """Every Tk-held value a rating save needs, read once on the Tk thread so a worker can build payloads."""

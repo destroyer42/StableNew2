@@ -70,6 +70,7 @@ def prepare_outpaint_edit(
     fallback_config: dict[str, Any],
     baseline: dict[str, Any],
     family_lookup: FamilyLookup | None = None,
+    output_dir: str | None = None,
 ) -> MaskEditPreview:
     """Worker-side preparation. No queue or GUI mutation; snapshots contain the exact derived and inspected bytes."""
     settings.validate()
@@ -93,6 +94,7 @@ def prepare_outpaint_edit(
         ),
         lineage_sha=lambda frozen: frozen[ORIGINAL_KEY]["sha256"],
         operation=OPERATION,
+        output_dir=output_dir,
     )
 
 
