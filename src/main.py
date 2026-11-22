@@ -606,8 +606,9 @@ def _install_image_family_lookups() -> None:
         profile = family_lookup(model_name)
         if profile is not None and profile.status is CompatibilityStatus.CONFLICTING:
             return False
-        if profile is not None and profile.checkpoint_architecture not in (None, "unrecognized"):
-            return profile.family is ModelFamily.QWEN_IMAGE and profile.checkpoint_architecture == "qwen_image_20b_fp8"
+        architecture = getattr(profile, "checkpoint_architecture", None)
+        if profile is not None and architecture not in (None, "unrecognized"):
+            return profile.family is ModelFamily.QWEN_IMAGE and architecture == "qwen_image_20b_fp8"
         relative = qwen_transformer_loader_name(model_name)
         if not relative:
             return False

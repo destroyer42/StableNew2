@@ -57,7 +57,7 @@ class ComfyInstallationStatus:
         return "installed" if self.ready else "; ".join(self.problems)
 
 
-def comfy_model_folders() -> dict[str, list[Path]]:
+def comfy_model_folders(*, use_registered_launcher: bool = True) -> dict[str, list[Path]]:
     """The model folders of StableNew's managed Comfy launch configuration (reads settings, never runs Comfy)."""
 
     from src.video.comfy_process_manager import (
@@ -66,7 +66,7 @@ def comfy_model_folders() -> dict[str, list[Path]]:
     )
     from src.video.workflow_asset_integrity import model_folders
 
-    manager = get_global_comfy_process_manager()
+    manager = get_global_comfy_process_manager() if use_registered_launcher else None
     config = getattr(manager, "config", None) if manager is not None else None
     config = config or build_default_comfy_process_config()
     if config is None:
@@ -146,7 +146,9 @@ def has_structural_qwen_checkpoint(model_name: str) -> bool:
     """Inspect just the selected checkpoint in the configured Comfy diffusion folders."""
 
     try:
-        candidates = _diffusion_files(model_name, comfy_model_folders())
+        candidates = _diffusion_files(
+            model_name, comfy_model_folders(use_registered_launcher=False)
+        )
         return len(candidates) == 1 and is_qwen_image_20b_fp8(
             inspect_component_file(candidates[0][1])
         )

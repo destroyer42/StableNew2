@@ -535,7 +535,7 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
         return policy_for_profile(ZIMAGE_PROFILE_V1)
     if is_ideogram4_model_name(model_name):
         return policy_for_profile(IDEOGRAM4_PROFILE_V1)
-    qwen = qwen_image_profile_for_model(model_name, structural=family_lookup is None)
+    qwen = qwen_image_profile_for_model(model_name, structural=False)
     if qwen is not None:
         return policy_for_profile(qwen)
     if not str(model_name or "").strip() or family_lookup is None:
