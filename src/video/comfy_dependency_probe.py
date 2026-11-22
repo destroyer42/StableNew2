@@ -36,6 +36,19 @@ def _has_model_inventory(payload: Any) -> bool:
     return False
 
 
+def _node_accepts_input(payload: Mapping[str, Any], node_name: str, input_name: str) -> bool:
+    """Whether a stock node declares ``input_name`` as a required or optional input."""
+
+    node = payload.get(node_name) if isinstance(payload, Mapping) else None
+    inputs = node.get("input") if isinstance(node, Mapping) else None
+    if not isinstance(inputs, Mapping):
+        return False
+    return any(
+        isinstance(inputs.get(section), Mapping) and input_name in inputs[section]
+        for section in ("required", "optional")
+    )
+
+
 def _loader_options(payload: Mapping[str, Any], loader: str, input_name: str) -> list[str] | None:
     """Enumerated choices a stock loader node advertises for ``input_name`` (None if unknown)."""
 
@@ -117,6 +130,13 @@ class ComfyDependencyProbe:
                 node_name, _, input_name = str(dependency.version_hint or "").partition(".")
                 options = _loader_options(payload, node_name, input_name)
                 found = options is not None and dependency.locator in options
+                verifiable = True
+            elif dependency.dependency_kind == "node_input":
+                # ``version_hint`` names a stock node ("WanImageToVideo") that must declare the input the graph
+                # sets (``locator``, e.g. "ref_pad_image"); an older build without it would reject the prompt.
+                found = _node_accepts_input(
+                    payload, str(dependency.version_hint or ""), dependency.locator
+                )
                 verifiable = True
             else:
                 found = _contains_locator(payload, dependency.locator)

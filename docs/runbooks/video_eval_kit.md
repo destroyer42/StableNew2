@@ -20,6 +20,8 @@ graph revision gets one eval run, a contact sheet and the owner's rating.
   membership is only in `<output>/video_eval/<run_id>/run.json` (`stablenew.video-eval-run.v1`), written at
   admission and removed if admission fails.
 * At most 64 jobs per run.
+* A case can instead be a **sequence** of 2-12 segments (section 2.1). It runs as one multi-segment job per arm and is
+  rated as one clip: the assembled sequence.
 
 ## 2. Writing a suite
 
@@ -58,6 +60,35 @@ Rules the loader enforces (`src/video/video_eval_suite.py`):
   the suite file is the per-job opt-in, and the queue confirmation names every arm that sets it.
 * Admission refuses anything the normal submission would refuse (frame count, missing opt-in, an SVD preflight
   block such as a missing local model).
+
+### 2.1 Sequence cases (VID-A14B-SVI-375)
+
+A case with `segments` instead of `prompt` is a multi-segment sequence:
+
+```json
+{"case_id": "walk_then_stop", "image": "images/fullbody.png",
+ "segments": [
+   {"prompt": "the person walks slowly toward the camera"},
+   {"prompt": "the person keeps walking, then slows down"},
+   {"prompt": "the person stops and looks into the camera", "frame_count": 49}
+ ]}
+```
+
+* 2-12 segments, each with its own `prompt` and an optional `frame_count` (otherwise the arm's `frame_count`). A
+  sequence case may not also set a case-level `prompt`; `negative_prompt` applies to every segment.
+* Each arm builds **one** job through the sequence admission path (`build_sequence_job`, PR-VID-SEQ-330): segment 0
+  starts from the case image, each later segment carries the previous segment's exact last frame, and the segments are
+  assembled inside the job. Admission refuses what a sequence cannot run (a workflow without a frame-count policy, RIFE
+  smoothing, operator controls, an experimental workflow without the arm's opt-in).
+* Seeds are fixed: segment *i* uses the suite seed **+ i** under every arm. The manifest records each job's
+  `segment_seeds` and its total frame count.
+* Sequence cases need Video Workflow arms; a suite that mixes them with a `svd_native` arm is refused.
+* One job is one clip in the report: the job's primary video is the assembled sequence, so a row in `ratings.csv` rates
+  the whole sequence. Judge seams as well as identity; `segment_seam` is a failure category for a visible jump where
+  one segment hands over to the next. The numbers still measure only the first 120 frames of the preview (the page
+  says so), which for three 81-frame segments is the first segment and part of the second.
+* Pair verification checks the whole sequence: the stored plan must have the case's segment count, every segment's
+  prompt and every segment's seed, otherwise the pair is incomparable.
 
 A good suite covers what has failed before: a face that must stay the same person, a body that must move
 (locomotion has been the weak point), a wide scene with camera motion, a close-up with fine detail, and a busy
@@ -109,7 +140,7 @@ rebuild. Blank means *not assessed*, never zero or pass.
 | `anatomy_integrity_1_to_5` | Faces, clothing, proportions and important objects stable and plausible. |
 | `scene_stability_1_to_5` | Background coherent. |
 | `critical_identity_break` | `yes`, `no`, `cannot_assess`. **Required** as yes or no for a complete review. |
-| `failure_categories` | Any of `face_or_identity_drift`, `clothing_or_appearance_change`, `body_proportion_change`, `important_object_change`, `subject_disappearance`, `scene_background_drift`, `temporal_flicker`, `motion_freeze`, `other`, separated by `;`. |
+| `failure_categories` | Any of `face_or_identity_drift`, `clothing_or_appearance_change`, `body_proportion_change`, `important_object_change`, `subject_disappearance`, `scene_background_drift`, `temporal_flicker`, `motion_freeze`, `segment_seam` (sequence cases), `other`, separated by `;`. |
 | `first_failure_seconds` | Optional time you actually saw the first failure in the original clip. |
 | `notes` | Free text. |
 | `artifact_sha256` | Filled in by the report; see below. |
@@ -260,3 +291,28 @@ sit-down. 8 cases x 4 arms = 32 jobs. Its image names are synthetic placeholders
   in the queue is a cold start. Compare generation time per arm from the job records, not across arm changes alone.
 * This only queues and measures. Whether any arm is faster without losing quality is your rating's call (sections 4
   and 5); no physical run has been made.
+
+## 8. A14B SVI 2.0 sequence example suite (VID-A14B-SVI-375)
+
+`docs/runbooks/examples/video_eval_a14b_svi_sequence.suite.json` compares plain last-frame carry with Stable Video
+Infinity 2.0 on eight three-segment sequence cases (a walk that stops, a full turn and back, a close-up face, a wave
+then point, side steps, wind in hair, sit down and stand up, picking up a cup). Seed 372, so segments use 372, 373 and
+374 (the WAN-BENCH-373 SVI rerun's seeds); 81 frames per segment; the same negative prompt on every case (it matters at
+CFG 1.5 and is ignored at CFG 1). 8 cases x 4 arms = 32 jobs, 96 segment generations. Its image names are synthetic
+placeholders: copy the file next to your own images and change `image`, ideally pinning `image_sha256`.
+
+| Arm | Workflow | What it tests |
+|---|---|---|
+| `plain_carry` (baseline) | `wan22_i2v_a14b_4step_v1` 1.0.0, approved | The promoted graph with plain last-frame carry: no SVI, no reference pad. |
+| `svi_derived` | `wan22_i2v_a14b_svi` 1.0.0, experimental | Our derived copies of the official bf16 SVI LoRAs (key prefix only), CFG 1.5. |
+| `svi_kijai` | `wan22_i2v_a14b_svi` 1.1.0, experimental | Kijai's fp16 repack of the same LoRAs, CFG 1.5. Compare with `svi_derived` for adapter source. |
+| `svi_derived_cfg1` | `wan22_i2v_a14b_svi` 1.2.0, experimental | The derived LoRAs at CFG 1.0. Compare with `svi_derived` for CFG. |
+
+* The three SVI arms set `"experimental_opt_in": true`; the queue confirmation names them.
+* Every SVI segment pads its image conditioning with segment 0's prepared source (`ref_pad_image`) while starting from
+  the carried frame. Readiness refuses a ComfyUI whose `WanImageToVideo` lacks that input, and a job whose adapter files
+  are not in `models/loras` (names and SHA-256 in the catalog). Nothing is downloaded for you.
+* Each arm change is a cold start (the warm hold keys on workflow id and version); a sequence keeps its own process warm
+  across its segments.
+* This only queues and measures. Whether SVI holds identity better, and which adapter or CFG to keep, is your rating's
+  call (sections 4 and 5); no physical run has been made through StableNew.

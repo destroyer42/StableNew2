@@ -125,6 +125,7 @@ def prepare_mask_edit(
     baseline: dict[str, Any],
     family_lookup: FamilyLookup | None = None,
     guided: GuidedReprocess | None = None,
+    output_dir: str | None = None,
 ) -> MaskEditPreview:
     """Worker-side preparation. No queue or GUI mutation; snapshots contain the exact inspected bytes."""
     settings.validate()
@@ -158,6 +159,7 @@ def prepare_mask_edit(
         ),
         lineage_sha=lambda frozen: frozen["source"]["sha256"],
         guided=guided,
+        output_dir=output_dir,
     )
 
 
@@ -175,6 +177,7 @@ def build_frozen_edit_preview(
     lineage_sha: Callable[[dict[str, Any]], str],
     operation: str | None = None,
     guided: GuidedReprocess | None = None,
+    output_dir: str | None = None,
 ) -> MaskEditPreview:
     """Shared builder for frozen Review image edits: one img2img NJR through the existing reprocess builder."""
     builder = ReprocessJobBuilder()  # type: ignore[no-untyped-call]  # existing unannotated constructor
@@ -235,6 +238,7 @@ def build_frozen_edit_preview(
         batch_size=1,
         pack_name=pack_name,
         source="image_edit",
+        output_dir=output_dir or "output",
         extra_metadata_builder=lambda _items, _output: {
             "parent_job_id": baseline.get("job_id"),
             "parent_artifact_id": artifact_id,

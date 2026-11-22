@@ -102,7 +102,8 @@ is a confidence limit, not a reclassification. The one status change and the tex
 4. **Device-loss count.** The Windows event log (Kernel-PnP event 1000, NVIDIA device, queried read-only 2026-11-05) holds
    **21** remove-veto markers since 2026-09-07; the last record (`DIAG-GPU-150`) counted 19. The extra two are 2026-10-22 20:10:56
    and 2026-10-30 18:50:44 (ET). No DIAG record in the tree covers either (a local folder `C:\Users\rob\qual\GPU-20261022-2010`
-   exists for the first). `STATUS.md` and the ledger hold now say so. Root cause is still unattributed.
+   exists for the first). The count was recorded in `STATUS.md` and the former ledger hold.
+   **2026-11-22 update.** [DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md) records the owner-accepted resolution after forcing PCIe Gen4.
 5. **Coverage matrix** (`tools/operator_journey/golden/coverage_matrix.v1.json`): two rows still cited failures that no longer
    fail. `GP830-I1` was repaired in 831; the discovered-outputs journey test passes, as do
    `tests/gui_v2/test_photo_optimize_tab_v2.py` and `test_photo_baseline_save_580.py` (17 passed, 2026-11-05, `a2794072` plus
@@ -180,12 +181,12 @@ Three independent outcomes are reported: functional, resource/runtime safety, an
 Stop conditions (all NO-GO, never retried, a generation POST is never replayed): device loss, CUDA/OOM error text, 300 s timeout,
 any retry or return-to-queue (ambiguous dispatch), GPU or host telemetry loss, VRAM or commit over the plan, RAM under the
 floor, environment drift mid-run, an NJR that disagrees with the plan or a second job (`PlanGate`, `frozen.py:138-167`).
-Any new device loss also stops the campaign (`HOLD-GPU-DEVICE-LOSS`).
+Any new device loss also stops the campaign. The owner retired the standing hold on 2026-11-22 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)).
 
 ### 3.3 Owner authorization required (none has been given)
 
-1. Decide whether a GPU run is acceptable given 21 loss markers, the newest on 2026-10-30, and whether the PCIe Gen3 variable
-   from `DIAG-GPU-150` was applied. The last five documented losses came 4-11 s into Forge txt2img jobs, which is what IMG-01 does.
+1. **Decided 2026-11-22.** The owner cleared the device-loss blocker by forcing PCIe Gen4 (see [DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)).
+   The last five documented losses came 4-11 s into Forge txt2img jobs, which is what IMG-01 does.
    Optional: start `tools/diagnostics/gpu_hang_recorder.py` first.
 2. Start the pinned managed Forge Neo (`d70373eb`) yourself, idle on `127.0.0.1:7860`, with no other StableNew instance
    running. The harness will not start, stop, adopt or restart it.
@@ -201,8 +202,8 @@ Any new device loss also stops the campaign (`HOLD-GPU-DEVICE-LOSS`).
   registry says it needs an owner decision. `GP833-O2` (Motion Library tree and Review canvas capture the mouse wheel) and
   `GP833-O3` (Review Edit Mask and Extend Canvas below the fold at the minimum window) are minor and UNREPAIRED. None blocks the
   candidate. No source-change PR is recommended here.
-- Not defects, but unverified: Smart Review edits record no parent (a safe default); the two newest device-loss markers have
-  no analysis.
+- Not defects, but unverified: Smart Review edits record no parent (a safe default); the two newest historical device-loss markers have
+  no individual analysis. [DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md) records the later owner-accepted resolution.
 
 ## 5. Checks run (all non-GPU)
 

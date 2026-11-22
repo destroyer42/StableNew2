@@ -20,6 +20,7 @@ from src.controller.masked_edit_service import (
     bind_history_lineage,
     prepare_mask_edit,
 )
+from src.controller.review_batch_service import review_output_dir
 from src.gui.theme_v2 import apply_toplevel_theme
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
@@ -358,6 +359,8 @@ class MaskEditorDialog(tk.Toplevel):
             deepcopy(self._baseline),
         )
 
+        output_dir = review_output_dir(self._controller)
+
         def work() -> WorkOutcome:
             stream = io.BytesIO()
             mask.save(stream, format="PNG")
@@ -370,6 +373,7 @@ class MaskEditorDialog(tk.Toplevel):
                     fallback_config=fallback,
                     baseline=baseline,
                     guided=guided,
+                    output_dir=output_dir,
                 )
             )
 

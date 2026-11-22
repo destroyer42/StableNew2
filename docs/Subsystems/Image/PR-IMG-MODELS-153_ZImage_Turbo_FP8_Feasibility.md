@@ -1,5 +1,7 @@
 # PR-IMG-MODELS-153 — Pinned Forge and hardware feasibility: Z-Image-Turbo FP8-scaled
 
+**2026-11-22 update.** The owner resolved the device-loss fault by forcing PCIe Gen4 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The evidence and qualification disposition below record the original work.
+
 Status: READ-ONLY FEASIBILITY PHASE COMPLETE (local); hosted CI and review pending.
 
 **Verdict: `ELIGIBLE_FOR_OWNER_AUTHORIZATION` — conditional eligibility only.** It means no source-level, identity or

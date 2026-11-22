@@ -74,7 +74,7 @@ destroyed widget. It never hashes, scans, writes to Forge or changes a control.
 | `VAE/flux2-vae.safetensors` | latent channels 32, native keys, F32, batch-norm stats | structural match |
 | `VAE/diffusion_pytorch_model (2).safetensors` | latent channels 32, **Diffusers** key format, BF16 | counts as a structural match (latent channels) by the current logic, but its format differs from `flux2-vae` and it is unclassified for Forge loading; the key format is not a match criterion |
 | `VAE/flux1AE_v10`, `sdxl_vae` | 16 / 4 latent channels | mismatch |
-| `juggernautZ_v10*_pruned_fp8.safetensors` | no recognized signature | unclassified (not gated, not claimed) |
+| `juggernautZ_v10*_pruned_fp8.safetensors` | Z-Image DiT, variant unresolved | refused by the dependency gate. The header does not establish Turbo compatibility. |
 
 SHA-256: none of the above is in the AssetRegistry cache (empty on this host) — byte identity is pending for all of them;
 nothing in this package hashes large weights. The 9B's served path, catalog and live selection could not be read (Forge was

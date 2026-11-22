@@ -448,6 +448,21 @@ def _history_failure_detail(entry: Mapping[str, Any]) -> str:
     return ""
 
 
+def _sequence_ref_pad_hash(spec: Any, stage_config: Mapping[str, Any]) -> tuple[str, str] | None:
+    """``(path, sha256)`` the SVI reference pad must match before upload, when the job is a sequence (VID-A14B-SVI-375).
+
+    The pad is segment 0's prepared source; a sequence plan records that file's SHA-256, so a later segment (or a resume)
+    never pads with an image that changed after admission. A single clip pads with its own, runner-verified input."""
+
+    if not any(binding.binding_name == "ref_pad_image" for binding in spec.input_bindings):
+        return None
+    path = str(_mapping_dict(stage_config.get("source_preparation")).get("prepared_image_path") or "")
+    source = _mapping_dict(_mapping_dict(stage_config.get("sequence_metadata")).get("source"))
+    if not path or not source.get("sha256") or str(source.get("path") or "") != path:
+        return None
+    return path, str(source["sha256"])
+
+
 class ComfyWorkflowVideoBackend:
     backend_id = "comfy"
     capabilities = VideoBackendCapabilities(
@@ -1254,15 +1269,19 @@ class ComfyWorkflowVideoBackend:
                 stage_config["pose_video_path"],
                 str(stage_config.get("pose_video_sha256") or ""),
             )
+        input_hashes: dict[str, str | None] | None = {
+            str(request.input_image_path): (stage_config.get("reference_identity") or {}).get("prepared_sha256"),
+            str(stage_config.get("pose_video_path")): stage_config.get("pose_video_sha256"),
+        } if spec.backend_defaults.get("motion_source_policy") else None
+        ref_pad = _sequence_ref_pad_hash(spec, stage_config)
+        if ref_pad is not None:
+            input_hashes = {**(input_hashes or {}), ref_pad[0]: ref_pad[1]}
         prompt_payload = self._normalize_prompt_payload_for_comfy(
             prompt_payload,
             client=client,
             object_info=object_info,
             cancel_token=request.cancel_token,
-            input_hashes={
-                str(request.input_image_path): (stage_config.get("reference_identity") or {}).get("prepared_sha256"),
-                str(stage_config.get("pose_video_path")): stage_config.get("pose_video_sha256"),
-            } if spec.backend_defaults.get("motion_source_policy") else None,
+            input_hashes=input_hashes,
         )
         extra_data = {
             "workflow_id": compiled.workflow_id,

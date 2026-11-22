@@ -1,5 +1,7 @@
 # PR-IMG-MODELS-154A — Z-Image-Turbo FP8-scaled: safety preparation only
 
+**2026-11-22 update.** The owner resolved the device-loss fault by forcing PCIe Gen4 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The evidence and qualification disposition below record the original work.
+
 Status: **PREPARATION COMPLETE (local branch); hosted CI and independent review pending.**
 Package classification: **`PASS_PREPARATION_ONLY`**. That means the preparation implementation and deterministic monitor simulations passed. The current host preflight is a separate disposition: **REFUSED or INCONCLUSIVE is unacceptable for physical qualification**, regardless of a preparation implementation PASS. No numeric threshold
 is proven, no stop rule is enforceable, and physical qualification is neither authorized nor implemented.

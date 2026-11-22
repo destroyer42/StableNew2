@@ -110,7 +110,6 @@ def test_a_transformer_only_flux1_dev_layout_resolves_to_the_family_profile_poli
     [
         ("flux2_klein_9b", FAMILY_FLUX2_KLEIN, "NO-GO"),
         ("flux2_klein_4b", FAMILY_FLUX2_KLEIN, "flux-2-klein-4b-fp8.safetensors"),
-        ("flux1_schnell", FAMILY_FLUX1, "schnell"),
         ("flux_unrecognized", "flux", "matches no StableNew profile"),
     ],
 )

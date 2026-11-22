@@ -69,6 +69,10 @@ class BatchViewHooks:
     open_movie_clips: Callable[[dict[str, Any]], None] = lambda bundle: None
 
 
+#: Why the output actions are disabled when every selected job's content is hidden by SFW mode.
+SFW_OUTPUTS_REASON = "Outputs of content hidden in SFW mode are not opened."
+
+
 def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}" + ("" if count == 1 else "s")
 
@@ -454,7 +458,7 @@ class BatchOperationsSession:
             if ref.available is not False and (kind is None or ref.kind is kind)
         ]
         if not usable and any(self._hidden(job) for job in selected):
-            return ActionState(False, "Outputs of content hidden in SFW mode are not opened.")
+            return ActionState(False, SFW_OUTPUTS_REASON)
         return ActionState(bool(usable), "Uses the selected jobs' recorded outputs." if usable else empty)
 
     def review_state(self) -> ActionState:

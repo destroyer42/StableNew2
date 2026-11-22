@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded 2026-11-22.** The owner resolved device loss by forcing PCIe Gen4. See [DIAG-GPU-160](DIAG-GPU-160_PCIe_Gen4_Resolution.md).
+
 **RECURRENCE CAPTURED - TRANSITION INSUFFICIENT.** The observation was closed by the
 2026-09-23 recurrence recorded in `DIAG-GPU-130`. Windows directly still reports both DIMMs at
 5600 MT/s (XMP remains operator-reported enabled). The established hard failure recurred under

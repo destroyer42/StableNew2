@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded 2026-11-22.** The owner resolved device loss by forcing PCIe Gen4. See [DIAG-GPU-160](DIAG-GPU-160_PCIe_Gen4_Resolution.md).
+
 **DIAG-GPU-110 — COMPLETE / ACCEPTED / INTEGRATED.** The evidence record
 establishes strong cross-incident convergence on the Windows
 black-screen/display capture domain, without driver- or component-level

@@ -236,6 +236,8 @@ An exact profile is an immutable, versioned contract. The NJR persists only `bac
 | Profile | Id / version | Envelope (summary) | Code |
 |---|---|---|---|
 | FLUX.2 Klein 4B FP8 | `flux2_klein_4b_fp8` v1 and v2 (`latest_klein_profile()` is v2) | Forge only. Euler / Beta / 4 steps / CFG 1.0; 768x1024 or 1024x1024; modes txt2img and `single_reference_edit` (img2img, exactly one source, denoise 1.0); no negative prompt, no global terms, no optimizer, hires, refiner, ADetailer or upscale. v1 admits no LoRA; v2 admits exactly one explicitly Klein-4B-compatible LoRA on txt2img. Total host RAM at least 32e9 bytes. | `src/image_backends/forge_klein_profile.py` |
+| Qwen-Image 20B FP8 | `qwen_image_20b_fp8` v1 | Managed ComfyUI, structural checkpoint identity, pinned encoder and VAE, txt2img only. Preview checks local dependencies. Physical qualification is pending. | `src/image_backends/comfy_qwen_image_profile.py` |
+| FLUX.1 [dev] / [schnell] | `flux1_dev_gguf` v1 / `flux1_schnell` v1 | Managed Forge, standalone transformer layout, pinned modules, txt2img only. Physical qualification is pending. | `src/image_backends/forge_flux1_profile.py` |
 | Z-Image-Turbo FP8 (limited support) | `z_image_turbo_fp8_scaled` v1 | Forge only, txt2img only, 1024x1024, one image, Euler / Beta / 9 steps / CFG 1.0 / `distilled_cfg_scale` 9.0; natural-language positive prompt only (no weights, brackets, `<lora:>`, embeddings); no negative prompt; pinned Forge sampling options verified before dispatch. Physical qualification is inconclusive (STATUS.md Holds). | `src/image_backends/forge_zimage_profile.py` |
 | Klein Base 9B | none | Refused. Verdict `NO_GO_RESOURCE_RISK`. Enforcement is generic, not a name check: the Forge dependency gate refuses any positively identified dependency-bearing, unqualified multi-component checkpoint (`ForgeUnqualifiedModelError`) before any module write or POST. | `src/image_backends/model_readiness.py`, `src/image_backends/model_readiness_probe.py`, `ForgeWebUIImageBackend._dependency_gate` |
 
@@ -245,13 +247,13 @@ Asset identity (size + SHA-256 of the exact files Forge will load) is verified b
 
 ### 4.2 Model policy and capability registry
 
-`src/image_backends/model_policy.py` is the single capability/operator-policy answer: `resolve_model_policy(model_name, family_lookup=...)` returns a `ModelPolicy` (family, evidence level, allowed backends, stages, per-control `ControlPolicy` of configurable/fixed/unsupported, per-feature `FeaturePolicy`, prompt dialect). Resolution order: exact Klein name, exact Z-Image name, then `AssetRegistry` family evidence (`RegistryFamilyLookup`, persisted snapshot only, no scan), else unverified/unknown. Only SDXL (`QUALIFIED_REGISTRY_POLICY_IDS`) is a qualified registry policy; sd1, sd2, sd3 and flux are labelled but unqualified. Nothing unclassified is ever labelled SDXL.
+`src/image_backends/model_policy.py` is the single capability/operator-policy answer: `resolve_model_policy(model_name, family_lookup=...)` returns a `ModelPolicy` (family, evidence level, allowed backends, stages, per-control `ControlPolicy` of configurable/fixed/unsupported, per-feature `FeaturePolicy`, prompt dialect). Resolution checks pinned names first, then uses local family evidence for structural profiles, ordinary SDXL and specific refusals. Only SDXL (`QUALIFIED_REGISTRY_POLICY_IDS`) is a qualified registry policy; sd1, sd2, sd3 and flux are labelled but unqualified. Nothing unclassified is ever labelled SDXL.
 
 Four concepts stay separate: backend identity (configuration), model family, exact profile, policy. The GUI, Learning and PromptPack editor project the policy and are advisory. The compiler and the backend are final.
 
 Compile-time seams in `model_policy.py`:
 
-- `apply_model_compile_policy(config)`: the one compile entry point; dispatches to the Klein or Z-Image compile policy; a no-op for every other model.
+- `apply_model_compile_policy(config)`: the one compile entry point; dispatches to the selected profile's compile policy.
 - `normalize_profile_owned_values(config, changes)` and `prepare_candidate_baseline(config)`: replace inherited values the exact profile itself owns (sampling, CLIP skip, VAE, optimizer, global prompt terms and flags) before validation. They never touch geometry, counts, seeds, stages, assets or optional features, so a genuine conflict is still refused.
 - Generic builder: `prepare_effective_config` in `src/pipeline/exact_profile_effective_config.py` normalizes and composes global positive terms for an exact Z-Image selection; the core (`njr_compiler.prepare_image_config`) calls it before `apply_model_compile_policy` for generic `RAW` drafts and for each PromptPack record's flat payload. The PromptPack builder does the equivalent inline for Z-Image and keeps source intent separate from the executable config.
 - Global prompt policy: `src/pipeline/global_prompt_policy.py` (`has_frozen_global_prompt_policy`); the executor applies global terms only when not already composed by the compiler.
@@ -362,7 +364,7 @@ Provenance is best-effort but no longer silent (audit B9, fixed in P3-5) [V]: wh
 8. Conditioning bytes (OpenPose) never enter the NJR, logs or manifests; the job-owned snapshot is hash-verified at the POST.
 9. The registry never gains network or scan-at-import behavior; evidence modules stay header-only and path-free in reports.
 10. Persisted state goes through `src/utils/atomic_io.py`.
-11. The physical-GPU hold was lifted on 2026-10-18 (STATUS.md Holds); the device-loss quarantine remains. Tests must not contact a WebUI, model, GPU or display unless explicitly opt-in (`real_backend` marker).
+11. The owner resolved the device-loss fault on 2026-11-22 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The device-loss quarantine remains. Tests must not contact a WebUI, model, GPU or display unless explicitly opt-in (`real_backend` marker).
 12. Protected actions (push to `main`, merge, publish, secrets, material architecture changes) need explicit owner approval (`AGENTS.md` section 5).
 
 ## 10. How to test

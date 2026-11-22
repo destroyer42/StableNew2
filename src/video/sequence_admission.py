@@ -65,9 +65,18 @@ SEGMENT_INTENT_KEYS: Final = frozenset(
 )
 ANCHOR_INTENT_KEYS: Final = frozenset({"policy", "path"})
 #: Declared inputs a sequence-capable workflow may require; anything beyond them (a driving video, an end anchor)
-#: is something the sequence layer has no way to supply.
+#: is something the sequence layer has no way to supply. ``ref_pad_image`` (the SVI reference pad, VID-A14B-SVI-375) is
+#: segment 0's prepared source, bound from the frozen ``source_preparation`` block every segment's stage config keeps.
 SUPPORTED_REQUIRED_INPUTS: Final = frozenset(
-    {"source_image", "prompt", "seed", "target_width", "target_height", "frame_count"}
+    {
+        "source_image",
+        "prompt",
+        "seed",
+        "target_width",
+        "target_height",
+        "frame_count",
+        "ref_pad_image",
+    }
 )
 #: A storyboard take with a lead-in: segment 0's first generated frame re-renders the handoff frame, so it is dropped.
 LEAD_IN_OVERLAP: Final = 1

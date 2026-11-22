@@ -7,6 +7,7 @@ only with what this returns, so a missing or unreadable file can never look like
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +43,7 @@ def resolve_job_outputs(
     """Existing, usable outputs of ``job_ids`` in selection order, then artifact order."""
 
     images: list[str] = []
+    seen: set[str] = set()  # the same file recorded under two spellings (relative/absolute, case) is one output
     videos: list[str] = []
     folders: list[str] = []
     unavailable: list[tuple[str, str, str]] = []
@@ -67,8 +69,9 @@ def resolve_job_outputs(
                 folders.append(folder)
             if ref.kind is OutputKind.VIDEO and ref.path not in videos:
                 videos.append(ref.path)
-            elif ref.kind is OutputKind.IMAGE and ref.path not in images:
+            elif ref.kind is OutputKind.IMAGE and os.path.normcase(os.path.abspath(ref.path)) not in seen:
                 if not verify_images or _is_valid_image(path):
+                    seen.add(os.path.normcase(os.path.abspath(ref.path)))
                     images.append(ref.path)
                 else:
                     unavailable.append((job_id, ref.path, "not a readable image"))
