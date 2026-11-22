@@ -5,6 +5,12 @@ source images. Each *case* is one source image with a prompt; each *arm* is one 
 into a clip (a native SVD configuration or a Video Workflow form). An eval run queues every case under
 every arm through the canonical path, so candidates are compared on the same inputs.
 
+A case may instead be a *sequence* (VID-A14B-SVI-375): an ordered list of 2-12 segments, each with its own prompt,
+that runs as ONE multi-segment job (``build_sequence_job``, PR-VID-SEQ-330) under each Video Workflow arm. Segment 0
+starts from the case image and each later segment carries the previous segment's last frame; segment ``i`` uses the
+suite seed plus ``i``, so every arm sees identical seeds. The job's primary video is the assembled sequence, so one
+rating covers the whole sequence.
+
 The suite only describes intent. Nothing here builds an NJR, touches a runtime or reads a video; loading
 validates the file and pins each image by SHA-256 so a run can prove which bytes it used.
 """
@@ -27,6 +33,9 @@ ARM_BACKENDS = (ARM_BACKEND_SVD, ARM_BACKEND_WORKFLOW)
 MAX_EVAL_JOBS = 64
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+#: A sequence case has at least two segments (one is a plain case) and at most what one sequence job may run.
+MIN_SEQUENCE_SEGMENTS = 2
+MAX_SEQUENCE_SEGMENTS = 12
 
 
 class EvalSuiteError(ValueError):
@@ -34,13 +43,33 @@ class EvalSuiteError(ValueError):
 
 
 @dataclass(frozen=True)
+class EvalSegment:
+    """One segment of a sequence case: its own prompt and, optionally, its own length."""
+
+    prompt: str
+    frame_count: int | None = None
+
+
+@dataclass(frozen=True)
 class EvalCase:
     case_id: str
     image_path: Path
     image_sha256: str
+    #: For a sequence case, segment 0's prompt (what the job's form-level prompt records).
     prompt: str
     negative_prompt: str = ""
     tags: tuple[str, ...] = ()
+    #: Empty for a single-clip case; 2-12 segments for a sequence case.
+    segments: tuple[EvalSegment, ...] = ()
+
+    @property
+    def is_sequence(self) -> bool:
+        return bool(self.segments)
+
+    def segment_seeds(self, suite_seed: int) -> tuple[int, ...]:
+        """Segment ``i`` uses ``suite_seed + i``: fixed, and identical under every arm."""
+
+        return tuple(suite_seed + index for index in range(len(self.segments)))
 
 
 @dataclass(frozen=True)
@@ -132,7 +161,14 @@ def _load_case(raw: Any, suite_dir: Path) -> EvalCase:
             f"case {case_id}: {image_path.name} changed since the suite pinned it "
             f"(expected {pinned[:12]}..., found {actual[:12]}...)",
         )
+    segments = _load_segments(raw.get("segments"), case_id)
     prompt = str(raw.get("prompt") or "").strip()
+    if segments:
+        _require(
+            not prompt,
+            f"case {case_id}: a sequence case sets a prompt per segment, not a case 'prompt'",
+        )
+        prompt = segments[0].prompt
     _require(bool(prompt), f"case {case_id}: 'prompt' is required")
     tags = raw.get("tags") or []
     _require(isinstance(tags, list), f"case {case_id}: 'tags' must be a list")
@@ -143,7 +179,34 @@ def _load_case(raw: Any, suite_dir: Path) -> EvalCase:
         prompt=prompt,
         negative_prompt=str(raw.get("negative_prompt") or "").strip(),
         tags=tuple(str(tag) for tag in tags),
+        segments=segments,
     )
+
+
+def _load_segments(raw: Any, case_id: str) -> tuple[EvalSegment, ...]:
+    if raw is None:
+        return ()
+    _require(isinstance(raw, list), f"case {case_id}: 'segments' must be a list")
+    _require(
+        MIN_SEQUENCE_SEGMENTS <= len(raw) <= MAX_SEQUENCE_SEGMENTS,
+        f"case {case_id}: a sequence case has {MIN_SEQUENCE_SEGMENTS}-{MAX_SEQUENCE_SEGMENTS} segments "
+        f"(it has {len(raw)}); use 'prompt' for a single clip",
+    )
+    segments: list[EvalSegment] = []
+    for position, item in enumerate(raw, start=1):
+        label = f"case {case_id} segment {position}"
+        _require(isinstance(item, Mapping), f"{label} must be an object")
+        unknown = sorted(set(item) - {"prompt", "frame_count"})
+        _require(not unknown, f"{label}: unknown field(s) {', '.join(unknown)}")
+        prompt = str(item.get("prompt") or "").strip()
+        _require(bool(prompt), f"{label}: 'prompt' is required")
+        count = item.get("frame_count")
+        _require(
+            count is None or (isinstance(count, int) and not isinstance(count, bool) and count > 0),
+            f"{label}: frame_count must be a positive whole number",
+        )
+        segments.append(EvalSegment(prompt=prompt, frame_count=count))
+    return tuple(segments)
 
 
 def _load_arm(raw: Any) -> EvalArm:
@@ -204,6 +267,13 @@ def load_eval_suite(path: str | Path) -> EvalSuite:
     arms = tuple(_load_arm(raw) for raw in raw_arms)
     _unique([case.case_id for case in cases], "case_id")
     _unique([arm.arm_id for arm in arms], "arm_id")
+    if any(case.is_sequence for case in cases):
+        svd_arms = [arm.arm_id for arm in arms if arm.backend != ARM_BACKEND_WORKFLOW]
+        _require(
+            not svd_arms,
+            f"sequence cases run as Video Workflow sequences; arm(s) {', '.join(svd_arms)} "
+            f"use {ARM_BACKEND_SVD}",
+        )
     _require(
         len(cases) * len(arms) <= MAX_EVAL_JOBS,
         f"{len(cases)} cases x {len(arms)} arms = {len(cases) * len(arms)} jobs; "
@@ -233,9 +303,12 @@ __all__ = [
     "ARM_BACKEND_SVD",
     "ARM_BACKEND_WORKFLOW",
     "MAX_EVAL_JOBS",
+    "MAX_SEQUENCE_SEGMENTS",
+    "MIN_SEQUENCE_SEGMENTS",
     "SUITE_SCHEMA",
     "EvalArm",
     "EvalCase",
+    "EvalSegment",
     "EvalSuite",
     "EvalSuiteError",
     "file_sha256",

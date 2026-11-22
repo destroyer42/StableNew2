@@ -305,6 +305,11 @@ def _dependency_gates(
         f"{hints.get(key) or 'node option'} '{details[key]['locator']}'"
         for key in result.missing_required
         if details[key]["dependency_kind"] == "node_option"
+    ) + sorted(
+        # A stock node that is present but lacks an input the graph sets (VID-A14B-SVI-375).
+        f"{hints.get(key) or 'node'} input '{details[key]['locator']}'"
+        for key in result.missing_required
+        if details[key]["dependency_kind"] == "node_input"
     )
     missing_files = sorted(
         details[key]["locator"]

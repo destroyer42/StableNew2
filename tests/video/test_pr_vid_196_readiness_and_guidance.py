@@ -602,6 +602,10 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
         "wan22_i2v_a14b_4step_v1@1.1.0": "8237d6b3a8dde7e24ae3c139451ad1484157b6c118ec3cb148b609141b037c84",
         "wan22_i2v_a14b_4step_v1@1.2.0": "defa17ec3d6b8b29b79e0f8146c652d36d8539e0e92cd8a714bc3d896c2d4b27",
         "wan22_i2v_a14b_4step_v1@1.3.0": "1a21bfa93c2d6b51d45df50f363fe3d540f47cbbc3d891532f1704d2a8847982",
+        # VID-A14B-SVI-375: the three experimental SVI 2.0 versions.
+        "wan22_i2v_a14b_svi@1.0.0": "13d874535e83ae50d154ced688aedb17e4c2aa679edcc74bc7c8040e393b9ba8",
+        "wan22_i2v_a14b_svi@1.1.0": "be48344756f8ccdc264553c7aabce75e45d74745c4251f42e2cba1ab88c8f770",
+        "wan22_i2v_a14b_svi@1.2.0": "0153ff2b7be56cc011911c391df8b73ac158675b8efc3e0d8f3640657d2a4774",
         "wan22_ti2v_5b_i2v_720p_v1@1.0.0": "00a676cfe01120df98e24d1ccebb5a14084a6cb5181f759cb0b84b5a15da766e",  # VID-CLIP-372
         "wan22_ti2v_5b_i2v_v1@1.0.0": "42dac69b34130c4db06ea5dc0e91dd7b35bba2ff0c960ab24b406437adb58332",
         "wan22_ti2v_5b_i2v_v1@1.1.0": "e5821b1cf6eadf0d93e666f4a606d7540d53298cf3bfc51402393f80388fe731",
