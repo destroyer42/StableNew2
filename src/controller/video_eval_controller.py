@@ -89,7 +89,7 @@ class VideoEvalControllerMixin:
             )
         form.update(overrides)
         form.update(prompt=case.prompt, negative_prompt=case.negative_prompt, seed=str(seed))
-        if case.is_sequence:
+        if getattr(case, "is_sequence", False):  # a duck-typed single-clip case has no segments
             return self._build_workflow_eval_sequence(case, arm, form, seed)
         frozen = self._njr_builder.freeze_inputs(case.image_path, form)
         built = self._njr_builder.build_job(form, frozen)
