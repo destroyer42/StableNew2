@@ -12,9 +12,22 @@ from pathlib import Path
 from typing import Any
 
 from src.ai_assist.argv import RunLimits, Sampling
-from src.ai_assist.contracts import AiCancelToken, AssistOutcome, AssistRequest, OutcomeCode
+from src.ai_assist.contracts import (
+    AiCancelToken,
+    AssistOutcome,
+    AssistRequest,
+    OutcomeCode,
+    SuggestionKind,
+)
 from src.ai_assist.framing import FramingError, build_json_schema, render_prompt
-from src.ai_assist.remote_preview import RemoteApproval, RemoteSettings, read_remote_settings
+from src.ai_assist.remote_preview import (
+    DuplicateRemoteKeyError,
+    RemoteApproval,
+    RemoteSettings,
+    read_remote_settings,
+    reject_duplicate_json_keys,
+    select_remote_model,
+)
 from src.ai_assist.remote_transport import (
     MAX_REQUEST_BYTES,
     Transport,
@@ -31,6 +44,37 @@ HEALTH_LIMIT = 128 * 1024
 READY_TTL = 8.0
 RECOVERY_INTERVAL = 3.0
 MAX_OUTPUT_BYTES = 256 * 1024
+
+
+_SUCCESS_PAYLOAD = {
+    SuggestionKind.PROMPT_REWRITE: (
+        "Write the revised prompts in positive and negative. If NEGATIVE_PROMPT is empty, return an empty negative. "
+        "Only reproduce protected tokens that occur in the authored prompts."
+    ),
+    SuggestionKind.TARGET_FIT_ADVICE: "Set target to one exact identifier from Allowed targets.",
+    SuggestionKind.WORKFLOW_CHOICE: "Set workflow to one exact identifier from Allowed workflows.",
+    SuggestionKind.PLAN_PROPOSAL: (
+        "Put the ordered advice in steps. Copy identifiers exactly, including capitalization and punctuation. "
+        "For an image step, set target and use null for workflow. For a video step, set workflow and use null for target."
+    ),
+    SuggestionKind.SLOT_VARIETY: (
+        "Put the proposals in slots. Copy each slot name exactly into slot and put the new phrases in values. "
+        "Follow the requested category for each value."
+    ),
+}
+
+
+def _ollama_prompt(request: AssistRequest) -> str:
+    # A refusal was the only concrete response shape in the shared frame. Describe both paths without
+    # placing a copyable refusal object in front of the model. The wire schema still constrains both.
+    return render_prompt(
+        request,
+        response_instructions=(
+            'For a suggestion, set status to "ok" and use the schema id and kind given above. '
+            + _SUCCESS_PAYLOAD[request.kind]
+            + ' If you cannot or will not help, set status to "refused" and provide a short refusal_reason.'
+        ),
+    )
 
 
 class RemoteState(StrEnum):
@@ -54,12 +98,38 @@ class _Health:
 
 def _read_object(raw: bytes) -> dict[str, Any]:
     try:
-        value = json.loads(raw.decode("utf-8"))
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=reject_duplicate_json_keys)
     except (RecursionError, ValueError):
         raise TransportFailure("invalid_json") from None
     if not isinstance(value, dict):
         raise TransportFailure("invalid_json")
     return value
+
+
+def _wire_problem(output: str, schema: dict[str, Any]) -> str:
+    """Enforce the envelope sent to Ollama before the shared semantic validator."""
+    try:
+        document = json.loads(output, object_pairs_hook=reject_duplicate_json_keys)
+    except DuplicateRemoteKeyError:
+        return "remote_duplicate_response_key"
+    except (RecursionError, ValueError):
+        # The canonical validator classifies malformed JSON and plain-text refusals.
+        return ""
+    if not isinstance(document, dict):
+        return ""
+    for branch in schema["oneOf"]:
+        fields = branch["properties"]
+        if document.get("status") != fields["status"]["const"]:
+            continue
+        if not set(branch["required"]) <= document.keys() <= fields.keys():
+            return "remote_response_fields"
+        if any(
+            fields[key].get("type") == "string" and not isinstance(value, str)
+            for key, value in document.items()
+        ):
+            return "remote_response_field_type"
+        break
+    return ""
 
 
 class RemoteAssist:
@@ -76,6 +146,9 @@ class RemoteAssist:
 
     def settings(self) -> RemoteSettings:
         return read_remote_settings(self._root)
+
+    def select_model(self, approval: RemoteApproval) -> None:
+        select_remote_model(self._root, approval)
 
     def state(self) -> RemoteState:
         settings = self.settings()
@@ -244,11 +317,12 @@ class RemoteAssist:
     ) -> RuntimeResult:
         started = time.monotonic()
         try:
+            schema = build_json_schema(request)
             body = json.dumps(
                 {
                     "model": identity.model_reference,
-                    "prompt": render_prompt(request),
-                    "format": build_json_schema(request),
+                    "prompt": _ollama_prompt(request),
+                    "format": schema,
                     "stream": False,
                     "think": False,
                     "options": {
@@ -294,17 +368,23 @@ class RemoteAssist:
             if response.get("done") is not True or not isinstance(output, str):
                 raise TransportFailure("invalid_response")
             raw_output = output.encode("utf-8")
+            if problem := _wire_problem(output, schema):
+                return RuntimeResult(
+                    OutcomeCode.MALFORMED,
+                    problem,
+                    elapsed_ms=int((time.monotonic() - started) * 1000),
+                )
         except UnicodeError:
             return RuntimeResult(OutcomeCode.MALFORMED, "remote_invalid_response")
         except TransportFailure as exc:
             reason = str(exc)
-            if reason in {"disconnected", "identity_mismatch"}:
+            if reason in {"disconnected", "response_lost", "identity_mismatch"}:
                 with self._lock:
                     self._probe_number += 1
                     self._health = _Health(
                         identity,
                         RemoteState.UNAVAILABLE
-                        if reason == "disconnected"
+                        if reason in {"disconnected", "response_lost"}
                         else RemoteState.UNTRUSTED,
                         time.monotonic(),
                     )

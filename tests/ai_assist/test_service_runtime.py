@@ -508,7 +508,15 @@ def test_identical_inputs_give_identical_outcomes(installation: Install) -> None
 def test_the_service_exposes_request_cancellation_only_never_job_cancellation() -> None:
     public = {name for name in dir(AiAssistService) if not name.startswith("_")}
     # ``busy`` is a read-only property (AI-202b: the model selector refuses to switch while a request is in flight).
-    assert public == {"begin_shutdown", "busy", "cancel", "run", "shutdown", "submit"}
+    assert public == {
+        "begin_shutdown",
+        "busy",
+        "cancel",
+        "run",
+        "select_remote_model",
+        "shutdown",
+        "submit",
+    }
     assert AiAssistService.cancel.__doc__ and "No job" in AiAssistService.cancel.__doc__
 
 
