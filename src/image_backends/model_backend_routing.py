@@ -6,7 +6,7 @@ configured WebUI identity. This is not a fallback and not a backend selector: a 
 rewritten, and a conflicting one is refused by the model's own profile.
 
 Additive by design: a later backend package (a Comfy still-image backend, further Diffusers families) appends one
-resolver to ``_RESOLVERS``. Resolvers are pure, cheap name matches and import nothing heavy.
+resolver to ``_RESOLVERS``. Resolvers use exact identities or local header evidence without loading or hashing weights.
 """
 
 from __future__ import annotations
@@ -46,15 +46,18 @@ def _ideogram4_offer() -> tuple[str, str] | None:
 
 
 def _qwen_image_offers() -> tuple[tuple[str, str], ...]:
-    """Each Qwen-Image 2.1 variant whose exact files are in the managed Comfy model folders (sizes only, no hash)."""
+    """Offer the published Qwen names with complete local dependencies, without hashing."""
 
     from src.image_backends.comfy_image_readiness import check_installation, comfy_model_folders
-    from src.image_backends.comfy_qwen_image_profile import QWEN_IMAGE_PROFILES
+    from src.image_backends.comfy_qwen_image_profile import (
+        QWEN_IMAGE_20B_FP8_PROFILE_V1,
+        QWEN_IMAGE_PROFILES,
+    )
 
     folders = comfy_model_folders()
     return tuple(
         (profile.display_name, profile.model_name)
-        for profile in QWEN_IMAGE_PROFILES
+        for profile in (*QWEN_IMAGE_PROFILES, QWEN_IMAGE_20B_FP8_PROFILE_V1)
         if check_installation(profile, folders=folders).ready
     )
 

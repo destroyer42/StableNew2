@@ -11,7 +11,7 @@ How to keep this true:
 
 ## 1. Scope and the four concepts
 
-Covered: the two exact profiles (FLUX.2 Klein 4B FP8 v1/v2, Z-Image-Turbo FP8 v1), the refusal of Klein Base 9B, `ModelPolicy`, operation compatibility, effective-config adaptation and global-positive ownership, local asset evidence as it gates dispatch, readiness, and Model Comparison where it touches profiles. Not covered: SDXL ordinary work (generic path), OpenPose (IMAGE_PIPELINE 3.1), video.
+Covered: exact profiles and structural family profiles for Forge, Diffusers and Comfy still-image work, the refusal of Klein Base 9B, `ModelPolicy`, operation compatibility, effective-config adaptation and global-positive ownership, local asset evidence as it gates dispatch, readiness, and Model Comparison where it touches profiles. Not covered: SDXL ordinary work (generic path), OpenPose (IMAGE_PIPELINE 3.1), video.
 
 Four concepts stay separate (a fifth, advisory recommended generation profiles, is in section 17); most bugs here come from mixing them (`model_policy.py` module docstring):
 
@@ -71,11 +71,30 @@ Enforced where:
 - Selection: the compiler stamps the reference only when the registry snapshot records a transformer-only `flux1_dev` layout for the selected checkpoint (the installable lookup `install_variant_lookup`, installed by `src/main.py`); a frozen reference is never upgraded or swapped. The backend re-derives the layout from the served file at dispatch.
 - Evidence: `backend_metadata["flux1_profile"]` (`flux1_provenance` + `asset_identity`), `qualification_status = "not physically qualified"`. Policy evidence is `structural_profile`, so `exact_identity_authority` is false and Model Comparison refuses it.
 
+### 2.2c FLUX.1 [schnell] family profile (`flux1_schnell` v1, Forge)
+
+The standalone schnell layout is identified by the absence of the FLUX.1 guidance embedding. It uses the same
+verified CLIP-L, T5-XXL FP8 and FLUX.1 AE modules as dev. The profile freezes four Euler/Simple steps, CFG 1,
+and omits distilled guidance from the Forge payload. Physical qualification is pending.
+
+### 2.2d Qwen-Image on managed ComfyUI
+
+- The Qwen-Image 2.1 int8 and 2.1 Turbo int8 profiles retain their exact pinned assets and graphs.
+- `qwen_image_20b_fp8` v1 admits the standalone 60-block, unscaled E4M3 Qwen-Image DiT layout. The NJR freezes
+  the selected checkpoint name and profile reference. Comfy readiness checks the selected file and dependencies
+  at Preview. Dispatch verifies the file's header again and records its SHA-256 alongside the pinned encoder and VAE.
+- The core-node graph uses Euler/Simple, 20 steps, CFG 4 and shift 3.1. It generates one image from a positive
+  text prompt. The profile needs the 9.38 GB Qwen2.5-VL-7B FP8 scaled encoder in `models/text_encoders` and
+  the pinned Qwen-Image VAE. A uniquely identifiable renamed VAE with the pinned bytes is accepted.
+- A shared checkpoint library must be visible to Comfy's `diffusion_models` loader. See the
+  [managed Comfy runtime runbook](../../runbooks/managed_comfy_runtime.md). The pre-dispatch floors are 11 GiB
+  free VRAM and 28 GiB free RAM. Physical qualification is pending and requires owner authorization.
+
 ### 2.3 Klein Base 9B and other FLUX layouts (refused, no profile)
 
 There is no profile for Klein 9B. `NO_GO_RESOURCE_RISK` is the decision recorded in `PR-IMG-MODELS-151`. The refusal is generic: `ForgeWebUIImageBackend._dependency_gate` (run from `_before_dispatch` only when there is no exact profile and the name is not the Klein 4B transformer) calls `probe_model_readiness`; `ModelReadiness.blocks_dispatch` is true for a not-qualified checkpoint whose safetensors header positively identifies a dependency-bearing transformer; the gate raises `ForgeUnqualifiedModelError` before any module write or POST. Unreadable, ambiguous or unrecognized evidence is "unverified" and preserves the old generic behavior [V]. Any other FLUX-style multi-component checkpoint is refused the same way.
 
-PR-IMG-FLUX-130 names the layout: a FLUX transformer is classified into `flux1_dev`, `flux1_schnell`, `flux2_klein_4b`, `flux2_klein_9b` or `flux_unrecognized` (plus a `_bundled` form) from safetensors headers **and GGUF tensor tables**, so the GGUF 9B files that used to bypass the gate as "unsupported format" are refused too. Each refused layout has its own sentence (`FLUX_VARIANT_REFUSALS`): 9B is NO-GO in every precision; a Klein 4B-class file other than the exact qualified one, FLUX.1 [schnell] and unrecognised FLUX layouts have no profile. `ModelPolicy.refusal` carries the same sentence to the GUI. A transformer-only DiT of no known layout (`unrecognized_dit`, the installed `flux3Klein_*` transformer) is refused, and a text encoder or VAE selected as a checkpoint is `NOT_A_CHECKPOINT`.
+PR-IMG-FLUX-130 names the layout: a FLUX transformer is classified into `flux1_dev`, `flux1_schnell`, `flux2_klein_4b`, `flux2_klein_9b` or `flux_unrecognized` (plus a `_bundled` form) from safetensors headers **and GGUF tensor tables**, so the GGUF 9B files that used to bypass the gate as "unsupported format" are refused too. Each refused layout has its own sentence (`FLUX_VARIANT_REFUSALS`): 9B is NO-GO in every precision; a Klein 4B-class file outside the exact profile and unrecognised FLUX layouts have no profile. `ModelPolicy.refusal` carries the same sentence to the GUI. A transformer-only DiT of no known layout (`unrecognized_dit`, the installed `flux3Klein_*` transformer) is refused, and a text encoder or VAE selected as a checkpoint is `NOT_A_CHECKPOINT`.
 
 ## 3. Versioning and frozen work
 
@@ -92,8 +111,11 @@ PR-IMG-FLUX-130 names the layout: a FLUX transformer is classified into `flux1_d
 
 1. `is_klein_transformer_name` -> `policy_for_profile(latest_klein_profile())`.
 2. `is_zimage_transformer_name` -> `policy_for_profile(ZIMAGE_PROFILE_V1)`.
-3. Blank name or no lookup -> `unverified_generic`, evidence `no_evidence`.
-4. Lookup result: conflicting -> unknown/`conflicting_evidence`; structural error, `sdxl_refiner` or `sdxl_inpaint` -> unknown/`unknown_evidence`; resolved SDXL -> `_sdxl_policy` (evidence `registry_evidence`); resolved FLUX with a recorded transformer-only layout -> `flux1_dev_gguf` policy (evidence `structural_profile`) for `flux1_dev`, else `flux_refused:<variant>` with `refusal` set; any other resolved family (sd1, sd2, sd3, bundled or label-only flux) -> `unverified_generic:<family>`, labelled but never qualified. A lookup exception is absent evidence. (Ideogram 4 is checked by name before step 3.)
+3. Ideogram 4 and the two Qwen-Image 2.1 profiles match their pinned model names.
+4. A resolved checkpoint layout can select the FLUX.1 dev or schnell family profile, the Qwen-Image 20B Comfy
+   profile, or a precise FLUX or Z-Image refusal. The Z-Image tensor layout leaves the Turbo variant unresolved.
+5. Resolved ordinary SDXL uses the SDXL policy. Conflicting, unreadable and unsupported evidence produces an
+   unverified policy.
 
 Name matching is whole-name after stripping directory, a ` [hash]` suffix and a weights extension (`_model_key`), never a substring. Three copies of that normalizer exist (`forge_klein_profile._model_key`, `model_policy._model_key`, `model_readiness_probe.checkpoint_key`); keep them equivalent [V].
 
@@ -241,6 +263,7 @@ Stage methods swallow generic exceptions (IMAGE_PIPELINE 11). Raise a refusal fr
 | Area | Tests |
 |---|---|
 | Klein profile, assets, LoRA | `tests/image_backends/test_forge_klein_profile.py`, `test_forge_klein_assets.py`, `test_forge_klein_lora.py` |
+| Qwen-Image profiles, Preview, and fake Comfy dispatch | `tests/image_backends/test_comfy_qwen_image_profile_comfy100.py`, `test_comfy_image_readiness_comfy100.py`, `test_comfy_image_backend_comfy100.py` |
 | Z-Image profile | `tests/image_backends/test_forge_zimage_profile.py` |
 | FLUX layouts, GGUF tables, FLUX.1 family profile | `tests/assets/test_flux_variant_130.py`, `tests/image_backends/test_forge_flux1_profile_130.py`, `tests/integration/test_pr_img_flux_130_canonical_path.py` (fixtures `tests/assets/flux_fixtures_130.py`) |
 | Backend validation and dispatch ordering | `tests/image_backends/test_forge_webui_backend.py` (with `tests/helpers/fake_webui_transport.py`) |
