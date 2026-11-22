@@ -814,6 +814,7 @@ class ConfigManager:
             "global_positive_enabled": False,
             "global_negative_enabled": True,
             "output_dir": str(Path("output")),
+            "eval_plans_dir": "",
             "model_dir": str(Path("models")),
             "prompt_optimizer": dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS),
         }

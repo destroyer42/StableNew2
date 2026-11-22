@@ -19,6 +19,7 @@ from pathlib import Path
 from src.utils.atomic_io import atomic_write_json
 from src.video.motion_source_preparation import sha256_file
 from src.video.workflow_asset_integrity import model_folders
+from tools.qualification.eval_plan_output import plan_output
 from tools.qualification.fun354 import q0
 from tools.qualification.fun354.inputs import load_input_set, rebuild_plan
 from tools.qualification.fun354.plan import QualificationPlan, build_plan
@@ -104,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     propose = sub.add_parser("propose")
-    propose.add_argument("--out", required=True)
+    propose.add_argument("--out")
     check = sub.add_parser("check")
     check.add_argument("--plan", required=True)
     check.add_argument("--out", required=True)
@@ -116,7 +117,10 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--reference")
         p.add_argument("--inputs-manifest")
     args = parser.parse_args(argv)
-    return _propose(args) if args.command == "propose" else _check(args)
+    if args.command == "propose":
+        args.out = plan_output(propose, args.out, "fun354", filename="plan.json")
+        return _propose(args)
+    return _check(args)
 
 
 if __name__ == "__main__":

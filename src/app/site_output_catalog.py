@@ -19,6 +19,7 @@ from src.app.site_native_review import NativeImageReview
 from src.app.site_output_library import OutputLibrary
 from src.app.site_rating_sync import edit_stamp, field_conflicts, root_identity, was_applied
 from src.app.site_video_playback import VIDEO_LIMIT, VideoPlayback
+from src.video.video_eval_catalog import RUN_ID_PATTERN, list_run_ids
 from src.video.video_eval_ratings_store import (
     ARTIFACT_COLUMN,
     KEY_COLUMNS,
@@ -35,11 +36,9 @@ from src.video.video_eval_rubric import parse_rating_row, row_has_content
 from src.video.video_eval_run import EVAL_OUTPUT_FOLDER, RUN_MANIFEST_NAME, RUN_SCHEMA
 
 _REPORT_SCHEMA = "stablenew.video-eval-report.v1"
-_RUN_ID = re.compile(r"\d{8}_\d{6}_[a-zA-Z0-9_-]{1,150}")
 _DIGEST = re.compile(r"[a-f0-9]{64}")
 _MAX_REPORT = 5 * 1024 * 1024
 _MAX_MEDIA = 64 * 1024 * 1024
-_MAX_RUNS = 100
 _MAX_CELLS = 500
 _JUDGMENTS = set(RATING_COLUMNS) - {*KEY_COLUMNS, ARTIFACT_COLUMN}
 _RECEIPTS_COLUMN = "site_rating_receipts"
@@ -126,7 +125,7 @@ class SiteOutputCatalog:
         return inside(self._root, path)
 
     def _report_paths(self, run_id: str) -> tuple[Path, Path]:
-        if not _RUN_ID.fullmatch(run_id):
+        if not RUN_ID_PATTERN.fullmatch(run_id):
             raise SiteOutputError("unknown_run")
         directory = self._inside(self._root / EVAL_OUTPUT_FOLDER / run_id)
         return (
@@ -135,33 +134,15 @@ class SiteOutputCatalog:
         )
 
     def list_runs(self, *, include_unbuilt: bool = False) -> list[str]:
-        try:
-            root = self._inside(self._root / EVAL_OUTPUT_FOLDER)
-            candidates = sorted(
-                (path.name for path in root.iterdir() if _RUN_ID.fullmatch(path.name)),
-                reverse=True,
-            )
-        except (OSError, SiteOutputError):
-            return []
-        runs = []
-        for name in candidates:
-            try:
-                if include_unbuilt:
-                    directory = self._inside(root / name)
-                    if self._inside(directory / RUN_MANIFEST_NAME).is_file():
-                        runs.append(name)
-                else:
-                    manifest, metrics = self._report_paths(name)
-                    if manifest.is_file() and metrics.is_file():
-                        runs.append(name)
-            except (OSError, SiteOutputError):
-                continue
-            if len(runs) == _MAX_RUNS:
-                break
-        return runs
+        return list_run_ids(
+            self._root,
+            include_unbuilt=include_unbuilt,
+            resolve_path=self._inside,
+            path_error=SiteOutputError,
+        )
 
     def eval_manifest(self, run_id: str) -> tuple[Path, dict[str, Any]]:
-        if not _RUN_ID.fullmatch(run_id):
+        if not RUN_ID_PATTERN.fullmatch(run_id):
             raise SiteOutputError("unknown_run")
         directory = self._inside(self._root / EVAL_OUTPUT_FOLDER / run_id)
         manifest = _bounded_json(self._root, directory / RUN_MANIFEST_NAME)

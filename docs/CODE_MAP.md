@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-787 of 942 modules have a docstring.
+790 of 945 modules have a docstring.
 
 ## src/
 
@@ -903,6 +903,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Runtime-state and workspace-path helpers for StableNew
 - `content_visibility.py`: (no docstring)
+- `eval_plans_paths.py`: Names and first-use contents of the Evaluation Plans workspace
 - `output_routing.py`: (no docstring)
 - `workspace_paths.py`: Centralized paths for mutable StableNew workspace data
 
@@ -1024,7 +1025,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_backend_types.py`: (no docstring)
 - `video_eval_assessment.py`: Pure identity and continuity assessment of an eval run (PR-VID-QUALITY-351)
 - `video_eval_assessment_html.py`: HTML fragments for the identity assessment in the eval contact sheet (PR-VID-QUALITY-351)
+- `video_eval_catalog.py`: Read-only discovery of video evaluation plans and runs
 - `video_eval_identity.py`: Source-image, clip and job identity for eval reports (PR-VID-QUALITY-351)
+- `video_eval_import.py`: Copy a video suite into Evaluation Plans while keeping its source references usable
 - `video_eval_metrics.py`: Deterministic clip measurements for the video eval kit (PR-VID-EVAL-320)
 - `video_eval_ratings_store.py`: Safe, lossless persistence for an eval run's ``ratings.csv`` (PR-VID-QUALITY-351)
 - `video_eval_report.py`: Measure an admitted eval run and write its contact sheet (PR-VID-EVAL-320)
