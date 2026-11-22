@@ -10,8 +10,9 @@ work. Not a qualification: no physical run of this product code has been made.
 from __future__ import annotations
 
 import random
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 
 from src.image_backends.forge_klein_profile import KleinProfileError, _model_key
@@ -80,7 +81,7 @@ _GEOMETRIES: tuple[tuple[int, int], ...] = (
 class QwenImageProfile:
     profile_id: str
     display_name: str
-    #: The diffusion-model asset; its filename is the one model identity StableNew offers and persists.
+    #: The pinned diffusion asset, or the published example name for a structural profile.
     diffusion_model: ComfyModelAsset
     #: The frozen graph (``comfy_image_graphs``) this profile runs.
     graph_id: str
@@ -102,6 +103,7 @@ class QwenImageProfile:
     modes: tuple[str, ...] = ("txt2img",)
     max_loras: int = 0
     resources: QwenImageResources = QwenImageResources()
+    structural_transformer: bool = False
 
     @property
     def model_name(self) -> str:
@@ -151,7 +153,56 @@ QWEN_IMAGE_PROFILES: tuple[QwenImageProfile, ...] = (
     QWEN_IMAGE_21_PROFILE_V1,
     QWEN_IMAGE_21_TURBO_PROFILE_V1,
 )
-_BY_ID = {profile.profile_id: profile for profile in QWEN_IMAGE_PROFILES}
+QWEN_IMAGE_20B_FP8_PROFILE_V1 = QwenImageProfile(
+    profile_id="qwen_image_20b_fp8",
+    display_name="Qwen-Image 20B FP8 (Comfy)",
+    diffusion_model=ComfyModelAsset(
+        "diffusion_model",
+        "diffusion_models",
+        "qwen_image_fp8_e4m3fn.safetensors",
+        0,
+        "",
+    ),
+    graph_id="qwen_image_20b_fp8_t2i",
+    graph_version="1.0.0",
+    steps=20,
+    sampler="euler",
+    scheduler="simple",
+    cfg_scale=4.0,
+    repo_id="Comfy-Org/Qwen-Image",
+    revision="25608066f9bf5cdc28020836ce9549587053f346",
+    licence="Apache-2.0",
+    text_encoder=ComfyModelAsset(
+        "text_encoder",
+        "text_encoders",
+        "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+        9_384_670_680,
+        "cb5636d852a0ea6a9075ab1bef496c0db7aef13c02350571e388aea959c5c0b4",
+    ),
+    vae=ComfyModelAsset(
+        "vae",
+        "vae",
+        "qwen_image_vae.safetensors",
+        253_806_246,
+        "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f",
+    ),
+    resources=QwenImageResources(min_free_vram_bytes=11 * 1024**3, min_free_ram_bytes=28 * 1024**3),
+    structural_transformer=True,
+)
+_BY_ID = {
+    profile.profile_id: profile for profile in (*QWEN_IMAGE_PROFILES, QWEN_IMAGE_20B_FP8_PROFILE_V1)
+}
+
+_structural_lookup: Callable[[str], bool] | None = None
+
+
+def install_qwen_structure_lookup(
+    lookup: Callable[[str], bool] | None,
+) -> Callable[[str], bool] | None:
+    global _structural_lookup
+    previous, _structural_lookup = _structural_lookup, lookup
+    return previous
+
 
 _MODEL_KEYS = ("model", "model_name", "base_model", "sd_model_checkpoint")
 _FIXED_EMPTY = ("negative_prompt", "global_positive_prompt", "global_negative_prompt")
@@ -194,13 +245,38 @@ _STAGE_AUTHORITATIVE = frozenset({"width", "height"})
 _MAX_SEED = 2**32 - 1
 
 
-def qwen_image_profile_for_model(name: str | None) -> QwenImageProfile | None:
-    """The exact profile whose diffusion model this selection names (whole-name match only)."""
+def qwen_image_profile_for_model(
+    name: str | None, *, structural: bool = True
+) -> QwenImageProfile | None:
+    """Resolve a pinned name first, then the installed application's structural evidence."""
 
     if not name:
         return None
     key = _model_key(str(name))
-    return next((p for p in QWEN_IMAGE_PROFILES if _model_key(p.model_name) == key), None)
+    exact = next((p for p in QWEN_IMAGE_PROFILES if _model_key(p.model_name) == key), None)
+    if exact is not None:
+        return exact
+    if structural and _structural_lookup is not None and _structural_lookup(name):
+        return QWEN_IMAGE_20B_FP8_PROFILE_V1
+    return None
+
+
+def qwen_transformer_loader_name(model_name: str) -> str:
+    """Normalize a catalog selection while preserving its path relative to a loader root."""
+
+    selection = model_name.rsplit(" [", 1)[0] if model_name.endswith("]") else model_name
+    relative = PurePosixPath(selection.replace("\\", "/"))
+    if not relative.name or relative.is_absolute() or ".." in relative.parts or ":" in selection:
+        return ""
+    return str(relative) if relative.suffix.lower() == ".safetensors" else f"{relative}.safetensors"
+
+
+def qwen_model_matches(profile: QwenImageProfile, name: Any) -> bool:
+    """Persisted structural work is checked against the actual loader file at dispatch."""
+
+    if profile.structural_transformer:
+        return bool(qwen_transformer_loader_name(str(name or "").strip()))
+    return bool(name and _model_key(str(name)) == _model_key(profile.model_name))
 
 
 def is_qwen_image_model_name(name: str | None) -> bool:
@@ -243,7 +319,11 @@ def qwen_image_selected(config: Mapping[str, Any]) -> QwenImageProfile | None:
 
 
 def validate_qwen_image_config(
-    profile: QwenImageProfile, config: Mapping[str, Any], *, negative: str = ""
+    profile: QwenImageProfile,
+    config: Mapping[str, Any],
+    *,
+    negative: str = "",
+    model_name: str | None = None,
 ) -> None:
     """Reject every represented conflict with the profile's v1 envelope; missing values take v1 defaults."""
 
@@ -251,10 +331,19 @@ def validate_qwen_image_config(
     problems: list[str] = []
     pipeline = config.get("pipeline")
     sizes = {side for geometry in p.geometries for side in geometry}
+    selection_key = qwen_transformer_loader_name if p.structural_transformer else _model_key
+    selected_key = selection_key(model_name) if model_name else None
     for section in (*_sections(config), pipeline if isinstance(pipeline, Mapping) else {}):
         for key in _MODEL_KEYS:
-            if section.get(key) and qwen_image_profile_for_model(str(section[key])) is not p:
-                problems.append(f"conflicting model {section[key]}")
+            requested = section.get(key)
+            if requested and (
+                not qwen_model_matches(p, requested)
+                or (
+                    selected_key is not None
+                    and selection_key(str(requested)).casefold() != selected_key.casefold()
+                )
+            ):
+                problems.append(f"conflicting model {requested}")
         for key in ("sampler", "sampler_name"):
             if section.get(key) not in (None, "", p.sampler):
                 problems.append(f"{key} {section[key]!r} conflicts with the fixed {p.sampler!r}")
@@ -354,8 +443,13 @@ def _clear_unsupported(profile: QwenImageProfile, config: dict[str, Any]) -> Non
 def apply_qwen_image_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
     """Freeze the selected v1 profile into a merged run configuration (in place); a no-op for every other model."""
 
-    profile = qwen_image_selected(config)
+    from src.image_backends.forge_flux1_profile import selected_model_name
+
+    model_name = selected_model_name(config)
     frozen = frozen_qwen_image_profile(config.get("backend_options"))
+    profile = qwen_image_selected(config)
+    if profile is None and frozen is not None and frozen.structural_transformer and model_name:
+        profile = frozen
     if profile is None:
         if frozen is not None:
             raise QwenImageProfileError(
@@ -367,16 +461,15 @@ def apply_qwen_image_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
             f"{profile.display_name} conflicts with the frozen {frozen.display_name} profile of this work"
         )
     _clear_unsupported(profile, config)
-    validate_qwen_image_config(profile, config)
+    model_name = model_name if profile.structural_transformer else profile.model_name
+    validate_qwen_image_config(profile, config, model_name=model_name)
     from src.image_backends.exact_model_profile import resolve_model_profile
     from src.image_backends.image_backend_types import (
         normalize_image_backend_options,
         resolve_image_backend_id,
     )
 
-    options = normalize_image_backend_options(
-        config.get("backend_options"), model_name=profile.model_name
-    )
+    options = normalize_image_backend_options(config.get("backend_options"), model_name=model_name)
     if (
         resolve_image_backend_id(options) != profile.backend_id
         or resolve_model_profile(options) is not profile
@@ -385,11 +478,17 @@ def apply_qwen_image_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
             f"{profile.display_name} runs only on the '{profile.backend_id}' image backend with its exact v1 "
             "profile; StableNew never switches or falls back between backends"
         )
+    if profile.structural_transformer:
+        from src.image_backends.comfy_image_readiness import check_installation
+
+        readiness = check_installation(profile, model_name=model_name)
+        if not readiness.ready:
+            raise QwenImageProfileError(readiness.summary)
     config["backend_options"] = options
     stage = config.setdefault("txt2img", {})
     width, height = profile.geometries[0]
     defaults: dict[str, Any] = {
-        "model": profile.model_name,
+        "model": model_name,
         "sampler_name": profile.sampler,
         "scheduler": profile.scheduler,
         "steps": profile.steps,
@@ -421,8 +520,15 @@ def validate_qwen_image_njr(njr: Any, stage_names: list[str] | None = None) -> N
     from src.image_backends.image_backend_types import resolve_image_backend_id
 
     options = getattr(njr, "backend_options", None) or {}
-    selected = qwen_image_profile_for_model(getattr(njr, "base_model", None))
+    model_name = getattr(njr, "base_model", None)
     frozen = frozen_qwen_image_profile(options)
+    selected = (
+        frozen
+        if frozen is not None
+        and frozen.structural_transformer
+        and qwen_model_matches(frozen, model_name)
+        else qwen_image_profile_for_model(model_name)
+    )
     profile = selected or frozen
     if profile is None:
         return
@@ -458,6 +564,7 @@ def validate_qwen_image_njr(njr: Any, stage_names: list[str] | None = None) -> N
         profile,
         getattr(njr, "config", None) or {},
         negative=str(getattr(njr, "negative_prompt", "") or ""),
+        model_name=model_name,
     )
     validate_qwen_image_config(
         profile,

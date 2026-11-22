@@ -695,12 +695,12 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         model = self._normalize_model_name(self.model_var.get())
         entry = picker_entry(entries, model) if model else None
         refusal = getattr(getattr(entry, "picker", None), "refusal", "")
-        if projected and projected.constrained:
+        if projected and projected.constrained and not refusal:
             return  # The executable policy owns its controls and explanation.
-        if projected and projected.blocking:
-            text = projected.blocking
-        elif refusal:
+        if refusal:
             text = refusal
+        elif projected and projected.blocking:
+            text = projected.blocking
         elif entries and model and self._model_combo is not None and self.model_var.get() not in self._model_combo["values"]:
             text = self._unavailable_model_message(self.model_var.get())
         else:

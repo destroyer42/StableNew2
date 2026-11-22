@@ -29,7 +29,6 @@ from enum import Enum
 from typing import Any
 
 from src.assets.flux_variant import (
-    VARIANT_FLUX1_DEV,
     VARIANT_FLUX1_SCHNELL,
     VARIANT_FLUX2_KLEIN_4B,
     VARIANT_FLUX2_KLEIN_9B,
@@ -37,6 +36,7 @@ from src.assets.flux_variant import (
     variant_label,
 )
 from src.image_backends.comfy_qwen_image_profile import (
+    QWEN_IMAGE_20B_FP8_PROFILE_V1,
     QwenImageProfile,
     apply_qwen_image_compile_policy,
     frozen_qwen_image_profile,
@@ -53,9 +53,9 @@ from src.image_backends.diffusers_ideogram4_profile import (
 )
 from src.image_backends.exact_model_profile import ExactModelProfile, resolve_model_profile
 from src.image_backends.forge_flux1_profile import (
-    FLUX1_DEV_PROFILE_V1,
     Flux1Profile,
     apply_flux1_compile_policy,
+    flux1_profile_for_variant,
     flux1_selected,
     flux_variant_refusal,
     frozen_profile_is_flux1,
@@ -84,6 +84,7 @@ from src.image_backends.image_backend_types import (
     normalize_image_backend_options,
     resolve_image_backend_id,
 )
+from src.image_backends.model_readiness import z_image_variant_refusal
 
 # -- broad model families (concept B) ---------------------------------------------------------------------------
 FAMILY_SDXL = "sdxl"
@@ -392,7 +393,7 @@ def _ideogram4_policy(profile: Ideogram4Profile) -> ModelPolicy:
 
 
 def _flux1_policy(profile: Flux1Profile) -> ModelPolicy:
-    """FLUX.1 [dev] family profile (PR-IMG-FLUX-130): txt2img only, fixed distilled settings, the five sizes."""
+    """FLUX.1 txt2img family policy with fixed sampling and verified separate modules."""
 
     fixed = ControlMode.FIXED
     return ModelPolicy(
@@ -406,12 +407,13 @@ def _flux1_policy(profile: Flux1Profile) -> ModelPolicy:
             geometry=ControlPolicy(ControlMode.CONFIGURABLE, allowed=profile.geometries),
         ),
         features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
-        note=(f"FLUX.1 [dev]-class transformer on the managed Forge: {profile.sampler} / {profile.scheduler} / "
-              f"{profile.steps} steps / CFG {profile.cfg_scale:g} / distilled guidance {profile.distilled_cfg_scale:g}, "
-              "one image, txt2img only. Any transformer-only file with the FLUX.1 [dev] layout runs under this profile "
-              "(fine-tunes included; its SHA-256 is recorded, not required). CLIP-L, T5-XXL FP8 and the FLUX.1 VAE must be "
-              "the exact pinned files. No negative prompt, LoRA, embeddings or extra stages. Non-commercial licence. "
-              "Not yet physically qualified in StableNew."),
+        note=(f"{profile.display_name} on managed Forge: {profile.sampler} / {profile.scheduler} / "
+              f"{profile.steps} steps / CFG {profile.cfg_scale:g}, one image, txt2img only. "
+              f"Requires {', '.join(asset.filename for asset in profile.modules)}. "
+              "The transformer SHA-256 is recorded at dispatch. No negative prompt, LoRA, embeddings or extra stages. "
+              + ("Apache-2.0. " if profile.transformer_variant == VARIANT_FLUX1_SCHNELL else
+                 f"Distilled guidance {profile.distilled_cfg_scale:g}. Non-commercial licence. ")
+              + "Physical qualification is pending."),
     )
 
 
@@ -439,12 +441,12 @@ def _flux_refused_policy(variant: str) -> ModelPolicy:
 
 
 def _qwen_image_policy(profile: QwenImageProfile) -> ModelPolicy:
-    """Qwen-Image 2.1 on the Comfy still-image backend (PR-IMG-COMFY-100): txt2img only, frozen graph values."""
+    """Qwen-Image txt2img on the managed Comfy backend with immutable graph values."""
 
     fixed = ControlMode.FIXED
     return ModelPolicy(
         policy_id=profile.profile_id, family=FAMILY_QWEN_IMAGE, display_name=profile.display_name,
-        evidence=EVIDENCE_PROFILE, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
+        evidence=EVIDENCE_STRUCTURAL if profile.structural_transformer else EVIDENCE_PROFILE, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
         profile_ref=profile.reference(), stages=(STAGE_TXT2IMG,), modes=profile.modes,
         controls=_controls(
             sampler=ControlPolicy(fixed, profile.sampler), scheduler=ControlPolicy(fixed, profile.scheduler),
@@ -456,8 +458,13 @@ def _qwen_image_policy(profile: QwenImageProfile) -> ModelPolicy:
               f"releases its own Forge/A1111 and SVD runtimes; ComfyUI is stopped after each job, so each job loads the "
               f"model again. Fixed {profile.steps} steps, cfg {profile.cfg_scale:g}; sizes are the 1-megapixel set "
               "(1024x1024 and six aspect ratios). Plain natural-language prompts only: no negative prompt, LoRA, "
-              "embeddings or extra stages. Weights are never downloaded by StableNew. Non-commercial licence (Qwen "
-              "Research License). Not yet physically qualified in StableNew."),
+              "embeddings or extra stages. Weights are never downloaded by StableNew. "
+              + (
+                  f"Requires {profile.text_encoder.filename} and {profile.vae.filename}. "
+                  f"Licence: {profile.licence}. "
+                  if profile.structural_transformer else "Non-commercial licence (Qwen Research License). "
+              )
+              + "Not yet physically qualified in StableNew."),
     )  # fmt: skip
 
 
@@ -528,7 +535,7 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
         return policy_for_profile(ZIMAGE_PROFILE_V1)
     if is_ideogram4_model_name(model_name):
         return policy_for_profile(IDEOGRAM4_PROFILE_V1)
-    qwen = qwen_image_profile_for_model(model_name)
+    qwen = qwen_image_profile_for_model(model_name, structural=family_lookup is None)
     if qwen is not None:
         return policy_for_profile(qwen)
     if not str(model_name or "").strip() or family_lookup is None:
@@ -550,15 +557,27 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
     if status != "resolved" or family is None:
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_UNKNOWN)
     family_value = str(getattr(family, "value", family))
+    architecture = getattr(compat, "checkpoint_architecture", None)
+    if family_value == FAMILY_QWEN_IMAGE and architecture == "qwen_image_20b_fp8":
+        return policy_for_profile(QWEN_IMAGE_20B_FP8_PROFILE_V1)
+    if family_value == "z_image":
+        refusal = z_image_variant_refusal()
+        return ModelPolicy(
+            policy_id="z_image_variant_unverified", family=family_value, display_name="Z-Image (variant unverified)",
+            evidence=EVIDENCE_STRUCTURAL, allowed_backends=(FORGE_IMAGE_BACKEND_ID,),
+            controls=_controls(), features=_features(_UNSUPPORTED), stages=(), modes=(),
+            prompt_dialect=DIALECT_NATURAL_LANGUAGE, note=refusal, refusal=refusal,
+        )
     if family_value == FAMILY_SDXL:
         return _sdxl_policy(EVIDENCE_REGISTRY)
     if family_value == FAMILY_FLUX:
         # PR-IMG-FLUX-130: a transformer-only FLUX layout class recorded from structure. A bundled (all-in-one) FLUX
         # checkpoint and a filename/metadata-only FLUX label keep the previous labelled-but-unverified projection.
-        layout = variant_from_architecture(getattr(compat, "checkpoint_architecture", None))
+        layout = variant_from_architecture(architecture)
+        executable = flux1_profile_for_variant(layout)
+        if executable is not None:
+            return policy_for_profile(executable)
         if layout is not None and not layout[1]:
-            if layout[0] == VARIANT_FLUX1_DEV:
-                return policy_for_profile(FLUX1_DEV_PROFILE_V1)
             return _flux_refused_policy(layout[0])
     return _unverified_policy(family_value, EVIDENCE_REGISTRY)  # sd1/sd2/sd3/flux: labelled, never qualified
 
@@ -623,7 +642,9 @@ class RegistryFamilyLookup:
                      item.checkpoint_architecture in ("sdxl_refiner", "sdxl_inpaint"),
                      bool(item.structural_error),
                      # Two same-named files of different FLUX layouts are a conflict, never a pick.
-                     variant_from_architecture(item.checkpoint_architecture)) for item in found}
+                     variant_from_architecture(item.checkpoint_architecture),
+                     item.checkpoint_architecture if item.family and item.family.value in ("qwen_image", "z_image")
+                     else None) for item in found}
         if len(outcomes) > 1:
             return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, ())
         return found[0]

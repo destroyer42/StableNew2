@@ -39,7 +39,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
   and `docs/Subsystems/Image/MODEL_PROFILES.md`. The per-PR records linked below are historical evidence and lose to the code and the living docs.
 - Forge is the default backend; A1111 is the rollback/compatibility backend (`docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`).
   Backend-neutral execution: `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`.
-- Exact model profiles: FLUX.2 Klein 4B FP8 (`docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`) and
+- Image model profiles include managed Comfy Qwen-Image 20B FP8 and Forge FLUX.1 dev/schnell (physical qualification pending). Exact profiles include FLUX.2 Klein 4B FP8 (`docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`) and
   Z-Image-Turbo FP8 (`docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md`; physical qualification
   inconclusive, see Holds). Klein Base 9B is refused (`NO_GO_RESOURCE_RISK`). Advisory generation profiles: `MODEL_PROFILES.md` section 17.
 - SDXL PromptPack ControlNet: legacy OpenPose and up to two ordered pre-rendered OpenPose/Canny/Depth units, with maps that can be created on request from a reference image (Canny and depth need no new package; OpenPose needs the pinned `onnxruntime` installed by a re-bootstrap; real-model output is unqualified) (`docs/Subsystems/Image/IMAGE_PIPELINE.md` section 3.1); ADetailer control

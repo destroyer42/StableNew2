@@ -17,7 +17,7 @@ import struct
 from pathlib import Path
 from typing import Any
 
-STRUCTURE_CONTRACT = "checkpoint_structure/2"
+STRUCTURE_CONTRACT = "checkpoint_structure/3"
 _MAX_HEADER = 64 * 1024 * 1024
 # Inspection supports ordinary tensor ranks without allowing adversarial work.
 _MAX_TENSOR_RANK = 64
@@ -188,13 +188,22 @@ def checkpoint_variant_from_metadata(metadata: dict[str, Any]) -> str | None:
     return None
 
 
-def _flux_variant_of_table(shapes: dict[str, list[int]], dtypes: dict[str, str]) -> str | None:
+def _transformer_structure(shapes: dict[str, list[int]], dtypes: dict[str, str]) -> dict[str, Any]:
     # Deferred: component_evidence imports this module's parser.
-    from src.assets.component_evidence import classify_tensor_table
+    from src.assets.component_evidence import (
+        ARCH_QWEN_IMAGE_DIT,
+        ARCH_Z_IMAGE_DIT,
+        classify_tensor_table,
+        is_qwen_image_20b_fp8,
+    )
     from src.assets.flux_variant import classify_flux_variant
 
-    variant = classify_flux_variant(classify_tensor_table(shapes, dtypes))
-    return None if variant is None else variant.architecture_id
+    component = classify_tensor_table(shapes, dtypes)
+    if component.architecture in (ARCH_QWEN_IMAGE_DIT, ARCH_Z_IMAGE_DIT):
+        architecture = "qwen_image_20b_fp8" if is_qwen_image_20b_fp8(component) else component.architecture
+        return {"architecture": architecture, "facts": dict(component.facts)}
+    variant = classify_flux_variant(component)
+    return {"architecture": variant.architecture_id if variant else "unrecognized"}
 
 
 def _flux_variant_of(path: Path) -> str | None:
@@ -208,7 +217,7 @@ def _flux_variant_of(path: Path) -> str | None:
 def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
     """Read at most a bounded JSON header, validating descriptors against file size.
 
-    No weights, hash, scan or imports of another model detector. Missing tensor
+    No weights, hash or directory scan. Missing tensor
     descriptors retain existing metadata-only semantics. Invalid descriptors
     cannot manufacture structural or metadata admission evidence.
     """
@@ -234,7 +243,7 @@ def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
         if error:
             structure["error"] = error
         elif structure["architecture"] == "unrecognized":
-            structure["architecture"] = _flux_variant_of_table(shapes, dtypes) or "unrecognized"
+            structure.update(_transformer_structure(shapes, dtypes))
     except (OSError, ValueError, TypeError, UnicodeDecodeError, struct.error):
         # Diagnostic intentionally omits local paths and raw authored metadata.
         structure["error"] = "malformed or truncated safetensors header/tensor descriptors"

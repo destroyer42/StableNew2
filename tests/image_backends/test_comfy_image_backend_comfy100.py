@@ -3,8 +3,12 @@ artifact and release contract, and the canonical ``run_njr`` route. Everything r
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import random
+import struct
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -13,23 +17,33 @@ import pytest
 from PIL import Image
 
 from src.api.http_transport import DispatchOutcomeUnknown
+from src.assets import AssetRegistry
+from src.assets.compatibility import ModelFamily
 from src.controller.runtime_state import CancellationError
-from src.image_backends import ImageBackendRegistry, ImageExecutionRequest
+from src.image_backends import ImageBackendRegistry, ImageExecutionRequest, comfy_image_readiness
+from src.image_backends import comfy_qwen_image_profile as qwen
 from src.image_backends.comfy_image_backend import (
     REQUIRED_LAUNCH_FLAGS,
     ComfyImageBackend,
     ComfyImageExecutionError,
     ComfyImageUnavailable,
 )
-from src.image_backends.comfy_image_graphs import QWEN_IMAGE_21_T2I, QWEN_IMAGE_21_TURBO_T2I
+from src.image_backends.comfy_image_graphs import (
+    QWEN_IMAGE_20B_FP8_T2I,
+    QWEN_IMAGE_21_T2I,
+    QWEN_IMAGE_21_TURBO_T2I,
+)
 from src.image_backends.comfy_image_readiness import (
     ComfyImageResourceError,
     ComfyInstallationStatus,
+    check_installation,
 )
+from src.image_backends.comfy_qwen_image_profile import QWEN_IMAGE_20B_FP8_PROFILE_V1 as ORIGINAL
 from src.image_backends.comfy_qwen_image_profile import QWEN_IMAGE_21_PROFILE_V1 as BASE
 from src.image_backends.comfy_qwen_image_profile import QWEN_IMAGE_21_TURBO_PROFILE_V1 as TURBO
 from src.image_backends.comfy_qwen_image_profile import QwenImageProfileError
 from src.image_backends.diffusers_ideogram4_profile import IDEOGRAM4_PROFILE_V1
+from src.image_backends.model_policy import resolve_model_policy
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.services.runtime_transition_service import RuntimeTransitionError, RuntimeTransitionStatus
@@ -432,6 +446,112 @@ def test_canonical_run_njr_dispatches_to_comfy_without_any_webui_call(
         "noise_seed")) == 5  # fmt: skip
     assert webui.method_calls == [] and runner._pipeline.client is None
     assert manager.stops == 1
+
+
+def _write_original_fp8(root: Path) -> Path:
+    shapes = {
+        "img_in.weight": [3072, 64],
+        "txt_in.weight": [3072, 3584],
+        "txt_norm.weight": [3584],
+        "transformer_blocks.0.attn.add_q_proj.weight": [1],
+        **{f"transformer_blocks.{index}.fixture": [1] for index in range(60)},
+    }
+    descriptors = {}
+    offset = 0
+    for name, shape in shapes.items():
+        end = offset + math.prod(shape)
+        descriptors[name] = {"shape": shape, "dtype": "F8_E4M3", "data_offsets": [offset, end]}
+        offset = end
+    header = json.dumps(descriptors).encode()
+    root.mkdir(parents=True)
+    path = root / "renamed-original.safetensors"
+    path.write_bytes(struct.pack("<Q", len(header)) + header + bytes(offset))
+    return path
+
+
+def test_structural_qwen_preview_and_runner_use_the_selected_file(tmp_path, monkeypatch):
+    folders = {name: [tmp_path / name] for name in ("diffusion_models", "text_encoders", "vae")}
+    checkpoint = _write_original_fp8(folders["diffusion_models"][0])
+    registry = AssetRegistry(tmp_path, cache_path=tmp_path / "registry.json")
+    compatibility = registry.inspect_checkpoint(checkpoint).compatibility
+    assert compatibility.family is ModelFamily.QWEN_IMAGE
+    policy = resolve_model_policy(checkpoint.name, family_lookup=lambda _: compatibility)
+    assert policy.profile_ref == ORIGINAL.reference()
+    assert policy.required_backend == "comfyui"
+
+    monkeypatch.setattr(qwen, "_structural_lookup", lambda name: name == checkpoint.name)
+    monkeypatch.setattr(comfy_image_readiness, "comfy_model_folders", lambda: folders)
+    config = {
+        "model": checkpoint.name,
+        "prompt": "A ceramic teapot.",
+        "seed": 5,
+        "width": 1024,
+        "height": 1024,
+    }
+    with pytest.raises(QwenImageProfileError, match="needs the Qwen2.5-VL-7B text encoder"):
+        JobBuilderV2().build_jobs(base_config=config)
+
+    def small_asset(asset, content):
+        directory = folders[asset.folder][0]
+        directory.mkdir()
+        (directory / asset.filename).write_bytes(content)
+        return replace(asset, size=len(content), sha256=hashlib.sha256(content).hexdigest())
+
+    test_profile = replace(
+        ORIGINAL,
+        text_encoder=small_asset(ORIGINAL.text_encoder, b"encoder"),
+        vae=small_asset(ORIGINAL.vae, b"vae"),
+    )
+    monkeypatch.setattr(
+        comfy_image_readiness,
+        "check_installation",
+        lambda profile, **kwargs: check_installation(test_profile, **kwargs),
+    )
+    record = JobBuilderV2().build_jobs(base_config=config)[0]
+    assert (
+        record.base_model == checkpoint.name
+        and record.backend_options["image"] == options(ORIGINAL)["image"]
+    )
+    info = object_info()
+    info.update(
+        {
+            name: {"input": {"required": {}}}
+            for name in QWEN_IMAGE_20B_FP8_T2I.required_node_classes
+            if name not in info
+        }
+    )
+    info["UNETLoader"]["input"]["required"] = {
+        "unet_name": [[checkpoint.name]],
+        "weight_dtype": [["fp8_e4m3fn"]],
+    }
+    info["CLIPLoader"]["input"]["required"]["clip_name"] = [[ORIGINAL.text_encoder.filename]]
+    info["VAELoader"]["input"]["required"]["vae_name"] = [[ORIGINAL.vae.filename]]
+    client = FakeComfyClient(info=info, stats=system_stats(ram_free=29 * GIB))
+    manager = FakeManager()
+    backend = ComfyImageBackend(
+        transition=FakeTransition(),
+        process_manager=manager,
+        client_factory=lambda _: client,
+        installation=lambda _: check_installation(
+            test_profile, model_name=checkpoint.name, verify_sha256=True
+        ),
+        temp_root=str(tmp_path),
+    )
+    registry = ImageBackendRegistry()
+    registry.register(backend)
+    runner = PipelineRunner(
+        Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"), image_backend_registry=registry
+    )
+    runner._pipeline = _NoWebUIPipeline()
+    result = runner.run_njr(record)
+    assert result.success, result.error
+    assert len(client.payloads) == 1 and manager.stops == 1
+    graph = client.payloads[0]["prompt"]
+    assert graph["1"]["inputs"] == {"unet_name": checkpoint.name, "weight_dtype": "fp8_e4m3fn"}
+    assert graph["7"]["inputs"]["steps"] == 20 and graph["7"]["inputs"]["cfg"] == 4.0
+    manifest = next(Path(result.output_paths[0]).parent.glob("manifests/*.json"))
+    identity = json.loads(manifest.read_text(encoding="utf-8"))["model_identity"]
+    assert identity["files"][checkpoint.name] == hashlib.sha256(checkpoint.read_bytes()).hexdigest()
 
 
 def test_the_registered_comfy_owner_wins_and_construction_stays_in_the_video_module(

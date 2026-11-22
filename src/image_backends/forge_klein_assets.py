@@ -227,7 +227,7 @@ def verify_flux1_assets(
 
     Requires the StableNew-owned managed Forge at the profile's pinned revision (like Z-Image). The transformer Forge will
     load is located from its own catalog, classified from its bounded header (``inspect``: path -> ``ComponentEvidence``)
-    and must be a transformer-only FLUX.1 [dev]-class file in an admitted precision; its SHA-256 is then recorded, never
+    and must match the profile's standalone FLUX.1 layout and precision; its SHA-256 is then recorded, never
     compared against a pin. Each module must be the one served file under its pinned name, with the pinned size and SHA-256.
     ``inspect`` and ``verify_launch`` are test seams.
     """
@@ -250,7 +250,7 @@ def verify_flux1_assets(
     if variant is None or variant.variant != profile.transformer_variant or variant.bundled:
         found = "not a FLUX transformer" if variant is None else variant.label
         raise KleinProfileError(
-            f"{profile.display_name} admits only a transformer-only FLUX.1 [dev]-class checkpoint; the served "
+            f"{profile.display_name} requires its own transformer-only FLUX.1 layout; the served "
             f"{transformer.name} is {found}."
         )
     if variant.precision not in profile.transformer_precisions:
