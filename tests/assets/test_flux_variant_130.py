@@ -209,7 +209,7 @@ def test_architecture_ids_round_trip():
 
 
 def test_header_evidence_contract_two_records_the_flux_layout(tmp_path, monkeypatch):
-    assert STRUCTURE_CONTRACT == "checkpoint_structure/2"
+    assert STRUCTURE_CONTRACT == "checkpoint_structure/3"
     gguf = checkpoint_header_evidence(write_gguf(tmp_path / "flux1-dev-Q4_K_S.gguf", flux1_table()))
     assert gguf["structure"] == {
         "contract": STRUCTURE_CONTRACT,

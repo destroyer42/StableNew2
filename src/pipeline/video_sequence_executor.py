@@ -10,6 +10,12 @@ segments. ``release_runtime`` is called exactly once, in ``finally``, on success
 ``BaseException``; it goes through the backend's existing ownership interface, which only stops a process StableNew
 launched and still owns and never touches an external one. The release never masks the error that ended the sequence.
 
+Storyboard takes (policy v2, PR-VID-STORY-380). A take that continues from a parent cut checks the pinned parent
+manifest and the handoff PNG before anything is dispatched, at every start. After each committed segment, and before the
+ledger that names it is written, it rewrites its own cut manifest, so finished takes can be viewed and continued from
+even when a later segment or the assembly does not finish. The assembly puts the lead-in first, each frame re-hashed,
+and segment 0's one-frame overlap drops its re-rendered handoff frame, so the handoff frame appears once.
+
 SQLite keeps every job lifecycle fact. The ledger written here is evidence and a resume source, nothing more.
 """
 
@@ -20,7 +26,7 @@ import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.video.sequence_admission import verify_plan_source, verify_provided_anchors
@@ -57,11 +63,14 @@ from src.video.sequence_plan import (
     ANCHOR_CARRY,
     ANCHOR_PROVIDED,
     ANCHOR_SOURCE,
+    SEQUENCE_POLICY_VERSION_V2,
     STAGE_SVD_NATIVE,
     STAGE_VIDEO_WORKFLOW,
     SegmentSpec,
     SequencePlan,
     SequencePlanError,
+    StoryboardLeadIn,
+    StoryboardPlanLink,
 )
 from src.video.sequence_resume import (
     REPLAY_BLOCK_KEYS,
@@ -71,6 +80,14 @@ from src.video.sequence_resume import (
     load_pinned_ledger,
     parse_resume_block,
     resume_problems,
+)
+from src.video.storyboard_cut import (
+    CutManifest,
+    CutManifestError,
+    lead_in_frames,
+    read_cut_manifest,
+    take_manifest,
+    write_cut_manifest,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,6 +108,9 @@ ALLOWED_OVERRIDES: dict[str, frozenset[str]] = {
     ),
     STAGE_SVD_NATIVE: frozenset({"inference.seed", "inference.num_frames", "output.save_frames"}),
 }
+
+#: A storyboard take's cut manifest, beside the ledger in the run directory (policy v2 only).
+CUT_MANIFEST_FILE_NAME: Final = "storyboard_cut.json"
 
 REPLAY_NOTE = (
     "a full replay recomputes every segment; GPU generation is not guaranteed to be byte-identical, so a "
@@ -237,6 +257,9 @@ class VideoSequenceExecutor:
         self._outputs: dict[int, list[str]] = {}
         self._replay_reference = replay_reference
         self._reference_ledger: SequenceLedger | None = None
+        #: A take's lead-in: the pinned parent manifest cut to its first K frames (set by ``_begin``).
+        self._lead_in_cut: CutManifest | None = None
+        self._first_frame_size: tuple[int, int] | None = None
 
     # ------------------------------------------------------------------ public
 
@@ -246,6 +269,7 @@ class VideoSequenceExecutor:
         outcome: SequenceOutcome | None = None
         try:
             start = self._begin(source_image_path, resume)
+            self._write_cut_manifest()  # a resumed take's verified prefix; nothing is committed yet on a fresh start
             self._persist()
             outcome = self._run_all(source_image_path, start)
         except BaseException as exc:
@@ -271,6 +295,8 @@ class VideoSequenceExecutor:
         if start == 0:
             verify_plan_source(self._plan, source_image_path, hash_file=self._hash_file)
         verify_provided_anchors(self._plan, hash_file=self._hash_file, from_segment=start)
+        # A take's lead-in is referenced, never copied, so it is checked at every start: fresh, resume or replay.
+        self._verify_lead_in()
         self._load_replay_reference()
         if block is None:
             return 0
@@ -296,6 +322,42 @@ class VideoSequenceExecutor:
             "reused_segments": list(range(start)),
         }
         return start
+
+    def _storyboard(self) -> StoryboardPlanLink | None:
+        """The storyboard link of a v2 take (``None`` for every v1 plan)."""
+
+        if self._plan.policy_version != SEQUENCE_POLICY_VERSION_V2:
+            return None
+        return self._plan.storyboard
+
+    def _lead_in(self) -> StoryboardLeadIn | None:
+        link = self._storyboard()
+        return None if link is None else link.lead_in
+
+    def _verify_lead_in(self) -> None:
+        """The parent cut is still the one the take was queued with: the pinned manifest and the handoff PNG.
+
+        Two hashes, on purpose: every lead-in frame is re-hashed right before assembly (``lead_in_frames``)."""
+
+        lead_in = self._lead_in()
+        if lead_in is None:
+            return
+        parent = read_cut_manifest(lead_in.manifest_path, expected_sha256=lead_in.manifest_sha256)
+        prefix = parent.prefix(lead_in.frame_count)
+        handoff = Path(lead_in.handoff_path)
+        if not prefix.frames or prefix.frames[-1].sha256 != lead_in.handoff_sha256:
+            raise CutManifestError(
+                f"the handoff frame is not frame K ({lead_in.frame_count}) of the parent cut: {handoff}"
+            )
+        if not handoff.is_file():
+            raise CutManifestError(f"the handoff frame is missing: {handoff}")
+        try:
+            actual = self._hash_file(handoff)
+        except OSError as exc:
+            raise CutManifestError(f"the handoff frame cannot be read: {handoff}: {exc}") from exc
+        if actual != lead_in.handoff_sha256:
+            raise CutManifestError(f"the handoff frame changed since it was recorded: {handoff}")
+        self._lead_in_cut = prefix
 
     def _load_replay_reference(self) -> None:
         """Open the original run's ledger for comparison; an unavailable reference is recorded, never fatal."""
@@ -348,6 +410,7 @@ class VideoSequenceExecutor:
                 self._outputs[segment.index] = [str(item) for item in run.output_paths]
                 self._ledger.segments.append(self._record(segment, artifacts, anchor))
                 self._compare_with_reference(self._ledger.segments[-1])
+                self._write_cut_manifest()  # before the ledger that names it, so that file always exists
                 self._persist()  # the segment is durable before the next one dispatches
             except BaseException:
                 self._discard_uncommitted(segment)
@@ -412,6 +475,48 @@ class VideoSequenceExecutor:
         return str(carried), InputAnchor(
             policy=ANCHOR_CARRY, basis=basis, file=record, from_segment=previous.index
         )
+
+    def _write_cut_manifest(self) -> None:
+        """Rewrite a take's cut manifest from its committed segments and record it in the ledger (v2 only).
+
+        The lead-in comes first, then each segment's frames after its overlap, labelled with that segment's take id."""
+
+        link = self._storyboard()
+        committed = self._ledger.segments
+        if link is None or not committed:
+            return
+        width, height = self._take_size()
+        manifest = take_manifest(
+            lead_in=self._lead_in_cut,
+            segments=[
+                (
+                    link.take_ids[segment.index],
+                    segment.frames,
+                    self._plan.segments[segment.index].overlap_frames,
+                    segment.final_frame.basis,
+                )
+                for segment in committed
+            ],
+            fps=self._plan.fps,
+            width=width,
+            height=height,
+            job_id=self._job_id,
+        )
+        written = write_cut_manifest(self._run_dir / CUT_MANIFEST_FILE_NAME, manifest)
+        self._ledger.cut_manifest = {"path": written.path, "sha256": written.sha256}
+
+    def _take_size(self) -> tuple[int, int]:
+        """The cut's pixel size: the lead-in's, else the plan's frozen target size, else the first committed frame's."""
+
+        if self._lead_in_cut is not None:
+            return self._lead_in_cut.width, self._lead_in_cut.height
+        width, height = self._plan.target_width, self._plan.target_height
+        if width and height:
+            return width, height
+        if self._first_frame_size is None:
+            first = Path(self._ledger.segments[0].frames[0].path)
+            self._first_frame_size = require_still(first, label="the take's first frame")
+        return self._first_frame_size
 
     def _record(
         self, segment: SegmentSpec, artifacts: SegmentArtifacts, anchor: InputAnchor
@@ -487,10 +592,17 @@ class VideoSequenceExecutor:
             leftover.unlink(missing_ok=True)
 
     def _assemble_movie(self) -> tuple[str, str]:
-        """Encode the assembly frames (overlap dropped, optionally colour-matched) with the ASM-332 engine."""
+        """Encode the assembly frames (overlap dropped, optionally colour-matched) with the ASM-332 engine.
+
+        A take's lead-in goes first, each frame re-hashed against the pinned parent manifest; segment 0's overlap then
+        drops its re-rendered handoff frame."""
 
         frames: list[Path] = []
         used: list[dict[str, Any]] = []
+        lead_in = self._lead_in()
+        if lead_in is not None:
+            frames.extend(lead_in_frames(lead_in, hash_file=self._hash_file))
+            used.append({"segment": "lead_in", "frames_used": lead_in.frame_count})
         reference = Path(self._ledger.segments[0].frames[0].path)
         reference_sha = self._hash_file(reference)
         matching = self._plan.color_match.enabled
@@ -607,7 +719,7 @@ def sequence_artifact_payload(outcome: SequenceOutcome, plan: SequencePlan) -> d
     """The run-metadata record of a finished sequence (the shape history and the legacy readers already know)."""
 
     segments = outcome.ledger.segments
-    return {
+    payload: dict[str, Any] = {
         "sequence_id": plan.sequence_id,
         "job_id": outcome.ledger.job_id,
         "plan_sha256": outcome.ledger.plan_sha256,
@@ -636,6 +748,11 @@ def sequence_artifact_payload(outcome: SequenceOutcome, plan: SequencePlan) -> d
         "runtime_release": dict(outcome.ledger.runtime_release or {}) or None,
         "replay": dict(outcome.ledger.replay or {}) or None,
     }
+    # Only a storyboard take records its cut manifest; v1 records keep exactly their historical keys.
+    if plan.policy_version == SEQUENCE_POLICY_VERSION_V2:
+        cut = outcome.ledger.cut_manifest
+        payload["cut_manifest"] = None if cut is None else dict(cut)
+    return payload
 
 
 def parse_sequence_plan(sequence_config: Mapping[str, Any], *, stage_name: str) -> SequencePlan:
@@ -829,6 +946,7 @@ def run_sequence_stage(
 
 __all__ = [
     "ALLOWED_OVERRIDES",
+    "CUT_MANIFEST_FILE_NAME",
     "REPLAY_KEY",
     "SegmentCallback",
     "SegmentRun",

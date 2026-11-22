@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from src.pipeline.njr_core_v26 import thaw_json
-from src.video.sequence_plan import SequencePlan, default_overlap
+from src.video.sequence_plan import SEQUENCE_POLICY_VERSION_V2, SequencePlan, default_overlap
 from src.video.sequence_resume import PLAN_KEY, sequence_stage_name
 from src.video.sequence_shots import ShotDraft
 from src.video.storyboard import StoryboardDraft, StoryboardError
@@ -28,6 +28,11 @@ def from_history(repository: Any, job_id: str) -> StoryboardDraft:
     stage = next(s for s in njr.stage_chain if s.stage_type == stage_name)
     config = thaw_json(stage.extra)
     plan = SequencePlan.from_dict(config.get(PLAN_KEY))
+    if plan.policy_version == SEQUENCE_POLICY_VERSION_V2 or plan.storyboard is not None:
+        raise StoryboardError(
+            "This job is a Storyboard take; the linear Storyboard editor cannot express its lead-in. "
+            "Open it in the Storyboard tab."
+        )
     errors = plan.validate()
     if errors:
         raise StoryboardError("Invalid frozen sequence: " + "; ".join(errors))

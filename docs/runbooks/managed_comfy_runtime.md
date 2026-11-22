@@ -33,6 +33,12 @@ files are referenced through `extra_model_paths.yaml`, never copied or downloade
   library (diffusion models, text encoders, VAE, CLIP vision). The runtime folders are StableNew's, not the
   external Comfy's.
 
+For Qwen-Image 20B FP8 stored in a shared WebUI library, include its existing checkpoint directory under
+`diffusion_models` in the runtime's `extra_model_paths.yaml`. For example, under the library's existing
+section with `base_path` set to its `models` directory, add `diffusion_models: Stable-diffusion`.
+The corresponding VAE directory must be listed under `vae`. A `checkpoints` mapping alone is for Comfy's
+bundled-checkpoint loader. The Qwen graph uses the diffusion-model loader.
+
 ## Build
 
 ```powershell

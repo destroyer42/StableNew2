@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-942 of 942 modules have a docstring.
+951 of 951 modules have a docstring.
 
 ## src/
 
@@ -168,6 +168,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `reprocess_admission.py`: Reprocess admission preflight (PR-IMG-MODELS-158): refuse an exact profile's unsupported operation before que…
 - `review_batch_service.py`: Transient Review compilation/preflight; JobService remains the admission authority
 - `runtime_state.py`: Controller-owned runtime state primitives
+- `storyboard_submission_service.py`: Storyboard submission service: create roots, preview, submit and reconcile takes (PR-VID-STORY-380, spec 7.5)
 - `submission_policy_v26.py`: Typed policy for submitting an already compiled NJR to the queue
 - `svd_controller.py`: Controller surface for native SVD selected-image jobs
 - `svd_submission_service.py`: Thin form-data bridge for SVD submissions owned by AppController
@@ -929,6 +930,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `experiment_snapshot_ref.py`: The one rule for a frozen Learning experiment snapshot carried by reference (LEARN-SNAPSHOT-914)
 - `file_access_log_v2_5_2025_11_26.py`: Record unique paths touched at runtime through a shared file-access logger
 - `file_io.py`: File I/O utilities with UTF-8 support
+- `file_writer_lock.py`: A bounded cross-process lock for a file that may be atomically replaced
 - `gpu_device_health.py`: Read-only host GPU evidence and the accelerator-fault vocabulary (PR-QUEUE-GPU-180)
 - `gpu_survivor_telemetry.py`: Best-effort, durable survivor telemetry for active GPU pipeline jobs
 - `graceful_exit.py`: Centralized graceful exit helper for the StableNew V2 GUI
@@ -995,15 +997,22 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `sequence_assembly.py`: Assemble a sequence's frames into one movie with the ASM-332 engine, inside the sequence job (PR-VID-SEQ-330-…
 - `sequence_frames.py`: Frame-level helpers of a sequence job: the exact final frame, overlap trimming, opt-in colour matching and th…
 - `sequence_history.py`: What Job History needs to know about a sequence job, read from its stored snapshot and result (PR-VID-SEQ-331…
+- `sequence_job_build.py`: Build the one NJR of a Comfy sequence job: freeze segment 0's inputs and the typed plan, then the job (PR-VID…
 - `sequence_ledger.py`: The durable, per-segment ledger of a sequence job (PR-VID-SEQ-330-CORE)
 - `sequence_locator.py`: Find a sequence job's checkpoint ledger when its result did not record one (PR-VID-SEQ-331A)
 - `sequence_plan.py`: The typed, frozen plan of a multi-segment video job (PR-VID-SEQ-330-CORE)
 - `sequence_resume.py`: Resume a failed or interrupted sequence job as a NEW job (PR-VID-SEQ-330-CORE)
 - `sequence_shots.py`: Operator shots in, ``sequence_intent`` out (PR-VID-SEQ-331A)
 - `storyboard.py`: Versioned, editable Storyboard intent, distinct from an admitted SequencePlan (VID-STORYBOARD-350)
+- `storyboard_cut.py`: The cut manifest of a stitched storyboard cut (PR-VID-STORY-380)
+- `storyboard_cuts.py`: Read storyboard cuts back from the repository and pin lead-ins (PR-VID-STORY-380, spec 7.5)
 - `storyboard_history.py`: Create new authoring intent only from a canonical frozen sequence snapshot, never from artifacts
 - `storyboard_readiness.py`: Read-only source identity and workflow projections for editable Storyboards; admission stays authoritative
+- `storyboard_reconcile.py`: Adopt a repository job into a storyboard tree by the storyboard link its plan carries (PR-VID-STORY-380, spec…
+- `storyboard_root.py`: Storyboard root preparation (PR-VID-STORY-380, spec 7.3)
 - `storyboard_store.py`: Atomic Storyboard JSON storage with revision compare-and-swap; never stores executable jobs
+- `storyboard_tree.py`: Storyboard tree-of-takes authoring file (PR-VID-STORY-380)
+- `storyboard_tree_store.py`: Atomic storyboard-tree JSON storage with revision compare-and-swap (PR-VID-STORY-380)
 - `svd_capabilities.py`: Capability discovery for native SVD postprocess helpers
 - `svd_config.py`: Typed configuration models for native SVD image-to-video
 - `svd_errors.py`: Typed error surface for native SVD runtime

@@ -97,7 +97,7 @@ def inspect_picker_file(
     elif suffix in {".safetensors", ".sft"}:
         try:
             shapes, dtypes, metadata = read_tensor_table(path)
-            component = classify_tensor_table(shapes, dtypes)
+            component = classify_tensor_table(shapes, dtypes, metadata)
         except (OSError, ValueError, TypeError, UnicodeDecodeError):
             component = ComponentEvidence(
                 error="malformed, truncated or unreadable safetensors header"

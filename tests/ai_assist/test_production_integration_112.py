@@ -122,13 +122,16 @@ def test_production_composition_reads_pins_once_launches_nothing_and_requires_qu
         return real(**kwargs)
 
     monkeypatch.setattr(integration, "AiAssistService", factory)
-    owner = integration.AiAssistIntegration(lambda: None, lambda cb: None, root=tmp_path / "absent")
+    owner = integration.AiAssistIntegration(lambda: None, lambda cb: None)
     assert len(created) == 1
     assert created[0]["memory_probe"] is read_host_memory
     assert created[0]["policy"].allow_candidate is False
     assert created[0]["policy"].strict_offline is True
     assert owner.service._worker is None
-    assert not (tmp_path / "absent").exists()
+    assert created[0]["root"] == tmp_path / "ManagedAi"
+    assert not owner._remote.settings().preferred
+    assert owner._remote._monitor is None
+    assert not (tmp_path / "ManagedAi").exists()
     for _ in range(2):
         assert owner.availability()[0] is OutcomeCode.NOT_INSTALLED
         result = owner.submit(request_for(), Mock())

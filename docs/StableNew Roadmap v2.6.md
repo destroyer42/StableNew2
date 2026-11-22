@@ -290,6 +290,18 @@ legacy failures remain non-blocking.
 
 ## Approved post-v2.6 sequence
 
+**Developer-experience enabling track (owner-approved direction, not an active
+production dependency):** [agent context and AI-worker research roadmap](work_packages/DEVEX-CONTEXT_AI_WORKER_ROADMAP.md).
+Its first implementable package is [PR-DEVEX-CONTEXT-100](work_packages/PR-DEVEX-CONTEXT-100.md):
+deterministic task routing, static dependency index, compact context capsules,
+and module-docstring completion. Follow-on [AI-WORKER-110](work_packages/AI-WORKER-110.md)
+is a separately authorized Proxmox/model measurement gate;
+[CONTEXT-120](work_packages/PR-DEVEX-CONTEXT-120.md) is conditional
+semantic retrieval. No model downloads, hardware changes, production AI
+Assist integration, or remote source sharing are authorized by this roadmap.
+Current priorities and implementation state remain in `STATUS.md`.
+
+
 This sequence records the post-v2.6 architecture line. PR-IMG-100 is complete /
 accepted / integrated on `main`.
 PR-IMG-110 completed its separate qualification; its Ideogram 4 target-hardware
