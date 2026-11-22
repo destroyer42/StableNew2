@@ -1,0 +1,27 @@
+{
+  "schema": "stablenew.video-eval-suite.v1",
+  "suite_id": "a14b-speed-arms-v1",
+  "description": "Example only: Wan2.2 I2V-A14B 4-step 1.0.0 (approved baseline) against its three experimental speed arms on identical cases. Replace the synthetic image names with your own sources before running.",
+  "seed": 374,
+  "baseline_arm": "a14b_base",
+  "cases": [
+    {"case_id": "turn_around", "image": "images/synthetic_fullbody_portrait.png", "prompt": "the person turns around slowly in place until their back faces the camera, static camera, smooth continuous motion", "tags": ["body", "rotation"]},
+    {"case_id": "walk_toward", "image": "images/synthetic_fullbody_portrait.png", "prompt": "the person walks slowly toward the camera at a steady natural pace, static camera", "tags": ["body", "locomotion"]},
+    {"case_id": "face_closeup", "image": "images/synthetic_closeup_portrait.png", "prompt": "close-up: the person blinks, then slowly turns their head toward the camera and smiles, static camera", "tags": ["face"]},
+    {"case_id": "wave_hello", "image": "images/synthetic_halfbody_portrait.png", "prompt": "the person raises their right hand and waves at the camera twice, then lowers it, static camera", "tags": ["body", "gesture"]},
+    {"case_id": "side_step", "image": "images/synthetic_fullbody_portrait.png", "prompt": "the person takes one step to the left and shifts their weight, static camera", "tags": ["body", "locomotion"]},
+    {"case_id": "hair_wind", "image": "images/synthetic_halfbody_portrait.png", "prompt": "a light breeze moves the person's hair and clothing while they stand still and look at the camera, static camera", "tags": ["fine_detail"]},
+    {"case_id": "laugh", "image": "images/synthetic_closeup_portrait.png", "prompt": "the person laughs naturally, shoulders moving slightly, static camera", "tags": ["face", "expression"]},
+    {"case_id": "sit_down", "image": "images/synthetic_fullbody_landscape.png", "prompt": "the person slowly sits down on the bench beside them, static camera", "tags": ["body", "landscape"]}
+  ],
+  "arms": [
+    {"arm_id": "a14b_base", "label": "I2V-A14B 4-step 1.0.0 (approved baseline)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_i2v_a14b_4step_v1", "workflow_version": "1.0.0", "frame_count": 81}},
+    {"arm_id": "a14b_ck_attention", "label": "1.1.0 Comfy Kitchen attention (experimental)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_i2v_a14b_4step_v1", "workflow_version": "1.1.0", "frame_count": 81, "experimental_opt_in": true}},
+    {"arm_id": "a14b_merged", "label": "1.2.0 merged lightx2v experts (experimental)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_i2v_a14b_4step_v1", "workflow_version": "1.2.0", "frame_count": 81, "experimental_opt_in": true}},
+    {"arm_id": "a14b_gpu_te", "label": "1.3.0 text encoder on GPU (experimental)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_i2v_a14b_4step_v1", "workflow_version": "1.3.0", "frame_count": 81, "experimental_opt_in": true}}
+  ]
+}

@@ -303,10 +303,11 @@ def test_the_a14b_policies_are_declared_with_the_existing_fields_only() -> None:
     assert defaults["frame_count_policy"] == {
         "default": 81,
         "minimum": 17,
-        "maximum": 81,
+        "maximum": 121,  # VID-A14B-SPEED-374 (WAN-BENCH-373 ran 113 frames); the default stays 81
         "step": 4,
         "offset": 1,
         "fps": 16,
+        "advisory_above": 81,
     }
     assert defaults["runtime_policy"] == {
         "release_owned_runtime_after_job": True,

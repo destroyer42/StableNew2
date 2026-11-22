@@ -45,6 +45,9 @@ def test_default_workflow_registry_holds_only_real_evidence_backed_workflows() -
     ] == [
         ("wan22_fun_control_5b_canny_i2v_v1", "1.0.0"),
         ("wan22_i2v_a14b_4step_v1", "1.0.0"),
+        ("wan22_i2v_a14b_4step_v1", "1.1.0"),
+        ("wan22_i2v_a14b_4step_v1", "1.2.0"),
+        ("wan22_i2v_a14b_4step_v1", "1.3.0"),
         ("wan22_ti2v_5b_i2v_720p_v1", "1.0.0"),
         ("wan22_ti2v_5b_i2v_v1", "1.0.0"),
         ("wan22_ti2v_5b_i2v_v1", "1.1.0"),

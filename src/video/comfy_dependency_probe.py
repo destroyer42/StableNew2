@@ -110,6 +110,14 @@ class ComfyDependencyProbe:
                 options = _loader_options(payload, loader, input_name)
                 found = options is not None and dependency.locator in options
                 verifiable = True
+            elif dependency.dependency_kind == "node_option":
+                # ``version_hint`` names a stock node input ("ModelAttentionBackend.attention") whose
+                # advertised choices must contain the exact option the graph sets.  A node that would
+                # accept an unlisted value and silently fall back is refused here, never assumed capable.
+                node_name, _, input_name = str(dependency.version_hint or "").partition(".")
+                options = _loader_options(payload, node_name, input_name)
+                found = options is not None and dependency.locator in options
+                verifiable = True
             else:
                 found = _contains_locator(payload, dependency.locator)
                 verifiable = True

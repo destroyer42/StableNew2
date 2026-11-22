@@ -8,6 +8,9 @@ binding and ``backend_defaults["frame_count_policy"]``::
 A length ``n`` is legal when ``minimum <= n <= maximum`` and ``(n - offset) % step == 0`` (for Wan's
 VAE that is the ``4n+1`` rule).  Illegal values are rejected, never rounded.  Nothing here branches
 on a workflow or model name, and FPS is reported, not chosen.
+
+A policy may also declare ``advisory_above`` (VID-A14B-SPEED-374): legal lengths above it stay selectable, but
+the form shows :func:`frame_count_advisory` for them (longer run, more memory, motion may loop back).
 """
 
 from __future__ import annotations
@@ -34,6 +37,10 @@ def frame_count_policy(spec: Any) -> dict[str, int] | None:
         return None
     if policy["step"] < 1 or policy["fps"] < 1 or policy["minimum"] > policy["maximum"]:
         return None
+    advisory_above = raw.get("advisory_above")
+    if isinstance(advisory_above, int) and not isinstance(advisory_above, bool):
+        if policy["minimum"] <= advisory_above < policy["maximum"]:
+            policy["advisory_above"] = advisory_above
     return policy
 
 
@@ -58,7 +65,7 @@ def frame_count_projection(spec: Any) -> dict[str, Any] | None:
     policy = frame_count_policy(spec)
     if policy is None:
         return None
-    return {
+    projection: dict[str, Any] = {
         "default": policy["default"],
         "fps": policy["fps"],
         "choices": [
@@ -66,6 +73,27 @@ def frame_count_projection(spec: Any) -> dict[str, Any] | None:
             for count in legal_frame_counts(spec)
         ],
     }
+    if "advisory_above" in policy:
+        projection["advisory_above"] = policy["advisory_above"]
+    return projection
+
+
+def frame_count_advisory(projection: Any, frame_count: Any) -> str:
+    """Inline advisory for a legal length above the policy's ``advisory_above`` (else an empty string)."""
+
+    if not isinstance(projection, Mapping):
+        return ""
+    above = projection.get("advisory_above")
+    try:
+        frames = int(frame_count)
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(above, int) or isinstance(above, bool) or frames <= above:
+        return ""
+    return (
+        f"Longer than {above} frames: expect a longer run and more RAM, and the motion may drift "
+        "or loop back toward the starting pose."
+    )
 
 
 def parse_frame_count(spec: Any, value: Any) -> int:
@@ -96,6 +124,7 @@ def parse_frame_count(spec: Any, value: Any) -> int:
 __all__ = [
     "FRAME_COUNT_INPUT",
     "approximate_seconds",
+    "frame_count_advisory",
     "frame_count_policy",
     "frame_count_projection",
     "legal_frame_counts",
