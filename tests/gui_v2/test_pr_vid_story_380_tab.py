@@ -274,3 +274,143 @@ def test_experimental_opt_in_is_shown_only_when_needed_and_never_preset(
     storyboard_tab.experimental_var.set(True)
     storyboard_tab.queue_button.invoke()
     assert fake_service.last_submit.experimental_opt_in is True
+
+
+# ---------------------------------------------------------------------------------------------- B5
+
+
+def _fake_preview(path, **_kwargs):
+    from src.video.review_preview import STATUS_OK, PreviewClip, PreviewResult
+
+    clip = PreviewClip(
+        path=path,
+        width=2,
+        height=2,
+        source_width=2,
+        source_height=2,
+        fps=16.0,
+        frame_count=3,
+        reported_frame_count=3,
+        duration_seconds=0.2,
+        raw=bytes(12) * 3,
+    )
+    return PreviewResult(path=path, status=STATUS_OK, clip=clip)
+
+
+def test_compare_opens_with_sibling_clips_and_no_rating(storyboard_tab, fake_service):
+    storyboard_tab.compare_preview_fn = _fake_preview
+    storyboard_tab.open_storyboard("diner")
+    assert "Shot 2 · from A @ f8" in storyboard_tab.columns.compare_buttons
+    window = storyboard_tab.open_compare("Shot 2 · from A @ f8")
+    try:
+        assert [label for label, _ in window.clips] == ["A1", "A3", "A4"]  # A2 is dropped
+        assert not window.has_rating_controls()
+        assert window.position_var.get().startswith("t = 0.000 s")
+        window.toggle_play()
+        window.toggle_play()
+        window._step(1)
+        assert "A1 frame 2/3" in window.position_var.get()
+    finally:
+        window.destroy()
+
+
+def test_compare_needs_two_finished_takes(storyboard_tab, fake_service):
+    fake_service.states.update({"t3": "failed", "t4": "failed"})
+    storyboard_tab.open_storyboard("diner")
+    assert storyboard_tab.open_compare("Shot 2 · from A @ f8") is None
+    assert "two or more" in storyboard_tab.status_var.get()
+
+
+def test_a_clip_that_cannot_be_decoded_is_reported_in_its_pane(storyboard_tab, fake_service):
+    from src.video.review_preview import STATUS_FAILED, PreviewResult
+
+    def broken(path, **_kwargs):
+        return PreviewResult(
+            path=path, status=STATUS_FAILED, message="The video file does not exist"
+        )
+
+    storyboard_tab.compare_preview_fn = broken
+    storyboard_tab.open_storyboard("diner")
+    window = storyboard_tab.open_compare("Shot 2 · from A @ f8")
+    try:
+        assert window.position_var.get() == "None of these clips could be decoded."
+        assert window.sides[0].status.get() == "The video file does not exist"
+    finally:
+        window.destroy()
+
+
+def test_export_of_a_middle_chain_take_names_the_chain_file_and_end(storyboard_tab, fake_service):
+    storyboard_tab.open_storyboard("diner")
+    text = storyboard_tab.export_text("c1", 18)
+    assert fake_service.chain_mp4 in text and "ends at 00:01.02" in text
+    assert "chain" in text
+    last = storyboard_tab.export_text("c2", 22)
+    assert fake_service.chain_mp4 in last and "ends at" not in last
+
+
+def test_export_of_a_take_without_a_video_says_not_encoded_and_offers_resume(
+    storyboard_tab, fake_service
+):
+    fake_service.states["t4"] = "cancelled"
+    storyboard_tab.open_storyboard("diner")
+    storyboard_tab.select_take("t4")
+    assert "not encoded" in storyboard_tab.export_text("t4", 12)
+    storyboard_tab._ask_export()
+    from src.gui.views.storyboard_tab_frame_v2 import _ExportDialog
+
+    dialogs = [w for w in storyboard_tab.winfo_children() if isinstance(w, _ExportDialog)]
+    assert (
+        dialogs
+        and "Resume" in dialogs[0].buttons
+        and "Reveal stitched video" not in dialogs[0].buttons
+    )
+    dialogs[0].destroy()
+
+
+def test_export_of_an_encoded_take_offers_reveal_and_movie_clips(storyboard_tab, fake_service):
+    storyboard_tab.open_storyboard("diner")
+    storyboard_tab.select_take("c2")
+    storyboard_tab._ask_export()
+    from src.gui.views.storyboard_tab_frame_v2 import _ExportDialog
+
+    dialog = next(w for w in storyboard_tab.winfo_children() if isinstance(w, _ExportDialog))
+    assert {"Reveal stitched video", "Send to Movie Clips"} <= set(dialog.buttons)
+    dialog.destroy()
+
+
+def test_send_to_movie_clips_hands_the_stitched_file_over(storyboard_tab, fake_service):
+    received = []
+    tab = type(
+        "Tab",
+        (),
+        {"set_source_bundle": lambda self, bundle, status_message=None: received.append(bundle)},
+    )()
+    storyboard_tab.app_controller.main_window = type("W", (), {"movie_clips_tab": tab})()
+    storyboard_tab.open_storyboard("diner")
+    storyboard_tab.send_to_movie_clips("c2")
+    assert received and received[0]["output_paths"] == [fake_service.chain_mp4]
+
+
+def test_resume_goes_through_the_controller_then_reconciles(storyboard_tab, fake_service):
+    fake_service.states["t4"] = "failed"
+    storyboard_tab.open_storyboard("diner")
+    assert ("t4", "Resume") in storyboard_tab.columns.action_buttons
+    storyboard_tab.resume_take("t4")
+    assert fake_service.controller_calls == [("resume_sequence", fake_service.job_of("t4"))]
+    assert [c for c in fake_service.calls if c[0] == "reconcile"] == [("reconcile", "diner")] * 2
+    assert storyboard_tab.status_var.get() == "Queued resume as job job-resumed."
+
+
+def test_replay_of_a_cancelled_take_goes_through_the_controller(storyboard_tab, fake_service):
+    fake_service.states["t4"] = "cancelled"
+    storyboard_tab.open_storyboard("diner")
+    storyboard_tab.columns.action_buttons[("t4", "Replay")].invoke()
+    assert fake_service.controller_calls == [("replay_sequence", fake_service.job_of("t4"))]
+
+
+def test_completed_takes_show_no_resume_or_replay_buttons(storyboard_tab, fake_service):
+    storyboard_tab.open_storyboard("diner")
+    assert storyboard_tab.columns.action_buttons == {}
+    storyboard_tab.resume_take("t4")
+    assert "cannot be resumed" in storyboard_tab.status_var.get()
+    assert fake_service.controller_calls == []

@@ -132,7 +132,7 @@ class FakeService:
             _take("t4", ROOT_PARENT, 7),
             _take("t1a", "t1", 9),
             _take("t1b", "t1", 9),
-            _take("c1", "t1b", 11),
+            _take("c1", "t1b", 11, mode="sequential"),
             _take("c2", "c1", None, mode="sequential", position=1),
         ]
         for take in takes:
@@ -174,7 +174,12 @@ class FakeService:
             cut = self.cuts[take.take_id]
             owned = [r for r in cut.segment_ranges() if r.owner == take.take_id]
             state = self.states.get(take.take_id, "completed")
-            mp4 = self.chain_mp4 if take.take_id in ("c1", "c2") else None
+            mp4 = (
+                self.chain_mp4
+                if take.take_id in ("c1", "c2")
+                else f"{self._folder}/{take.take_id}.mp4"
+            )
+            encoded = state == "completed"
             views[take.take_id] = TakeView(
                 take_id=take.take_id,
                 state=state,
@@ -182,8 +187,8 @@ class FakeService:
                 shown_job_id=self.job_of(take.take_id),
                 manifest=CutFrame("m.json", "0" * 64),
                 stitched_path=mp4,
-                clip_path=None,
-                encoded=mp4 is not None,
+                clip_path=f"{self._folder}/{take.take_id}_clip.mp4",
+                encoded=encoded,
                 frames_ok=True,
                 problem="",
                 can_resume=state in ("failed", "cancelled"),

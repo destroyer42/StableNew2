@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from tkinter import ttk
 from typing import Any
@@ -20,8 +20,11 @@ from src.controller.storyboard_submission_service import ContinueRequest, Contin
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
 from src.gui.view_contracts.storyboard_tree_contract import AI_NOT_SET_UP, StoryboardTreeContract
+from src.gui.views.storyboard_compare_window_v2 import StoryboardCompareWindowV2
 from src.gui.widgets.storyboard_columns_v2 import StoryboardColumnsV2
 from src.gui.widgets.storyboard_viewer_v2 import StoryboardViewerV2
+from src.utils.os_shell import reveal_in_file_manager
+from src.video.review_preview import prepare_review_preview
 from src.video.sequence_plan import ROOT_PARENT
 from src.video.storyboard_cut import CutManifest
 from src.video.storyboard_frame_cache import FrameCache
@@ -37,6 +40,14 @@ class _State:
     tree: StoryboardTree
     views: dict[str, TakeView]
     root_thumbnail: str | None
+    notice: str = ""
+
+
+def _timecode(frames: int, fps: int) -> str:
+    """``mm:ss.ff``: whole seconds, then the frames left over at the cut's own fps."""
+
+    seconds, rest = divmod(frames, max(1, fps))
+    return f"{seconds // 60:02d}:{seconds % 60:02d}.{rest:02d}"
 
 
 def _saved_text(tree: StoryboardTree) -> str:
@@ -64,6 +75,8 @@ class StoryboardTabFrameV2(ttk.Frame):
         self._refresh_after: str | None = None
         self._frame_path = ""
         self._ai_tooltip_text = ""
+        self.compare_preview_fn: Any = prepare_review_preview
+        self.compare_windows: list[StoryboardCompareWindowV2] = []
         self.status_var = tk.StringVar(
             value="Open a storyboard, or start one from a finished clip or image."
         )
@@ -78,6 +91,8 @@ class StoryboardTabFrameV2(ttk.Frame):
             on_select=self.select_take,
             on_mark=self.set_mark,
             on_compare=self._compare_hook,
+            on_resume=self.resume_take,
+            on_replay=self.replay_take,
         )
         self.columns.grid(row=1, column=0, sticky="ew", padx=8)
         body = ttk.Frame(self, style="Panel.TFrame")
@@ -226,7 +241,9 @@ class StoryboardTabFrameV2(ttk.Frame):
         else:
             self._after_views_changed()
         self._schedule_refresh()
-        if not keep_selection:
+        if state.notice:
+            self._say(state.notice)
+        elif not keep_selection:
             self._say("Ready.")
 
     def _after_views_changed(self) -> None:
@@ -711,11 +728,154 @@ class StoryboardTabFrameV2(ttk.Frame):
         self.refresh()
         self._update_continue_panel()
 
+    # ------------------------------------------------------------------ compare, export, resume, replay (B5)
+
+    def open_compare(self, column_title: str) -> StoryboardCompareWindowV2 | None:
+        """Play the completed, non-dropped takes of one column side by side (their own clips, no ratings)."""
+
+        contract = self.contract
+        if contract is None:
+            return None
+        clips: list[tuple[str, str]] = []
+        for column in contract.columns(show_dropped=False):
+            if column.title != column_title:
+                continue
+            for card in column.cards:
+                view = self.views.get(card.take_id)
+                if view is not None and view.state == "completed" and view.clip_path:
+                    clips.append((card.label, view.clip_path))
+        if len(clips) < 2:
+            self._say("Compare needs two or more finished takes in the column.")
+            return None
+        window = StoryboardCompareWindowV2(self, clips=clips, preview_fn=self.compare_preview_fn)
+        self.compare_windows.append(window)
+        return window
+
     def _compare_hook(self, column_title: str) -> None:
-        return None
+        self.open_compare(column_title)
+
+    def _chain_info(self, take_id: str) -> bool:
+        """True when later takes of the same chain follow this one (so the stitched file runs past it)."""
+
+        tree = self.tree
+        if tree is None or take_id == ROOT_PARENT:
+            return False
+        take = next(item for item in tree.takes if item.take_id == take_id)
+        return take.mode == "sequential" and any(
+            other.batch_id == take.batch_id and other.chain_position > take.chain_position
+            for other in tree.takes
+        )
+
+    def export_text(self, take_id: str, cut_length: int | None) -> str:
+        """What Export cut… offers for one take. Nothing is re-encoded: the stitched file already exists."""
+
+        view = self.views.get(take_id)
+        label = self.contract.label(take_id) if self.contract else take_id
+        if take_id == ROOT_PARENT:
+            return "The root clip is not a stitched cut. Export a take instead."
+        if view is None or not view.encoded or not view.stitched_path:
+            return (
+                f"{label}: not encoded. Its frames can still be viewed and continued; "
+                "Resume re-encodes the stitched video."
+            )
+        lines = [f"{label}: {view.stitched_path}"]
+        if self._chain_info(take_id):
+            fps = (
+                self.cut.fps
+                if self.cut is not None
+                else int(self.tree.root.fps if self.tree else 16)
+            )
+            end = "" if cut_length is None else f" and ends at {_timecode(cut_length, fps)}"
+            lines.append(
+                f"This take is part of a chain. The stitched file is the whole chain's cut{end}; "
+                "there is no file that stops at this take."
+            )
+        return "\n".join(lines)
 
     def _ask_export(self) -> None:
-        return None
+        contract, tree = self.contract, self.tree
+        if contract is None or tree is None:
+            return
+        take_id = contract.selected_id
+        view = self.views.get(take_id)
+        service = self._service()
+
+        def work() -> tuple[str, int | None]:
+            cut = service.parent_cut(tree, take_id) if take_id != ROOT_PARENT else None
+            return take_id, None if cut is None else len(cut.frames)
+
+        def show(result: tuple[str, int | None]) -> None:
+            _ExportDialog(self, take_id, self.export_text(result[0], result[1]), view)
+
+        self._work("export", work, show)
+
+    def reveal_stitched(self, take_id: str) -> None:
+        view = self.views.get(take_id)
+        if view is None or not view.stitched_path:
+            self._say("Nothing to reveal: this take has no stitched video.")
+            return
+        path = view.stitched_path
+
+        def work() -> Any:
+            return reveal_in_file_manager(path)
+
+        def done(result: Any) -> None:
+            self._say("" if result.ok else str(result.message))
+
+        self._work("reveal", work, done)
+
+    def send_to_movie_clips(self, take_id: str) -> None:
+        view = self.views.get(take_id)
+        if view is None or not view.encoded or not view.stitched_path:
+            self._say("This take is not encoded; there is no stitched video to send.")
+            return
+        from src.gui.controllers.video_workspace_handoff import route_bundle_to_movie_clips
+
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            self._say("The main window is not available.")
+            return
+        bundle = {
+            "stage": "assembled_video",
+            "primary_path": view.stitched_path,
+            "output_paths": [view.stitched_path],
+        }
+        try:
+            route_bundle_to_movie_clips(
+                main_window=main_window,
+                bundle=bundle,
+                status_message="Loaded the storyboard cut into Movie Clips.",
+            )
+        except RuntimeError as exc:
+            self._say(str(exc))
+
+    def resume_take(self, take_id: str) -> None:
+        self._sequence_action(take_id, "resume_sequence")
+
+    def replay_take(self, take_id: str) -> None:
+        self._sequence_action(take_id, "replay_sequence")
+
+    def _sequence_action(self, take_id: str, method: str) -> None:
+        view = self.views.get(take_id)
+        allowed = view is not None and (
+            view.can_resume if method == "resume_sequence" else view.can_replay
+        )
+        if view is None or not allowed or not view.shown_job_id:
+            self._say("That take cannot be resumed or replayed right now.")
+            return
+        job_id, ledger = view.shown_job_id, view.ledger_path
+        controller = self.app_controller.get_video_workflow_controller()
+        action = getattr(controller, method)
+        storyboard_id = self.tree.storyboard_id if self.tree else ""
+
+        def work() -> _State:
+            new_job = action(job_id, ledger_path=ledger)
+            state = self._load_state(
+                storyboard_id
+            )  # reconcile adopts the new job (a resume joins the take)
+            return replace(state, notice=f"Queued {method.split('_')[0]} as job {new_job}.")
+
+        self._work("sequence", work, lambda state: self._apply_state(state, keep_selection=True))
 
     # ------------------------------------------------------------------ lifetime
 
@@ -725,6 +885,35 @@ class StoryboardTabFrameV2(ttk.Frame):
             self._refresh_after = None
         self.runner.close()
         super().destroy()
+
+
+class _ExportDialog(tk.Toplevel):
+    """Export cut…: reveal the stitched video, send it to Movie Clips, or resume when it is not encoded."""
+
+    def __init__(
+        self, tab: StoryboardTabFrameV2, take_id: str, text: str, view: TakeView | None
+    ) -> None:
+        super().__init__(tab)
+        self.title("Export cut")
+        self.transient(tab.winfo_toplevel())
+        self.summary = text
+        body = ttk.Frame(self, padding=10)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text=text, wraplength=520, justify="left").pack(anchor="w")
+        buttons = ttk.Frame(body)
+        buttons.pack(anchor="e", pady=(8, 0))
+        self.buttons: dict[str, ttk.Button] = {}
+        if view is not None and view.encoded:
+            self._add(buttons, "Reveal stitched video", lambda: tab.reveal_stitched(take_id))
+            self._add(buttons, "Send to Movie Clips", lambda: tab.send_to_movie_clips(take_id))
+        elif view is not None and view.can_resume:
+            self._add(buttons, "Resume", lambda: tab.resume_take(take_id))
+        self._add(buttons, "Close", self.destroy)
+
+    def _add(self, parent: ttk.Frame, text: str, command: Callable[[], None]) -> None:
+        button = ttk.Button(parent, text=text, command=command)
+        button.pack(side="left", padx=2)
+        self.buttons[text] = button
 
 
 class _RowWidgets:

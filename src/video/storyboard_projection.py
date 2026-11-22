@@ -62,6 +62,8 @@ class TakeView:
     can_replay: bool
     #: First frame this take owns (for its card thumbnail); ``None`` until it has a readable manifest.
     thumbnail_path: str | None = None
+    #: The job's ``sequence_state.json``, so Resume can start a run that recorded no result.
+    ledger_path: str | None = None
 
 
 def _state(entry: Any) -> TakeState:
@@ -90,8 +92,11 @@ def _reference(value: Any) -> CutFrame | None:
     return None
 
 
-def _read_ledger(job_id: str, result: Any, roots: Iterable[str]) -> SequenceLedger | None:
-    path = find_ledger_path(result) or locate_ledger(job_id, list(roots))
+def _ledger_path(job_id: str, result: Any, roots: Iterable[str]) -> str | None:
+    return find_ledger_path(result) or locate_ledger(job_id, list(roots))
+
+
+def _read_ledger(job_id: str, path: str | None) -> SequenceLedger | None:
     if not path:
         return None
     try:
@@ -155,7 +160,8 @@ def project_take(
     state = _state(entry)
     result = getattr(entry, "result", None)
     roots = [root for root in output_roots if root]
-    ledger = _read_ledger(shown, result, roots)
+    ledger_path = _ledger_path(shown, result, roots)
+    ledger = _read_ledger(shown, ledger_path)
     artifact = find_sequence_artifact(result) or {}
     reference = _reference(artifact.get("cut_manifest")) or (
         None if ledger is None else _reference(ledger.cut_manifest)
@@ -191,6 +197,7 @@ def project_take(
         can_resume=state in ("failed", "cancelled"),
         can_replay=terminal,
         thumbnail_path=None if manifest is None else _thumbnail(manifest, take),
+        ledger_path=ledger_path,
     )
 
 

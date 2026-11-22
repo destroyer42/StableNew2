@@ -42,6 +42,8 @@ class Card:
     mark: str
     on_path: bool
     selected: bool
+    can_resume: bool = False
+    can_replay: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,16 +130,26 @@ class StoryboardTreeContract:
             columns.append(Column(title, cards))
         return tuple(columns)
 
+    def _status(self, take: Take, view: TakeView | None) -> str:
+        text = "pending" if view is None else view.status_text
+        if view is not None and view.state == "completed" and not view.encoded:
+            text += " · not encoded"
+        if take.replay_of is not None:
+            text += f" · replay of {self.label(take.replay_of)}"
+        return text
+
     def _card(self, take: Take, path: set[str]) -> Card:
         view = self.views.get(take.take_id)
         return Card(
             take.take_id,
             self.label(take.take_id),
             _excerpt(take.prompt),
-            "pending" if view is None else view.status_text,
+            self._status(take, view),
             take.mark,
             take.take_id in path,
             take.take_id == self.selected_id,
+            can_resume=view is not None and view.can_resume,
+            can_replay=view is not None and view.can_resume and view.can_replay,
         )
 
     # ------------------------------------------------------------------ the slider

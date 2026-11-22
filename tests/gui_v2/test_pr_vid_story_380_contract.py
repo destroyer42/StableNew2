@@ -294,3 +294,19 @@ def test_cache_is_thread_safe(tmp_path):
 def test_cache_raises_oserror_for_a_missing_file(tmp_path):
     with pytest.raises(OSError):
         FrameCache().frame(str(tmp_path / "gone.png"))
+
+
+def test_cards_say_replay_of_and_not_encoded():
+    from dataclasses import replace
+
+    tree, views = _diner()
+    tree = tree.with_take(replace(_take("r1", ROOT_PARENT, 77), replay_of="t1"))
+    views["r1"] = replace(_view("r1"), encoded=False)
+    views["t4"] = replace(_view("t4", state="cancelled"), can_resume=True, can_replay=True)
+    cards = {
+        c.take_id: c
+        for col in StoryboardTreeContract(tree, views).columns(False)
+        for c in col.cards
+    }
+    assert cards["r1"].status_text == "completed · not encoded · replay of A1"
+    assert cards["t4"].can_resume and cards["t4"].can_replay and not cards["t3"].can_resume
