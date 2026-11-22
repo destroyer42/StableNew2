@@ -1,3 +1,5 @@
+"""Define editable job drafts, pack entries and summaries, and the current run config facade."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

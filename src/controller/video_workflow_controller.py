@@ -1,3 +1,5 @@
+"""Coordinate workflow video validation, Preview, motion preparation, and queue submission."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence

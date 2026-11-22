@@ -1,3 +1,5 @@
+"""Define versioned secondary-motion intent and policy payloads for stored job records."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

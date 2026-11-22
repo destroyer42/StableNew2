@@ -1,3 +1,5 @@
+"""Validate curated style LoRA selections against model compatibility and local inventory evidence."""
+
 from __future__ import annotations
 
 import logging

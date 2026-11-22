@@ -1,3 +1,5 @@
+"""Define revisioned runtime projections, Preview and submission requests, and the projection sink protocol."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

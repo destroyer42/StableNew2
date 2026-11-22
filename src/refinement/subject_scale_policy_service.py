@@ -1,3 +1,5 @@
+"""Assess subject scale from face detections and pass measured face ratios into refinement decisions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

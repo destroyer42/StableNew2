@@ -1,3 +1,5 @@
+"""Normalize and serialize the global content visibility mode for operator-facing surfaces."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

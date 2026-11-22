@@ -1,3 +1,5 @@
+"""Define distinct optimizer errors for prompt splitting, classification, and invalid settings."""
+
 class PromptOptimizerError(Exception):
     """Base optimizer error."""
 

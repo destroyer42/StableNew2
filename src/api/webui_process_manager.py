@@ -1,3 +1,5 @@
+"""Manage owned WebUI processes, launch configuration, OS containment, and readiness epochs."""
+
 from __future__ import annotations
 
 import json

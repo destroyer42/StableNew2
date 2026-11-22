@@ -1,3 +1,5 @@
+"""Parse LoRA and embedding references from prompts for GUI metadata."""
+
 from __future__ import annotations
 
 import re

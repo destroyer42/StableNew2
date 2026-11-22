@@ -1,3 +1,5 @@
+"""Build and read secondary-motion manifest blocks and normalized result summaries."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

@@ -1,3 +1,5 @@
+"""Collect bounded runtime diagnostics into ZIP bundles with single-flight and cooldown controls."""
+
 from __future__ import annotations
 
 import json

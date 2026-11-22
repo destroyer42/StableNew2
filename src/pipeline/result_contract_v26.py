@@ -1,3 +1,5 @@
+"""Project execution results into canonical artifacts and replay and diagnostics descriptors."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

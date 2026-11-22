@@ -1,3 +1,5 @@
+"""Render collapsible inline guidance for workflow choices and high-risk actions."""
+
 from __future__ import annotations
 
 import tkinter as tk

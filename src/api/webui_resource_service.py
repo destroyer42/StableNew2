@@ -1,3 +1,5 @@
+"""Refresh WebUI picker resources such as models, samplers, and schedulers as a normalized snapshot."""
+
 from __future__ import annotations
 
 import concurrent.futures

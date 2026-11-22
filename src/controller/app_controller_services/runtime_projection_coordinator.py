@@ -1,3 +1,5 @@
+"""Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink."""
+
 from __future__ import annotations
 
 import logging

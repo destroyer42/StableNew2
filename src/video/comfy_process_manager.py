@@ -1,3 +1,5 @@
+"""Own managed ComfyUI startup, health checks, launch flag evidence, and child process shutdown."""
+
 from __future__ import annotations
 
 import os

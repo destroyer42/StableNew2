@@ -1,3 +1,5 @@
+"""Present workflow video settings, source selection, previews, and queue admission controls."""
+
 from __future__ import annotations
 
 import tkinter as tk

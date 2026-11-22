@@ -1,3 +1,5 @@
+"""Wrap the external LoRA trainer subprocess and report session status and produced weights."""
+
 from __future__ import annotations
 
 import json

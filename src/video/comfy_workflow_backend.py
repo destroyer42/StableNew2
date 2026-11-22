@@ -1,3 +1,5 @@
+"""Execute frozen Comfy video requests and collect artifacts, provenance, and runtime liveness evidence."""
+
 from __future__ import annotations
 
 import hashlib

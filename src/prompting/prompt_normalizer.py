@@ -1,3 +1,5 @@
+"""Normalize prompt matching keys while preserving attention syntax and extra-network identity."""
+
 from __future__ import annotations
 
 import re

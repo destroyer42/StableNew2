@@ -1,3 +1,5 @@
+"""Derive adaptive refinement cues for subject framing, pose, and face detail from prompt text."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

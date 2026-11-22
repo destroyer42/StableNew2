@@ -1,3 +1,5 @@
+"""Expose a toolkit-neutral facade over canonical config layers and GUI draft state."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

@@ -1,3 +1,5 @@
+"""Request one queued dispatch with auto-run off or start the worker with auto-run on."""
+
 from __future__ import annotations
 
 import logging

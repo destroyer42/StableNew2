@@ -1,3 +1,5 @@
+"""Define prompt polarities, bucket order, and typed chunk and optimization results."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

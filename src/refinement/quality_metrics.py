@@ -1,3 +1,5 @@
+"""Measure image sharpness and assemble refinement observations for Learning evidence."""
+
 from __future__ import annotations
 
 from pathlib import Path

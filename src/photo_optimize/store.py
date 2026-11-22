@@ -1,3 +1,5 @@
+"""Manage photo sidecars, imports, archives, baseline revisions, and result promotion."""
+
 from __future__ import annotations
 
 import json

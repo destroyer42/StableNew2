@@ -1,3 +1,5 @@
+"""Normalize WebUI resources and populate Pipeline dropdowns across the stage cards and sidebar."""
+
 from __future__ import annotations
 
 import re

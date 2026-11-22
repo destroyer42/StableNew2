@@ -1,3 +1,5 @@
+"""Bind Windows Job Object APIs for child process containment, limits, observation, and teardown."""
+
 from __future__ import annotations
 
 import ctypes

@@ -1,3 +1,5 @@
+"""Normalize WebUI resource suffixes and VAE display values for lookup and comparison."""
+
 from __future__ import annotations
 
 import re

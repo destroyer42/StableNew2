@@ -1,3 +1,5 @@
+"""Declare the main window grid zones and Pipeline stage layout order."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable

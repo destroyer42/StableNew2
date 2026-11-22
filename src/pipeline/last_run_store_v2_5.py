@@ -1,3 +1,5 @@
+"""Translate and persist the last-run snapshot used to restore working configuration."""
+
 from __future__ import annotations
 
 import json
