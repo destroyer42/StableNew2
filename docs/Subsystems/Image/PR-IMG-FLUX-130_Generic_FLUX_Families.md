@@ -345,5 +345,8 @@ Differences from sections 3 to 7, each smaller than or equal to the accepted des
 - **GUI**: `ModelPolicy.refusal` carries the refusal sentence; the Base Generation projection shows it as `blocking` even on the
   right backend. `refusal` is not part of a frozen Learning policy context.
 
+IMG-POLICY-380 subsequently added `flux1_schnell@v1` for the standalone schnell layout. It shares the
+dev module pins, sets four steps and CFG 1, and omits distilled guidance at the Forge wire boundary.
+
 Not done here (owner-gated): the FLUX.1 [dev] downloads, the first physical run and its qualification, any Model Comparison
 eligibility, and the backlog `img151` read-only feasibility package for Klein 9B Q6_K + Qwen3-8B fp8mixed (owner answer Q2).

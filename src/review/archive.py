@@ -30,7 +30,7 @@ import re
 import stat
 import time
 from collections.abc import Callable, Collection, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -373,6 +373,8 @@ class ArchiveOutcome:
     sidecar_moved: bool = False
     #: Restore only: a free name the operator may accept when the original location is taken.
     alternative: Path | None = None
+    #: Restore only: earlier files discarded from the same path, put back next to it under free names.
+    also_restored: tuple[Path, ...] = ()
 
     @property
     def moved(self) -> bool:
@@ -808,6 +810,31 @@ def archive_file(
     )
 
 
+def restore_earlier_copies(
+    original: str | os.PathLike[str], *, output_root: str | os.PathLike[str]
+) -> tuple[Path, ...]:
+    """Put every other archived file of ``original`` back beside it under a free name; nothing is overwritten.
+
+    Two different files can be discarded from one path (the later is archived under a digest-suffixed name). A
+    restore returns one of them to the path; this returns the rest, so none is left restorable only by hand. A copy
+    is moved only while the path is taken by a different file (so each gets its own free name); any other state
+    leaves it archived, and a move that cannot complete without replacing something is not made.
+    """
+
+    restored: list[Path] = []
+    for variant in archived_variants(original, output_root=output_root):
+        digest = _sha256(variant)
+        if not digest:
+            continue
+        plan = plan_restore(original, output_root=output_root, digest=digest)
+        if plan.refusal != OCCUPIED or plan.alternative is None:
+            continue
+        outcome = apply_restore(plan, use_alternative=True)
+        if outcome.moved and outcome.target is not None:
+            restored.append(outcome.target)
+    return tuple(restored)
+
+
 def restore_file(
     original: str | os.PathLike[str],
     *,
@@ -815,10 +842,14 @@ def restore_file(
     digest: str | None = None,
     use_alternative: bool = False,
 ) -> ArchiveOutcome:
-    return apply_restore(
+    outcome = apply_restore(
         plan_restore(original, output_root=output_root, digest=digest),
         use_alternative=use_alternative,
     )
+    if not outcome.moved:
+        return outcome
+    also = restore_earlier_copies(original, output_root=output_root)
+    return replace(outcome, also_restored=also) if also else outcome
 
 
 __all__ = [
@@ -843,5 +874,6 @@ __all__ = [
     "plan_archive",
     "plan_restore",
     "reason_text",
+    "restore_earlier_copies",
     "restore_file",
 ]

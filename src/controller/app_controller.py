@@ -2000,6 +2000,7 @@ class AppController:
         return submit(self, plan)
 
     def _extract_reprocess_baseline_from_image(self, image_path: Path) -> dict[str, Any]:
+        from src.controller.review_batch_service import parent_job_model
         from src.utils.image_metadata import (
             extract_embedded_metadata,
             resolve_model_vae_fields,
@@ -2032,12 +2033,11 @@ class AppController:
         if isinstance(vae_value, str) and vae_value.strip().lower() in {"unknown", "n/a"}:
             vae_value = None
         prompt_value, negative_prompt_value = resolve_rework_baseline(payload)[:2]
-
         return {
             "stage": str(stage_manifest.get("stage") or payload.get("stage") or "unknown"),
             "prompt": prompt_value,
             "negative_prompt": negative_prompt_value,
-            "model": model_value,
+            "model": model_value or parent_job_model(self, payload.get("job_id")) or None,
             "vae": vae_value,
             "config": config,
         }

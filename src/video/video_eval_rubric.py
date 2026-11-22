@@ -95,6 +95,8 @@ FAILURE_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("scene_background_drift", "Scene or background drift"),
     ("temporal_flicker", "Temporal flicker"),
     ("motion_freeze", "Motion freeze"),
+    # VID-A14B-SVI-375: a visible jump (pose, colour, identity) where one segment of a sequence hands over to the next.
+    ("segment_seam", "Seam between sequence segments"),
     ("other", "Other (explain in notes)"),
 )
 CATEGORY_KEYS = tuple(value for value, _label in FAILURE_CATEGORIES)

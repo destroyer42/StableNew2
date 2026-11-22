@@ -1,5 +1,7 @@
 # PR-IMG-BACKEND-QUAL-100 — Forge vs. ComfyUI Still-Image Qualification
 
+**2026-11-22 update.** The owner resolved the device-loss fault by forcing PCIe Gen4 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The evidence and qualification disposition below record the original work.
+
 ## Decision and limits
 
 **Architecture feasibility: CONDITIONAL. Quality/performance comparison: INCONCLUSIVE.

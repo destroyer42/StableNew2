@@ -17,7 +17,11 @@ from typing import Any
 from src.gui.batch_retry_dialog import BatchRetryDialog
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_dispatcher import tk_dispatcher_for
-from src.gui.view_contracts.batch_operations_contract import BatchOperationsSession, BatchViewHooks
+from src.gui.view_contracts.batch_operations_contract import (
+    SFW_OUTPUTS_REASON,
+    BatchOperationsSession,
+    BatchViewHooks,
+)
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.gui.widgets.flow_row_v2 import FlowRow
 from src.queue.batch_membership import BatchKey
@@ -348,6 +352,10 @@ class BatchOperationsPanelV2(ttk.Frame):
             ):
                 if not state.enabled:
                     blocked.append(f"{name}: {state.reason}")
+            # The output actions are disabled for many routine reasons; only SFW mode is surprising enough to
+            # spell out, once, instead of leaving three greyed buttons unexplained.
+            if session.review_state().reason == SFW_OUTPUTS_REASON:
+                blocked.append(f"Open in Review / Open Output Folder / Movie Clips: {SFW_OUTPUTS_REASON}")
         self.hint_var.set(" | ".join(blocked))
         if session.busy:
             self.status_var.set(f"Working ({session.busy.lower()})...")
@@ -384,9 +392,12 @@ class BatchOperationsPanelV2(ttk.Frame):
         if main_window is None:
             raise RuntimeError("The main window is not available")
         # 0 means the operator chose Cancel when asked to replace unsent Review work.
-        return len(route_images_to_review(
+        handed = route_images_to_review(
             main_window=main_window, image_paths=list(paths),
-            status_message=f"Opened {len(paths)} batch output image(s) from Queue/History."))
+            status_message="Opened {count} batch output image(s) from Queue/History.")
+        # Report what Review lists (a file named twice is listed once), not how many paths were offered.
+        listed = getattr(getattr(main_window, "review_tab", None), "selected_images", None)
+        return len(listed) if handed and isinstance(listed, list) else len(handed)
 
     def _open_movie_clips(self, bundle: dict[str, Any]) -> None:
         from src.gui.controllers.video_workspace_handoff import route_bundle_to_movie_clips

@@ -168,6 +168,8 @@ class JobFacts:
     seed: int | None
     source_image: str | None
     prompt: str | None
+    #: For a multi-segment job, each frozen segment's ``(prompt, seed)``; ``None`` for a single clip.
+    segments: tuple[tuple[str | None, int | None], ...] | None = None
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -199,6 +201,7 @@ def read_job_facts(snapshot: Mapping[str, Any] | None) -> JobFacts | None:
                 seed=_int_or_none(block.get("seed")),
                 source_image=str(original) if original else first_input,
                 prompt=str(block.get("prompt")) if block.get("prompt") is not None else None,
+                segments=_sequence_segments(block.get("sequence_metadata")),
             )
         svd = config.get("svd_native") if isinstance(config, Mapping) else None
         if isinstance(svd, Mapping):
@@ -215,6 +218,62 @@ def read_job_facts(snapshot: Mapping[str, Any] | None) -> JobFacts | None:
         return JobFacts(str(njr.job_id), None, None, first_input, None)
     except Exception:  # noqa: BLE001 - a stored row that cannot be read is simply "not verified"
         return None
+
+
+def _sequence_segments(plan: Any) -> tuple[tuple[str | None, int | None], ...] | None:
+    if not isinstance(plan, Mapping):
+        return None
+    segments = plan.get("segments")
+    if not isinstance(segments, (list, tuple)):
+        return ()
+    return tuple(
+        (
+            str(item.get("prompt")) if item.get("prompt") is not None else None,
+            _int_or_none(item.get("seed")),
+        )
+        if isinstance(item, Mapping)
+        else (None, None)
+        for item in segments
+    )
+
+
+def _sequence_findings(
+    facts: JobFacts, job: Mapping[str, Any], case: Mapping[str, Any]
+) -> tuple[list[str], list[str]]:
+    """``(contradictions, unverified)`` for the whole sequence: every segment's prompt and seed (VID-A14B-SVI-375)."""
+
+    planned = case.get("segments")
+    if not isinstance(planned, list) or not planned:
+        if facts.segments is not None:
+            return ["the stored job is a multi-segment sequence, but the case is a single clip"], []
+        return [], []
+    if facts.segments is None:
+        return ["the case is a multi-segment sequence, but the stored job is a single clip"], []
+    if len(facts.segments) != len(planned):
+        return [
+            f"the stored job has {len(facts.segments)} segment(s), not the case's {len(planned)}"
+        ], []
+    contradictions: list[str] = []
+    unverified: list[str] = []
+    seeds = job.get("segment_seeds")
+    expected_seeds = list(seeds) if isinstance(seeds, list) else None
+    if expected_seeds is None or len(expected_seeds) != len(planned):
+        unverified.append("the manifest records no per-segment seeds")
+    for index, ((prompt, seed), segment) in enumerate(zip(facts.segments, planned, strict=True)):
+        label = f"segment {index + 1}"
+        want = str(segment.get("prompt") or "") if isinstance(segment, Mapping) else ""
+        if prompt is None:
+            unverified.append(f"the stored job records no prompt for {label}")
+        elif prompt != want:
+            contradictions.append(f"the stored job used a different prompt for {label}")
+        if seed is None:
+            unverified.append(f"the stored job records no seed for {label}")
+        elif expected_seeds is not None and index < len(expected_seeds):
+            if seed != _int_or_none(expected_seeds[index]):
+                contradictions.append(
+                    f"the stored job used seed {seed} for {label}, not {expected_seeds[index]}"
+                )
+    return contradictions, unverified
 
 
 class Comparability(str, Enum):
@@ -285,6 +344,9 @@ def verify_cell_identity(
         unverified.append("the stored job records no source image")
     elif not _same_path(facts.source_image, str(case.get("image") or "")):
         contradictions.append("the stored job used a different source image than the case")
+    sequence_contradictions, sequence_unverified = _sequence_findings(facts, job, case)
+    contradictions.extend(sequence_contradictions)
+    unverified.extend(sequence_unverified)
     if facts.backend == BACKEND_WORKFLOW:
         if facts.prompt is None:
             unverified.append("the stored job records no prompt")

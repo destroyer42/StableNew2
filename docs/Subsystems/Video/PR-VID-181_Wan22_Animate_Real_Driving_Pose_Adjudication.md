@@ -1,5 +1,7 @@
 # PR-VID-181 — Wan2.2-Animate Upstream-Compatible Real-Driving Pose Adjudication
 
+**2026-11-22 update.** The owner resolved the device-loss fault by forcing PCIe Gen4 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The evidence and qualification disposition below record the original work.
+
 Status: **`PR-VID-181 — COMPLETE / ACCEPTED / INTEGRATED — ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY`**;
 secondary finding **`BACKGROUND_INSTABILITY_CROSS_CASE`**. Qualification only. No production `src/` change, no
 backend, no resolver/controller/queue/NJR change, no workflow registration. Start

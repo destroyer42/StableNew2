@@ -20,6 +20,7 @@ from src.image_backends.operation_compatibility import (
 from src.pipeline.adetailer_contract import classify_detector
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
+from src.review.archive import configured_output_root, job_queue_of
 from src.review.assist.contracts import AssistError
 from src.review.assist.identity import current_file_sha256
 from src.review.correction_advice import (
@@ -81,6 +82,37 @@ class ReviewBatchPreview:
                 raise ValueError(f"Source content changed; preview again: {item.path}")
 
 
+def review_output_dir(controller: Any) -> str:
+    """The configured output root a Review re-work job writes under (``<root>/Reprocess/...``).
+
+    One authority, the one Pipeline jobs and the Review archive use: the ``output_dir`` setting of the controller's
+    config manager, route folders stripped. Without a config manager (a bare test double) the builder default stays.
+    """
+
+    manager = getattr(controller, "_config_manager", None)
+    return str(configured_output_root(manager)) if manager is not None else "output"
+
+
+def parent_job_model(controller: Any, job_id: Any) -> str:
+    """The checkpoint the job that wrote an artifact ran with, for artifacts that recorded none of their own.
+
+    Re-work children written before the stage manifest carried the checkpoint embed no model. The immutable job
+    snapshot does, so the model is carried forward from the parent job rather than dropped to ``unknown``.
+    """
+
+    queue = job_queue_of(controller)
+    getter = getattr(queue, "get_job", None)
+    if not callable(getter) or not job_id:
+        return ""
+    try:
+        job = getter(str(job_id))
+    except Exception:  # noqa: BLE001 - an unreadable job only means the artifact stays without a recorded model
+        return ""
+    snapshot = getattr(job, "snapshot", None)
+    value = snapshot.get("base_model") if isinstance(snapshot, dict) else None
+    return value.strip() if isinstance(value, str) and value.strip().lower() not in {"", "unknown", "n/a"} else ""
+
+
 def _source_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -139,6 +171,7 @@ def prepare_review_batch(
         raise ValueError("A guided correction prepares exactly one source and one stage.")
     batch_id = str(uuid.uuid4())
     builder, sources, rows, jobs = ReprocessJobBuilder(), [], [], []
+    output_dir = review_output_dir(controller)
     hash_source = current_file_sha256 if guided is not None else _source_sha256
 
     def extra(chunk: list[ReprocessSourceItem], _output: str) -> dict[str, Any]:
@@ -228,6 +261,7 @@ def prepare_review_batch(
             plan = builder.build_grouped_reprocess_jobs(
                 items=[source], stages=stages, fallback_config=fallback_config,
                 batch_size=1, pack_name="ReviewReprocess", source="review_tab", extra_metadata_builder=extra,
+                output_dir=output_dir,
             )
             record = plan.jobs[0]
             model = record.base_model
@@ -251,6 +285,7 @@ def prepare_review_batch(
         plan = builder.build_grouped_reprocess_jobs(
             items=sources, stages=stages, fallback_config=fallback_config, batch_size=batch_size,
             pack_name="ReviewReprocess", source="review_tab", extra_metadata_builder=extra,
+            output_dir=output_dir,
         )
         jobs = plan.jobs
     def group_key(job: NormalizedJobRecord) -> tuple[str, str]:

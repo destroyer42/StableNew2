@@ -1,9 +1,9 @@
 # Qualification and acceptance harnesses
 
 Offline-by-default, operator-only tooling that produced the qualification verdicts recorded under `docs/Subsystems/`.
-It is never part of the production path and never runs in CI against a GPU, Forge, Comfy or SVD. The owner's
-2026-10-18 general GPU hold lift (`STATUS.md` Holds) is not a qualification authorization: each physical run of a harness
-here or of a SYSTEM-840 arm needs fresh explicit owner authorization of its exact plan
+It is never part of the production path and never runs in CI against a GPU, Forge, Comfy or SVD. The owner resolved the
+GPU device-loss fault on 2026-11-22 ([DIAG-GPU-160](../../docs/Subsystems/Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). Each physical run of a harness here or of a SYSTEM-840 arm
+still needs fresh explicit owner authorization of its exact plan
 (`docs/runbooks/qual_system_840.md` section 2). This file grants none. It covers `tools/qualification/` and `tools/acceptance/`.
 
 ## Retention rule

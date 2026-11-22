@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded 2026-11-22.** The owner resolved device loss by forcing PCIe Gen4. See [DIAG-GPU-160](DIAG-GPU-160_PCIe_Gen4_Resolution.md).
+
 **RECURRENCE RECORDED - ROOT CAUSE NOT ATTRIBUTED - EXIT CRITERION NOT MET.**
 
 - At 2026-10-20 22:57:15 UTC (18:57:15 ET) the RTX 4070 Ti dropped off the bus during a StableNew Forge txt2img batch. `nvidia-smi` then reported `GPU is lost. Reboot the system to recover this GPU`, and it still did at the time of writing (no reboot yet).

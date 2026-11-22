@@ -1,5 +1,7 @@
 # PR-IMG-MODELS-151 — Pinned Forge exact-model feasibility (FLUX.2 Klein Base 9B BF16)
 
+**2026-11-22 update.** The owner resolved the device-loss fault by forcing PCIe Gen4 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The evidence and qualification disposition below record the original work.
+
 Status: COMPLETE / ACCEPTED / INTEGRATED (PR #78, merged to `main` at `814aa64e`); the verdict below is unchanged.
 
 **Verdict: `NO_GO_RESOURCE_RISK`.** The package closes here: no model was loaded, no generation was run, Forge was not

@@ -1015,6 +1015,9 @@ class AssetRegistry:
         structural_family = {
             "sdxl_base": ModelFamily.SDXL, "sdxl_refiner": ModelFamily.SDXL,
             "sdxl_inpaint": ModelFamily.SDXL, "sd1": ModelFamily.SD1, "sd2": ModelFamily.SD2,
+            "qwen_image_dit": ModelFamily.QWEN_IMAGE,
+            "qwen_image_20b_fp8": ModelFamily.QWEN_IMAGE,
+            "z_image_dit": ModelFamily.Z_IMAGE,
             # PR-IMG-FLUX-130: a FLUX layout class is structural FLUX evidence (it can conflict with a metadata claim).
             **dict.fromkeys(FLUX_ARCHITECTURE_IDS, ModelFamily.FLUX),
         }.get(architecture or "")
