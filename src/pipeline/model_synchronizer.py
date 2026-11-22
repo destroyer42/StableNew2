@@ -13,9 +13,15 @@ DEFAULT_MODEL_SWITCH_POLL_INTERVAL_SECONDS = 0.5
 
 
 #: Failure kinds that are a verified checkpoint problem (the endpoint answered; the selected checkpoint
-#: is not the active one and could not be made so).  Every other kind (``query_failed``, ``change_error``,
-#: ``invalid_request``) is not evidence about the checkpoint and keeps its generic reporting.
+#: is not the active one and could not be made so). Separate local pre-dispatch failures do not
+#: attribute the failed switch to the checkpoint.
 CHECKPOINT_PROBLEM_KINDS = frozenset({"writes_disabled", "change_rejected", "not_applied"})
+
+_LOCAL_WRITE_FAILURE_KINDS = {
+    "safe_mode": "writes_disabled",
+    "readiness": "write_not_ready",
+    "throttle_timeout": "write_throttle_timeout",
+}
 
 _MAX_NAME_CHARS = 80
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]+")
@@ -58,8 +64,18 @@ class ModelSynchronizationError(RuntimeError):
         return self.kind in CHECKPOINT_PROBLEM_KINDS
 
     def operator_message(self) -> str | None:
-        """Operator-readable reason for a verified checkpoint problem, else ``None`` (not a checkpoint issue)."""
+        """Return a bounded operator message for recognized preparation failures."""
 
+        if self.kind == "write_throttle_timeout":
+            return (
+                "Checkpoint switch timed out waiting for StableNew's local options-write throttle. "
+                "No checkpoint write was sent and no images were generated."
+            )
+        if self.kind == "write_not_ready":
+            return (
+                "WebUI was not ready for the checkpoint switch. "
+                "No checkpoint write was sent and no images were generated."
+            )
         if not self.is_checkpoint_problem:
             return None
         wanted = operator_model_title(self.requested)
@@ -174,7 +190,8 @@ class A1111ModelSynchronizer:
                 if failure_reason
                 else "model change request returned false"
             )
-            self._raise_failure(requested, actual, detail, kind="change_rejected")
+            kind = _LOCAL_WRITE_FAILURE_KINDS.get(failure_reason or "", "change_rejected")
+            self._raise_failure(requested, actual, detail, kind=kind)
 
         deadline = self._monotonic() + self._timeout_seconds
         last_actual = actual

@@ -1039,6 +1039,25 @@ class SDWebUIClient:
             return False, "throttle"
         return True, None
 
+    def _await_options_write_allowed(self) -> tuple[bool, str | None]:
+        """Reserve one write, waiting only after a local throttle denial."""
+        interval = float(self._options_min_interval_seconds)
+        deadline = time.monotonic() + max(15.0, 2 * interval)
+        poll_interval = min(0.5, max(0.01, interval / 4))
+        can_send, reason = self._options_can_send()
+        while reason == "throttle":
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False, "throttle_timeout"
+            time.sleep(min(poll_interval, remaining))
+            if time.monotonic() >= deadline:
+                return False, "throttle_timeout"
+            can_send, reason = self._options_can_send()
+        return can_send, reason
+
+    def _checkpoint_write_permission(self) -> tuple[bool, str | None]:
+        return self._options_can_send()
+
     def _resource_endpoint_on_cooldown(self, endpoint: str) -> bool:
         until = self._resource_endpoint_cooldowns.get(endpoint, 0.0)
         now = time.monotonic()
@@ -2246,7 +2265,7 @@ class SDWebUIClient:
         """
         payload = {"sd_model_checkpoint": model_name}
         self._last_options_write_failure = None
-        can_send, reason = self._options_can_send()
+        can_send, reason = self._checkpoint_write_permission()
         if not can_send:
             self._last_options_write_failure = reason or "unknown"
             if reason == "safe_mode":
