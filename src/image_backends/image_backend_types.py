@@ -20,8 +20,9 @@ A1111_IMAGE_BACKEND_ID = "a1111_webui"
 FORGE_IMAGE_BACKEND_ID = "forge_webui"
 #: The Diffusers runtime family (PR-IMG-120): a contained child per job, selected only by a model that requires it.
 DIFFUSERS_IMAGE_BACKEND_ID = "diffusers"
-#: The Comfy still-image backend (PR-IMG-COMFY-100): StableNew's managed ComfyUI, selected only by a model that requires
-#: it (the frozen Qwen-Image 2.1 profiles); never the new-work default and never a fallback target.
+#: The Comfy still-image backend (PR-IMG-COMFY-100): StableNew's managed ComfyUI, selected by a model that requires it
+#: (the frozen Qwen-Image 2.1 profiles) or by the operator's ``image_backend_default`` setting (PR-IMG-COMFY-381, SDXL
+#: txt2img); never a fallback target.
 COMFY_IMAGE_BACKEND_ID = "comfyui"
 #: ``ImageBackendCapabilities.runtime_family`` values.
 RUNTIME_FAMILY_WEBUI = "webui"
@@ -36,14 +37,35 @@ NEW_IMAGE_BACKEND_DEFAULT_ID = FORGE_IMAGE_BACKEND_ID
 LEGACY_MISSING_IMAGE_BACKEND_ID = A1111_IMAGE_BACKEND_ID
 
 
-def configured_image_backend_id() -> str:
-    """The still-image backend NEW work is constructed for: the configured WebUI-family identity.
+#: The persisted setting (PR-IMG-COMFY-381) that picks the still-image backend NEW work defaults to. It is separate from
+#: ``webui_runtime_identity`` (which names the WebUI process slot and needs a restart): ``webui`` (also blank/absent) follows
+#: that identity, today's behavior; ``comfyui`` makes StableNew's managed ComfyUI the default for new work.
+IMAGE_BACKEND_DEFAULT_SETTING = "image_backend_default"
+IMAGE_BACKEND_DEFAULT_WEBUI = "webui"
+IMAGE_BACKEND_DEFAULT_COMFYUI = "comfyui"
+IMAGE_BACKEND_DEFAULT_CHOICES = (IMAGE_BACKEND_DEFAULT_WEBUI, IMAGE_BACKEND_DEFAULT_COMFYUI)
 
-    ``forge_webui`` (the product default) unless the operator explicitly selected the ``a1111_webui`` rollback
-    (``webui_runtime_identity``). Selection is configuration only: there is no fallback between backends, and an
-    unrecognized or unreadable backend configuration raises ``WebUIRuntimeConfigurationError`` instead of selecting
-    either one.
-    """
+
+def normalize_image_backend_default(value: Any) -> str:
+    """A known ``image_backend_default`` value; blank/absent is ``webui``. An unknown value fails closed (no fallback)."""
+
+    text = str(value or "").strip().lower()
+    if not text:
+        return IMAGE_BACKEND_DEFAULT_WEBUI
+    if text not in IMAGE_BACKEND_DEFAULT_CHOICES:
+        from src.api.webui_runtime_identity import WebUIRuntimeConfigurationError
+
+        raise WebUIRuntimeConfigurationError(
+            f"Unknown {IMAGE_BACKEND_DEFAULT_SETTING} '{value}'; expected one of "
+            f"{list(IMAGE_BACKEND_DEFAULT_CHOICES)}. Fix it in Settings; no backend fallback is performed."
+        )
+    return text
+
+
+def configured_webui_image_backend_id() -> str:
+    """The configured WebUI-family identity: ``forge_webui`` (the product default) unless the operator explicitly
+    selected the ``a1111_webui`` rollback (``webui_runtime_identity``). An unrecognized or unreadable configuration
+    raises ``WebUIRuntimeConfigurationError`` instead of selecting either one."""
 
     from src.api.webui_runtime_identity import (
         load_backend_settings,
@@ -51,6 +73,29 @@ def configured_image_backend_id() -> str:
     )
 
     return resolve_configured_webui_runtime_identity(load_backend_settings())
+
+
+def configured_image_backend_id() -> str:
+    """The still-image backend NEW work is constructed for when nothing more specific names one.
+
+    ``image_backend_default = "comfyui"`` selects the managed ComfyUI backend; otherwise (the default) the configured
+    WebUI-family identity, Forge unless the operator selected the A1111 rollback. This is a global default, not per-job
+    runtime switching: an explicit job identity and a model-required backend (Qwen, Ideogram) still win, there is no
+    fallback between backends, and unreadable or unknown backend configuration raises instead of selecting either one.
+    """
+
+    from src.api.webui_runtime_identity import (
+        load_backend_settings,
+        resolve_configured_webui_runtime_identity,
+    )
+
+    settings = load_backend_settings()
+    if (
+        normalize_image_backend_default(settings.get(IMAGE_BACKEND_DEFAULT_SETTING))
+        == IMAGE_BACKEND_DEFAULT_COMFYUI
+    ):
+        return COMFY_IMAGE_BACKEND_ID
+    return resolve_configured_webui_runtime_identity(settings)
 
 
 def normalize_image_backend_options(
@@ -93,7 +138,11 @@ def normalize_image_backend_options(
     if backend_id is None:
         # Only a construction with no explicit identity consults the configured default; an explicit identity in the
         # options (including a replay or reprocess source) is kept and never rewritten.
-        backend_id = configured_image_backend_id() if "backend_id" not in image else NEW_IMAGE_BACKEND_DEFAULT_ID
+        backend_id = (
+            configured_image_backend_id()
+            if "backend_id" not in image
+            else NEW_IMAGE_BACKEND_DEFAULT_ID
+        )
     explicit_backend_id = image.get("backend_id", backend_id)
     if not isinstance(explicit_backend_id, str):
         raise ValueError("backend_options.image.backend_id must be a string")
@@ -201,7 +250,9 @@ class ImageExecutionResult:
         normalized = canonicalize_variant_entry(result, stage=stage_name)
         artifact = dict(normalized.get("artifact") or {})
         output_paths = [str(item) for item in extract_artifact_paths(normalized) if item]
-        primary_path = artifact.get("primary_path") or normalized.get("path") or normalized.get("output_path")
+        primary_path = (
+            artifact.get("primary_path") or normalized.get("path") or normalized.get("output_path")
+        )
         if not artifact or artifact.get("schema") != ARTIFACT_SCHEMA_VERSION:
             artifact = build_artifact_record(
                 stage=stage_name,
@@ -217,8 +268,12 @@ class ImageExecutionResult:
             stage_name=stage_name,
             primary_path=str(primary_path) if primary_path else None,
             output_paths=output_paths,
-            manifest_path=str(normalized["manifest_path"]) if normalized.get("manifest_path") else None,
-            thumbnail_path=str(normalized["thumbnail_path"]) if normalized.get("thumbnail_path") else None,
+            manifest_path=str(normalized["manifest_path"])
+            if normalized.get("manifest_path")
+            else None,
+            thumbnail_path=str(normalized["thumbnail_path"])
+            if normalized.get("thumbnail_path")
+            else None,
             artifact=artifact,
             raw_result=normalized,
             backend_metadata=dict(backend_metadata or {}),
@@ -241,4 +296,6 @@ class ImageBackendInterface(Protocol):
     backend_id: str
     capabilities: ImageBackendCapabilities
 
-    def execute(self, pipeline: Any, request: ImageExecutionRequest) -> ImageExecutionResult | None: ...
+    def execute(
+        self, pipeline: Any, request: ImageExecutionRequest
+    ) -> ImageExecutionResult | None: ...

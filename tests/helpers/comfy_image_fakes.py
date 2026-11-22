@@ -59,6 +59,37 @@ def object_info(
     return info
 
 
+def sdxl_object_info(
+    *,
+    checkpoints: Iterable[str] = ("juggernaut.safetensors",),
+    loras: Iterable[str] = ("detail.safetensors",),
+    vaes: Iterable[str] = ("sdxl_vae.safetensors",),
+    missing_class: str = "",
+) -> dict:
+    """``/object_info`` of the pinned runtime for the SDXL graph (PR-IMG-COMFY-381); combos are the legacy shape."""
+
+    from src.image_backends.comfy_image_graphs import SDXL_T2I
+
+    info: dict[str, Any] = {
+        name: {"input": {"required": {}}}
+        for name in SDXL_T2I.required_node_classes
+        if name != missing_class
+    }
+    combos = {
+        "CheckpointLoaderSimple": {"ckpt_name": [list(checkpoints)]},
+        "LoraLoader": {"lora_name": [list(loras)]},
+        "VAELoader": {"vae_name": [list(vaes)]},
+        "KSampler": {
+            "sampler_name": [["euler", "euler_ancestral", "dpmpp_2m", "dpmpp_sde"]],
+            "scheduler": [["normal", "karras", "simple", "beta"]],
+        },
+    }
+    for node_class, required in combos.items():
+        if node_class in info:
+            info[node_class]["input"]["required"] = required
+    return info
+
+
 def system_stats(*, vram_free: int = 11 * GIB, ram_free: int = 20 * GIB) -> dict:
     return {
         "system": {

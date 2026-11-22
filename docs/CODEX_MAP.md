@@ -16,7 +16,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Running a job | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
 | PromptPacks | `docs/Subsystems/PromptPacks/PROMPTPACKS_AND_PROMPTING.md`; `src/pipeline/prompt_pack_parser.py` -> `src/pipeline/prompt_pack_job_builder.py`; `src/promptpacks/` |
 | Matrix and randomization | `src/pipeline/matrix_expansion_plan.py` (PromptPack Matrix: counts, limit, seeded selection) -> `src/pipeline/prompt_pack_job_builder.py`; `src/pipeline/config_variant_plan_v2.py` -> `src/randomizer/` |
-| Image backends and model profiles | `docs/Subsystems/Image/IMAGE_PIPELINE.md` and `MODEL_PROFILES.md` first, then `src/image_backends/image_backend_registry.py`, `src/image_backends/model_policy.py` |
+| Image backends and model profiles | `docs/Subsystems/Image/IMAGE_PIPELINE.md` and `MODEL_PROFILES.md` first, then `src/image_backends/image_backend_registry.py`, `src/image_backends/model_policy.py`; ComfyUI SDXL: `comfy_image_backend.py`, `comfy_sdxl_profile.py` |
 | Model-aware generation profiles and startup defaults | `docs/Subsystems/Image/MODEL_PROFILES.md` section 17; `src/generation_profiles/` -> `src/controller/generation_profile_controller.py` -> `src/gui/generation_profile_strip.py` |
 | Prompt compatibility and adaptation | `src/prompting/`; `docs/Subsystems/Prompting/` |
 | Assets (models, LoRAs, embeddings, curated resource readiness) | `src/assets/registry.py`; `docs/Subsystems/Image/PR-ASSET-110_Local_Asset_Registry.md`; readiness `src/assets/resource_readiness.py`, `tools/asset_readiness_report.py` |

@@ -43,6 +43,7 @@ from src.image_backends.comfy_qwen_image_profile import QWEN_IMAGE_21_PROFILE_V1
 from src.image_backends.comfy_qwen_image_profile import QWEN_IMAGE_21_TURBO_PROFILE_V1 as TURBO
 from src.image_backends.comfy_qwen_image_profile import QwenImageProfileError
 from src.image_backends.diffusers_ideogram4_profile import IDEOGRAM4_PROFILE_V1
+from src.image_backends.forge_klein_profile import KleinProfileError
 from src.image_backends.model_policy import resolve_model_policy
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.pipeline_runner import PipelineRunner
@@ -392,7 +393,8 @@ def test_registry_rejects_extra_stages_and_the_backend_rejects_foreign_njr_inten
     with pytest.raises(ValueError, match="does not support stage chain: adetailer"):
         registry.validate_stage_chain("comfyui", ["txt2img", "adetailer"])
     njr = Mock(base_model="sdxl.safetensors", backend_options={"image": {"backend_id": "comfyui"}})
-    with pytest.raises(QwenImageProfileError, match="ordinary checkpoint"):
+    # PR-IMG-COMFY-381: an ordinary checkpoint now takes the SDXL path, which admits only registry-classified SDXL.
+    with pytest.raises(KleinProfileError, match="not a registry-classified SDXL checkpoint"):
         backend.validate_njr_intent(njr, ["txt2img"])
 
 
