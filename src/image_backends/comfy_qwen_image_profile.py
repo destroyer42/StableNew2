@@ -527,7 +527,7 @@ def validate_qwen_image_njr(njr: Any, stage_names: list[str] | None = None) -> N
         if frozen is not None
         and frozen.structural_transformer
         and qwen_model_matches(frozen, model_name)
-        else qwen_image_profile_for_model(model_name)
+        else qwen_image_profile_for_model(model_name, structural=False)
     )
     profile = selected or frozen
     if profile is None:
