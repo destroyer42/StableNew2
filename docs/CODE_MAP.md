@@ -200,7 +200,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
 - `run_submission_service.py`: (no docstring)
 - `runtime_projection_coordinator.py`: (no docstring)
-- `shutdown_coordinator.py`: Application-shutdown sequencing for the job queue (PR-RUNTIME-SHUTDOWN-140)
+- `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
 
 ## src/controller/pipeline_controller_services/
 

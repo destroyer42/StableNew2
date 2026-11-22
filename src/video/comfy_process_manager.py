@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.controller.runtime_state import CancellationError, CancelToken
 from src.utils.config import ConfigManager
 from src.utils.managed_process import ManagedProcess
 from src.video.comfy_healthcheck import probe_comfy_endpoint, wait_for_comfy_ready
@@ -179,19 +180,24 @@ class ComfyProcessManager:
         _GLOBAL_COMFY_PROCESS_MANAGER = self
         return process
 
-    def stop(self, *, grace_seconds: float = 5.0) -> None:
+    def stop(self, *, grace_seconds: float = 5.0) -> bool:
         global _GLOBAL_COMFY_PROCESS_MANAGER
         if self._stopped:
-            return
-        self._stopped = True
-        managed, self._managed = self._managed, None
-        self._running_command = ()
-        self._verified_launch_flags = ()
+            return True
+        managed = self._managed
         if managed is not None:
+            process = managed.process
             managed.stop(grace_seconds=grace_seconds)
             self._last_tails = (managed.stdout_tail(), managed.stderr_tail())
+            if process is not None and process.poll() is None:
+                return False
+        self._stopped = True
+        self._managed = None
+        self._running_command = ()
+        self._verified_launch_flags = ()
         if _GLOBAL_COMFY_PROCESS_MANAGER is self:
             _GLOBAL_COMFY_PROCESS_MANAGER = None
+        return True
 
     @property
     def readiness_timeout_seconds(self) -> float:
@@ -207,9 +213,11 @@ class ComfyProcessManager:
         code = process.poll() if process is not None else None
         return f"the ComfyUI process StableNew launched exited (return code {code})"
 
-    def check_health(self) -> bool:
+    def check_health(self, *, cancel_token: CancelToken | None = None) -> bool:
         base_url = self._configured_base_url()
         options: dict[str, Any] = {}
+        if cancel_token is not None:
+            options["cancel_token"] = cancel_token
         if self.owns_process:
             options["abort_if"] = self._owned_child_exited
         try:
@@ -219,25 +227,38 @@ class ComfyProcessManager:
                 poll_interval=self._config.poll_interval_seconds,
                 **options,
             )
+        except CancellationError:
+            raise
         except Exception as exc:
             if self.owns_process:
                 raise ComfyStartupError(self._startup_failure_detail(base_url, exc)) from exc
             raise
 
-    def ensure_running(self, *, required_flags: Sequence[str] = ()) -> bool:
+    def ensure_running(
+        self, *, required_flags: Sequence[str] = (), cancel_token: CancelToken | None = None,
+    ) -> bool:
+        options = {} if cancel_token is None else {"cancel_token": cancel_token}
         required = workflow_launch_requirements(self.config.command, required_flags)
+        if cancel_token is not None:
+            cancel_token.check_cancelled()
         if self.is_running():
             self._check_running_flags(required)
             if required:
-                return self.check_health() and self.is_running()
+                return self.check_health(**options) and self.is_running()
             try:
-                if self.check_health():
+                if self.check_health(**options):
                     return True
+            except CancellationError:
+                raise
             except Exception:
                 pass
+            if cancel_token is not None:
+                cancel_token.check_cancelled()
             self.stop()
+        if cancel_token is not None:
+            cancel_token.check_cancelled()
         self.start(required_flags=required_flags)
-        return self.check_health() and (not required or self.is_running())
+        return self.check_health(**options) and (not required or self.is_running())
 
     def restart(
         self,

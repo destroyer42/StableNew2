@@ -51,6 +51,8 @@ class _FakeManaged:
 
     def stop(self, *, grace_seconds: float = 5.0) -> None:
         self.stopped = True
+        if self.process is not None:
+            self.process._returncode = 0
 
     def is_running(self) -> bool:
         return self.process is not None and self.process.poll() is None

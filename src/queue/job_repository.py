@@ -858,7 +858,8 @@ class JobRepository(JobHistoryStore):
         return [self._row_to_history(row) for row in rows]
 
     def list_recent_jobs(
-        self, *, statuses: set[JobStatus] | None = None, limit: int = 50
+        self, *, statuses: set[JobStatus] | None = None, limit: int = 50,
+        stop: threading.Event | None = None,
     ) -> list[JobHistoryEntry]:
         wanted = tuple(status.value for status in statuses or ())
         parameters: list[Any] = []
@@ -869,9 +870,39 @@ class JobRepository(JobHistoryStore):
         newest += " ORDER BY created_at DESC LIMIT ?"
         parameters.append(max(0, int(limit)))
         sql = f"SELECT * FROM jobs WHERE job_id IN ({newest}) ORDER BY created_at DESC"
-        with self._lock:
-            rows = self._connection.execute(sql, tuple(parameters)).fetchall()
-        return [self._row_to_history(row) for row in rows]
+        if stop is None:
+            with self._lock:
+                rows = self._connection.execute(sql, tuple(parameters)).fetchall()
+            return [self._row_to_history(row) for row in rows]
+
+        # The connection is shared. Limit the progress hook to this read under the
+        # repository lock so it cannot interrupt a queue transaction.
+        while not stop.is_set():
+            if self._lock.acquire(timeout=0.05):
+                break
+        else:
+            return []
+        try:
+            if stop.is_set():
+                return []
+            self._connection.set_progress_handler(stop.is_set, 1000)
+            try:
+                rows = self._connection.execute(sql, tuple(parameters)).fetchall()
+            except sqlite3.OperationalError as exc:
+                if stop.is_set() and exc.sqlite_errorcode == sqlite3.SQLITE_INTERRUPT:
+                    return []
+                raise
+            finally:
+                self._connection.set_progress_handler(None, 0)
+        finally:
+            self._lock.release()
+
+        entries = []
+        for row in rows:
+            if stop.is_set():
+                return []
+            entries.append(self._row_to_history(row))
+        return entries
 
     def get_job(self, job_id: str) -> JobHistoryEntry | None:
         with self._lock:

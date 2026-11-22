@@ -25,10 +25,12 @@ Usage:
 """
 
 import logging
+import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -86,7 +88,11 @@ class ThreadRegistry:
         """
 
         with self._registry_lock:
-            self._shutdown_listeners.append(listener)
+            already_shutting_down = self._shutdown_requested
+            if not already_shutting_down:
+                self._shutdown_listeners.append(listener)
+        if already_shutting_down:
+            listener()
 
         def remove() -> None:
             with self._registry_lock:
@@ -145,15 +151,23 @@ class ThreadRegistry:
             daemon=daemon,
         )
 
+        return self.start_tracked_thread(thread, purpose, suppress_daemon_warning=suppress_daemon_warning)
+
+    def start_tracked_thread(
+        self, thread: threading.Thread, purpose: str | None, *, suppress_daemon_warning: bool = False,
+    ) -> threading.Thread:
+        """Start and register an existing Thread subclass under the same admission fence."""
         tracked = TrackedThread(
             thread=thread,
-            name=name,
+            name=thread.name,
             spawned_at=time.monotonic(),
             purpose=purpose,
             suppress_daemon_warning=suppress_daemon_warning,
         )
 
         with self._registry_lock:
+            if self._shutdown_requested:
+                raise RuntimeError("Thread registry is shutting down")
             # Remove any dead threads before adding new one
             self._cleanup_dead_threads()
 
@@ -162,7 +176,7 @@ class ThreadRegistry:
             self._threads[id(thread)] = tracked
 
             logger.debug(
-                f"[thread_registry] Spawned thread '{name}' (id={id(thread)}, daemon={daemon})"
+                "[thread_registry] Started thread '%s' (ident=%s)", thread.name, thread.ident,
             )
 
         return thread
@@ -207,87 +221,44 @@ class ThreadRegistry:
                 f"[thread_registry] Cleaned up dead thread '{tracked.name}' (id={thread_id})"
             )
 
-    def shutdown_all(self, timeout: float = 10.0) -> dict[str, Any]:
-        """
-        Gracefully shutdown all tracked threads.
-
-        This method:
-        1. Marks shutdown as requested (threads should check this)
-        2. Joins all non-daemon threads with timeout
-        3. Reports any threads that didn't shut down cleanly
-
-        Args:
-            timeout: Maximum time to wait for each thread (seconds)
-
-        Returns:
-            Dict with shutdown statistics:
-                - total: Total threads tracked
-                - joined: Threads that shutdown cleanly
-                - timeout: Threads that timed out
-                - orphaned: Daemon threads still alive
-        """
-        logger.info(f"[thread_registry] Shutdown requested for all threads (timeout={timeout}s)")
-
-        self._shutdown_requested = True
-
+    def begin_shutdown(self) -> None:
+        """Fence new tracked work and notify each registered stop listener once."""
         with self._registry_lock:
+            if self._shutdown_requested:
+                return
+            self._shutdown_requested = True
             listeners = list(self._shutdown_listeners)
-            threads_to_join = list(self._threads.values())
         for listener in listeners:
             try:
                 listener()
             except Exception:
                 logger.exception("[thread_registry] shutdown listener failed")
 
-        stats = {
-            "total": len(threads_to_join),
-            "joined": 0,
-            "timeout": 0,
-            "orphaned": 0,
-        }
-
-        # Join all threads
-        for tracked in threads_to_join:
+    def shutdown_all(self, timeout: float = 10.0) -> dict[str, Any]:
+        """Signal stops and join non-daemon threads within one aggregate budget."""
+        deadline = time.monotonic() + max(0.0, timeout)
+        self.begin_shutdown()
+        tracked_threads = self.get_active_threads()
+        current = threading.current_thread()
+        for tracked in tracked_threads:
             thread = tracked.thread
+            if not thread.daemon and thread is not current:
+                thread.join(timeout=max(0.0, deadline - time.monotonic()))
 
-            if thread.daemon:
-                if thread.is_alive() and not tracked.suppress_daemon_warning:
-                    logger.warning(
-                        f"[thread_registry] Daemon thread '{tracked.name}' "
-                        f"still alive (age={time.monotonic() - tracked.spawned_at:.1f}s)"
-                    )
-                    stats["orphaned"] += 1
-                continue
-
-            if not thread.is_alive():
-                stats["joined"] += 1
-                continue
-
-            logger.debug(f"[thread_registry] Joining thread '{tracked.name}' (timeout={timeout}s)")
-
-            thread.join(timeout=timeout)
-
-            if thread.is_alive():
-                logger.error(
-                    f"[thread_registry] Thread '{tracked.name}' did not "
-                    f"shutdown within {timeout}s timeout!"
-                )
-                stats["timeout"] += 1
-            else:
-                logger.debug(f"[thread_registry] Thread '{tracked.name}' shutdown cleanly")
-                stats["joined"] += 1
-
-        # Final cleanup
-        with self._registry_lock:
-            self._cleanup_dead_threads()
-            remaining = len(self._threads)
-
-        if remaining > 0:
-            logger.warning(f"[thread_registry] {remaining} thread(s) still tracked after shutdown")
-        else:
-            logger.info("[thread_registry] All threads shutdown successfully")
-
-        return stats
+        surviving = self.get_active_threads()
+        timeouts = sum(not item.thread.daemon for item in surviving)
+        orphans = sum(item.thread.daemon and not item.suppress_daemon_warning for item in surviving)
+        for item in surviving:
+            if not item.thread.daemon:
+                logger.error("[thread_registry] Thread '%s' did not shutdown within the shared deadline", item.name)
+            elif not item.suppress_daemon_warning:
+                logger.warning("[thread_registry] Daemon thread '%s' still alive", item.name)
+        return {
+            "total": len(tracked_threads),
+            "joined": sum(not item.thread.daemon and not item.thread.is_alive() for item in tracked_threads),
+            "timeout": timeouts,
+            "orphaned": orphans,
+        }
 
     def is_shutdown_requested(self) -> bool:
         """
@@ -357,10 +328,29 @@ def shutdown_all_threads(timeout: float = 10.0) -> dict[str, Any]:
     Convenience function to shutdown all tracked threads.
 
     Args:
-        timeout: Maximum time to wait for each thread
+        timeout: Maximum time to wait across all threads
 
     Returns:
         Shutdown statistics dict
     """
     registry = get_thread_registry()
     return registry.shutdown_all(timeout=timeout)
+
+
+def log_worker_stacks(workers: Iterable[tuple[threading.Thread, str]], *, phase: str) -> None:
+    """Sample a bounded stack of surviving workers without reading source or frame locals."""
+    active = [(thread, role) for thread, role in workers if thread.is_alive()]
+    if not active:
+        return
+    frames = sys._current_frames()
+    for thread, role in active[:12]:
+        frame = frames.get(thread.ident) if thread.ident is not None else None
+        stack = []
+        while frame is not None and len(stack) < 8:
+            code = frame.f_code
+            stack.append(f"{Path(code.co_filename).name}:{frame.f_lineno}:{code.co_name}")
+            frame = frame.f_back
+        logger.warning(
+            "[shutdown] phase=%s worker=%s ident=%s role=%s stack=%s",
+            phase, thread.name, thread.ident, role, " <- ".join(stack),
+        )

@@ -96,14 +96,14 @@ def test_the_repository_closes_when_quiescent_and_not_otherwise(caplog) -> None:
         assert coordinator.close_repository_when_quiescent(busy) is False
     assert busy.history_store.close_calls == 0
     assert "NOT closed" in caplog.text and "Job repository closed" not in caplog.text
-    assert busy.stop_calls == [coordinator.REPOSITORY_FINAL_CHECK_SECONDS]  # one short final bounded check
+    assert busy.stop_calls == []  # the coordinator uses the first stop verdict and never waits twice
 
 
-def test_a_worker_that_quiesces_during_the_final_check_allows_the_close() -> None:
-    late = FakeService(quiescent=False, stop_returns=True)
+def test_a_live_background_repository_user_refuses_close() -> None:
+    service = FakeService(quiescent=True, stop_returns=True)
 
-    assert coordinator.close_repository_when_quiescent(late) is True
-    assert late.history_store.close_calls == 1
+    assert coordinator.close_repository_when_quiescent(service, other_users_quiescent=False) is False
+    assert service.history_store.close_calls == 0
 
 
 def test_a_failing_close_is_reported_not_raised(caplog) -> None:

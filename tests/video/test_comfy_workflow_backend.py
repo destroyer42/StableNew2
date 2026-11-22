@@ -423,3 +423,133 @@ def test_comfy_workflow_backend_executes_conditioned_synthetic_workflow_with_res
     manifest_payload = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
     assert manifest_payload["conditioning"]["camera_intent"]["preset"] == "dolly_in"
     assert manifest_payload["conditioning"]["depth_input"]["resolved_path"] == str(depth_map)
+
+
+
+def _shutdown_test_backend(client, monkeypatch, *, live_preparation=None):
+    backend = ComfyWorkflowVideoBackend(client=client, transition=_ready_transition())
+    monkeypatch.setattr(backend, "_ensure_runtime_ready", lambda *_args, **_kw: "http://fake")
+    backend._dependency_probe = SimpleNamespace(probe_workflow=lambda *_a, **_kw: SimpleNamespace(ready=True))
+    backend._readiness = SimpleNamespace(policy_for=lambda _spec: None)
+    backend._compiler = SimpleNamespace(compile=lambda *_args: None)
+    backend._resolve_conditioning_inputs = lambda **_kwargs: None
+    backend._build_queue_payload = live_preparation or (lambda *_args, **_kw: {"prompt": {"fake": {}}})
+    return backend
+
+
+def test_cancel_during_workflow_preparation_prevents_dispatch(monkeypatch):
+    from src.controller.runtime_state import CancellationError, CancelToken
+
+    token = CancelToken()
+    client = Mock()
+
+    def prepare(*_args, **_kwargs):
+        token.cancel()
+        return {"prompt": {"fake": {}}}
+
+    backend = _shutdown_test_backend(client, monkeypatch, live_preparation=prepare)
+    with pytest.raises(CancellationError, match="before the workflow was queued"):
+        backend._execute_on_runtime(
+            None, SimpleNamespace(cancel_token=token), SimpleNamespace(), {}, "synthetic"
+        )
+    client.queue_prompt.assert_not_called()
+
+
+def test_cancel_wakes_history_wait_without_full_interval():
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from src.controller.runtime_state import CancellationError, CancelToken
+
+    waiting = threading.Event()
+
+    class ObservedCancelToken(CancelToken):
+        def wait(self, timeout):
+            waiting.set()
+            return super().wait(timeout)
+
+    token = ObservedCancelToken()
+    client = Mock()
+    client.get_history.return_value = {}
+    client.get_queue.return_value = {"queue_running": [[0, "known-id"], [1, "other-id"]]}
+    backend = ComfyWorkflowVideoBackend(history_poll_interval=2, history_timeout=180)
+    with ThreadPoolExecutor(1) as pool:
+        try:
+            result = pool.submit(backend._wait_for_history_entry, client, prompt_id="known-id", cancel_token=token)
+            assert waiting.wait(1)
+            token.cancel()
+            with pytest.raises(CancellationError):
+                result.result(0.8)
+            client.interrupt.assert_called_once_with("known-id")
+            client.get_history.assert_called_once_with("known-id")
+        finally:
+            token.cancel()
+
+
+def test_cancel_during_stalled_comfy_get_uses_scoped_stop_when_timeout_returns():
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from requests.exceptions import ReadTimeout
+
+    from src.controller.runtime_state import CancellationError, CancelToken
+    from src.video.comfy_api_client import ComfyApiClient
+
+    entered = threading.Event()
+    release = threading.Event()
+    session = Mock()
+
+    def get(url, *, timeout):
+        if url.endswith("/queue"):
+            assert timeout == (0.5, 1.5)
+            return SimpleNamespace(status_code=200, json=lambda: {"queue_pending": [[0, "known-id"]]})
+        assert timeout == 10
+        entered.set()
+        assert release.wait(2)
+        raise ReadTimeout()
+
+    session.get.side_effect = get
+    client = ComfyApiClient(session=session)
+    token = CancelToken()
+    backend = ComfyWorkflowVideoBackend()
+    with ThreadPoolExecutor(1) as pool:
+        try:
+            result = pool.submit(backend._wait_for_history_entry, client, prompt_id="known-id", cancel_token=token)
+            assert entered.wait(1)
+            token.cancel()
+            assert not result.done()
+            release.set()
+            with pytest.raises(CancellationError):
+                result.result(1)
+        finally:
+            release.set()
+
+    session.post.assert_called_once_with(
+        "http://127.0.0.1:8188/queue", timeout=(0.5, 1.5), json={"delete": ["known-id"]}
+    )
+
+
+def test_cancel_during_dispatch_keeps_unknown_outcome_and_does_not_replay(monkeypatch, caplog):
+    from requests.exceptions import ReadTimeout
+
+    from src.api.http_transport import DispatchOutcomeUnknown
+    from src.controller.runtime_state import CancelToken
+    from src.video.comfy_api_client import ComfyApiClient
+
+    token = CancelToken()
+    session = Mock()
+
+    def dispatch(*_args, **_kwargs):
+        token.cancel()
+        raise ReadTimeout()
+
+    session.post.side_effect = dispatch
+    session.get.return_value = SimpleNamespace(status_code=200, json=dict)
+    backend = _shutdown_test_backend(ComfyApiClient(session=session), monkeypatch)
+    with pytest.raises(DispatchOutcomeUnknown):
+        backend._execute_on_runtime(
+            None, SimpleNamespace(cancel_token=token), SimpleNamespace(), {}, "synthetic"
+        )
+
+    assert session.post.call_count == 1 and session.post.call_args.args[0].endswith("/prompt")
+    assert "outcome is unknown" in caplog.text

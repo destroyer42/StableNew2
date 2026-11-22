@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover - Tk not ready
 
 
 from src.gui import main_window
-from src.utils.gpu_survivor_telemetry import start_gpu_session_telemetry, stop_gpu_session_telemetry
+from src.utils.gpu_survivor_telemetry import start_gpu_session_telemetry
 from src.utils.graceful_exit import graceful_exit
 from src.utils.single_instance import SingleInstanceLock
 
@@ -70,8 +70,10 @@ def _emergency_webui_cleanup() -> None:
     logger = logging.getLogger(__name__)
     try:
         logger.warning("EMERGENCY CLEANUP: Killing WebUI processes via atexit handler")
-        manager.stop_webui(grace_seconds=1.0)
-        logger.warning("EMERGENCY CLEANUP: Complete")
+        if manager.stop_webui(grace_seconds=1.0):
+            logger.warning("EMERGENCY CLEANUP: WebUI stopped")
+        else:
+            logger.error("EMERGENCY CLEANUP: Owned WebUI did not stop")
     except Exception as exc:
         logger.error("EMERGENCY CLEANUP: Failed - %s", exc, exc_info=True)
 
@@ -84,8 +86,10 @@ def _emergency_comfy_cleanup() -> None:
     logger = logging.getLogger(__name__)
     try:
         logger.warning("EMERGENCY CLEANUP: Stopping ComfyUI via atexit handler")
-        manager.stop(grace_seconds=1.0)
-        logger.warning("EMERGENCY CLEANUP: ComfyUI cleanup complete")
+        if manager.stop(grace_seconds=1.0):
+            logger.warning("EMERGENCY CLEANUP: ComfyUI stopped")
+        else:
+            logger.error("EMERGENCY CLEANUP: Owned ComfyUI did not stop")
     except Exception as exc:
         logger.error("EMERGENCY CLEANUP: ComfyUI cleanup failed - %s", exc, exc_info=True)
 
@@ -649,6 +653,8 @@ def main() -> None:
         single_instance_lock.release()
         return
 
+    # Register before the runtime and persistence fallbacks, which run in LIFO order.
+    atexit.register(single_instance_lock.release)
     auto_exit_seconds = 0.0
     auto_exit_env = os.environ.get("STABLENEW_AUTO_EXIT_SECONDS")
     if auto_exit_env:
@@ -693,9 +699,13 @@ def main() -> None:
     root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
     # Managed Comfy launches from the queue after its workflow requirements are known.
     atexit.register(_emergency_comfy_cleanup)
+    # A timed-out shutdown leaves the persistence writer available. Once all
+    # non-daemon producers have exited, drain any acknowledged writes.
+    from .services.persistence_worker import shutdown_persistence_worker
 
-    # Observation-only GPU state record for the whole app session (see gpu_survivor_telemetry); stopped by
-    # graceful_exit or the finally block below.
+    atexit.register(shutdown_persistence_worker, timeout=None)
+
+    # Observation-only GPU state record for the whole app session, stopped by the coordinator.
     start_gpu_session_telemetry()
 
     try:
@@ -707,11 +717,12 @@ def main() -> None:
             app_controller, root, single_instance_lock, logger, window=window, reason="fatal-error"
         )
     finally:
+        graceful_exit(
+            app_controller, root, single_instance_lock, logging.getLogger(__name__),
+            window=window, reason="mainloop-exit",
+        )
         if site_connection is not None:
             site_connection.shutdown()
-        stop_gpu_session_telemetry("mainloop_exit")
-        if single_instance_lock.is_acquired():
-            single_instance_lock.release()
 
 
 if __name__ == "__main__":

@@ -21,6 +21,9 @@ class FakeJobService:
     def register_callback(self, *args, **kwargs):
         return None
 
+    def begin_shutdown(self) -> None:
+        pass
+
     def cancel_current(self) -> None:
         self.cancel_calls += 1
         return None

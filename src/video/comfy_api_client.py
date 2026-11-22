@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import IO, Any
@@ -70,7 +70,7 @@ class ComfyApiClient:
     def get_object_info(self, *, timeout: float = 10.0) -> dict[str, Any]:
         return self._get_json("/object_info", timeout=timeout)
 
-    def get_queue(self, *, timeout: float = 5.0) -> dict[str, Any]:
+    def get_queue(self, *, timeout: float | tuple[float, float] = 5.0) -> dict[str, Any]:
         return self._get_json("/queue", timeout=timeout)
 
     def get_history(
@@ -93,7 +93,7 @@ class ComfyApiClient:
             json=dict(payload or {}),
         )
 
-    def interrupt(self, prompt_id: str | None = None, *, timeout: float = 5.0) -> None:
+    def interrupt(self, prompt_id: str | None = None, *, timeout: float | tuple[float, float] = 5.0) -> None:
         """Ask Comfy to stop the prompt it is executing.
 
         With ``prompt_id`` the request names the prompt (current Comfy interrupts only that prompt if it is the one
@@ -107,7 +107,7 @@ class ComfyApiClient:
             json=body,
         )
 
-    def delete_from_queue(self, prompt_ids: list[str], *, timeout: float = 5.0) -> None:
+    def delete_from_queue(self, prompt_ids: list[str], *, timeout: float | tuple[float, float] = 5.0) -> None:
         """Remove still-pending prompts from Comfy's queue (a running prompt is not affected)."""
 
         self._transport.send(
@@ -147,6 +147,7 @@ class ComfyApiClient:
         subfolder: str = "",
         file_type: str = "output",
         timeout: float = 300.0,
+        check_cancelled: Callable[[], None] | None = None,
     ) -> Path:
         """Fetch one produced file through Comfy's ``/view`` endpoint into ``destination``."""
 
@@ -162,6 +163,8 @@ class ComfyApiClient:
         try:
             with target.open("wb") as handle:
                 for chunk in response.iter_content(chunk_size=1 << 20):
+                    if check_cancelled is not None:
+                        check_cancelled()
                     if chunk:
                         handle.write(chunk)
         except requests.exceptions.RequestException as exc:
@@ -174,7 +177,7 @@ class ComfyApiClient:
             response.close()
         return target
 
-    def _get_json(self, path: str, *, timeout: float) -> dict[str, Any]:
+    def _get_json(self, path: str, *, timeout: float | tuple[float, float]) -> dict[str, Any]:
         return self._transport.request_json(
             "GET", path, policy=RequestPolicy(timeout=timeout, idempotent=True)
         )

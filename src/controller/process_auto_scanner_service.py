@@ -123,15 +123,17 @@ class ProcessAutoScannerService:
     def set_memory_threshold(self, mb: float) -> None:
         self._config.memory_threshold_mb = max(0.0, float(mb))
 
-    def stop(self) -> None:
-        """Stop the scanner thread gracefully.
-
-        PR-SCANNER-001: Increased timeout from 1s to 10s for reliable shutdown.
-        """
+    def begin_shutdown(self) -> None:
         self._stop_event.set()
-        if self._thread and self._thread.is_alive():
-            # PR-SCANNER-001: Increased timeout for clean shutdown
-            self._thread.join(timeout=10.0)
+
+    def stop(self, timeout: float = 10.0) -> bool:
+        """Signal the scanner and report whether it has exited."""
+        self.begin_shutdown()
+        thread = self._thread
+        if thread is None:
+            return True
+        thread.join(timeout=max(0.0, timeout))
+        return not thread.is_alive()
 
     def scan_once(self) -> ProcessAutoScannerSummary:
         """Scan for and terminate stray Python processes.

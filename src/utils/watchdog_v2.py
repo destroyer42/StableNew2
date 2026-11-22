@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover - optional dependency
 from src.queue.job_model import JobExecutionMetadata
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, wrap_exception
 from src.utils.exceptions_v2 import WatchdogViolationError
+from src.utils.thread_registry import get_thread_registry
 
 WATCHDOG_LOG_PREFIX = "[WATCHDOG]"
 
@@ -63,12 +64,16 @@ class JobWatchdog(threading.Thread):
     def run(self) -> None:
         if not self._config.enabled:
             return
-        while not self._stop_event.wait(max(0.1, self._config.interval_sec)):
-            violation = self.inspect()
-            if violation is not None:
-                envelope = self._build_violation_envelope(violation)
-                self._violation_callback(self.job_id, envelope)
-                break
+        remove = get_thread_registry().add_shutdown_listener(self.stop)
+        try:
+            while not self._stop_event.wait(max(0.1, self._config.interval_sec)):
+                violation = self.inspect()
+                if violation is not None:
+                    envelope = self._build_violation_envelope(violation)
+                    self._violation_callback(self.job_id, envelope)
+                    break
+        finally:
+            remove()
 
     def stop(self) -> None:
         self._stop_event.set()
