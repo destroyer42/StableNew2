@@ -1386,7 +1386,7 @@ class PipelineController(CorePipelineController):
         error_msg = "Job missing _normalized_record; NJR-only execution requires NormalizedJobRecord snapshots."
         return {"error": error_msg, "job_id": job.job_id}
     def _get_runtime_status_callback(self) -> Callable[[dict[str, Any]], None] | None:
-        app_controller = getattr(self, "app_controller", None)
+        app_controller = getattr(self, "_app_controller", None)
         downstream = app_controller._get_runtime_status_callback() if app_controller else None
         return self._job_controller.runtime_status_callback(
             downstream

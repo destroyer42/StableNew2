@@ -113,3 +113,58 @@ def test_build_crash_bundle_skips_default_image_tree_scan_under_pytest(
 
     assert bundle is not None
     assert bundle.exists()
+
+
+def _touch(path: Path, mtime: float) -> Path:
+    import os
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x")
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_collect_image_paths_returns_the_newest_images_newest_first(tmp_path: Path) -> None:
+    import os
+
+    from src.utils.diagnostics_bundle_v2 import _collect_image_paths
+
+    old = _touch(tmp_path / "run_old" / "a.png", 1_000)
+    new = _touch(tmp_path / "run_new" / "b.jpg", 3_000)
+    mid = _touch(tmp_path / "run_mid" / "nested" / "c.jpeg", 2_000)
+    _touch(tmp_path / "run_new" / "notes.txt", 4_000)
+    for directory, mtime in (
+        (tmp_path / "run_old", 1_000),
+        (tmp_path / "run_mid" / "nested", 2_000),
+        (tmp_path / "run_mid", 2_000),
+        (tmp_path / "run_new", 3_000),
+    ):
+        os.utime(directory, (mtime, mtime))
+
+    assert _collect_image_paths([tmp_path], limit=2) == [new, mid]
+    assert _collect_image_paths([tmp_path], limit=5) == [new, mid, old]
+
+
+def test_collect_image_paths_is_bounded_by_directories_not_tree_size(tmp_path: Path) -> None:
+    import os
+
+    from src.utils.diagnostics_bundle_v2 import _collect_image_paths
+
+    for index in range(10):
+        folder = tmp_path / f"run_{index:02d}"
+        _touch(folder / "frame.png", 1_000 + index)
+        os.utime(folder, (1_000 + index, 1_000 + index))
+
+    # The root plus the two newest run folders: older folders are never listed.
+    found = _collect_image_paths([tmp_path], limit=25, dir_budget=3)
+
+    assert found == [tmp_path / "run_09" / "frame.png", tmp_path / "run_08" / "frame.png"]
+
+
+def test_collect_image_paths_skips_hidden_work_folders_and_missing_roots(tmp_path: Path) -> None:
+    from src.utils.diagnostics_bundle_v2 import _collect_image_paths
+
+    _touch(tmp_path / ".ffmpeg_frames_abc" / "frame_000000.png", 5_000)
+    kept = _touch(tmp_path / "clip" / "poster.png", 1_000)
+
+    assert _collect_image_paths([tmp_path, tmp_path / "missing"], limit=25) == [kept]
