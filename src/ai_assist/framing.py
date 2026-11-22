@@ -140,7 +140,7 @@ def _selected_model_lines(request: AssistRequest) -> list[str]:
     ]
 
 
-def render_prompt(request: AssistRequest) -> str:
+def render_prompt(request: AssistRequest, *, response_instructions: str = "") -> str:
     """The complete model input. Deterministic for a given request."""
 
     _check_text("positive_text", request.positive_text)
@@ -164,9 +164,14 @@ def render_prompt(request: AssistRequest) -> str:
     if request.kind is SuggestionKind.PLAN_PROPOSAL and request.current_target:
         lines += _selected_model_lines(request)
     lines += [
-        "If you cannot or will not help, reply "
-        + json.dumps({"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "..."})
-        + ".",
+        response_instructions
+        or (
+            "If you cannot or will not help, reply "
+            + json.dumps(
+                {"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "..."}
+            )
+            + "."
+        ),
         "",
         *_authored_block(request),
     ]

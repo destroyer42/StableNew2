@@ -179,12 +179,16 @@ for staged files, imports, readiness and firewall attestation.
 
 ## 14. Remote Preview and provider policy (PR-AI-REMOTE-310)
 
-- **D23.** An operator-approved remote configuration persists per user. Each explicit Suggest, Advise plan or Suggest
-  variety request prefers the approved Ollama worker. Startup and bounded background health checks carry only version
-  and installed-model metadata. With remote disabled or unconfigured, AI Assist uses its established local workflow.
+- **D23.** A per-user Remote Preview record pins the endpoint and Ollama version, holds independent model approvals,
+  and records enablement and the selection. Legacy single-model records retain their approval and active model.
+  New setups prefer Qwen when approved until the operator selects a model in **AI Preview…**. Switching only selects
+  an existing approval and is blocked during a request. Revoking the active approval requires a fresh selection from
+  the remaining approvals. Disabling preserves valid approvals and selects the established local workflow. Startup
+  and bounded background health checks carry only version and installed-model metadata.
 - **D24.** Remote inference uses an independently managed GPU. It can run alongside Forge, SVD or Comfy generation or
   desktop GPU quarantine. Local Preview and fallback retain the D10 activity and yield policy and local RAM admission.
-- **D25.** A confirmed connection failure permits one local attempt per request, under the existing local gates.
+- **D25.** A confirmed connection failure before generation dispatch permits one local attempt per request under
+  the existing local gates. A lost connection after possible dispatch ends that attempt because Ollama may have received the request.
   Identity failures, request cancellation, timeouts, overload, refusal and malformed or rejected output remain visible.
   Recovery rechecks the exact identity for future requests while any current local request continues. Both providers
   share one request slot and one completion path.
@@ -202,8 +206,9 @@ for staged files, imports, readiness and firewall attestation.
 `AiAssistService` owns selection and the shared Shutdown and Cancel fences. `remote.py` owns metadata health,
 request adaptation and fixed transport error classification. `remote_transport.py` restricts host, port and paths,
 avoids environment proxies, does not follow redirects and bounds request and response bytes and wall time.
-Both providers use the same framing and deterministic suggestion validators. D17 planning remains read-only and
-D10 applies when a plan uses local inference. Neither provider can submit production work.
+Both providers use the same response schema and deterministic suggestion validators. The Ollama adapter describes the
+success and refusal fields explicitly in its prompt and checks the wire envelope before canonical validation. D17 planning remains read-only and D10 applies when a plan uses local
+inference. Neither provider can submit production work. Review displays the model identity from the completed request.
 
 See [Remote Preview setup and acceptance](../../runbooks/ai_assist_preview_activation.md#remote-preview).
-Live StableNew inference, simultaneous GPU workloads and model qualification require scoped operator evidence.
+Desktop acceptance, simultaneous GPU workloads and model qualification each require applicable evidence.
