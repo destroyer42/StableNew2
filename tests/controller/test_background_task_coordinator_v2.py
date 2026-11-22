@@ -62,7 +62,6 @@ def test_background_task_coordinator_runs_inline_for_deterministic_callers() -> 
     assert seen == [7]
 
 
-
 def test_shutdown_discards_deliveries_already_queued_for_the_ui() -> None:
     deliveries = []
     seen = []

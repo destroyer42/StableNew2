@@ -110,7 +110,10 @@ class BackgroundTaskCoordinator:
             if not self._run_inline:
                 try:
                     self._thread_registry.spawn(
-                        target=self._run, args=(spec,), name=spec.name, purpose=spec.purpose,
+                        target=self._run,
+                        args=(spec,),
+                        name=spec.name,
+                        purpose=spec.purpose,
                     )
                 except Exception:
                     self._inflight_generation.pop(spec.key, None)

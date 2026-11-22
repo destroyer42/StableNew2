@@ -199,12 +199,14 @@ class HistoryBrowserPanelV2(JobHistoryPanelV2):
                 return
             try:
                 future.set_result(search(query))
-            except BaseException as exc:
+            except BaseException as exc:  # noqa: BLE001 - The Future transports worker failures to Tk.
                 future.set_exception(exc)
 
         try:
             self._registry.spawn(
-                read, name="HistoryBrowserSearch", purpose="Search the shared History repository",
+                read,
+                name="HistoryBrowserSearch",
+                purpose="Search the shared History repository",
             )
         except RuntimeError:
             if not self._registry.is_shutdown_requested():

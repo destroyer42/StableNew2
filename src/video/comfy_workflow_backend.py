@@ -1547,7 +1547,7 @@ class ComfyWorkflowVideoBackend:
                         continue
                     _raise_if_cancelled(cancel_token, "before downloading workflow outputs")
                     name = str(descriptor["filename"])
-                    options = (
+                    options: dict[str, Any] = (
                         {"check_cancelled": lambda: _raise_if_cancelled(cancel_token, "during output download")}
                         if cancel_token is not None and isinstance(client, ComfyApiClient) else {}
                     )

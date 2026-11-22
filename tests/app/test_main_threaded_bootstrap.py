@@ -62,7 +62,9 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "_async_bootstrap_webui", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(main_module, "graceful_exit", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        main_module.atexit, "register", lambda callback, **kw: emergency_callbacks.append((callback, kw))
+        main_module.atexit,
+        "register",
+        lambda callback, **kw: emergency_callbacks.append((callback, kw)),
     )
     monkeypatch.setattr(
         site_connection_dialog, "install_site_connection_control", install_site_control

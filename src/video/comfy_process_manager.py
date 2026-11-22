@@ -235,7 +235,10 @@ class ComfyProcessManager:
             raise
 
     def ensure_running(
-        self, *, required_flags: Sequence[str] = (), cancel_token: CancelToken | None = None,
+        self,
+        *,
+        required_flags: Sequence[str] = (),
+        cancel_token: CancelToken | None = None,
     ) -> bool:
         options = {} if cancel_token is None else {"cancel_token": cancel_token}
         required = workflow_launch_requirements(self.config.command, required_flags)

@@ -632,7 +632,9 @@ class SiteListener:
         remove_listener = registry.add_shutdown_listener(self._stop.set)
         try:
             registry.spawn(
-                target=self._serve, args=(session, remove_listener), name="StableNewSite",
+                target=self._serve,
+                args=(session, remove_listener),
+                name="StableNewSite",
                 purpose="Operator Site request and repository access",
             )
         except Exception:

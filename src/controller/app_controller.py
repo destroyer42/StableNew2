@@ -3454,6 +3454,14 @@ class AppController:
         self.webui_process_manager = manager
         return shutdown_coordinator.finish_webui(manager, timeout)
 
+    def _start_shutdown_watchdog(self) -> threading.Thread:
+        thread = self._thread_registry.spawn(
+            self._shutdown_watchdog, name="ShutdownWatchdog", daemon=True,
+            purpose="Observe the application shutdown deadline", suppress_daemon_warning=True,
+        )
+        self._shutdown_watchdog_thread = thread
+        return thread
+
     def _shutdown_watchdog(self) -> None:
         shutdown_coordinator.watch_shutdown(self)
 

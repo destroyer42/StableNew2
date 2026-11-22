@@ -93,7 +93,9 @@ class ComfyApiClient:
             json=dict(payload or {}),
         )
 
-    def interrupt(self, prompt_id: str | None = None, *, timeout: float | tuple[float, float] = 5.0) -> None:
+    def interrupt(
+        self, prompt_id: str | None = None, *, timeout: float | tuple[float, float] = 5.0
+    ) -> None:
         """Ask Comfy to stop the prompt it is executing.
 
         With ``prompt_id`` the request names the prompt (current Comfy interrupts only that prompt if it is the one
@@ -107,7 +109,9 @@ class ComfyApiClient:
             json=body,
         )
 
-    def delete_from_queue(self, prompt_ids: list[str], *, timeout: float | tuple[float, float] = 5.0) -> None:
+    def delete_from_queue(
+        self, prompt_ids: list[str], *, timeout: float | tuple[float, float] = 5.0
+    ) -> None:
         """Remove still-pending prompts from Comfy's queue (a running prompt is not affected)."""
 
         self._transport.send(

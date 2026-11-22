@@ -171,11 +171,8 @@ def shutdown_app(controller: Any, reason: str) -> ShutdownOutcome:
     outcome = ShutdownOutcome()
     active_steps: list[tuple[threading.Thread, str]] = []
     controller._shutdown_phase = "admission"
-    watchdog = threading.Thread(
-        target=controller._shutdown_watchdog, name="ShutdownWatchdog", daemon=True
-    )
-    controller._shutdown_watchdog_thread = watchdog
-    watchdog.start()
+    watchdog = controller._start_shutdown_watchdog()
+    registry = controller._thread_registry
 
     def remaining() -> float:
         return max(0.0, deadline - time.monotonic())
@@ -201,8 +198,7 @@ def shutdown_app(controller: Any, reason: str) -> ShutdownOutcome:
             except Exception:
                 logger.exception("[shutdown] %s failed", phase)
 
-        worker = threading.Thread(target=run, name=f"Shutdown-{phase}", daemon=False)
-        worker.start()
+        worker = registry.spawn_shutdown_step(run, phase=phase)
         return worker, result
 
     def finish_step(
@@ -224,7 +220,6 @@ def shutdown_app(controller: Any, reason: str) -> ShutdownOutcome:
         return default
 
     job_service = controller.job_service
-    registry = controller._thread_registry
     background = controller._background_tasks
     ai = getattr(controller, "ai_assist", None)
     legacy_worker = controller._worker_thread
@@ -285,9 +280,11 @@ def shutdown_app(controller: Any, reason: str) -> ShutdownOutcome:
         return [
             (item.thread, item.purpose or "tracked background worker")
             for item in registry.get_active_threads()
-            if not item.suppress_daemon_warning
-            or item.name.startswith("WebUI-")
-            and not item.name.endswith("-reader")
+            if not item.name.startswith("Shutdown-")
+            and (
+                not item.suppress_daemon_warning
+                or (item.name.startswith("WebUI-") and not item.name.endswith("-reader"))
+            )
         ]
 
     attempt("tracked-threads", lambda: registry.shutdown_all(timeout=remaining()))

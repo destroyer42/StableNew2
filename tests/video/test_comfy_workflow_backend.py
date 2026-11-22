@@ -425,15 +425,18 @@ def test_comfy_workflow_backend_executes_conditioned_synthetic_workflow_with_res
     assert manifest_payload["conditioning"]["depth_input"]["resolved_path"] == str(depth_map)
 
 
-
 def _shutdown_test_backend(client, monkeypatch, *, live_preparation=None):
     backend = ComfyWorkflowVideoBackend(client=client, transition=_ready_transition())
     monkeypatch.setattr(backend, "_ensure_runtime_ready", lambda *_args, **_kw: "http://fake")
-    backend._dependency_probe = SimpleNamespace(probe_workflow=lambda *_a, **_kw: SimpleNamespace(ready=True))
+    backend._dependency_probe = SimpleNamespace(
+        probe_workflow=lambda *_a, **_kw: SimpleNamespace(ready=True)
+    )
     backend._readiness = SimpleNamespace(policy_for=lambda _spec: None)
     backend._compiler = SimpleNamespace(compile=lambda *_args: None)
     backend._resolve_conditioning_inputs = lambda **_kwargs: None
-    backend._build_queue_payload = live_preparation or (lambda *_args, **_kw: {"prompt": {"fake": {}}})
+    backend._build_queue_payload = live_preparation or (
+        lambda *_args, **_kw: {"prompt": {"fake": {}}}
+    )
     return backend
 
 
@@ -475,7 +478,9 @@ def test_cancel_wakes_history_wait_without_full_interval():
     backend = ComfyWorkflowVideoBackend(history_poll_interval=2, history_timeout=180)
     with ThreadPoolExecutor(1) as pool:
         try:
-            result = pool.submit(backend._wait_for_history_entry, client, prompt_id="known-id", cancel_token=token)
+            result = pool.submit(
+                backend._wait_for_history_entry, client, prompt_id="known-id", cancel_token=token
+            )
             assert waiting.wait(1)
             token.cancel()
             with pytest.raises(CancellationError):
@@ -502,7 +507,9 @@ def test_cancel_during_stalled_comfy_get_uses_scoped_stop_when_timeout_returns()
     def get(url, *, timeout):
         if url.endswith("/queue"):
             assert timeout == (0.5, 1.5)
-            return SimpleNamespace(status_code=200, json=lambda: {"queue_pending": [[0, "known-id"]]})
+            return SimpleNamespace(
+                status_code=200, json=lambda: {"queue_pending": [[0, "known-id"]]}
+            )
         assert timeout == 10
         entered.set()
         assert release.wait(2)
@@ -514,7 +521,9 @@ def test_cancel_during_stalled_comfy_get_uses_scoped_stop_when_timeout_returns()
     backend = ComfyWorkflowVideoBackend()
     with ThreadPoolExecutor(1) as pool:
         try:
-            result = pool.submit(backend._wait_for_history_entry, client, prompt_id="known-id", cancel_token=token)
+            result = pool.submit(
+                backend._wait_for_history_entry, client, prompt_id="known-id", cancel_token=token
+            )
             assert entered.wait(1)
             token.cancel()
             assert not result.done()

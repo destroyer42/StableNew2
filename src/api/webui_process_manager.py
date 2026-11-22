@@ -1006,7 +1006,7 @@ class WebUIProcessManager:
         self._teardown_process_container(terminate_owned=True)
 
         self._stop_output_capture()
-        if process.poll() is None:
+        if process is not None and process.poll() is None:
             logger.error("Owned WebUI PID %s is still running after shutdown", pid)
             return False  # Retain the launched handle for the existing exit fallback.
         self._finalize_process(process)

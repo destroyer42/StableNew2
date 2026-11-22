@@ -151,12 +151,35 @@ class ThreadRegistry:
             daemon=daemon,
         )
 
-        return self.start_tracked_thread(thread, purpose, suppress_daemon_warning=suppress_daemon_warning)
+        return self.start_tracked_thread(
+            thread, purpose, suppress_daemon_warning=suppress_daemon_warning
+        )
 
     def start_tracked_thread(
-        self, thread: threading.Thread, purpose: str | None, *, suppress_daemon_warning: bool = False,
+        self,
+        thread: threading.Thread,
+        purpose: str | None,
+        *,
+        suppress_daemon_warning: bool = False,
     ) -> threading.Thread:
         """Start and register an existing Thread subclass under the same admission fence."""
+        return self._start_tracked_thread(
+            thread, purpose, suppress_daemon_warning=suppress_daemon_warning
+        )
+
+    def spawn_shutdown_step(self, target: Callable[[], None], *, phase: str) -> threading.Thread:
+        """Track application cleanup even after ordinary work admission has closed."""
+        thread = threading.Thread(target=target, name=f"Shutdown-{phase}")
+        return self._start_tracked_thread(thread, phase, shutdown_step=True)
+
+    def _start_tracked_thread(
+        self,
+        thread: threading.Thread,
+        purpose: str | None,
+        *,
+        suppress_daemon_warning: bool = False,
+        shutdown_step: bool = False,
+    ) -> threading.Thread:
         tracked = TrackedThread(
             thread=thread,
             name=thread.name,
@@ -166,7 +189,7 @@ class ThreadRegistry:
         )
 
         with self._registry_lock:
-            if self._shutdown_requested:
+            if self._shutdown_requested and not shutdown_step:
                 raise RuntimeError("Thread registry is shutting down")
             # Remove any dead threads before adding new one
             self._cleanup_dead_threads()
@@ -176,7 +199,9 @@ class ThreadRegistry:
             self._threads[id(thread)] = tracked
 
             logger.debug(
-                "[thread_registry] Started thread '%s' (ident=%s)", thread.name, thread.ident,
+                "[thread_registry] Started thread '%s' (ident=%s)",
+                thread.name,
+                thread.ident,
             )
 
         return thread
@@ -250,12 +275,17 @@ class ThreadRegistry:
         orphans = sum(item.thread.daemon and not item.suppress_daemon_warning for item in surviving)
         for item in surviving:
             if not item.thread.daemon:
-                logger.error("[thread_registry] Thread '%s' did not shutdown within the shared deadline", item.name)
+                logger.error(
+                    "[thread_registry] Thread '%s' did not shutdown within the shared deadline",
+                    item.name,
+                )
             elif not item.suppress_daemon_warning:
                 logger.warning("[thread_registry] Daemon thread '%s' still alive", item.name)
         return {
             "total": len(tracked_threads),
-            "joined": sum(not item.thread.daemon and not item.thread.is_alive() for item in tracked_threads),
+            "joined": sum(
+                not item.thread.daemon and not item.thread.is_alive() for item in tracked_threads
+            ),
             "timeout": timeouts,
             "orphaned": orphans,
         }
@@ -345,12 +375,16 @@ def log_worker_stacks(workers: Iterable[tuple[threading.Thread, str]], *, phase:
     frames = sys._current_frames()
     for thread, role in active[:12]:
         frame = frames.get(thread.ident) if thread.ident is not None else None
-        stack = []
+        stack: list[str] = []
         while frame is not None and len(stack) < 8:
             code = frame.f_code
             stack.append(f"{Path(code.co_filename).name}:{frame.f_lineno}:{code.co_name}")
             frame = frame.f_back
         logger.warning(
             "[shutdown] phase=%s worker=%s ident=%s role=%s stack=%s",
-            phase, thread.name, thread.ident, role, " <- ".join(stack),
+            phase,
+            thread.name,
+            thread.ident,
+            role,
+            " <- ".join(stack),
         )
