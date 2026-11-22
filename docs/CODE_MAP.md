@@ -178,7 +178,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_preflight_controller.py`: Read-only workflow readiness on the Video Workflow controller (PR-VID-UX-311)
 - `video_recent_outputs_controller.py`: Make Video support on the Video Workflow controller (PR-VID-UX-313/314)
 - `video_sequence_controller.py`: Admit, resume and replay multi-segment video jobs on the Video Workflow controller (PR-VID-SEQ-330-CORE)
-- `video_workflow_controller.py`: Coordinate workflow video validation, Preview, motion preparation, and queue submission
+- `video_workflow_controller.py`: Coordinate queued video workflows, one-variable experiments, batches, and motion preparation
 - `video_workflow_mixins.py`: The controller surfaces ``VideoWorkflowController`` is composed of (kept apart so the controller module stays…
 - `webui_connection_controller.py`: Coordinate WebUI connection checks, readiness epochs, reconnects, and resource notifications
 - `webui_outage_coordinator.py`: Contain a WebUI outage inside the existing queue/worker/manager boundaries
