@@ -591,7 +591,22 @@ def render_html(report: EvalReport, *, show_prompts: bool = True) -> str:
             out.append(
                 assess_html.source_html(report.sources.get(case_id), show_media=show_prompts)
             )
-        out.append(f"<small>{prompt}</small></th>")
+        out.append(f"<small>{prompt}</small>")
+        segments = case.get("segments")
+        if isinstance(segments, list) and segments:
+            # One job per arm runs every segment; the clip beside it is the assembled sequence (VID-A14B-SVI-375).
+            out.append(
+                f"<div class='note'>{len(segments)}-segment sequence: rate the whole assembled clip</div>"
+            )
+            if show_prompts:
+                out.append("<ol class='segments'>")
+                out.extend(
+                    f"<li><small>{esc(str(item.get('prompt', '')))}</small></li>"
+                    for item in segments
+                    if isinstance(item, dict)
+                )
+                out.append("</ol>")
+        out.append("</th>")
         for arm in arms:
             out.append(
                 _cell_html(

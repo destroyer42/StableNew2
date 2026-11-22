@@ -89,9 +89,43 @@ class VideoEvalControllerMixin:
             )
         form.update(overrides)
         form.update(prompt=case.prompt, negative_prompt=case.negative_prompt, seed=str(seed))
+        if case.is_sequence:
+            return self._build_workflow_eval_sequence(case, arm, form, seed)
         frozen = self._njr_builder.freeze_inputs(case.image_path, form)
         built = self._njr_builder.build_job(form, frozen)
         return BuiltEvalJob(njr=built.njr, seed=built.seed, frame_count=built.frame_count)
+
+    def _build_workflow_eval_sequence(
+        self, case: EvalCase, arm: EvalArm, form: dict[str, Any], seed: int
+    ) -> BuiltEvalJob:
+        """One multi-segment job through the sequence admission path (``build_sequence_job``); nothing is queued."""
+
+        build_sequence_job = getattr(self, "build_sequence_job", None)
+        if not callable(build_sequence_job):
+            raise RuntimeError("this controller cannot build multi-segment sequence jobs")
+        seeds = case.segment_seeds(seed)
+        intent = {
+            "segments": [
+                {
+                    "prompt": segment.prompt,
+                    "seed": segment_seed,
+                    "frame_count": segment.frame_count
+                    if segment.frame_count is not None
+                    else form.get("frame_count"),
+                }
+                for segment, segment_seed in zip(case.segments, seeds, strict=True)
+            ],
+            "assembly": {"clip_name": f"{case.case_id}_{arm.arm_id}"},
+        }
+        built = build_sequence_job(
+            source_image_path=str(case.image_path), form_data=form, sequence_intent=intent
+        )
+        plan = dict(built.njr.config["video_workflow"]["sequence_metadata"])
+        frozen_seeds = tuple(int(item["seed"]) for item in plan["segments"])
+        if frozen_seeds != seeds:  # admission must freeze exactly the suite's seeds
+            raise RuntimeError(f"the sequence froze seeds {frozen_seeds}, not {seeds}")
+        total = sum(int(item["frame_count"]) for item in plan["segments"])
+        return BuiltEvalJob(njr=built.njr, seed=seeds[0], frame_count=total, segment_seeds=seeds)
 
     def _build_svd_eval_job(self, case: EvalCase, arm: EvalArm, seed: int) -> BuiltEvalJob:
         from src.controller.svd_controller import SVDController

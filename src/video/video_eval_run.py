@@ -36,7 +36,10 @@ class BuiltEvalJob:
 
     njr: Any
     seed: int | None
+    #: For a sequence, the total generated frames across segments.
     frame_count: int | None = None
+    #: For a sequence case, each segment's frozen seed (segment 0's is ``seed``); empty for a single clip.
+    segment_seeds: tuple[int, ...] = ()
 
 
 #: ``(case, arm, seed) -> BuiltEvalJob``; raises ``ValueError``/``RuntimeError`` to refuse the case.
@@ -52,6 +55,7 @@ class EvalJobPlan:
     seed: int | None
     frame_count: int | None
     njr: Any = field(repr=False, compare=False)
+    segment_seeds: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -75,6 +79,13 @@ class EvalRunPlan:
             f"Eval suite {suite.suite_id}: {len(suite.cases)} cases x {len(suite.arms)} arms = "
             f"{suite.job_count} jobs, seed {suite.seed}, baseline arm {suite.baseline_arm_id}."
         ]
+        sequences = [case for case in suite.cases if case.is_sequence]
+        if sequences:
+            segments = sum(len(case.segments) for case in sequences)
+            lines.append(
+                f"  {len(sequences)} case(s) are multi-segment sequences ({segments} segments per arm, "
+                "segment i seeded with the suite seed + i); each runs as one job rated as a whole."
+            )
         for arm in suite.arms:
             flag = (
                 " (experimental workflow, opted in by the suite)"
@@ -130,6 +141,7 @@ class VideoEvalRunService:
                         seed=built.seed,
                         frame_count=built.frame_count,
                         njr=built.njr,
+                        segment_seeds=tuple(built.segment_seeds),
                     )
                 )
         return EvalRunPlan(run_id=run_id, suite=suite, jobs=tuple(jobs), errors=tuple(errors))
@@ -223,6 +235,16 @@ def build_run_manifest(plan: EvalRunPlan) -> dict[str, Any]:
                 "prompt": case.prompt,
                 "negative_prompt": case.negative_prompt,
                 "tags": list(case.tags),
+                **(
+                    {
+                        "segments": [
+                            {"prompt": segment.prompt, "frame_count": segment.frame_count}
+                            for segment in case.segments
+                        ]
+                    }
+                    if case.is_sequence
+                    else {}
+                ),
             }
             for case in suite.cases
         ],
@@ -244,6 +266,7 @@ def build_run_manifest(plan: EvalRunPlan) -> dict[str, Any]:
                 "job_id": job.job_id,
                 "seed": job.seed,
                 "frame_count": job.frame_count,
+                **({"segment_seeds": list(job.segment_seeds)} if job.segment_seeds else {}),
             }
             for job in plan.jobs
         ],

@@ -1,0 +1,215 @@
+{
+  "schema": "stablenew.video-eval-suite.v1",
+  "suite_id": "a14b-svi-sequence-v1",
+  "description": "Example only: three-segment Wan2.2 I2V-A14B sequences with plain last-frame carry (approved 1.0.0, baseline) against the experimental SVI 2.0 workflow (derived bf16 and Kijai fp16 adapters at CFG 1.5, derived at CFG 1.0). Segment i uses seed 372 + i. Replace the synthetic image names with your own sources before running.",
+  "seed": 372,
+  "baseline_arm": "plain_carry",
+  "cases": [
+    {
+      "case_id": "walk_toward",
+      "image": "images/synthetic_fullbody_portrait.png",
+      "negative_prompt": "camera shake, handheld, jitter, flicker, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+      "segments": [
+        {
+          "prompt": "the person walks slowly toward the camera at a steady natural pace, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person keeps walking toward the camera, then slows down, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person stops, stands still and looks into the camera, static locked-off camera, same person, same clothing and same background throughout"
+        }
+      ],
+      "tags": [
+        "body",
+        "locomotion"
+      ]
+    },
+    {
+      "case_id": "turn_around",
+      "image": "images/synthetic_fullbody_portrait.png",
+      "negative_prompt": "camera shake, handheld, jitter, flicker, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+      "segments": [
+        {
+          "prompt": "the person turns slowly in place until their side faces the camera, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person keeps turning until their back faces the camera, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person turns back around to face the camera again, static locked-off camera, same person, same clothing and same background throughout"
+        }
+      ],
+      "tags": [
+        "body",
+        "rotation",
+        "identity"
+      ]
+    },
+    {
+      "case_id": "face_closeup",
+      "image": "images/synthetic_closeup_portrait.png",
+      "negative_prompt": "camera shake, handheld, jitter, flicker, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+      "segments": [
+        {
+          "prompt": "close-up: the person blinks and slowly turns their head to the left, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "close-up: the person turns their head back toward the camera and smiles, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "close-up: the person laughs softly, then their face relaxes, static locked-off camera, same person, same clothing and same background throughout"
+        }
+      ],
+      "tags": [
+        "face",
+        "expression"
+      ]
+    },
+    {
+      "case_id": "wave_then_point",
+      "image": "images/synthetic_halfbody_portrait.png",
+      "negative_prompt": "camera shake, handheld, jitter, flicker, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+      "segments": [
+        {
+          "prompt": "the person raises their right hand and waves at the camera, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person lowers the hand and points to the side, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person puts both hands on their hips and nods, static locked-off camera, same person, same clothing and same background throughout"
+        }
+      ],
+      "tags": [
+        "body",
+        "gesture"
+      ]
+    },
+    {
+      "case_id": "side_steps",
+      "image": "images/synthetic_fullbody_portrait.png",
+      "negative_prompt": "camera shake, handheld, jitter, flicker, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+      "segments": [
+        {
+          "prompt": "the person takes one step to the left, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person takes two steps back to the right, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person shifts their weight and crosses their arms, static locked-off camera, same person, same clothing and same background throughout"
+        }
+      ],
+      "tags": [
+        "body",
+        "locomotion"
+      ]
+    },
+    {
+      "case_id": "hair_wind",
+      "image": "images/synthetic_halfbody_portrait.png",
+      "negative_prompt": "camera shake, handheld, jitter, flicker, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+      "segments": [
+        {
+          "prompt": "a light breeze moves the person's hair and clothing while they stand still, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the breeze grows stronger and the person brushes hair from their face, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the breeze calms and the person smiles at the camera, static locked-off camera, same person, same clothing and same background throughout"
+        }
+      ],
+      "tags": [
+        "fine_detail",
+        "identity"
+      ]
+    },
+    {
+      "case_id": "sit_and_stand",
+      "image": "images/synthetic_fullbody_landscape.png",
+      "negative_prompt": "camera shake, handheld, jitter, flicker, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+      "segments": [
+        {
+          "prompt": "the person slowly sits down on the bench beside them, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person sits on the bench and looks around, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person stands up again and faces the camera, static locked-off camera, same person, same clothing and same background throughout"
+        }
+      ],
+      "tags": [
+        "body",
+        "landscape"
+      ]
+    },
+    {
+      "case_id": "pick_up_object",
+      "image": "images/synthetic_halfbody_portrait.png",
+      "negative_prompt": "camera shake, handheld, jitter, flicker, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+      "segments": [
+        {
+          "prompt": "the person reaches down and picks up a cup from the table, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person raises the cup and takes a sip, static locked-off camera, same person, same clothing and same background throughout"
+        },
+        {
+          "prompt": "the person sets the cup down and looks at the camera, static locked-off camera, same person, same clothing and same background throughout"
+        }
+      ],
+      "tags": [
+        "body",
+        "object"
+      ]
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "plain_carry",
+      "label": "I2V-A14B 4-step 1.0.0, plain last-frame carry (approved baseline)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan22_i2v_a14b_4step_v1",
+        "workflow_version": "1.0.0",
+        "frame_count": 81
+      }
+    },
+    {
+      "arm_id": "svi_derived",
+      "label": "SVI 2.0 derived bf16, CFG 1.5 (experimental)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan22_i2v_a14b_svi",
+        "workflow_version": "1.0.0",
+        "frame_count": 81,
+        "experimental_opt_in": true
+      }
+    },
+    {
+      "arm_id": "svi_kijai",
+      "label": "SVI 2.0 Kijai fp16, CFG 1.5 (experimental)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan22_i2v_a14b_svi",
+        "workflow_version": "1.1.0",
+        "frame_count": 81,
+        "experimental_opt_in": true
+      }
+    },
+    {
+      "arm_id": "svi_derived_cfg1",
+      "label": "SVI 2.0 derived bf16, CFG 1.0 (experimental)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan22_i2v_a14b_svi",
+        "workflow_version": "1.2.0",
+        "frame_count": 81,
+        "experimental_opt_in": true
+      }
+    }
+  ]
+}
