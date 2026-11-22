@@ -1,5 +1,7 @@
 # PR-IMG-MODELS-154B — Controlled one-case physical qualification harness: Z-Image-Turbo FP8-scaled
 
+**2026-11-22 update.** The owner resolved the device-loss fault by forcing PCIe Gen4 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The evidence and qualification disposition below record the original work.
+
 Disposition: **`INSTRUMENTATION_GAP`** for the second owner-authorized physical case on 2026-10-10 (America/New_York).
 The corrected launch environment started Forge and generated one valid image. Shutdown was not verified clean at the
 recorded check; a later observation found no recorded PID or listener, but does not establish PASS. Both cases are consumed.

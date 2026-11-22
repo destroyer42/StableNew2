@@ -224,16 +224,16 @@ Related (B9, fixed in P3-5) [V]: `_json_loads` still returns the default for a c
 9. Shutdown order is fence -> cancel -> teardown -> quiescence -> repository close. Never close the repository under a live worker.
 10. Each process manager owns its own anonymous container; never name or share a job object.
 11. Persisted state goes through the repository or `src/utils/atomic_io.py`.
-12. The physical-GPU hold was lifted on 2026-10-18 (section 13); the device-loss quarantine is unchanged. Protected actions need owner approval (`AGENTS.md` section 5).
+12. The owner resolved device loss on 2026-11-22 (section 13). The device-loss quarantine remains in effect on recurrence. Protected actions need owner approval (`AGENTS.md` section 5).
 13. A RUNNING job returns to QUEUED under the same identity only when `FailureAssessment.safe_to_requeue` (or the worker's own proof that the callable was never invoked) positively shows generation never started, and it recorded no checkpoint or output. Absence of evidence never requeues. A refused return is a cancel plus an operator-action-required envelope; uncertain work is re-run only by a deliberate Replay.
 14. Every lifecycle change is candidate -> guarded SQLite commit -> projection, under the queue lock. The repository never writes to the job it is given, the live job and heap are never edited before the commit, and a failure after the commit is reconciled from the committed row, never reported as a rollback.
 15. `ReplayEngine.replay_njr` calls `run_njr` at most once per attempt. Argument compatibility (including `checkpoint_callback`) is resolved from the runner's signature before the call (`resolve_run_njr_kwargs`); an uninspectable or incompatible runner is refused with `RunnerCompatibilityError`, and a `TypeError` from the execution body is an ordinary failure, never a retry. The same holds for the `execute_job` adapter. Legacy imports never turn uncertain work into runnable work.
 16. A StableNew-launched WebUI on Windows never runs uncontained: it is created suspended, assigned to its launch's own anonymous kill-on-close job and resumed only after the OS confirms the assignment; any failure kills the new child through that job and raises `WebUIContainmentError`, and a containment failure is never retried in a loop. External processes (an occupied endpoint, another manager's process, a process in a foreign job) are never adopted, signalled or modified.
 17. The cold-start handoff only prepares: it never claims, never launches speculatively (only for eligible image work at the head of the queue), never touches an external process, never retries an unchanged failure per cycle, and releases its hold only on a fresh target-identity proof.
 
-## 13. GPU constraints (the standing hold was lifted on 2026-10-18)
+## 13. GPU constraints (device loss resolved 2026-11-22)
 
-The owner lifted the physical-GPU hold: device loss is intermittent and has no accepted root cause (`STATUS.md` Holds), and jobs are running. For this subsystem:
+The owner resolved the device-loss issue by forcing PCIe Gen4 ([DIAG-GPU-160](DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The device-loss quarantine remains the runtime response to a confirmed loss. Each physical qualification run requires fresh explicit owner authorization of its exact plan (`docs/runbooks/qual_system_840.md` section 2).
 
 - Physical work (real generation, qualification, starting or stopping a managed runtime) is allowed when a package's acceptance needs it. Production `WebUIOutageCoordinator.recover` performs a real owned restart on a confirmed outage, and `RuntimeTransitionCoordinator` stops real owned runtimes; never trigger either against a live manager from a test, gate or CI.
 - Tests must be hermetic: no WebUI, model, GPU, `nvidia-smi` or display. The autouse fixtures pin `STABLENEW_GPU_HOST_PROBE=0`, `STABLENEW_GPU_SESSION_TELEMETRY=0`, `STABLENEW_WEBUI_AUTOSTART=0`, `STABLENEW_COMFY_AUTOSTART=0`, `STABLENEW_NO_WEBUI=1`, and replace the WebUI container with a no-op. Inject probes, manager getters, clocks and runners instead of touching the real ones.
@@ -307,8 +307,9 @@ Per-PR records stay in `docs/Subsystems/Runtime/` as historical evidence. They m
 | `docs/Subsystems/Runtime/PR-RUNTIME-WEBUI-CONTAINMENT-FAILSAFE_Fail_Closed_WebUI_Launch.md` | Suspended-start, assign, resume; failure unwind; external-process isolation |
 | `docs/Subsystems/Runtime/PR-RUNTIME-READINESS-140_Operator_Readiness_Recovery_Projection.md` | Readiness and recovery projection |
 | `docs/Subsystems/Runtime/PR-RUNTIME-110_Comfy_Video_Runner_Liveness.md` | Comfy wait liveness reporting |
-| `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md` | The device-loss incident record behind the HOLD |
+| `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md` | The device-loss incident record behind the former hold |
 | `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` | Dump attribution for the same incident |
 | `docs/Subsystems/Runtime/DIAG-GPU-140_Forge_Job_Start_Device_Loss_Recurrence.md` | 2026-10-20 recurrence: Forge job-start device loss, 17-marker history, correlator UTC fix |
 | `docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md` | 2026-10-20/21: three losses in 11 hours, failing CUDA call differs each time, NVML hang recorder, PCIe Gen3 isolation protocol |
+| [DIAG-GPU-160](DIAG-GPU-160_PCIe_Gen4_Resolution.md) | Owner-accepted resolution after forcing PCIe Gen4 on 2026-11-22 |
 | `docs/audits/2026-10-16_repo_audit_and_roadmap.md` | Audit B2, B3, B7, B9, B10 and the P3 plan referenced above |

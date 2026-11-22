@@ -498,10 +498,9 @@ FLUX/model qualification does not live in this category.
 
 ### Platform Stability & Forensics (backlog category)
 
-`DIAG-GPU-130` is closed/integrated; current platform-baseline truth lives in
-`STATUS.md`'s "Active diagnostic evidence" entry, not restated here. This
-category becomes active again only on a new hardware/platform variable or
-recurrence, which needs an owner decision; PR-VID-184/184R/184S may inform
+`DIAG-GPU-130` closed on 2026-11-22 with the owner-accepted resolution in [DIAG-GPU-160](Subsystems/Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md).
+This category becomes active again only on a new hardware/platform variable or
+recurrence, which needs an owner decision. PR-VID-184/184R/184S may inform
 but cannot establish a failure family without supporting evidence.
 
 ### Model Qualification & Capability Expansion (backlog category)
@@ -538,12 +537,12 @@ qualification infrastructure, so both belong here when selected.
    artifact ownership, operator complexity, workflow/versioning burden, and
    suitability for future image/video runtime convergence. Qualification alone
    does not change the default backend. Offline phase completed in PR-IMG-BACKEND-QUAL-100:
-   architecture CONDITIONAL, quality/performance INCONCLUSIVE, physical execution HOLD after the
-   October 12 GPU device-loss incident. Clear the fault and obtain separately authorized matched
-   evidence before implementing PR-IMG-COMFY-100. See
+   architecture CONDITIONAL and quality/performance INCONCLUSIVE. [DIAG-GPU-160](Subsystems/Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md) clears the device-loss
+   blocker. Resource clearance and separately authorized matched physical evidence are still required
+   for promotion. See
    `docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md`.
-4. If controlled evidence supports Comfy promotion, `PR-IMG-COMFY-100` becomes
-   the bounded production still-image slice. ComfyUI must remain behind
+4. `PR-IMG-COMFY-100` implemented the bounded Comfy still-image slice. Promotion requires
+   controlled evidence. ComfyUI must remain behind
    StableNew-owned intent/compiler/NJR/JobService/SQLite/PipelineRunner/
    artifact-history authority; raw Comfy workflows and Comfy's internal queue
    stay backend private. Preserve Forge/A1111 compatibility until deliberate

@@ -98,6 +98,9 @@ No assumed weeks or pseudo-percent-complete bars. One coherent PR and one top-le
 
 ## Holds, owner choices and conflict handling
 
+**2026-11-22 update.** The owner cleared the device-loss blocker by forcing PCIe Gen4 ([DIAG-GPU-160](../Subsystems/Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)).
+Each physical qualification run still requires fresh explicit owner authorization of its exact plan.
+
 - Physical device-loss root cause remains unresolved (STATUS reports repeated events and quarantine); no new physical GPU/model run or WebUI/Comfy restart without fresh explicit owner authorization even though STATUS notes the prior general hold lifted October 18. Z-Image stability work specifically remains not authorized.
 - Text AI Assist qualification remains held on D12b and a fresh protected ETW canary. Smart Review real-model quality
   and LFM3-VL qualification remain open. See the [capability roadmap](../Subsystems/AiAssist/INTELLIGENT_IMAGE_REVIEW_ROADMAP.md)

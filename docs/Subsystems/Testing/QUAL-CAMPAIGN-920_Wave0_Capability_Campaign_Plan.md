@@ -18,8 +18,8 @@ From `tools/qualification/system840/ledger.py` (`derive_status`), `verdict.py` a
 - **Every physical run needs the owner.** A frozen plan, an `APPROVE <arm> <digest12>` authorization (never issued by an
   agent; a named delegate may type the launch phrase once per digest), a typed `RUN <digest12>` and passing readiness.
 - **A status changes only by an owner-accepted, reviewed edit of the ledger JSON.**
-- Standing hold `HOLD-GPU-DEVICE-LOSS`: any new device loss stops the campaign. GPU arms never run concurrently, and CPU
-  inference (AI Assist, Smart Review) never shares a session with a GPU arm.
+- The owner retired the standing GPU device-loss hold on 2026-11-22 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). Any new device loss stops the
+  campaign. GPU arms never run concurrently, and CPU inference (AI Assist, Smart Review) never shares a session with a GPU arm.
 
 ## 2. Scope: 34 qualifiable entries (16 out of scope)
 
@@ -168,7 +168,7 @@ messages truthful.
 2. **Smart Review: in scope, last** (Wave 6), under the same plan, `APPROVE <arm> <digest12>` and `RUN <digest12>` gate as
    the GPU arms, with a fixed corpus of about ten owner outputs as the quality reference.
 3. **Pace: accepted.** One sitting per wave; plans frozen and approved together; runs launched one at a time with each
-   canary inspected before the next; at most about four GPU runs per sitting because of `HOLD-GPU-DEVICE-LOSS`.
+   canary inspected before the next; at most about four GPU runs per sitting.
 4. **Out-of-scope list: decided item by item** (the section 2 table is the starting point; these decisions replace it).
    Each decision authorizes planning and build work only. Every physical run still needs its own frozen plan and owner
    approval, and every ledger change is an owner-accepted edit in a reviewed commit.

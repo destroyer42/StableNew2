@@ -79,6 +79,8 @@ What the measured runs show [R]:
 - TI2V-5B: 49 frames at 480x832 take about 60 s warm.
 - Wan-Animate-2: 39-41 frames take about 160-190 s at 10 steps.
 
+**2026-11-22 update.** The owner resolved the device-loss fault by forcing PCIe Gen4 ([DIAG-GPU-160](../Subsystems/Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). Segment-level checkpointing remains part of the design.
+
 **Stability.** Intermittent GPU device loss has occurred 16 times since 2026-09-07, with no root cause found (DIAG-GPU-100/110). Long jobs therefore need **segment-level checkpointing**: a lost device should cost one segment, not a whole movie. Phase D's design is built for this.
 
 **Architecture invariants are kept.**

@@ -1,5 +1,7 @@
 # PR-IMG-MODELS-156 - Z-Image canonical production acceptance
 
+**2026-11-22 update.** The owner resolved the device-loss fault by forcing PCIe Gen4 ([DIAG-GPU-160](../Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md)). The evidence and qualification disposition below record the original work.
+
 Implementation-only capability; no physical result claimed. PR-154B remains
 `INSTRUMENTATION_GAP`. No startup, model loading/selection, generation, publication
 or merge is authorized by this package.
