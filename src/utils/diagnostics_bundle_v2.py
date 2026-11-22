@@ -426,20 +426,51 @@ def _select_bundle_job_summary(job_snapshot: Mapping[str, Any] | None) -> dict[s
     return {}
 
 
-def _collect_image_paths(roots: list[Path], *, limit: int = 25) -> list[Path]:
-    seen: set[Path] = set()
-    images: list[Path] = []
+_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
+# Directories examined per bundle. Output trees hold hundreds of thousands of frames; walking all of them
+# (the previous ``rglob`` of every root, three times) took from 25 s to several minutes per bundle.
+_IMAGE_SCAN_DIR_BUDGET = 64
+
+
+def _collect_image_paths(
+    roots: list[Path], *, limit: int = 25, dir_budget: int = _IMAGE_SCAN_DIR_BUDGET
+) -> list[Path]:
+    """The newest ``limit`` images, found by visiting the most recently modified directories first.
+
+    Bounded by ``dir_budget`` directories rather than by the size of the tree. Hidden directories (for example
+    the transient ``.ffmpeg_frames_*`` work folders) are skipped, and an entry that disappears during the scan
+    is ignored instead of failing the bundle.
+    """
+
+    pending: list[tuple[float, str]] = []
     for root in roots:
-        if not root or not root.exists():
+        try:
+            if root and root.is_dir():
+                pending.append((root.stat().st_mtime, str(root)))
+        except OSError:
             continue
-        for ext in (".png", ".jpg", ".jpeg"):
-            for path in root.rglob(f"*{ext}"):
-                if path in seen or not path.is_file():
+    found: dict[str, float] = {}
+    visited = 0
+    while pending and visited < dir_budget:
+        pending.sort()
+        _mtime, directory = pending.pop()
+        visited += 1
+        try:
+            entries = list(os.scandir(directory))
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                if entry.name.startswith("."):
                     continue
-                seen.add(path)
-                images.append(path)
-    images.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    return images[:limit]
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append((entry.stat().st_mtime, entry.path))
+                elif entry.name.lower().endswith(_IMAGE_SUFFIXES) and entry.is_file():
+                    found.setdefault(entry.path, entry.stat().st_mtime)
+            except OSError:
+                continue
+    newest = sorted(found.items(), key=lambda item: item[1], reverse=True)[:limit]
+    return [Path(path) for path, _mtime in newest]
 
 
 def _capture_thread_dump() -> tuple[str, dict]:

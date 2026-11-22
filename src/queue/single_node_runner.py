@@ -104,6 +104,10 @@ def _merge_stage_checkpoints(
 #: Longest an idle worker waits before re-checking on its own (queue changes wake it immediately).
 IDLE_HEARTBEAT_SECONDS = 1.0
 
+#: Dispatch bookkeeping between two jobs (hold release check, runtime preparation, claim) slower than this is
+#: logged with its per-phase breakdown, so dead time between consecutive jobs is attributable from the log alone.
+SLOW_DISPATCH_PHASE_SECONDS = 2.0
+
 
 class _WakingEvent(threading.Event):
     """A stop flag whose ``set`` also wakes the (event-driven) idle wait, so a stop never waits out the heartbeat."""
@@ -284,6 +288,26 @@ class SingleNodeJobRunner:
             wait_for_change(IDLE_HEARTBEAT_SECONDS)
         else:
             time.sleep(self.poll_interval)
+
+    def _log_slow_dispatch(
+        self, job: Job | None, *, hold_check_s: float, prepare_s: float, claim_s: float
+    ) -> None:
+        """Attribute slow between-job bookkeeping to its phase (observation only; never alters dispatch)."""
+
+        if max(hold_check_s, prepare_s, claim_s) <= SLOW_DISPATCH_PHASE_SECONDS:
+            return
+        log_with_ctx(
+            logger,
+            logging.WARNING,
+            "QUEUE_DISPATCH_SLOW | Between-job dispatch bookkeeping was slow",
+            ctx=LogContext(job_id=getattr(job, "job_id", None), subsystem="queue_runner"),
+            extra_fields={
+                "hold_check_ms": int(hold_check_s * 1000),
+                "prepare_runtime_ms": int(prepare_s * 1000),
+                "claim_ms": int(claim_s * 1000),
+                "claimed": job is not None,
+            },
+        )
 
     def _wake_queue(self) -> None:
         wake = getattr(self.job_queue, "wake_worker", None)
@@ -483,13 +507,22 @@ class SingleNodeJobRunner:
                     break
             self._cancel_current.clear()
             self._cancel_return_to_queue = False
+            phase_started = time.monotonic()
             self._maybe_release_hold()
+            hold_checked = time.monotonic()
             self._prepare_runtime()
+            prepared = time.monotonic()
             # Clear before claiming: a change that lands between the claim and the wait leaves the event set.
             clear_wake = getattr(self.job_queue, "clear_wake", None)
             if callable(clear_wake):
                 clear_wake()
             job = self.job_queue.claim_next_job()
+            self._log_slow_dispatch(
+                job,
+                hold_check_s=hold_checked - phase_started,
+                prepare_s=prepared - hold_checked,
+                claim_s=time.monotonic() - prepared,
+            )
             if job is None:
                 self._idle_wait()
                 continue
@@ -584,6 +617,7 @@ class SingleNodeJobRunner:
                 if self._restore_if_undispatched(job, decision):
                     self._after_failure(decision)
                     continue
+                publish_started = time.monotonic()
                 published_job = self.job_queue.publish_result(
                     job.job_id,
                     status=notify_status,
@@ -591,6 +625,7 @@ class SingleNodeJobRunner:
                     stage_checkpoints=checkpoints,
                     error_message=error_msg,
                 )
+                publish_s = time.monotonic() - publish_started
                 if published_job is None:
                     durable_job = self.job_queue.get_job(job.job_id)
                     durable_status = durable_job.status if durable_job is not None else job.status
@@ -613,9 +648,27 @@ class SingleNodeJobRunner:
                     logging.INFO,
                     "QUEUE_JOB_DONE | Job execution completed",
                     ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
-                    extra_fields={**extra, "duration_ms": duration_ms, "status": status_value},
+                    extra_fields={
+                        **extra,
+                        "duration_ms": duration_ms,
+                        "publish_ms": int(publish_s * 1000),
+                        "status": status_value,
+                    },
                 )
+                notify_started = time.monotonic()
                 self._notify(job, notify_status)
+                notify_s = time.monotonic() - notify_started
+                if max(publish_s, notify_s) > SLOW_DISPATCH_PHASE_SECONDS:
+                    log_with_ctx(
+                        logger,
+                        logging.WARNING,
+                        "QUEUE_JOB_SLOW_FINISH | Result publication or completion handlers were slow",
+                        ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
+                        extra_fields={
+                            "publish_ms": int(publish_s * 1000),
+                            "notify_ms": int(notify_s * 1000),
+                        },
+                    )
                 self._after_failure(decision)
             except Exception as exc:  # noqa: BLE001
                 if self._cancel_current.is_set() or isinstance(exc, CancellationError):
