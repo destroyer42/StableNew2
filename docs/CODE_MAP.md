@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-787 of 942 modules have a docstring.
+788 of 943 modules have a docstring.
 
 ## src/
 
@@ -929,6 +929,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `experiment_snapshot_ref.py`: The one rule for a frozen Learning experiment snapshot carried by reference (LEARN-SNAPSHOT-914)
 - `file_access_log_v2_5_2025_11_26.py`: (no docstring)
 - `file_io.py`: File I/O utilities with UTF-8 support
+- `file_writer_lock.py`: A bounded cross-process lock for a file that may be atomically replaced
 - `gpu_device_health.py`: Read-only host GPU evidence and the accelerator-fault vocabulary (PR-QUEUE-GPU-180)
 - `gpu_survivor_telemetry.py`: Best-effort, durable survivor telemetry for active GPU pipeline jobs
 - `graceful_exit.py`: Centralized graceful exit helper for the StableNew V2 GUI
