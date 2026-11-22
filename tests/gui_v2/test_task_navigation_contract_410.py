@@ -77,7 +77,9 @@ def test_the_legacy_order_is_the_ten_ids_and_matches_historic_indices() -> None:
     assert nav.legacy_tab_id_for_index(0) == "prompt"
     assert nav.legacy_tab_id_for_index(1) == "pipeline"
     assert nav.legacy_tab_id_for_index(8) == "video_workflow"
-    assert nav.legacy_tab_id_for_index(9) == "storyboard"  # appended: historic indices 0-8 keep their meaning
+    assert (
+        nav.legacy_tab_id_for_index(9) == "storyboard"
+    )  # appended: historic indices 0-8 keep their meaning
     for bad in (-1, 10, 100, None, "1", 1.0, True, [], {}):
         assert nav.legacy_tab_id_for_index(bad) is None
 

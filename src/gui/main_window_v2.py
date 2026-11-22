@@ -418,7 +418,7 @@ class MainWindowV2:
         )
         self._restore_video_workflow_tab_state()
 
-        def _make_storyboard(parent):
+        def _make_storyboard(parent: tk.Misc) -> StoryboardTabFrameV2:
             return StoryboardTabFrameV2(
                 parent,
                 app_controller=self.app_controller,
@@ -1052,12 +1052,10 @@ class MainWindowV2:
                 self.video_workflow_tab.app_state = self.app_state
             except Exception:
                 pass
-        if hasattr(self, "storyboard_tab"):
-            try:
-                self.storyboard_tab.app_controller = controller
-                self.storyboard_tab.app_state = self.app_state
-            except Exception:
-                pass
+        storyboard_tab = getattr(self, "storyboard_tab", None)
+        if isinstance(storyboard_tab, StoryboardTabFrameV2):
+            storyboard_tab.app_controller = controller
+            storyboard_tab.app_state = self.app_state
         if hasattr(self, "movie_clips_tab"):
             try:
                 self.movie_clips_tab.app_controller = controller

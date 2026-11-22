@@ -29,6 +29,37 @@ It opens a new unsaved draft with original-job/plan provenance, without changing
 The editor supports homogeneous Comfy sequence plans with standard overlaps and assembly. It precisely refuses frozen settings it cannot express, including native
 SVD model/settings, mixed workflows, differing per-shot negatives or custom assembly/color/overlap. Resume and full Replay retain their existing behavior.
 
+## The Storyboard tab: a tree of takes (PR-VID-STORY-380)
+
+The **Storyboard** tab (Motion group, after Video Workflow) grows a scene from finished clips. It is a different thing from
+the linear **Storyboard** drafts above (the Multi-shot sequence form under Video Workflow > Advanced): those start from a
+still image and stay exactly as they are; the shared word is a known wording overlap until the tab covers the same ground.
+
+- **Start:** **New from clip or image…** takes a completed StableNew Comfy video job id or a still image plus the workflow.
+  A smoothed (RIFE) clip enters as its real generated frames at the workflow's own fps, with a one-line note. Root
+  refusals appear in the status line, never as dialogs.
+- **Shot columns:** one column per depth; cards show a thumbnail, label, prompt excerpt and the status read back from the
+  repository, with Keep and Drop marks (a dropped take is hidden until **Show dropped (N)**; no file is moved or deleted).
+- **Viewer:** plays the selected take's whole stitched cut from its frame PNGs, with a slider that has a tick at every
+  join, frame stepping, and a readout such as `frame 226 / 234 · A1b frame 78 of 81`. **Continue from this frame**
+  can start from any frame; a frame inside an earlier shot branches from the take that owns it.
+- **Continue panel:** 1-6 rows (positive, negative, seed). **Parallel** queues one single-clip job per row; **Sequential**
+  queues one chained job. The engine line is inherited and read-only. **Preview** submits nothing. A take whose frames are
+  missing or changed cannot be continued (its existing stitched MP4 still plays). **Write with AI…** is present and disabled
+  with its reason.
+- **Compare these side by side** plays the finished siblings' own clips in synchronized playback (no ratings).
+  **Export cut…** reveals the stitched MP4 or sends it to Movie Clips; a take without a video says `not encoded` and offers
+  Resume; a middle take of a chain names the chain file and the timecode where the take ends. Failed or cancelled cards
+  offer **Resume** and **Replay** through the existing sequence controller; a replay becomes a new sibling take.
+- **Entry from other tabs:** `route_job_to_storyboard` (`src/gui/controllers/video_workspace_handoff.py`) is in place. The
+  **Continue in Storyboard** buttons in Job History, Recent outputs and the Make Video result are **not wired yet**: they
+  wait for the Video Workflow layout work (VID-UX-384) to land on `main`, because they touch the same files.
+
+Acceptance boundary: deterministic tests only (Tk-free contract and projection tests, Tk tests with a fake service and real
+PNG frames, the gate). **NOT TESTED on hardware:** no GPU run, no A14B stitched continuation, no live use of the tab.
+Rob's first live use is the demonstration: one clip, three parallel takes, then one take continued with a two-row
+sequential run. Nothing here is a qualification claim.
+
 ## Proposed later contract: verified suffix regeneration
 
 This is a follow-up proposal, not an implemented capability or an authorization to change execution ownership.
