@@ -10,18 +10,29 @@ real endpoint. Only ``requests.Session.request`` (and the Klein host-memory/asse
 
 from __future__ import annotations
 
-import pytest
+from dataclasses import replace
+from functools import partial
+from types import SimpleNamespace
 
+import pytest
+import requests
+
+import src.api.client as client_module
 import src.image_backends.forge_webui_backend as forge_backend_module
+import src.pipeline.executor as executor_module
 from src.api.client import SDWebUIClient
 from src.api.forge_client import ForgeWebUIClient
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.image_backends import A1111WebUIImageBackend
 from src.image_backends.forge_klein_profile import KLEIN_PROFILE_ID
 from src.image_backends.forge_klein_readiness import HostMemorySnapshot
+from src.pipeline.model_synchronizer import A1111ModelSynchronizer
 from src.queue.job_model import JobStatus
-from tests.helpers.fake_webui_transport import FakeWebUITransport
+from tests.helpers.fake_webui_transport import FakeResponse, FakeWebUITransport
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 from tests.helpers.njr_queue_harness import run_njr_via_queue
+from tests.tools.test_img_forge_100_acceptance_driver import canonical_context  # noqa: F401
+from tools.acceptance.img_forge_100_acceptance import _await_terminal, build_stack
 
 KLEIN = "flux-2-klein-4b-fp8.safetensors"
 SDXL = "sdxl.safetensors"
@@ -197,6 +208,106 @@ def test_a_new_executor_instance_still_detects_state_left_by_a_klein_job() -> No
     assert transport.rejected_generations == []
     assert transport.generation_module_state == [["flux2-vae.safetensors", "qwen_3_4b.safetensors"], []]
     assert _names(transport.options) == []
+
+
+@pytest.mark.usefixtures("canonical_context")
+@pytest.mark.parametrize(
+    ("scenario", "error_text", "checkpoint_posts", "generation_posts"),
+    [
+        ("success", None, 1, 1),
+        ("safe_mode", "allowed to change it", 0, 0),
+        ("readiness", "WebUI was not ready", 0, 0),
+        ("throttle_timeout", "StableNew's local options-write throttle", 0, 0),
+        ("refusal", None, 1, 0),
+        ("mismatch", "WebUI did not switch", 1, 0),
+        ("ambiguous_generation", None, 1, 1),
+    ],
+)
+def test_checkpoint_switch_immediately_after_verified_module_cleanup(
+    tmp_path, monkeypatch, caplog, scenario, error_text, checkpoint_posts, generation_posts,
+) -> None:
+    transport = _forge(
+        checkpoint=KLEIN,
+        residue=KLEIN_RESIDUE,
+        generation_error=requests.ReadTimeout("ambiguous response") if scenario == "ambiguous_generation" else None,
+    )
+    client = _client(transport)
+    client.max_retries = 1
+    client._options_min_interval_seconds = 1.0
+    now = 100.0
+    checkpoints_at_generation: list[str] = []
+    writes_at: list[float] = []
+    post = transport._post
+
+    def monotonic():
+        return now
+
+    def sleep(seconds):
+        nonlocal now
+        now += seconds
+        if scenario == "safe_mode":
+            client.set_options_write_enabled(False)
+        elif scenario == "throttle_timeout":
+            # Simulate persistent contention for the shared options-write slot.
+            client._last_options_post_ts = now
+
+    def post_with_checkpoint_outcome(path, body):
+        if path == "/sdapi/v1/options" and "sd_model_checkpoint" in body:
+            writes_at.append(now)
+            if scenario == "mismatch":
+                return FakeResponse({})
+            if scenario == "refusal":
+                return FakeResponse({}, 400)
+        if path == "/sdapi/v1/txt2img":
+            checkpoints_at_generation.append(transport.options["sd_model_checkpoint"])
+        return post(path, body)
+
+    monkeypatch.setattr(transport, "_post", post_with_checkpoint_outcome)
+    monkeypatch.setattr(client_module, "time", SimpleNamespace(monotonic=monotonic, sleep=sleep))
+    monkeypatch.setattr(
+        executor_module, "A1111ModelSynchronizer",
+        partial(A1111ModelSynchronizer, timeout_seconds=0.5, monotonic=monotonic, sleep=sleep),
+    )
+    client.set_options_readiness_provider(lambda: scenario != "readiness" or now == 100.0)
+
+    output = tmp_path / "output"
+    record = _sdxl_njr(job_id=f"d110-{scenario}")
+    record = replace(record, output_plan=replace(record.output_plan, base_output_dir=str(output)))
+    # This stack leaves checkpoint reads and writes on the real client/transport path.
+    stack = build_stack(tmp_path / "state", output, "forge_webui", client.base_url, client=client)
+    try:
+        assert stack.service.submit_njrs(
+            [record], SubmissionPolicy(start_when_idle=True)
+        ) == [record.job_id]
+        entry = _await_terminal(stack.repository, record.job_id, 10)
+    finally:
+        quiesced = stack.service.stop(timeout=5)
+        if quiesced:
+            stack.repository.close()
+        assert quiesced
+
+    assert entry.status is (JobStatus.COMPLETED if scenario == "success" else JobStatus.FAILED), entry.error_message
+    assert _module_writes(transport) == [[]]
+    assert len(writes_at) == checkpoint_posts
+    assert len(transport.generation_calls) == generation_posts
+    assert checkpoints_at_generation == [SDXL] * generation_posts
+    if error_text:
+        assert error_text in str(entry.error_message)
+    if scenario in {"readiness", "throttle_timeout"}:
+        assert "No checkpoint write was sent" in str(entry.error_message)
+    if scenario == "throttle_timeout":
+        assert now == 115.0
+    if scenario == "refusal":
+        assert "model change request failed: 400 error" in caplog.text
+        assert entry.error_message == "No images were generated successfully"
+    if checkpoint_posts:
+        assert writes_at == [101.0]
+        clear = transport.calls.index(("POST", "/sdapi/v1/options", {"forge_additional_modules": []}))
+        switch = transport.calls.index(("POST", "/sdapi/v1/options", {"sd_model_checkpoint": SDXL}))
+        end = transport.calls.index(transport.generation_calls[0]) if generation_posts else len(transport.calls)
+        readback = ("GET", "/sdapi/v1/options", None)
+        assert readback in transport.calls[clear + 1:switch]
+        assert readback in transport.calls[switch + 1:end] or scenario == "refusal"
 
 
 def test_an_already_clean_automatic_endpoint_is_not_written_to() -> None:  # D

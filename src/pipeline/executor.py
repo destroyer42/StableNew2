@@ -4160,19 +4160,32 @@ class Pipeline:
             )
             frozen_negative, _ = self._global_prompt_terms(config, "global_negative_prompt")
             adaptive_refinement = dict(config.get("adaptive_refinement") or {})
+            from src.image_backends.exact_model_profile import resolve_model_profile
+            from src.image_backends.forge_zimage_profile import (
+                ZImageProfile,
+                project_zimage_wire_payload,
+                verify_zimage_dispatch_state,
+            )
 
-            # Apply global positive (prepends quality/style terms)
+            exact_zimage = isinstance(resolve_model_profile(config.get("backend_options")), ZImageProfile)
             original_positive_prompt = prompt
-            patch_application = apply_prompt_patch(
-                original_positive_prompt,
-                negative_prompt,
-                self._extract_prompt_patch_payload(adaptive_refinement),
-            )
-            _, enhanced_positive, positive_global_applied, positive_global_terms = (
-                self._merge_stage_positive(
-                    patch_application.positive.patched, apply_global_positive, frozen_positive
+            original_negative_prompt = negative_prompt
+            prompt_patch = self._extract_prompt_patch_payload(adaptive_refinement)
+            if exact_zimage and not prompt_patch:
+                # The exact profile already has its composed prompt in the frozen NJR.
+                patched_positive, patched_negative = prompt, negative_prompt
+            else:
+                patch_application = apply_prompt_patch(prompt, negative_prompt, prompt_patch)
+                patched_positive = patch_application.positive.patched
+                patched_negative = patch_application.negative.patched
+
+            # Apply global positive (prepends quality/style terms).
+            if exact_zimage and not (apply_global_positive and frozen_positive):
+                enhanced_positive, positive_global_applied, positive_global_terms = patched_positive, False, ""
+            else:
+                _, enhanced_positive, positive_global_applied, positive_global_terms = (
+                    self._merge_stage_positive(patched_positive, apply_global_positive, frozen_positive)
                 )
-            )
             if positive_global_applied:
                 logger.info(
                     "✨ Applied global positive terms (txt2img stage) - Enhanced: '%s'",
@@ -4182,11 +4195,8 @@ class Pipeline:
                 )
 
             # Apply global negative (appends NSFW prevention terms)
-            original_negative_prompt = negative_prompt
             _, enhanced_negative, negative_global_applied, negative_global_terms = (
-                self._merge_stage_negative(
-                    patch_application.negative.patched, apply_global_negative, frozen_negative
-                )
+                self._merge_stage_negative(patched_negative, apply_global_negative, frozen_negative)
             )
             if negative_global_applied:
                 logger.info(
@@ -4457,10 +4467,6 @@ class Pipeline:
                     self.progress_controller.report_progress("txt2img", percent, eta_text)
 
             from src.image_backends.forge_flux1_profile import project_flux1_wire_payload
-            from src.image_backends.forge_zimage_profile import (
-                project_zimage_wire_payload,
-                verify_zimage_dispatch_state,
-            )
 
             payload = project_zimage_wire_payload(config, payload, prompt=original_positive_prompt)
             payload = project_flux1_wire_payload(config, payload)  # PR-IMG-FLUX-130: distilled guidance; no-op otherwise

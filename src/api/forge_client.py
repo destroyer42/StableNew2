@@ -3,8 +3,8 @@
 ``SDWebUIClient`` remains the A1111 client and the transport for every endpoint that Forge Neo
 exposes with the same contract (``txt2img``, ``img2img``, ``extra-single-image``, ``progress``,
 ``interrupt``, ``options``, ``cmd-flags``, ``sd-models``, ``samplers``, ``schedulers``,
-``upscalers``, ``scripts``, ``script-info``). This subclass overrides only the VAE contract, where
-Forge Neo genuinely differs (verified against the frozen source in
+``upscalers``, ``scripts``, ``script-info``). Forge Neo differs in its VAE contract
+(verified against the frozen source in
 ``config/forge_qualification_runtime.json``):
 
 * The VAE/text-encoder listing is ``GET /sdapi/v1/sd-modules`` (there is no ``/sd-vae``); entries
@@ -15,6 +15,7 @@ Forge Neo genuinely differs (verified against the frozen source in
   list of file paths. Forge **silently drops** a module name it does not know, which would clear the
   VAE, so every write is verified by reading the option back and a mismatch raises before any
   generation can be dispatched.
+* Checkpoint writes can wait for the local options throttle after verified module cleanup.
 
 No generic runner code needs Forge field knowledge; this class is created only by the runtime-ports
 seam for the configured ``forge_webui`` runtime identity.
@@ -24,7 +25,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -234,20 +234,8 @@ class ForgeWebUIClient(SDWebUIClient):
         requested = [str(item).strip() for item in modules if str(item or "").strip()]
         return self._write_modules(requested, noun="module", strict=True)
 
-    def _await_options_write_allowed(self, *, noun: str) -> None:
-        """Strict writes: wait out the throttle (bounded); any other refusal is an error."""
-
-        deadline = time.monotonic() + max(15.0, 2 * float(self._options_min_interval_seconds))
-        while True:
-            can_send, reason = self._options_can_send()
-            if can_send:
-                return
-            if reason != "throttle" or time.monotonic() >= deadline:
-                raise ForgeVAEError(
-                    f"Forge {noun} selection was not applied ({reason}); generation must not proceed "
-                    "without the required modules."
-                )
-            time.sleep(min(0.5, max(0.01, float(self._options_min_interval_seconds) / 4)))
+    def _checkpoint_write_permission(self) -> tuple[bool, str | None]:
+        return self._await_options_write_allowed()
 
     def _write_modules(self, requested: list[str], *, noun: str, strict: bool = False) -> bool:
         targets = [self._resolve_module_name(item, noun=noun) for item in requested]
@@ -256,8 +244,12 @@ class ForgeWebUIClient(SDWebUIClient):
             raise ForgeVAEError(f"Duplicate Forge {noun} selection: {requested}")
 
         if strict:
-            self._await_options_write_allowed(noun=noun)
-            can_send, reason = True, None
+            can_send, reason = self._await_options_write_allowed()
+            if not can_send:
+                raise ForgeVAEError(
+                    f"Forge {noun} selection was not applied ({reason}); generation must not proceed "
+                    "without the required modules."
+                )
         else:
             can_send, reason = self._options_can_send()
         if not can_send:

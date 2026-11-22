@@ -11,12 +11,15 @@ import requests
 from src.image_backends.forge_klein_readiness import HostMemorySnapshot
 from src.image_backends.forge_zimage_profile import SAMPLING_OPTIONS
 from src.image_backends.forge_zimage_profile import ZIMAGE_PROFILE_V1 as P
+from src.pipeline.executor import Pipeline
 from src.queue.job_model import JobStatus
 from tests.helpers.fake_webui_transport import FakeWebUITransport
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 from tests.helpers.njr_queue_harness import run_njr_via_queue
 from tests.integration.test_pr_img_116_klein_canonical_path import _client
 from tests.tools.test_img_forge_100_acceptance_driver import canonical_context  # noqa: F401
+
+EXACT_PROMPT = "A ceramic teapot,burnished copper, beside a café window."
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +41,8 @@ def njr(**changes):
         **changes.pop("config", {}),
     }
     return make_pipeline_njr(
-        positive_prompt="A ceramic teapot on a wooden table.", base_model=P.transformer.filename,
+        positive_prompt=changes.pop("positive_prompt", "A ceramic teapot on a wooden table."),
+        base_model=P.transformer.filename,
         sampler_name="Euler", steps=9, cfg_scale=1, width=1024, height=1024, seed=424254,
         stage_chain=(make_stage_config("txt2img", model=P.transformer.filename, steps=9, cfg_scale=1,
                                        sampler_name="Euler", scheduler="Beta"),),
@@ -54,20 +58,23 @@ def transport(**kwargs):
     return t
 
 
+@pytest.mark.usefixtures("canonical_context")
 def test_actual_post_and_history_use_the_exact_profile(tmp_path):
     t = transport()
-    entry = run_njr_via_queue(njr(), _client(t), artifact_root=tmp_path)
+    record = njr(positive_prompt=EXACT_PROMPT, config={"adaptive_refinement": {}})
+    entry = run_njr_via_queue(record, _client(t), artifact_root=tmp_path)
     assert entry.status is JobStatus.COMPLETED, entry.error_message
     assert len(t.generation_calls) == 1
     payload = t.generation_calls[0][2]
     assert payload == {
-        "prompt": "A ceramic teapot on a wooden table.", "negative_prompt": "", "seed": 424254,
+        "prompt": EXACT_PROMPT, "negative_prompt": "", "seed": 424254,
         "steps": 9, "sampler_name": "Euler", "scheduler": "Beta", "cfg_scale": 1,
         "distilled_cfg_scale": 9.0, "width": 1024, "height": 1024, "batch_size": 1, "n_iter": 1,
         "send_images": True, "save_images": False,
     }
     assert t.generation_module_state == [sorted(a.filename for a in P.modules)]
     snapshot = entry.snapshot["normalized_job"]
+    assert snapshot["workload"] == record.to_dict()["workload"]
     assert snapshot["workload"]["backend_options"]["image"]["model_profile"] == P.reference()
     variant = entry.result["variants"][0]
     evidence = variant["image_backend_metadata"]["zimage_profile"]
@@ -83,6 +90,19 @@ def test_actual_post_and_history_use_the_exact_profile(tmp_path):
     assert manifest["zimage_profile"]["model_profile"] == P.reference()
     assert manifest["zimage_profile"]["asset_identity"]["vae"]["sha256"] == P.vae.sha256
     assert manifest["zimage_selection"]["verified_before_dispatch"] is True
+
+
+@pytest.mark.usefixtures("canonical_context")
+def test_runtime_prompt_drift_refuses_before_generation(monkeypatch, caplog):
+    monkeypatch.setattr(
+        Pipeline, "_extract_prompt_patch_payload",
+        staticmethod(lambda _: {"add_positive": ["gold trim"]}),
+    )
+    t = transport()
+    entry = run_njr_via_queue(njr(positive_prompt=EXACT_PROMPT), _client(t))
+    assert entry.status is JobStatus.FAILED
+    assert t.generation_calls == []
+    assert "prompt changed after admission" in caplog.text
 
 
 @pytest.mark.usefixtures("canonical_context")
