@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.operator_journey.workspace import REPO_ROOT
+from tools.qualification.eval_plan_output import plan_output
 from tools.qualification.system840 import compare as compare_mod
 from tools.qualification.system840 import (
     coordinator,
@@ -84,6 +85,9 @@ def _cmd_ledger(args: argparse.Namespace) -> int:
 
 
 def _cmd_plan(args: argparse.Namespace) -> int:
+    args.out = plan_output(
+        argparse.ArgumentParser(prog="system840 plan"), args.out, "system840", filename="plan.json"
+    )
     targets = plan_mod.load_json(Path(args.targets))
     ledger = ledger_mod.load_ledger()
     try:
@@ -204,7 +208,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--arm", required=True)
     p.add_argument("--stage", choices=("canary", "coverage"), required=True)
     p.add_argument("--targets", required=True)
-    p.add_argument("--out", required=True)
+    p.add_argument("--out")
     p.set_defaults(func=_cmd_plan)
     p = sub.add_parser("readiness")
     p.add_argument("--plan", required=True)

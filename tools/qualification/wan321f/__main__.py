@@ -10,6 +10,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from tools.qualification.eval_plan_output import plan_output
 from tools.qualification.wan321f.controls import physical_refusals, write_new_json
 from tools.qualification.wan321f.plan import (
     ASSETS,
@@ -25,9 +26,10 @@ from tools.qualification.wan321f.plan import (
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--out", type=Path, required=True, help="New directory; existing evidence is never replaced"
+        "--out", type=Path, help="New directory; existing evidence is never replaced"
     )
     args = parser.parse_args()
+    args.out = plan_output(parser, args.out, "wan321f")
     plan = frozen_plan()
     refusal = asset_refusals()
     runtime_refusal = source_refusals()

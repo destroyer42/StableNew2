@@ -58,6 +58,33 @@ class WorkspacePaths:
             path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def eval_plans_root(
+        self,
+        output_root: Path | str | None = None,
+        *,
+        override: Path | str | None = None,
+    ) -> Path:
+        """Resolve the Evaluation Plans root without creating anything."""
+        from src.state.eval_plans_paths import EVAL_PLANS_FOLDER
+
+        configured = str(override or "").strip()
+        output = Path(str(output_root or "").strip() or "output").expanduser()
+        path = Path(configured).expanduser() if configured else output / EVAL_PLANS_FOLDER
+        return self._root / path
+
+    def eval_plans_dir(
+        self,
+        kind: str,
+        output_root: Path | str | None = None,
+        *,
+        override: Path | str | None = None,
+    ) -> Path:
+        from src.state.eval_plans_paths import EVAL_PLAN_KINDS
+
+        if kind not in EVAL_PLAN_KINDS:
+            raise ValueError(f"Unknown eval plan kind: {kind}")
+        return self.eval_plans_root(output_root, override=override) / kind
+
     def legacy_photo_optimize_root(self) -> Path:
         return self._root / "data" / "photo_optimize"
 

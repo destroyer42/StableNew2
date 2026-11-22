@@ -11,6 +11,7 @@ from src.video.workflow_catalog import build_builtin_workflow_specs
 from tools.qualification.ai111.baselines import policy_for, residual_operations
 from tools.qualification.ai111.corpus import Case, build_corpus, corpus_digest, to_jsonl
 from tools.qualification.ai111.plan import digest, frozen_plan
+from tools.qualification.eval_plan_output import plan_output
 
 COUNTS = {
     "rewrite_sdxl_tags": 50,
@@ -130,8 +131,9 @@ def final_plan() -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
+    args.out = plan_output(parser, args.out, "ai111")
     plan = final_plan()
     args.out.mkdir(parents=True)
     (args.out / "plan.json").write_text(
