@@ -26,7 +26,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
   boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
 - Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,399 errors in
-  174 files), unformatted files (377), blind/silent excepts in `src` (BLE001 1,170, S110 456, S112 34), thread and layering
+  174 files), unformatted files (371), blind/silent excepts in `src` (BLE001 1,170, S110 456, S112 34), thread and layering
   rules (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6), plain truncating file writes outside `atomic_io` (non-atomic file writes 17; allowlist in `tools/ci/run_architecture_ratchets.py`), and the four controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
   Flaky tests are repaired or quarantined with an owner and expiry (`tests/quarantine/README.md`).
@@ -37,7 +37,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
 
 - Start with the living documents (one per subsystem, edited in place; see `docs/Subsystems/README.md`): `docs/Subsystems/Image/IMAGE_PIPELINE.md`
   and `docs/Subsystems/Image/MODEL_PROFILES.md`. The per-PR records linked below are historical evidence and lose to the code and the living docs.
-- Forge is the default backend; A1111 is the rollback/compatibility backend (`docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`).
+- Forge is the default backend (Settings: Image backend can make the managed ComfyUI the default instead; it runs SDXL and Qwen-Image txt2img only, offline-tested, not physically qualified); A1111 is the rollback/compatibility backend (`docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`).
   Backend-neutral execution: `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`.
 - Image model profiles include managed Comfy Qwen-Image 20B FP8 and Forge FLUX.1 dev/schnell (physical qualification pending). Exact profiles include FLUX.2 Klein 4B FP8 (`docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`) and
   Z-Image-Turbo FP8 (`docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md`; physical qualification
