@@ -299,7 +299,7 @@ is a separately authorized Proxmox/model measurement gate;
 [CONTEXT-120](work_packages/PR-DEVEX-CONTEXT-120.md) is conditional
 semantic retrieval. No model downloads, hardware changes, production AI
 Assist integration, or remote source sharing are authorized by this roadmap.
-Current priorities and implementation state remain in \`STATUS.md\`.
+Current priorities and implementation state remain in `STATUS.md`.
 
 
 This sequence records the post-v2.6 architecture line. PR-IMG-100 is complete /

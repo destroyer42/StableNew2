@@ -2,27 +2,27 @@
 
 **Status:** Approved product direction; implementation not started by this documentation package.
 **Scope:** Developer-experience support for StableNew, with optional read-only Proxmox AI-worker assistance and a separately gated image-analysis experiment.
-**Authority:** This is a supporting sequencing and decision record. \`docs/StableNew Roadmap v2.6.md\` remains the one active roadmap; \`STATUS.md\` remains current-state truth; \`AGENTS.md\` is the sole operating-rule authority. Current checkout/branch/SHA/diff and living subsystem docs supersede this plan.
+**Authority:** This is a supporting sequencing and decision record. `docs/StableNew Roadmap v2.6.md` remains the one active roadmap; `STATUS.md` remains current-state truth; `AGENTS.md` is the sole operating-rule authority. Current checkout/branch/SHA/diff and living subsystem docs supersede this plan.
 **Planning snapshot:** 2026-11-22; verify all hardware, software, model, and repository facts anew at each phase.
 
 ## Product problem and outcome
 
 StableNew's coding agents spend substantial context on re-orienting to source ownership, repeated broad searches, long source/log outputs, and re-reading context across turns. A task-specific navigation layer may reduce these costs while preserving correctness. A local AI-worker may subsequently provide semantic retrieval and bounded source-grounded summaries without making remote inference a prerequisite to development.
 
-**Success outcome:** Given a scoped work-package objective and a current checkout, a Claude Code/Codex session receives a small, verifiable list of authoritative sources, concrete code/test relationships, and reasons for each recommendation. The agent still inspects current source, validates work, and obeys \`AGENTS.md\`. Optional remote augmentation may be adopted only if measurements show additional benefit.
+**Success outcome:** Given a scoped work-package objective and a current checkout, a Claude Code/Codex session receives a small, verifiable list of authoritative sources, concrete code/test relationships, and reasons for each recommendation. The agent still inspects current source, validates work, and obeys `AGENTS.md`. Optional remote augmentation may be adopted only if measurements show additional benefit.
 
 **Not the outcome:** Replacing the repository with a super-repo, stuffing the entire repository into an LLM prompt, treating a generated summary as engineering authority, auto-applying local model judgments, or training a model to memorize changing code.
 
 ## What already exists — reuse first
 
-- \`docs/CODEX_MAP.md\`: manually curated short task-to-code routing (60-line gate).
-- \`tools/generate_code_map.py\` and \`docs/CODE_MAP.md\`: generated map using each \`src/\` module's leading docstring; \`tests/tools/test_code_map.py\` verifies freshness.
-- \`docs/AGENT_OPERATING_MODEL.md\`: small always-loaded context, one primary session per coherent package, read-only specialists only when worthwhile, evidence capsules rather than transcripts.
-- \`docs/AI_MODEL_SELECTION.md\` and \`tools/usage_report.py\`: timestamp- and session-bounded token accounting, separate cached reads/fresh input/cache writes/output.
-- \`docs/Subsystems/AiAssist/AI_ASSIST.md\`: existing local and approved SSH-forwarded inference boundaries; remote research must not silently extend production AI Assist authorization.
-- \`docs/Subsystems/Testing/TESTING_AND_CI.md\`: docs-only CI and executable-code validation contracts.
+- `docs/CODEX_MAP.md`: manually curated short task-to-code routing (60-line gate).
+- `tools/generate_code_map.py` and `docs/CODE_MAP.md`: generated map using each `src/` module's leading docstring; `tests/tools/test_code_map.py` verifies freshness.
+- `docs/AGENT_OPERATING_MODEL.md`: small always-loaded context, one primary session per coherent package, read-only specialists only when worthwhile, evidence capsules rather than transcripts.
+- `docs/AI_MODEL_SELECTION.md` and `tools/usage_report.py`: timestamp- and session-bounded token accounting, separate cached reads/fresh input/cache writes/output.
+- `docs/Subsystems/AiAssist/AI_ASSIST.md`: existing local and approved SSH-forwarded inference boundaries; remote research must not silently extend production AI Assist authorization.
+- `docs/Subsystems/Testing/TESTING_AND_CI.md`: docs-only CI and executable-code validation contracts.
 
-The 2026-11-22 checked-in \`CODE_MAP.md\` reported **787 of 942** modules with docstrings (155 without). The latest 50 PRs (#331–#380) were reviewed for changed-file shapes; these show repeated code/test/documentation co-changes but **not** the complete set of files agents actually read. PR token totals cannot be reconstructed without valid session telemetry. Recount at the future implementation SHA.
+The 2026-11-22 checked-in `CODE_MAP.md` reported **787 of 942** modules with docstrings (155 without). The latest 50 PRs (#331–#380) were reviewed for changed-file shapes; these show repeated code/test/documentation co-changes but **not** the complete set of files agents actually read. PR token totals cannot be reconstructed without valid session telemetry. Recount at the future implementation SHA.
 
 ## Sequencing and decision gates
 
@@ -43,15 +43,15 @@ Route task text using the short task map, verified module docstrings, Python AST
 
 **Default capsule budget:** approximately 1,200 tokens. Exact cap/format is an implementation choice, validated on representative narrow and cross-boundary tasks. Never inject complete source, PR discussions or AGENTS content by default.
 
-**Docstring completion:** include every eligible missing \`src/\` module docstring, accurately derived from code, without changing behavior beyond the module \`__doc__\` value. Regenerate \`docs/CODE_MAP.md\`; test AST equivalence after removing the new docstring from the after-version. Incomplete or ambiguous cases are surfaced, not filled with fictitious boilerplate.
+**Docstring completion:** include every eligible missing `src/` module docstring, accurately derived from code, without changing behavior beyond the module `__doc__` value. Regenerate `docs/CODE_MAP.md`; test AST equivalence after removing the new docstring from the after-version. Incomplete or ambiguous cases are surfaced, not filled with fictitious boilerplate.
 
 **Baseline dataset:** historical PR files are seeds, not exhaustive labels. Curate independent task → necessary-code/test labels and negative/unrelated cases, prevent historical-future leakage, and report recall plus irrelevant-context burden. A 90% top-k primary-area recall target is aspirational, not a substitute for valid ground truth.
 
 ## Stage 2 — AI-worker hardware and model qualification
 
-**Reported, not live-verified:** the Proxmox host \`pve-g16\`, container \`ai-worker\` (possibly CT 110), a laptop RTX 4070-class 8 GiB GPU, 16 GiB physical system RAM, Ollama and an operator-controlled SSH-forwarded endpoint. Container RAM and vCPU allocations and exact model inventory **must be measured**, not assumed from a conversation.
+**Reported, not live-verified:** the Proxmox host `pve-g16`, container `ai-worker` (possibly CT 110), a laptop RTX 4070-class 8 GiB GPU, 16 GiB physical system RAM, Ollama and an operator-controlled SSH-forwarded endpoint. Container RAM and vCPU allocations and exact model inventory **must be measured**, not assumed from a conversation.
 
-**Resource hypothesis:** subject to \`free -h\`, \`lscpu\`, \`pct config\`, actual GPU visibility, host safety/thermal observations and uptime, evaluate 12 GiB container RAM and 12–16 vCPUs, not a blanket 14 GiB/all-core allocation. Increased system RAM does not increase VRAM. No resource or network mutation is authorized by this plan.
+**Resource hypothesis:** subject to `free -h`, `lscpu`, `pct config`, actual GPU visibility, host safety/thermal observations and uptime, evaluate 12 GiB container RAM and 12–16 vCPUs, not a blanket 14 GiB/all-core allocation. Increased system RAM does not increase VRAM. No resource or network mutation is authorized by this plan.
 
 **Candidate roles (benchmarks, not endorsements):**
 - Baseline compact reasoning/classification: installed Qwen3.5 4B if verified; LFM3 1.7B if installed and license permits use.
@@ -59,7 +59,7 @@ Route task text using the short task map, verified module docstrings, Python AST
 - Deep reranking/code reasoning: MiMo-V2.6-Distill-Qwen-9B and Qwen3.5 9B; 8 GiB GPU residency and context length are **unproven**, so measure actual loaded memory, CPU spills, thermal behavior and latency.
 - Optional multimodal comparison: only after text retrieval gate; image-related candidates need a separate evaluation protocol.
 
-Do not infer VRAM use from downloaded weight size or advertised context size. Start with measured short-context/single-flight runs; record \`nvidia-smi\`, \`ollama ps\`, observed token throughput, cold/warm latency, error/refusal rate, GPU/system memory and quality against the same tasks. Model names, tags, hashes, quantization and Ollama versions must be pinned in each evidence record.
+Do not infer VRAM use from downloaded weight size or advertised context size. Start with measured short-context/single-flight runs; record `nvidia-smi`, `ollama ps`, observed token throughput, cold/warm latency, error/refusal rate, GPU/system memory and quality against the same tasks. Model names, tags, hashes, quantization and Ollama versions must be pinned in each evidence record.
 
 ## Stage 3 — remote retrieval without new authority
 
@@ -73,7 +73,7 @@ Evaluate whether remote vision captioning, embeddings, duplicate/near-duplicate 
 
 ## ROI measurement and stop thresholds
 
-**Primary:** end-to-end measured agent tokens for comparable tasks (cache read, fresh input, cache write, output individually) plus success, repair passes and correct source recall. **Secondary:** number of file/search reads, capsule size, elapsed discovery and task time, false negatives, irrelevance burden, network latency and AI-worker load. Compare at equivalent SHA, task, host/model/effort and acceptance standards; include context-service overhead and all participating sessions. Missing logs are \`unavailable\`, never zero or extrapolated from a commit.
+**Primary:** end-to-end measured agent tokens for comparable tasks (cache read, fresh input, cache write, output individually) plus success, repair passes and correct source recall. **Secondary:** number of file/search reads, capsule size, elapsed discovery and task time, false negatives, irrelevance burden, network latency and AI-worker load. Compare at equivalent SHA, task, host/model/effort and acceptance standards; include context-service overhead and all participating sessions. Missing logs are `unavailable`, never zero or extrapolated from a commit.
 
 The initial **20% median cached-read reduction** is a proposed pilot hurdle, not a guaranteed effect or a dollar-savings estimate. Reject or revise if savings arise through missed dependencies, weakening checks, broader reading recommendations, or higher defect/repair rates. Report cache volume separately from financial cost. Review whether savings come from retrieval or existing fresh-session discipline before adopting a new service.
 
@@ -102,4 +102,4 @@ External pages and model claims may change; reverify versions, licenses, require
 
 ## Documentation and completion discipline
 
-This documentation change approves a **plan** only; it does not implement the phases, operate the AI-worker, download weights, expose a service, change production code, publish downstream branches or merge protected refs. Each implementation package uses the current \`docs/CODEX_WORK_PACKAGE_TEMPLATE.md\`, current model-selection guidance, current SHA and separate explicit authorization for any protected/physical action. Keep \`STATUS.md\` a state summary, not a progress diary.
+This documentation change approves a **plan** only; it does not implement the phases, operate the AI-worker, download weights, expose a service, change production code, publish downstream branches or merge protected refs. Each implementation package uses the current `docs/CODEX_WORK_PACKAGE_TEMPLATE.md`, current model-selection guidance, current SHA and separate explicit authorization for any protected/physical action. Keep `STATUS.md` a state summary, not a progress diary.

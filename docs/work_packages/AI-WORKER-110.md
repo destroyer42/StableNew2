@@ -14,13 +14,13 @@ This evaluation is **not** a general LLM leaderboard or a mandate to use every a
 
 - **Class:** Standard read-only design and measurement; classify as Architectural and stop if a proposed production security/runtime ownership or networking change is necessary.
 - **Host:** Local Proxmox host + existing operator-approved AI-worker, only when explicitly authorized for live experiments. Research and test-fixture preparation can be completed without running inference.
-- **Claude Code:** Sonnet 5.5 High; **Codex:** GPT-6.1 Sol High (confirm per current \`docs/AI_MODEL_SELECTION.md\`).
+- **Claude Code:** Sonnet 5.5 High; **Codex:** GPT-6.1 Sol High (confirm per current `docs/AI_MODEL_SELECTION.md`).
 - **Expected usage:** planning allowance ~4–12M cache-read / 20–60k output tokens for design, measurements, analysis and bounded repair; model inference GPU load, download size and task tokens are separately measured and not included in agent-token projections.
 - **Participation:** One primary assessment session; specialist optional if isolation improves log analysis. Record exact timestamps and session IDs.
 
 ## Exact start and authorization gate
 
-Verify branch/HEAD/worktree, latest \`AGENTS.md\`, \`STATUS.md\`, current \`docs/CODEX_MAP.md\`, \`docs/AI_MODEL_SELECTION.md\`, relevant AI Assist and testing guidance, and the accepted CONTEXT-100 benchmark SHA. Repository rules and current architecture take precedence over this dated contract.
+Verify branch/HEAD/worktree, latest `AGENTS.md`, `STATUS.md`, current `docs/CODEX_MAP.md`, `docs/AI_MODEL_SELECTION.md`, relevant AI Assist and testing guidance, and the accepted CONTEXT-100 benchmark SHA. Repository rules and current architecture take precedence over this dated contract.
 
 **Before physical steps:** owner must expressly approve the target Proxmox host/container and the precise operation (observing host metrics, changing container resources, downloading named model artifacts, running bounded inference, exposing any interface). Approval of this roadmap is not that authorization. Read-only queries also require that the operator actually has a supported path to the host; this document makes no claim of current access.
 
@@ -28,12 +28,12 @@ Record whether operator state is sensitive, whether any source may be transferre
 
 ## Platform feasibility inventory — read-only first
 
-Operator-reported facts needing verification: Proxmox \`pve-g16\`, possible container \`110\` named \`ai-worker\`, nominal 8 GiB RTX 4070 Laptop VRAM, 16 GiB host RAM, Ollama via operator SSH tunnel. Do not assume the exact hardware, \`lscpu\` topology, CPU pinning, model residency, memory limits, existing Ollama service permissions or the tunnel identity.
+Operator-reported facts needing verification: Proxmox `pve-g16`, possible container `110` named `ai-worker`, nominal 8 GiB RTX 4070 Laptop VRAM, 16 GiB host RAM, Ollama via operator SSH tunnel. Do not assume the exact hardware, `lscpu` topology, CPU pinning, model residency, memory limits, existing Ollama service permissions or the tunnel identity.
 
 Capture:
-- Host \`free -h\`, \`lscpu\`, storage pressure and safe operating headroom.
-- Relevant \`pct config <actual-id>\`, cgroup memory/CPU caps, swap, balloon/scheduling assumptions, GPU passthrough visibility.
-- Inside container \`nvidia-smi\`, actual Ollama version, \`ollama list\` and \`ollama ps\` if already installed/authorized.
+- Host `free -h`, `lscpu`, storage pressure and safe operating headroom.
+- Relevant `pct config <actual-id>`, cgroup memory/CPU caps, swap, balloon/scheduling assumptions, GPU passthrough visibility.
+- Inside container `nvidia-smi`, actual Ollama version, `ollama list` and `ollama ps` if already installed/authorized.
 - Baseline idle/busy host CPU/RAM, GPU RAM and temperatures, existing services, thermal throttling, errors, power/restart behavior.
 - Whether the operator's SSH-forwarded localhost endpoint is reachable without increasing exposure.
 
@@ -54,7 +54,7 @@ If observations show insufficient memory, denied GPU access, unstable thermals, 
 
 Candidates and Ollama tags are not pinned deployment choices here. Before each live run, check official model provenance, license restrictions, supported format, exact weight digest, quantization, downloaded bytes, context limit and installed runtime compatibility. Provider performance claims are hypotheses, not StableNew evidence.
 
-Test one GPU request at a time initially. Compare 4K/8K/16K usable contexts first and only test larger contexts if memory headroom permits. Record measured \`nvidia-smi\`, \`ollama ps\` residency (fully GPU versus CPU split), transient peak RAM, failure rate, cold/warm first-token latency, tokens/second, GPU power/temperature and the effect on existing AI Assist work. Avoid misleading inference from compressed weight size alone.
+Test one GPU request at a time initially. Compare 4K/8K/16K usable contexts first and only test larger contexts if memory headroom permits. Record measured `nvidia-smi`, `ollama ps` residency (fully GPU versus CPU split), transient peak RAM, failure rate, cold/warm first-token latency, tokens/second, GPU power/temperature and the effect on existing AI Assist work. Avoid misleading inference from compressed weight size alone.
 
 ## Evidence design
 
@@ -85,7 +85,7 @@ Exclude modifying StableNew production AI Assist, automatic changes to Proxmox r
 
 Stop on unexpected egress, access beyond owner authorization, excessive CPU/RAM/GPU pressure, ambiguous model identity, unstable inference, non-reproducible quality findings, sensitive content exposure, a materially new architecture decision, or expanded scope beyond the accepted task.
 
-Record full session-based token usage per \`docs/AI_MODEL_SELECTION.md\` (including support sessions). Report missing data as unavailable, not zero. No push/merge/release or physical experiment without explicit action-level approval.
+Record full session-based token usage per `docs/AI_MODEL_SELECTION.md` (including support sessions). Report missing data as unavailable, not zero. No push/merge/release or physical experiment without explicit action-level approval.
 
 ## Source references
 

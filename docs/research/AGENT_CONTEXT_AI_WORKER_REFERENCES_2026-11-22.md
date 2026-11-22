@@ -6,7 +6,7 @@
 
 ## Authority and repository evidence
 
-At the planning cut, remote \`destroyer42/StableNew2\` \`main\` was \`6cc6f95916fa5f0105f114a245c2987550518fd3\`. Current checkout/branch/diff have precedence; do not freeze this SHA as a future implementation base.
+At the planning cut, remote `destroyer42/StableNew2` `main` was `6cc6f95916fa5f0105f114a245c2987550518fd3`. Current checkout/branch/diff have precedence; do not freeze this SHA as a future implementation base.
 
 | Question | Current repository entrypoint | What it establishes / does not |
 |---|---|---|
@@ -15,11 +15,11 @@ At the planning cut, remote \`destroyer42/StableNew2\` \`main\` was \`6cc6f95916
 | Where should a task start? | [CODEX_MAP.md](../CODEX_MAP.md) | Hand-maintained short navigation (60-line guard), not architecture authority |
 | What modules exist? | [CODE_MAP.md](../CODE_MAP.md), [generator](../../tools/generate_code_map.py) | Module-first-sentence map generated from docstrings, not a semantic dependency graph |
 | How is map freshness validated? | [tests/tools/test_code_map.py](../../tests/tools/test_code_map.py) | Existing committed-map check and 60-line task map/path controls |
-| How is agent usage measured? | [AI_MODEL_SELECTION.md](../AI_MODEL_SELECTION.md), \`tools/usage_report.py\` | Timestamp/session-bound usage; \`--since-commit\` is post-commit only |
+| How is agent usage measured? | [AI_MODEL_SELECTION.md](../AI_MODEL_SELECTION.md), `tools/usage_report.py` | Timestamp/session-bound usage; `--since-commit` is post-commit only |
 | What remote AI rules already apply? | [AI_ASSIST.md](../Subsystems/AiAssist/AI_ASSIST.md) | Existing app-bound local and operator-approved forwarded inference; independent developer research is **not** automatically qualified/authorized |
 | What is the docs-only lane? | [TESTING_AND_CI.md](../Subsystems/Testing/TESTING_AND_CI.md) | Documentation-only cheap checks; no production test/physical proof |
 
-\`docs/CODE_MAP.md\` on this cut reported **787 of 942 modules** with module docstrings; the actual starting inventory must be re-counted. The last 50 PRs (#331–#380) provide changed-file cohorts and possible task labels, but they do **not** show every source a coding agent read. Exact context waste cannot be deduced from PR changes or token totals without complete session telemetry.
+`docs/CODE_MAP.md` on this cut reported **787 of 942 modules** with module docstrings; the actual starting inventory must be re-counted. The last 50 PRs (#331–#380) provide changed-file cohorts and possible task labels, but they do **not** show every source a coding agent read. Exact context waste cannot be deduced from PR changes or token totals without complete session telemetry.
 
 ## Why deterministic navigation first
 
@@ -29,14 +29,14 @@ This is a design hypothesis; it is not a measured savings claim. Prompt caching 
 
 ## Existing module-map and docstring mechanics
 
-\`tools/generate_code_map.py\`:
-- Walks \`src/**/*.py\`, skipping \`__pycache__\`.
-- Parses module source via Python \`ast\` without importing application code.
+`tools/generate_code_map.py`:
+- Walks `src/**/*.py`, skipping `__pycache__`.
+- Parses module source via Python `ast` without importing application code.
 - Takes the first paragraph/sentence of the module-level docstring, capped at 110 characters.
-- Prints \`(no docstring)\` or \`(could not be parsed)\` as applicable.
-- Regenerates \`docs/CODE_MAP.md\`; \`--check\` refuses stale committed output.
+- Prints `(no docstring)` or `(could not be parsed)` as applicable.
+- Regenerates `docs/CODE_MAP.md`; `--check` refuses stale committed output.
 
-A module docstring must be semantically accurate, not a tautology. Preserve initial comment/license/shebang/encoding and \`from __future__\` semantics. Source AST before versus after (after excluding newly inserted leading docstring node) should match, with expected \`__doc__\` metadata differences reviewed. Because code can inspect \`__doc__\`, test/document any exceptional import-time consequences. Do not format or rewrite unrelated source in a mass-docstring package.
+A module docstring must be semantically accurate, not a tautology. Preserve initial comment/license/shebang/encoding and `from __future__` semantics. Source AST before versus after (after excluding newly inserted leading docstring node) should match, with expected `__doc__` metadata differences reviewed. Because code can inspect `__doc__`, test/document any exceptional import-time consequences. Do not format or rewrite unrelated source in a mass-docstring package.
 
 A future dependency index should distinguish:
 - **Proven by static parse:** resolvable imports, locally defined symbols.
@@ -47,11 +47,11 @@ Do not convert heuristic relevance into a claim of runtime control, data ownersh
 
 ## Remote AI-worker hypothesis and verification
 
-The operator has described \`pve-g16\`, a Proxmox \`ai-worker\` container (possibly CT 110), a mobile RTX 4070 with nominal 8 GiB VRAM, Ollama, and a previously SSH-forwarded localhost endpoint. These have **not** been inspected through this document-writing session; resource and endpoint details must be reverified live by an explicitly authorized operator.
+The operator has described `pve-g16`, a Proxmox `ai-worker` container (possibly CT 110), a mobile RTX 4070 with nominal 8 GiB VRAM, Ollama, and a previously SSH-forwarded localhost endpoint. These have **not** been inspected through this document-writing session; resource and endpoint details must be reverified live by an explicitly authorized operator.
 
 **Initial read-only command suggestions, after access approval:**
 
-\`\`\`sh
+```sh
 free -h
 lscpu
 pct list
@@ -59,7 +59,7 @@ pct config <verified-CT-ID>
 pct exec <verified-CT-ID> -- nvidia-smi
 pct exec <verified-CT-ID> -- ollama list
 pct exec <verified-CT-ID> -- ollama ps
-\`\`\`
+```
 
 No command above adjusts memory, CPU, GPU, network or installed models. If tool availability/access differs, do not infer state from an error. Avoid placing addresses, SSH private keys, passwords or full environment variables in PR evidence.
 
@@ -76,7 +76,7 @@ No command above adjusts memory, CPU, GPU, network or installed models. If tool 
 | MiMo-V2.6-Distill-Qwen-9B | Harder code-oriented reranking | 8 GiB GPU headroom, CPU spills, large context KV cache |
 | Qwen3.5 9B | Larger-model comparator | Same VRAM/context/latency challenge |
 
-Check specific model tags/digests/licenses at experiment time. Published 9B weight sizes and vendor advertised maximum contexts do not establish full-GPU residency at 8 GiB. Document actual context, KV-cache use, \`ollama ps\` residency and token throughput.
+Check specific model tags/digests/licenses at experiment time. Published 9B weight sizes and vendor advertised maximum contexts do not establish full-GPU residency at 8 GiB. Document actual context, KV-cache use, `ollama ps` residency and token throughput.
 
 ## External source bibliography — verify again at qualification time
 
@@ -110,4 +110,4 @@ No external model documentation, model-card benchmark or example command grants 
 
 The [CONTEXT-100 implementation package](../work_packages/PR-DEVEX-CONTEXT-100.md) is the first implementation objective. [AI-WORKER-110](../work_packages/AI-WORKER-110.md) is a separately authorized qualification; [CONTEXT-120](../work_packages/PR-DEVEX-CONTEXT-120.md) is conditional integration. Image-analysis work remains an independent later product/qualification decision.
 
-Do not modify \`STATUS.md\` merely to narrate this research. Adopted runtime/architecture changes belong in their current living docs and must pass the current owner decision and validation process.
+Do not modify `STATUS.md` merely to narrate this research. Adopted runtime/architecture changes belong in their current living docs and must pass the current owner decision and validation process.
