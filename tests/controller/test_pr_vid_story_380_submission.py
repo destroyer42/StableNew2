@@ -27,6 +27,7 @@ from src.controller.video_workflow_controller import VideoWorkflowController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
 from src.queue.job_model import JobStatus
+from src.queue.job_repository import JobRepositoryError
 from src.video.sequence_ledger import BASIS_NATIVE, FileRecord
 from src.video.sequence_plan import (
     ROOT_PARENT,
@@ -38,11 +39,16 @@ from src.video.sequence_plan import (
 from src.video.sequence_resume import REPLAY_KEY, RESUME_KEY
 from src.video.storyboard import StoryboardError
 from src.video.storyboard_cut import (
+    BASIS_DECODED,
+    CutFrame,
+    CutManifest,
     CutManifestError,
+    CutRange,
     read_cut_manifest,
     take_manifest,
     write_cut_manifest,
 )
+from src.video.storyboard_cuts import write_lead_in
 from src.video.storyboard_history import from_history
 from src.video.storyboard_tree import StoryboardTree, StoryboardTreeError, Take
 from src.video.storyboard_tree_store import MAX_BYTES, StoryboardTreeStore
@@ -62,7 +68,17 @@ from tests.helpers.storyboard_380 import (
 
 
 class RecordingRepository(FakeRepository):
-    """``FakeRepository`` plus the newest-first ``list_recent_jobs`` that reconciliation reads."""
+    """``FakeRepository`` plus the newest-first ``list_recent_jobs`` that reconciliation reads.
+
+    Job ids in ``broken`` raise ``JobRepositoryError`` from ``get_job_model``, as a corrupt ``njr_snapshot`` does.
+    """
+
+    broken: set[str]
+
+    def get_job_model(self, job_id: str) -> FakeJob | None:
+        if job_id in getattr(self, "broken", set()):
+            raise JobRepositoryError(f"corrupt njr_snapshot for {job_id}")
+        return super().get_job_model(job_id)
 
     def list_recent_jobs(self, *, limit: int = 50, statuses: Any = None) -> list[Any]:
         return [SimpleNamespace(job_id=job_id) for job_id in reversed(list(self.jobs))][:limit]
@@ -103,11 +119,18 @@ class RecordingJobService:
         self.repository = repository
         self.calls: list[int] = []
         self.njrs: list[NormalizedJobRecord] = []
+        #: ``"before_persist"`` or ``"after_persist"``: raise there, as ``JobService.submit_njrs`` can.
+        self.raise_at: str | None = None
 
     def submit_njrs(self, njrs: list[NormalizedJobRecord], policy: Any) -> list[str]:
         self.calls.append(len(njrs))
+        if self.raise_at == "before_persist":
+            raise RuntimeError("the queue refused the batch")
         self.njrs.extend(njrs)
-        return [self.repository.add(njr, status=JobStatus.QUEUED) for njr in njrs]
+        ids = [self.repository.add(njr, status=JobStatus.QUEUED) for njr in njrs]
+        if self.raise_at == "after_persist":
+            raise RuntimeError("a queue listener failed after the batch was admitted")
+        return ids
 
 
 class FlakyStore(StoryboardTreeStore):
@@ -521,6 +544,108 @@ def test_a_chain_replay_becomes_a_new_chain(service, tree_with_clip_root):
     first, second = sorted(replays, key=lambda t: t.chain_position)
     assert second.parent_id == first.take_id and first.parent_id == ROOT_PARENT
     assert first.attempts == second.attempts and first.batch_id == second.batch_id
+
+
+# --------------------------------------------------------------------------------------------- review fixes
+
+
+def test_submit_error_after_the_queue_persisted_keeps_the_takes(service, tree_with_clip_root):
+    service.fake_job_service.raise_at = "after_persist"
+    with pytest.raises(RuntimeError, match="listener failed"):
+        service.submit(_request(tree_with_clip_root, rows=2))
+    tree = service.store.load(tree_with_clip_root.storyboard_id)
+    queued = [str(njr.job_id) for njr in service.fake_job_service.njrs]
+    assert len(tree.takes) == 2 and [t.attempts for t in tree.takes] == [(j,) for j in queued]
+    assert service.reconcile(tree.storyboard_id) == tree  # nothing orphaned for reconcile to find
+
+
+def test_submit_error_before_the_queue_persisted_removes_the_takes(service, tree_with_clip_root):
+    service.fake_job_service.raise_at = "before_persist"
+    with pytest.raises(RuntimeError, match="refused the batch"):
+        service.submit(_request(tree_with_clip_root, rows=3, mode="sequential", handoff_index=80))
+    assert service.store.load(tree_with_clip_root.storyboard_id).takes == ()
+
+
+def test_failed_sequential_admission_removes_the_whole_chain(service, tree_with_clip_root):
+    service.fail_build_on_row = 1
+    with pytest.raises(SequencePlanError):
+        service.submit(_request(tree_with_clip_root, rows=3, mode="sequential", handoff_index=80))
+    assert (
+        service.job_service_calls == []
+        and service.store.load(tree_with_clip_root.storyboard_id).takes == ()
+    )
+
+
+def test_reconcile_skips_corrupt_job_records(service, tree_with_clip_root):
+    service.store.fail_next_save_after = 1  # pending write succeeds, attempt write fails
+    with pytest.raises(StoryboardTreeError):
+        service.submit(_request(tree_with_clip_root, rows=2))
+    service.fake_repository.broken = {
+        tree_with_clip_root.root.job_id
+    }  # an unrelated corrupt row in the window
+    tree = service.reconcile(tree_with_clip_root.storyboard_id)
+    assert len(tree.takes) == 2 and all(len(t.attempts) == 1 for t in tree.takes)
+
+
+def test_parent_cut_falls_back_past_unusable_newest_attempts(service, tree_with_finished_chain):
+    middle = _chain_take(tree_with_finished_chain, position=1)
+    original = middle.attempts[0]
+    resumed = service.fake_repository.add_resume_of(original)
+    tree = service.reconcile(tree_with_finished_chain.storyboard_id)
+    assert _chain_take(tree, position=1).attempts == (original, resumed)
+    good = service.fake_repository.jobs[original].result["metadata"]["sequence_artifact"][
+        "cut_manifest"
+    ]
+    changed = {"path": good["path"], "sha256": "0" * 64}
+    _set_status(
+        service,
+        resumed,
+        JobStatus.COMPLETED,
+        {"metadata": {"sequence_artifact": {"cut_manifest": changed}}},
+    )
+    cut = service.parent_cut(
+        tree, middle.take_id
+    )  # newest completed attempt's manifest hash is wrong
+    assert cut is not None and len(cut.frames) == 241
+    service.fake_repository.broken = {resumed}  # newest attempt's record is corrupt
+    assert len(service.parent_cut(tree, middle.take_id).frames) == 241
+    service.fake_repository.broken = set()
+    _set_status(
+        service,
+        original,
+        JobStatus.COMPLETED,
+        {"metadata": {"sequence_artifact": {"cut_manifest": changed}}},
+    )
+    with pytest.raises(CutManifestError, match="changed since it was recorded"):
+        service.parent_cut(
+            tree, middle.take_id
+        )  # no usable attempt left: the first failure is reported
+
+
+def test_lead_in_paths_are_written_resolved(tmp_path, monkeypatch):
+    real = [png(tmp_path / "frames" / f"f{n}.png", (8, 8), (n, 0, 0)) for n in range(3)]
+    monkeypatch.chdir(tmp_path)
+    raw = [
+        str(tmp_path / "frames" / ".." / "frames" / "f0.png"),  # not normalised
+        str(Path("frames") / "f1.png"),  # relative
+        str(tmp_path / "frames" / ".." / "frames" / "f2.png"),
+    ]
+    frames = tuple(
+        CutFrame(path=r, sha256=FileRecord.of(p).sha256) for r, p in zip(raw, real, strict=True)
+    )
+    cut = CutManifest(
+        fps=16,
+        width=8,
+        height=8,
+        frames=frames,
+        ranges=(CutRange(ROOT_PARENT, 0, 2, BASIS_DECODED, 0),),
+        lead_in_frames=0,
+        job_id=None,
+    )
+    lead_in = write_lead_in(tmp_path, "a" * 32, "batch1", cut)
+    assert lead_in.handoff_path == str(real[2].resolve()) != raw[2]
+    written = read_cut_manifest(lead_in.manifest_path, expected_sha256=lead_in.manifest_sha256)
+    assert [f.path for f in written.frames] == [str(p.resolve()) for p in real]
 
 
 # --------------------------------------------------------------------------------------------- surfaces

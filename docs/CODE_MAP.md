@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-790 of 945 modules have a docstring.
+791 of 946 modules have a docstring.
 
 ## src/
 
@@ -1001,6 +1001,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `sequence_shots.py`: Operator shots in, ``sequence_intent`` out (PR-VID-SEQ-331A)
 - `storyboard.py`: Versioned, editable Storyboard intent, distinct from an admitted SequencePlan (VID-STORYBOARD-350)
 - `storyboard_cut.py`: The cut manifest of a stitched storyboard cut (PR-VID-STORY-380)
+- `storyboard_cuts.py`: Read storyboard cuts back from the repository and pin lead-ins (PR-VID-STORY-380, spec 7.5)
 - `storyboard_history.py`: Create new authoring intent only from a canonical frozen sequence snapshot, never from artifacts
 - `storyboard_readiness.py`: Read-only source identity and workflow projections for editable Storyboards; admission stays authoritative
 - `storyboard_reconcile.py`: Adopt a repository job into a storyboard tree by the storyboard link its plan carries (PR-VID-STORY-380, spec…
