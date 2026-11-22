@@ -94,7 +94,9 @@ def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
     ] == [A14B_APPROVED, TI2V_720P_APPROVED, APPROVED, APPROVED_FRAMES_OUT]
-    assert len(registry.list_offerable_specs("comfy")) == 17  # + three A14B speed arms (VID-A14B-SPEED-374)
+    assert (
+        len(registry.list_offerable_specs("comfy")) == 17
+    )  # + three A14B speed arms (VID-A14B-SPEED-374)
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:
