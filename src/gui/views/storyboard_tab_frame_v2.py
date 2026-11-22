@@ -225,6 +225,10 @@ class StoryboardTabFrameV2(ttk.Frame):
     def _apply_state(self, state: _State, *, keep_selection: bool = False) -> None:
         previous = self.contract.selected_id if (keep_selection and self.contract) else ROOT_PARENT
         same_tree = self.tree is not None and self.tree.storyboard_id == state.tree.storyboard_id
+        if not same_tree:  # thumbnails are keyed by take id, and every root is ``root``
+            self._photos.clear()
+            self.cut = None
+            self.target = None
         self.tree, self.views, self._root_thumbnail = state.tree, state.views, state.root_thumbnail
         self.contract = StoryboardTreeContract(self.tree, self.views, ai_reason=self._ai_reason)
         selected = (
@@ -247,7 +251,17 @@ class StoryboardTabFrameV2(ttk.Frame):
             self._say("Ready.")
 
     def _after_views_changed(self) -> None:
+        self._reapply_cut()
         self._update_continue_panel()
+
+    def _reapply_cut(self) -> None:
+        """A rebuilt contract has no slider ownership yet: give it the cut that is already on screen."""
+
+        if self.contract is not None and self.cut is not None:
+            self.contract.apply_cut(
+                [(item.start, item.end, item.trimmed) for item in self.cut.ranges],
+                len(self.cut.frames),
+            )
 
     def _schedule_refresh(self) -> None:
         if self._refresh_after is not None:
@@ -418,11 +432,7 @@ class StoryboardTabFrameV2(ttk.Frame):
         self.tree = tree
         self.contract = StoryboardTreeContract(tree, self.views, ai_reason=self._ai_reason)
         self.contract.select(selected)
-        if self.cut is not None:
-            self.contract.apply_cut(
-                [(item.start, item.end, item.trimmed) for item in self.cut.ranges],
-                len(self.cut.frames),
-            )
+        self._reapply_cut()
         self.title_var.set(f"{tree.title} · {_saved_text(tree)}")
         self.dropped_text_var.set(f"Show dropped ({self.contract.dropped_count()})")
         self.render()

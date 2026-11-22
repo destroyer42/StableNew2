@@ -414,3 +414,29 @@ def test_completed_takes_show_no_resume_or_replay_buttons(storyboard_tab, fake_s
     storyboard_tab.resume_take("t4")
     assert "cannot be resumed" in storyboard_tab.status_var.get()
     assert fake_service.controller_calls == []
+
+
+# ---------------------------------------------------------------------------------------------- review fixes
+
+
+def test_a_refresh_keeps_the_slider_ownership_and_continue_working(storyboard_tab, fake_service):
+    storyboard_tab.open_storyboard("diner")
+    storyboard_tab.select_take("t1b")
+    storyboard_tab.refresh()
+    assert storyboard_tab.contract.joins() == (8, 10)
+    assert storyboard_tab.viewer.readout_var.get().startswith("frame 14 / 14")
+    storyboard_tab.viewer.seek(3)
+    storyboard_tab.viewer.continue_button.invoke()
+    assert storyboard_tab.continue_title_var.get() == "Continue A from its frame 4"
+
+
+def test_opening_another_storyboard_does_not_reuse_the_old_root_thumbnail(
+    storyboard_tab, fake_service
+):
+    from dataclasses import replace
+
+    storyboard_tab.open_storyboard("diner")
+    first = storyboard_tab._photos["root"]
+    fake_service.tree = replace(fake_service.tree, storyboard_id="other")
+    storyboard_tab.open_storyboard("other")
+    assert storyboard_tab._photos["root"] is not first
