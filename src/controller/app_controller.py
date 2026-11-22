@@ -116,7 +116,11 @@ from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerService,
 )
 from src.controller.reprocess_admission import submit_reprocess_njrs
-from src.controller.review_batch_service import ReviewBatchPreview, prepare_review_batch
+from src.controller.review_batch_service import (
+    ReviewBatchPreview,
+    parent_job_model,
+    prepare_review_batch,
+)
 from src.controller.runtime_state import GUIState
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.svd_submission_service import (
@@ -2032,6 +2036,7 @@ class AppController:
         if isinstance(vae_value, str) and vae_value.strip().lower() in {"unknown", "n/a"}:
             vae_value = None
         prompt_value, negative_prompt_value = resolve_rework_baseline(payload)[:2]
+        model_value = model_value or parent_job_model(self, payload.get("job_id")) or None
 
         return {
             "stage": str(stage_manifest.get("stage") or payload.get("stage") or "unknown"),

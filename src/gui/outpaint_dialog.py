@@ -19,6 +19,7 @@ from src.controller.outpaint_edit_service import (
     outpaint_preview_summary,
     prepare_outpaint_edit,
 )
+from src.controller.review_batch_service import review_output_dir
 from src.gui.theme_v2 import apply_toplevel_theme
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
@@ -305,6 +306,8 @@ class OutpaintDialog(tk.Toplevel):
         self.preview_button.state(["disabled"])
         self.status.set("Preparing and verifying frozen inputs…")
 
+        output_dir = review_output_dir(self._controller)
+
         def work() -> WorkOutcome:
             return WorkOutcome(
                 prepare_outpaint_edit(
@@ -313,6 +316,7 @@ class OutpaintDialog(tk.Toplevel):
                     settings=settings,
                     fallback_config=fallback,
                     baseline=baseline,
+                    output_dir=output_dir,
                 )
             )
 

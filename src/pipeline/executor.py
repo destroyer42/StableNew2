@@ -5083,6 +5083,12 @@ class Pipeline:
                 "requested_subseed": payload.get("subseed", -1),
                 "all_subseeds": gen_info.get("all_subseeds"),
             }
+            # The checkpoint and VAE this stage ran with travel in the manifest like the adetailer and upscale stages'
+            # do, so a later re-work of this image starts from the same checkpoint instead of "Unknown".
+            if model_name:
+                metadata["model"] = model_name
+            if vae_name:
+                metadata["vae"] = vae_name
             if outpaint_evidence is not None:
                 metadata["outpaint"] = outpaint_evidence
             if adaptive_refinement:
