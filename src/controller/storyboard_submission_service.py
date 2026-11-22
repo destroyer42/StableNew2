@@ -530,3 +530,15 @@ __all__ = [
     "ContinueRow",
     "StoryboardSubmissionService",
 ]
+
+
+def build_storyboard_service(controller: Any) -> StoryboardSubmissionService:
+    """Wire the service from a ``VideoWorkflowController`` (kept out of that file, which has a size ceiling)."""
+
+    return StoryboardSubmissionService(
+        njr_builder=controller._njr_builder,
+        workflow_registry=controller._workflow_registry,
+        job_service=controller._job_service,
+        repository=lambda: getattr(controller._job_service(), "history_store", None),
+        output_root=lambda: getattr(controller._app_controller, "output_dir", None) or "output",
+    )
