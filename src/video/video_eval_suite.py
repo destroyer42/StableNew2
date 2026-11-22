@@ -247,8 +247,16 @@ def load_eval_suite(path: str | Path) -> EvalSuite:
     suite_path = Path(path).expanduser()
     try:
         raw_bytes = suite_path.read_bytes()
+    except OSError as exc:
+        raise EvalSuiteError(f"cannot read eval suite {suite_path}: {exc}") from exc
+    return parse_eval_suite(suite_path, raw_bytes)
+
+
+def parse_eval_suite(suite_path: Path, raw_bytes: bytes) -> EvalSuite:
+    """Validate one suite snapshot using the given path for relative references."""
+    try:
         data = json.loads(raw_bytes.decode("utf-8"))
-    except (OSError, ValueError) as exc:
+    except ValueError as exc:
         raise EvalSuiteError(f"cannot read eval suite {suite_path}: {exc}") from exc
     _require(isinstance(data, Mapping), "an eval suite must be a JSON object")
     _require(
