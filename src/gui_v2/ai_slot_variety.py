@@ -20,10 +20,19 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from src.ai_assist.contracts import (
+    DEFAULT_VARIETY_PER_SLOT,
+    MAX_VARIETY_NEW_VALUES,
+    MAX_VARIETY_REQUESTED_TOTAL,
+    MAX_VARIETY_SLOTS,
     MAX_VARIETY_VALUE_CHARS,
+    VARIETY_ANSWER_TOKEN_BUDGET,
+    VARIETY_FOCUS_DIRECT,
+    VARIETY_FOCUS_EXPLORE,
+    VARIETY_FOCUS_MODES,
     AssistRequest,
     AssistSuggestion,
     SuggestionKind,
+    variety_answer_tokens,
 )
 from src.ai_assist.framing import VARIETY_RESERVED_MARKERS
 from src.utils.prompt_pack_utils import matrix_slot_round_trips as slot_round_trips
@@ -117,23 +126,200 @@ def matrix_state(slots: Sequence[Any]) -> tuple[SlotState, ...]:
     )
 
 
-def build_variety_request(
-    request_id: str, goal_text: str, slots: Sequence[SlotState], *, content_class: str
-) -> AssistRequest:
-    """The only constructor of a slot-variety request: the goal plus every editable slot, nothing else (no model list,
-    no stage list, no prompt). Raises ``ValueError`` when a bound is not met."""
+FOCUS_LABELS: dict[str, str] = {
+    VARIETY_FOCUS_DIRECT: "Directly supports the goal",
+    VARIETY_FOCUS_EXPLORE: "Explore related variations",
+}
+UNVERIFIED_LABEL = (
+    "Model-proposed, not independently relevance-verified. You decide whether a value is useful."
+)
+NO_SELECTION_TEXT = "Select at least one target slot first."
+SLOT_DISABLED_REASON = "needs a unique name and text values without commas"
 
+
+def selected_slot_names(slots: Sequence[SlotState], chosen: Sequence[str]) -> tuple[str, ...]:
+    """Validate an operator selection against the matrix state. Fails closed with ``ValueError``; never truncates."""
+
+    if not chosen:
+        raise ValueError(NO_SELECTION_TEXT)
+    if len(set(chosen)) != len(chosen):
+        raise ValueError("A slot was selected more than once.")
+    if len(chosen) > MAX_VARIETY_SLOTS:
+        raise ValueError(f"Select at most {MAX_VARIETY_SLOTS} slots.")
+    editable = {slot.name for slot in slots if slot.editable}
+    if any(name not in editable for name in chosen):
+        raise ValueError("A selected slot is no longer available. Review the target slots.")
+    return tuple(chosen)
+
+
+def check_variety_quantity(per_slot: Any, slot_count: int) -> int:
+    """The per-slot count (a whole number, 1 to 6) and the aggregate bound, checked before any inference."""
+
+    if (
+        isinstance(per_slot, bool)
+        or not isinstance(per_slot, int)
+        or not 1 <= per_slot <= MAX_VARIETY_NEW_VALUES
+    ):
+        raise ValueError(
+            f"Suggestions per slot must be a whole number from 1 to {MAX_VARIETY_NEW_VALUES}."
+        )
+    total = per_slot * slot_count
+    if total > MAX_VARIETY_REQUESTED_TOTAL:
+        raise ValueError(
+            f"{total} values requested; at most {MAX_VARIETY_REQUESTED_TOTAL} per request. "
+            "Reduce the suggestions per slot or the selected slots."
+        )
+    if variety_answer_tokens(slot_count, per_slot) > VARIETY_ANSWER_TOKEN_BUDGET:
+        raise ValueError(
+            f"{total} values over {slot_count} slots could exceed the model's answer budget. "
+            "Reduce the suggestions per slot or the selected slots."
+        )
+    return per_slot
+
+
+def build_variety_request(
+    request_id: str,
+    goal_text: str,
+    slots: Sequence[SlotState],
+    *,
+    content_class: str,
+    selected: Sequence[str],
+    per_slot: int = DEFAULT_VARIETY_PER_SLOT,
+    focus: str = VARIETY_FOCUS_DIRECT,
+) -> AssistRequest:
+    """The only constructor of a slot-variety request: the goal plus the explicitly selected editable slots, nothing else
+    (no model list, no stage list, no prompt, no unselected slot). Raises ``ValueError`` when a bound is not met."""
+
+    names = selected_slot_names(slots, selected)
+    check_variety_quantity(per_slot, len(names))
+    if focus not in VARIETY_FOCUS_MODES:
+        raise ValueError("Unsupported goal focus.")
+    by_name = {slot.name: slot for slot in slots if slot.editable}
     return AssistRequest(
         request_id,
         SuggestionKind.SLOT_VARIETY,
         content_class=content_class,
         goal_text=goal_text,
         matrix_slots=tuple(
-            (slot.name, tuple(str(value) for value in slot.values))
-            for slot in slots
-            if slot.editable
+            (name, tuple(str(value) for value in by_name[name].values)) for name in names
         ),
+        variety_per_slot=per_slot,
+        variety_focus=focus,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class SlotCoverage:
+    slot: str
+    requested: int
+    returned: int
+    eligible: int
+    rejected: int
+    added: int
+
+    @property
+    def missing(self) -> int:
+        return max(0, self.requested - self.returned)
+
+
+@dataclass(frozen=True, slots=True)
+class VarietyCoverage:
+    """Deterministic counts for a structurally valid answer. Says nothing about semantic relevance."""
+
+    focus: str
+    slots: tuple[SlotCoverage, ...]
+
+    @property
+    def requested(self) -> int:
+        return sum(s.requested for s in self.slots)
+
+    @property
+    def returned(self) -> int:
+        return sum(s.returned for s in self.slots)
+
+    @property
+    def eligible(self) -> int:
+        return sum(s.eligible for s in self.slots)
+
+    @property
+    def rejected(self) -> int:
+        return sum(s.rejected for s in self.slots)
+
+    @property
+    def added(self) -> int:
+        return sum(s.added for s in self.slots)
+
+    @property
+    def missing(self) -> int:
+        return sum(s.missing for s in self.slots)
+
+    @property
+    def partial(self) -> bool:
+        return self.missing > 0
+
+
+def variety_coverage(
+    request: AssistRequest, rows: Sequence[VarietyRow], *, added: frozenset[int] = frozenset()
+) -> VarietyCoverage:
+    """Per selected slot: requested, returned, eligible (offered and not yet added), rejected and added counts. A selected
+    slot the model omitted reports ``0 returned``. Rows for slots outside the request cannot occur (the validator's closed
+    list) and are ignored."""
+
+    out: list[SlotCoverage] = []
+    for name, _existing in request.matrix_slots:
+        mine = [row for row in rows if row.slot == name]
+        out.append(
+            SlotCoverage(
+                name,
+                request.variety_per_slot,
+                len(mine),
+                sum(row.offered for row in mine),
+                sum(not row.offered for row in mine),
+                sum(row.index in added for row in mine),
+            )
+        )
+    return VarietyCoverage(request.variety_focus, tuple(out))
+
+
+def coverage_status(coverage: VarietyCoverage) -> str:
+    """One compact line. Partial coverage is named; a full count is never presented as verified relevance."""
+
+    line = f"{coverage.returned} of {coverage.requested} requested values returned"
+    if coverage.partial:
+        return f"Partial coverage: {line}. Review the available suggestions or adjust the scope and request again."
+    return f"Requested count returned ({line}); relevance is not verified."
+
+
+def coverage_lines(coverage: VarietyCoverage) -> list[str]:
+    mode = "Direct" if coverage.focus == VARIETY_FOCUS_DIRECT else "Explore"
+    per = coverage.slots[0].requested if coverage.slots else 0
+    lines = [
+        f"Mode: {mode}",
+        f"Selected slots: {', '.join(s.slot for s in coverage.slots)}",
+        f"Requested: {per} per slot / {coverage.requested} total",
+        "",
+        "Coverage:",
+    ]
+    for slot in coverage.slots:
+        lines.append(
+            f"{slot.slot}  {slot.requested} requested / {slot.returned} returned / {slot.eligible} eligible"
+        )
+    lines += [
+        "",
+        "Overall:",
+        f"{coverage.requested} requested",
+        f"{coverage.returned} returned",
+        f"{coverage.eligible} eligible",
+        f"{coverage.rejected} rejected",
+        f"{coverage.added} added",
+    ]
+    if coverage.partial:
+        lines += [
+            "",
+            "PARTIAL COVERAGE",
+            f"{coverage.missing} requested value(s) were not returned.",
+        ]
+    return lines
 
 
 def value_key(text: str) -> str:
@@ -226,6 +412,11 @@ class VarietyReview:
     added: frozenset[int] = frozenset()
     notice: str = VARIETY_NOTICE
     actions: tuple[str, ...] = ()
+    coverage: VarietyCoverage | None = field(default=None, repr=False)
+
+    @property
+    def coverage_line(self) -> str:
+        return coverage_status(self.coverage) if self.coverage is not None else ""
 
     @property
     def offered_rows(self) -> tuple[VarietyRow, ...]:
@@ -240,10 +431,14 @@ def variety_review(
     trust_label: str = "",
     added: frozenset[int] = frozenset(),
     excluded_count: int = 0,
+    request: AssistRequest | None = None,
 ) -> VarietyReview:
     offered = sum(row.offered and row.index not in added for row in rows)
     rejected = sum(not row.offered and row.index not in added for row in rows)
     status = f"{offered} value(s) can be added, {rejected} rejected, {len(added)} added."
+    coverage = variety_coverage(request, rows, added=added) if request is not None else None
+    if coverage is not None:
+        status = f"{coverage_status(coverage)} {status}"
     if excluded_count:
         status += f" {excluded_count} slot(s) were not offered: a unique name and text values without commas are needed."
     return VarietyReview(
@@ -256,6 +451,7 @@ def variety_review(
         ),
         added=added,
         actions=VARIETY_REVIEW_ACTIONS if offered else (),
+        coverage=coverage,
     )
 
 
@@ -274,6 +470,9 @@ def variety_text(review: VarietyReview) -> str:
     if review.trust_label:
         lines.append(review.trust_label)
     lines += ["", review.status]
+    if review.coverage is not None:
+        lines += ["", UNVERIFIED_LABEL, ""]
+        lines += coverage_lines(review.coverage)
     rationales = dict(review.rationales)
     slot = None
     for row in review.rows:
@@ -311,6 +510,17 @@ def slots_line(slots: Sequence[SlotState], *, is_visible: Callable[[str], bool])
 
 
 __all__ = [
+    "FOCUS_LABELS",
+    "NO_SELECTION_TEXT",
+    "SLOT_DISABLED_REASON",
+    "UNVERIFIED_LABEL",
+    "SlotCoverage",
+    "VarietyCoverage",
+    "check_variety_quantity",
+    "coverage_lines",
+    "coverage_status",
+    "selected_slot_names",
+    "variety_coverage",
     "HIDDEN_TEXT",
     "REASON_TEXT",
     "VARIETY_LABEL",

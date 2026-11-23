@@ -95,7 +95,9 @@ def test_the_snapshot_keeps_no_reference_to_the_live_values() -> None:
 
 def test_the_request_sends_only_editable_slots_and_their_text() -> None:
     state = matrix_state([slot("lighting", "soft light"), slot("location", "forest, at dusk")])
-    request = build_variety_request("v1", "more light", state, content_class="sensitive")
+    request = build_variety_request(
+        "v1", "more light", state, content_class="sensitive", selected=["lighting"]
+    )
     assert request.kind is SuggestionKind.SLOT_VARIETY
     assert request.matrix_slots == (("lighting", ("soft light",)),)
     assert request.content_class == "sensitive"
@@ -263,3 +265,115 @@ def test_the_review_model_has_no_intent_queue_or_save_field_or_action() -> None:
         assert not [n for n in names if pattern.search(n)], (model, names)
     assert not [n for n in VARIETY_REVIEW_ACTIONS if pattern.search(n)]
     assert not [n for n in ai_slot_variety.__all__ if pattern.search(n)]
+
+
+# -- AI-214: scope, coverage and classification --------------------------------------------------------------------------
+
+from src.ai_assist.contracts import AssistRequest  # noqa: E402
+from src.gui_v2.ai_slot_variety import (  # noqa: E402
+    UNVERIFIED_LABEL,
+    check_variety_quantity,
+    coverage_status,
+    selected_slot_names,
+    variety_coverage,
+)
+
+FIVE = matrix_state(
+    [
+        slot("lighting", "golden hour", "broad daylight"),
+        slot("environment", "beach"),
+        slot("perspective", "close up"),
+        slot("clothes", "coat"),
+        slot("activity", "walking"),
+    ]
+)
+
+
+def _request(selected, per_slot=3, focus="direct") -> AssistRequest:
+    return build_variety_request(
+        "v1",
+        "more realistic lighting",
+        FIVE,
+        content_class="standard",
+        selected=selected,
+        per_slot=per_slot,
+        focus=focus,
+    )
+
+
+def test_only_the_selected_slots_and_their_values_enter_the_request() -> None:
+    request = _request(["lighting"])
+    assert request.matrix_slots == (("lighting", ("golden hour", "broad daylight")),)
+    blob = repr(request.matrix_slots) + request.goal_text
+    assert all(n not in blob for n in ("environment", "perspective", "clothes", "activity"))
+    two = _request(["lighting", "environment"])
+    assert [n for n, _v in two.matrix_slots] == ["lighting", "environment"]
+    assert (two.variety_per_slot, two.variety_focus) == (3, "direct")
+
+
+def test_an_empty_duplicate_unknown_or_non_editable_selection_fails_closed() -> None:
+    odd = matrix_state([slot("a", "x"), slot("a", "y"), slot("b", "p, q"), slot("c", "ok")])
+    with pytest.raises(ValueError, match="at least one"):
+        selected_slot_names(FIVE, [])
+    with pytest.raises(ValueError):
+        selected_slot_names(FIVE, ["lighting", "lighting"])
+    with pytest.raises(ValueError):
+        selected_slot_names(FIVE, ["missing"])
+    for name in ("a", "b"):  # a duplicated name; a value with a comma
+        with pytest.raises(ValueError):
+            selected_slot_names(odd, [name])
+    assert selected_slot_names(odd, ["c"]) == ("c",)
+
+
+@pytest.mark.parametrize("bad", [0, 7, True, "3", 2.5, None])
+def test_quantity_input_is_validated(bad) -> None:
+    with pytest.raises(ValueError):
+        check_variety_quantity(bad, 1)
+
+
+def test_the_aggregate_limit_blocks_with_a_reduce_hint() -> None:
+    assert check_variety_quantity(3, 4) == 3
+    with pytest.raises(ValueError, match="Reduce"):
+        check_variety_quantity(4, 4)
+    with pytest.raises(ValueError, match="Reduce"):
+        check_variety_quantity(1, 12)  # within 12 values, over the answer budget
+
+
+def test_coverage_counts_returned_eligible_rejected_and_missing_slots() -> None:
+    request = _request(["lighting", "environment"])
+    answer = suggestion(
+        ("lighting", ("neon glow", "golden hour"))
+    )  # one duplicate; environment omitted
+    rows = judge_variety(answer, FIVE, is_visible=lambda _t: True)
+    cov = variety_coverage(request, rows)
+    light, env = cov.slots
+    assert (light.requested, light.returned, light.eligible, light.rejected) == (3, 2, 1, 1)
+    assert (env.requested, env.returned, env.eligible) == (3, 0, 0)
+    assert (cov.requested, cov.returned, cov.eligible, cov.rejected, cov.added) == (6, 2, 1, 1, 0)
+    assert cov.partial and cov.missing == 4
+    assert "Partial coverage: 2 of 6" in coverage_status(cov)
+    assert variety_coverage(request, rows, added=frozenset({0})).added == 1
+
+
+def test_a_full_count_is_not_reported_as_verified_relevance() -> None:
+    request = _request(["lighting"], per_slot=2)
+    answer = suggestion(("lighting", ("neon glow", "cool dusk")))
+    rows = judge_variety(answer, FIVE, is_visible=lambda _t: True)
+    review = variety_review(rows, answer, is_visible=lambda _t: True, request=request)
+    assert review.coverage is not None and not review.coverage.partial
+    assert "not verified" in review.status
+    text = variety_text(review)
+    assert UNVERIFIED_LABEL in text and "PARTIAL COVERAGE" not in text
+    assert "lighting  2 requested / 2 returned / 2 eligible" in text
+    assert review.actions  # still manually acceptable
+
+
+def test_a_partial_review_stays_actionable_and_names_the_shortfall() -> None:
+    request = _request(["lighting", "environment"])
+    answer = suggestion(("lighting", ("neon glow",)))
+    rows = judge_variety(answer, FIVE, is_visible=lambda _t: True)
+    review = variety_review(rows, answer, is_visible=lambda _t: True, request=request)
+    assert review.actions and "Partial coverage: 1 of 6" in review.status
+    text = variety_text(review)
+    assert "PARTIAL COVERAGE" in text
+    assert "environment  3 requested / 0 returned / 0 eligible" in text
