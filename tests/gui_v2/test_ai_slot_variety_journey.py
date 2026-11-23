@@ -69,10 +69,20 @@ def _text(dialog) -> str:
     return dialog.status_var.get() + "\n" + dialog.preview.get("1.0", "end")
 
 
-def _ask(j, goal="more variety in the lighting and places"):
+def _ask(
+    j,
+    goal="more variety in the lighting and places",
+    select=("lighting", "location"),
+    count="3",
+    focus="direct",
+):
     dialog = j.flow.open()
     assert dialog is not None and dialog.variety_button is not None
     dialog.variety_goal_var.set(goal)
+    for name in select:
+        dialog.variety_slot_vars[name].set(True)
+    dialog.variety_count_var.set(count)
+    dialog.variety_focus_var.set(focus)
     dialog.variety_button.invoke()
     return dialog, j.service.requests[-1]
 
@@ -127,7 +137,7 @@ def _type_manually(frame, index: int, text: str) -> None:
 def test_the_request_sends_goal_and_slots_only_from_the_workspace_matrix(variety):
     j = variety
     before = copy.deepcopy(j.frame.workspace_state.current_pack)
-    dialog, request = _ask(j)
+    dialog, request = _ask(j, select=("character", "location", "lighting"), count="2")
     assert request.kind is SuggestionKind.SLOT_VARIETY
     assert request.goal_text == "more variety in the lighting and places"
     assert request.matrix_slots == (
@@ -413,7 +423,7 @@ def test_values_goal_and_suggestions_never_reach_the_log(variety, caplog):
     j = variety
     caplog.set_level("DEBUG")
     _matrix(j.frame, (("lighting", ("CANARY-VALUE-91",)),))
-    dialog, request = _ask(j, goal="CANARY-GOAL-91")
+    dialog, request = _ask(j, goal="CANARY-GOAL-91", select=("lighting",))
     _deliver(
         j,
         _outcome(
@@ -465,3 +475,146 @@ def test_the_only_matrix_mutation_is_the_editor_append():
     source = inspect.getsource(PromptAiSuggestions.add_variety_value)
     assert "matrix_tab_panel.append_slot_value(" in source
     assert ".values" not in source.replace("row.value", "")
+
+
+# -- AI-214: target slots, quantity, focus and coverage ------------------------------------------------------------------
+
+
+def _blocked(j, **kw):
+    """Ask and expect no request to be sent; returns the dialog."""
+    before = len(j.service.requests)
+    dialog = j.flow.open()
+    dialog.variety_goal_var.set("more realistic lighting")
+    for name in kw.get("select", ()):
+        dialog.variety_slot_vars[name].set(True)
+    dialog.variety_count_var.set(kw.get("count", "3"))
+    dialog.variety_button.invoke()
+    assert len(j.service.requests) == before
+    return dialog
+
+
+def test_a_new_dialog_starts_with_no_slot_selected_and_lists_every_slot(variety):
+    dialog = variety.flow.open()
+    assert set(dialog.variety_slot_vars) == {"character", "location", "lighting"}
+    assert dialog.selected_variety_slots() == ()
+    assert "none" in dialog.variety_scope_var.get().lower()
+    assert dialog.variety_count_var.get() == "3" and dialog.variety_focus_var.get() == "direct"
+
+
+def test_select_all_clear_and_the_summary_track_the_selection(variety):
+    dialog = variety.flow.open()
+    dialog.select_all_variety_slots()
+    assert dialog.selected_variety_slots() == ("character", "location", "lighting")
+    assert "Requested: 9 value(s)" in dialog.variety_scope_var.get()
+    dialog.clear_variety_slots()
+    assert dialog.selected_variety_slots() == ()
+    dialog.variety_slot_vars["lighting"].set(True)
+    dialog._variety_scope_changed()
+    assert "Selected: lighting" in dialog.variety_scope_var.get()
+    assert "Requested: 3 value(s)" in dialog.variety_scope_var.get()
+
+
+def test_an_empty_selection_blocks_before_inference(variety):
+    dialog = _blocked(variety)
+    assert (
+        "at least one" in dialog.preview.get("1.0", "end").lower() + dialog.status_var.get().lower()
+    )
+
+
+@pytest.mark.parametrize("count", ["0", "7", "x", "", "2.5", "-1"])
+def test_an_invalid_count_blocks_before_inference(variety, count):
+    dialog = _blocked(variety, select=("lighting",), count=count)
+    assert "whole number from 1 to 6" in dialog.status_var.get()
+
+
+def test_the_aggregate_limit_blocks_and_explains_how_to_reduce(variety):
+    dialog = _blocked(variety, select=("character", "location", "lighting"), count="6")
+    assert "Reduce" in dialog.status_var.get()
+
+
+def test_only_the_selected_slot_reaches_the_model_request(variety):
+    j = variety
+    _dialog, request = _ask(j, select=("lighting",))
+    assert request.matrix_slots == (("lighting", ("soft light",)),)
+    blob = json.dumps(dataclasses.asdict(request))
+    assert "character" not in blob and "knight" not in blob and "forest" not in blob
+    assert (request.variety_per_slot, request.variety_focus) == (3, "direct")
+
+
+def test_count_and_focus_reach_the_request_and_its_identity(variety):
+    j = variety
+    _dialog, direct = _ask(j, select=("lighting",), count="2")
+    _deliver(j, _outcome(direct, [{"slot": "lighting", "values": ["dusk"], "rationale": "x"}]))
+    _dialog, explore = _ask(j, select=("lighting",), count="2", focus="explore")
+    assert (explore.variety_per_slot, explore.variety_focus) == (2, "explore")
+    assert direct.digest() != explore.digest()
+
+
+def test_a_model_answer_for_an_unselected_slot_is_never_offered(variety):
+    j = variety
+    _dialog, request = _ask(j, select=("lighting",))
+    doc = {
+        "schema": SUGGESTION_SCHEMA_ID,
+        "status": "ok",
+        "kind": "slot_variety",
+        "slots": [{"slot": "location", "values": ["harbor"], "rationale": "x"}],
+    }
+    assert validate_output(json.dumps(doc), request).code is OutcomeCode.MALFORMED
+
+
+def test_partial_coverage_is_shown_and_remaining_values_stay_addable(variety):
+    j = variety
+    dialog, request = _ask(j, select=("location", "lighting"), count="3")
+    answer = [{"slot": "lighting", "values": ["golden hour", "dusk"], "rationale": "warm"}]
+    _deliver(j, _outcome(request, answer))
+    assert "Partial coverage: 2 of 6 requested values returned" in dialog.status_var.get()
+    assert "Partial coverage" in dialog.variety_coverage_var.get()
+    text = dialog.preview.get("1.0", "end")
+    assert "PARTIAL COVERAGE" in text and "location  3 requested / 0 returned / 0 eligible" in text
+    assert "not independently relevance-verified" in text
+    assert _offered(dialog) == ["lighting: golden hour", "lighting: dusk"]
+    _add(dialog, "lighting: dusk")
+    assert j.frame.workspace_state.get_matrix_config().slots[2].values == ["soft light", "dusk"]
+    assert "1 added" in dialog.preview.get("1.0", "end")
+
+
+def test_a_genuine_refusal_stays_a_refusal_with_no_coverage(variety):
+    j = variety
+    dialog, request = _ask(j, select=("lighting",))
+    _deliver(j, AssistOutcome(OutcomeCode.REFUSED_BY_MODEL, request.request_id))
+    assert OUTCOME_TEXT[OutcomeCode.REFUSED_BY_MODEL] in dialog.status_var.get()
+    assert _offered(dialog) == [] and dialog.variety_coverage_var.get() == ""
+
+
+def test_a_change_to_a_nonselected_slot_still_makes_the_request_stale(variety):
+    j = variety
+    dialog, request = _ask(j, select=("lighting",))
+    _type_manually(j.frame, 0, "knight,ranger,mage")  # 'character' was not selected
+    _deliver(j, _outcome(request, [{"slot": "lighting", "values": ["dusk"], "rationale": "x"}]))
+    assert _offered(dialog) == [] and j.flow._variety is None
+
+
+def test_a_nonselected_change_after_review_refuses_addition(variety):
+    j = variety
+    dialog, request = _ask(j, select=("lighting",))
+    _deliver(j, _outcome(request, [{"slot": "lighting", "values": ["dusk"], "rationale": "x"}]))
+    _type_manually(j.frame, 0, "knight,ranger,mage")
+    _add(dialog, "lighting: dusk")
+    assert j.frame.workspace_state.get_matrix_config().slots[2].values == ["soft light"]
+    assert "changed since the request" in dialog.status_var.get()
+
+
+def test_a_slot_that_cannot_take_a_value_is_listed_disabled(journey):  # noqa: F811
+    _matrix(journey.frame, (("good", ("a",)), ("bad", ("x, y",))))
+    dialog = journey.flow.open()
+    assert "disabled" in dialog.variety_slot_checks["bad"].state()
+    assert "disabled" not in dialog.variety_slot_checks["good"].state()
+    dialog.variety_slot_vars["bad"].set(True)
+    assert dialog.selected_variety_slots() == ()
+
+
+def test_closing_clears_the_selection(variety):
+    dialog = variety.flow.open()
+    dialog.variety_slot_vars["lighting"].set(True)
+    dialog.clear_sensitive()
+    assert dialog.selected_variety_slots() == ()

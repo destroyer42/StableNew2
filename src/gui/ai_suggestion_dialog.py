@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
 from tkinter import ttk
 
-from src.ai_assist.contracts import SuggestionKind
+from src.ai_assist.contracts import (
+    DEFAULT_VARIETY_PER_SLOT,
+    MAX_VARIETY_NEW_VALUES,
+    VARIETY_FOCUS_DIRECT,
+    SuggestionKind,
+)
 from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
 from src.gui_v2.ai_plan_advice import PLAN_ADVICE_NOTICE, PlanReview, review_text
 from src.gui_v2.ai_slot_variety import (
+    FOCUS_LABELS,
     VARIETY_LABEL,
     VARIETY_NOTICE,
     VarietyReview,
@@ -40,10 +46,11 @@ class AiSuggestionDialog(tk.Toplevel):
         trust_label: str = "",
         on_advise: Callable[[str], None] | None = None,
         advise_problem: str = "",
-        on_variety: Callable[[str], None] | None = None,
+        on_variety: Callable[[str, tuple[str, ...], str, str], None] | None = None,
         on_add_value: Callable[[int], None] | None = None,
         variety_problem: str = "",
         variety_slots: str = "",
+        variety_slot_options: Sequence[tuple[str, bool, str]] = (),
     ) -> None:
         super().__init__(master)
         self.title("AI suggestion review")
@@ -92,6 +99,12 @@ class AiSuggestionDialog(tk.Toplevel):
         self.variety_goal_var = tk.StringVar(value="")
         self.variety_button: ttk.Button | None = None
         self.variety_list: tk.Listbox | None = None
+        self.variety_slot_vars: dict[str, tk.BooleanVar] = {}
+        self.variety_slot_checks: dict[str, ttk.Checkbutton] = {}
+        self.variety_count_var = tk.StringVar(value=str(DEFAULT_VARIETY_PER_SLOT))
+        self.variety_focus_var = tk.StringVar(value=VARIETY_FOCUS_DIRECT)
+        self.variety_scope_var = tk.StringVar(value="")
+        self.variety_coverage_var = tk.StringVar(value="")
         self.add_value_button: ttk.Button | None = None
         self._offered_rows: list[int] = []
         if on_variety is not None:
@@ -111,6 +124,7 @@ class AiSuggestionDialog(tk.Toplevel):
             self.variety_goal_entry.pack(side="left", fill="x", expand=True, padx=4)
             self.variety_button = ttk.Button(row, text="Suggest variety", command=self._variety)
             self.variety_button.pack(side="left", padx=4)
+            self._build_variety_scope(variety, variety_slot_options)
             offered = ttk.Frame(variety)
             offered.pack(fill="x", padx=4, pady=2)
             self.variety_list = tk.Listbox(
@@ -182,9 +196,96 @@ class AiSuggestionDialog(tk.Toplevel):
                 ["disabled"] if running or self._variety_problem else ["!disabled"]
             )
 
+    def _build_variety_scope(
+        self, parent: ttk.LabelFrame, options: Sequence[tuple[str, bool, str]]
+    ) -> None:
+        """Target slots (checkboxes, none selected at first), count, goal focus and a summary of what will be sent."""
+
+        scope = ttk.LabelFrame(parent, text="Target slots")
+        scope.pack(fill="x", padx=4, pady=2)
+        tools = ttk.Frame(scope)
+        tools.pack(fill="x", padx=4)
+        ttk.Button(tools, text="Select all", command=self.select_all_variety_slots).pack(
+            side="left"
+        )
+        ttk.Button(tools, text="Clear", command=self.clear_variety_slots).pack(side="left", padx=4)
+        grid = ttk.Frame(scope)
+        grid.pack(fill="x", padx=4, pady=2)
+        for position, (name, enabled, label) in enumerate(options):
+            var = tk.BooleanVar(value=False)
+            check = ttk.Checkbutton(
+                grid, text=label, variable=var, command=self._variety_scope_changed
+            )
+            if not enabled:
+                check.state(["disabled"])
+            check.grid(row=position // 3, column=position % 3, sticky="w", padx=4)
+            self.variety_slot_vars[name] = var
+            self.variety_slot_checks[name] = check
+        quantity = ttk.Frame(parent)
+        quantity.pack(fill="x", padx=4, pady=2)
+        ttk.Label(quantity, text="Suggestions per slot:").pack(side="left")
+        self.variety_count_spin = ttk.Spinbox(
+            quantity,
+            from_=1,
+            to=MAX_VARIETY_NEW_VALUES,
+            width=4,
+            textvariable=self.variety_count_var,
+            command=self._variety_scope_changed,
+        )
+        self.variety_count_spin.pack(side="left", padx=4)
+        self.variety_count_spin.bind("<KeyRelease>", lambda _e: self._variety_scope_changed())
+        ttk.Label(quantity, text="Goal focus:").pack(side="left", padx=(12, 0))
+        for mode, text in FOCUS_LABELS.items():
+            ttk.Radiobutton(quantity, text=text, value=mode, variable=self.variety_focus_var).pack(
+                side="left", padx=4
+            )
+        ttk.Label(parent, textvariable=self.variety_scope_var, wraplength=740, justify="left").pack(
+            fill="x", padx=4
+        )
+        ttk.Label(
+            parent, textvariable=self.variety_coverage_var, wraplength=740, justify="left"
+        ).pack(fill="x", padx=4)
+        self._variety_scope_changed()
+
+    def selected_variety_slots(self) -> tuple[str, ...]:
+        return tuple(
+            name
+            for name, var in self.variety_slot_vars.items()
+            if var.get() and "disabled" not in self.variety_slot_checks[name].state()
+        )
+
+    def _variety_scope_changed(self) -> None:
+        chosen = self.selected_variety_slots()
+        text = self.variety_count_var.get().strip()
+        count = int(text) if text.isdigit() else None
+        if not chosen:
+            self.variety_scope_var.set("Selected: none. Select at least one target slot.")
+            return
+        if count is None:
+            self.variety_scope_var.set(f"Selected: {', '.join(chosen)}")
+            return
+        self.variety_scope_var.set(
+            f"Selected: {', '.join(chosen)}\nRequested: {count * len(chosen)} value(s)"
+        )
+
+    def select_all_variety_slots(self) -> None:
+        for name, var in self.variety_slot_vars.items():
+            var.set("disabled" not in self.variety_slot_checks[name].state())
+        self._variety_scope_changed()
+
+    def clear_variety_slots(self) -> None:
+        for var in self.variety_slot_vars.values():
+            var.set(False)
+        self._variety_scope_changed()
+
     def _variety(self) -> None:
         if self._on_variety is not None:
-            self._on_variety(self.variety_goal_var.get())
+            self._on_variety(
+                self.variety_goal_var.get(),
+                self.selected_variety_slots(),
+                self.variety_count_var.get(),
+                self.variety_focus_var.get(),
+            )
 
     def _add_value(self) -> None:
         if self._on_add_value is None or self.variety_list is None:
@@ -206,6 +307,7 @@ class AiSuggestionDialog(tk.Toplevel):
 
         self._clear_copy_buttons()
         self._clear_variety()
+        self.variety_coverage_var.set(review.coverage_line)
         self.status(review.status)
         self._set_requests(False)
         self._set_advise(False)
@@ -388,6 +490,9 @@ class AiSuggestionDialog(tk.Toplevel):
         self.clear_runtime_detail()
         self.goal_var.set("")
         self.variety_goal_var.set("")
+        self.variety_coverage_var.set("")
+        if self.variety_slot_vars:
+            self.clear_variety_slots()
         self._text("")
         self.accept_button.state(["disabled"])
         self.status_var.set(

@@ -190,7 +190,7 @@ def test_the_schema_is_closed_bounded_and_requires_every_payload_field() -> None
     assert item["additionalProperties"] is False
     assert item["properties"]["slot"] == {"enum": ["lighting", "location"]}
     values = item["properties"]["values"]
-    assert (values["minItems"], values["maxItems"]) == (1, MAX_VARIETY_NEW_VALUES)
+    assert (values["minItems"], values["maxItems"]) == (1, REQUEST.variety_per_slot)
     assert values["items"] == {"type": "string", "maxLength": MAX_VARIETY_VALUE_CHARS}
     assert item["properties"]["rationale"]["maxLength"] == MAX_VARIETY_RATIONALE_CHARS
     assert refused["required"] == ["schema", "status", "refusal_reason"]
@@ -276,7 +276,8 @@ def test_other_fields_cannot_ride_along_and_slots_belong_to_this_kind() -> None:
 def test_values_with_list_breaking_characters_pass_structure_for_the_judge_to_reject() -> None:
     # Per-value checks belong to the GUI-side judge, which shows each rejected value with its reason.
     result = validate_output(
-        document([entry(values=["", "a, b", "[[x]]", "<lora:x:1>", "two\nlines"])]), REQUEST
+        document([entry(values=["", "a, b", "[[x]]", "<lora:x:1>", "two\nlines"])]),
+        variety_request(variety_per_slot=5),
     )
     assert result.code is OutcomeCode.SUGGESTION
 
@@ -346,3 +347,80 @@ def test_content_class_is_carried_like_other_prompt_requests() -> None:
     assert variety_request(content_class="sensitive").content_class == "sensitive"
     with pytest.raises(ValueError):
         variety_request(content_class="adult")
+
+
+# -- AI-214: quantity, focus and scope -------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("count", [0, -1, 7, True, 2.0, "3"])
+def test_the_per_slot_count_must_be_a_whole_number_from_one_to_six(count) -> None:
+    with pytest.raises(ValueError):
+        variety_request(variety_per_slot=count)
+
+
+def test_the_aggregate_and_answer_budget_bounds_fail_before_inference() -> None:
+    from src.ai_assist.contracts import VARIETY_ANSWER_TOKEN_BUDGET, variety_answer_tokens
+
+    four = tuple((f"s{i}", ("v",)) for i in range(4))
+    assert variety_request(matrix_slots=four, variety_per_slot=3).variety_per_slot == 3  # 12 values
+    with pytest.raises(ValueError):
+        variety_request(matrix_slots=four, variety_per_slot=4)  # 16 values
+    twelve = tuple((f"s{i}", ("v",)) for i in range(12))
+    assert variety_answer_tokens(12, 1) > VARIETY_ANSWER_TOKEN_BUDGET
+    with pytest.raises(ValueError):
+        variety_request(matrix_slots=twelve, variety_per_slot=1)
+
+
+def test_an_unsupported_focus_is_refused_and_other_kinds_keep_their_defaults() -> None:
+    with pytest.raises(ValueError):
+        variety_request(variety_focus="anything")
+    with pytest.raises(ValueError):
+        AssistRequest("r1", SuggestionKind.PROMPT_REWRITE, "a barn", variety_per_slot=2)
+    with pytest.raises(ValueError):
+        AssistRequest("r1", SuggestionKind.PROMPT_REWRITE, "a barn", variety_focus="explore")
+
+
+def test_quantity_and_focus_change_the_request_digest_only_for_variety() -> None:
+    base = variety_request().digest()
+    assert variety_request(variety_per_slot=2).digest() != base
+    assert variety_request(variety_focus="explore").digest() != base
+    assert variety_request().digest() == base
+    rewrite = AssistRequest("r1", SuggestionKind.PROMPT_REWRITE, "a barn")
+    assert rewrite.digest() == AssistRequest("r2", SuggestionKind.PROMPT_REWRITE, "a barn").digest()
+
+
+def test_the_two_focus_modes_render_distinct_deterministic_frames() -> None:
+    direct = render_prompt(variety_request(variety_per_slot=2))
+    explore = render_prompt(variety_request(variety_per_slot=2, variety_focus="explore"))
+    assert direct == render_prompt(variety_request(variety_per_slot=2))
+    assert direct != explore
+    assert "directly support the goal" in direct and "explore related variations" in explore
+    assert "give 2 distinct" in direct
+    assert "verified the quality" in direct
+
+
+def test_the_prompt_carries_only_the_selected_slots() -> None:
+    prompt = render_prompt(variety_request(matrix_slots=(SLOTS[0],)))
+    assert "SLOT: lighting" in prompt and "VALUE: soft light" in prompt
+    assert "location" not in prompt and "forest" not in prompt
+
+
+def test_a_value_count_over_the_requested_maximum_is_malformed() -> None:
+    request = variety_request(variety_per_slot=1)
+    assert validate_output(document([entry(values=["a"])]), request).code is OutcomeCode.SUGGESTION
+    result = validate_output(document([entry(values=["a", "b"])]), request)
+    assert (result.code, result.reason) == (OutcomeCode.MALFORMED, "too_many_values")
+
+
+def test_an_unselected_slot_is_outside_the_closed_list() -> None:
+    request = variety_request(matrix_slots=(SLOTS[0],))
+    result = validate_output(document([entry(slot="location")]), request)
+    assert (result.code, result.reason) == (OutcomeCode.MALFORMED, "slot_not_in_closed_list")
+
+
+def test_a_valid_refusal_is_a_refusal_not_partial_coverage() -> None:
+    result = validate_output(
+        json.dumps({"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "no"}),
+        REQUEST,
+    )
+    assert result.code is OutcomeCode.REFUSED_BY_MODEL and result.suggestion is None

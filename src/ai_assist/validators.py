@@ -24,7 +24,6 @@ from src.ai_assist.contracts import (
     MAX_REFUSAL_REASON_CHARS,
     MAX_STEP_COUNT,
     MAX_TEXT_CHARS,
-    MAX_VARIETY_NEW_VALUES,
     MAX_VARIETY_RATIONALE_CHARS,
     MAX_VARIETY_VALUE_CHARS,
     SUGGESTION_SCHEMA_ID,
@@ -179,7 +178,7 @@ def _validate_slot_values(value: Any, request: AssistRequest) -> tuple[tuple[Slo
         seen.add(slot)
         if not isinstance(values, list) or not values:
             return (), "values_missing"
-        if len(values) > MAX_VARIETY_NEW_VALUES:
+        if len(values) > request.variety_per_slot:
             return (), "too_many_values"
         for proposal in values:
             _text, problem = _text_field(proposal, "value", limit=MAX_VARIETY_VALUE_CHARS)

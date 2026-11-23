@@ -9,7 +9,15 @@ from tkinter import ttk
 from typing import Any
 from uuid import uuid4
 
-from src.ai_assist.contracts import AssistOutcome, AssistRequest, OutcomeCode, SuggestionKind
+from src.ai_assist.contracts import (
+    DEFAULT_VARIETY_PER_SLOT,
+    MAX_VARIETY_NEW_VALUES,
+    VARIETY_FOCUS_DIRECT,
+    AssistOutcome,
+    AssistRequest,
+    OutcomeCode,
+    SuggestionKind,
+)
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.ai_preview_dialog import AiPreviewDialog
 from src.gui.ai_suggestion_dialog import AiSuggestionDialog
@@ -25,11 +33,15 @@ from src.gui_v2.ai_plan_advice import (
     unavailable_plan_review,
 )
 from src.gui_v2.ai_slot_variety import (
+    HIDDEN_TEXT,
+    NO_SELECTION_TEXT,
     REASON_TEXT,
+    SLOT_DISABLED_REASON,
     VARIETY_REFUSED_HINT,
     VarietyContext,
     VarietyReview,
     build_variety_request,
+    check_variety_quantity,
     judge_variety,
     matrix_state,
     slots_line,
@@ -274,6 +286,7 @@ class PromptAiSuggestions:
             on_add_value=self.add_variety_value,
             variety_problem=self._variety_problem(),
             variety_slots=self._variety_slots_text(),
+            variety_slot_options=self._variety_slot_options(),
         )
         return self.dialog
 
@@ -500,6 +513,26 @@ class PromptAiSuggestions:
         except Exception:  # noqa: BLE001 - fixed copy only, no raw context
             return ""
 
+    def _variety_slot_options(self) -> tuple[tuple[str, bool, str], ...]:
+        """``(slot name, selectable, label)`` for every matrix slot. A slot that cannot take a value, or whose name the
+        current visibility mode hides, is listed disabled with its reason; a hidden name is never shown."""
+
+        try:
+            slots = self._capture_matrix().slots
+            visible = self._variety_visible()
+        except Exception:  # noqa: BLE001 - fixed copy only, no raw context
+            return ()
+        options: list[tuple[str, bool, str]] = []
+        for slot in slots:
+            if not slot.editable:
+                options.append((slot.name, False, f"{slot.name} ({SLOT_DISABLED_REASON})"))
+            elif not visible(slot.name):
+                # Keyed by a placeholder: the real name stays out of the widget.
+                options.append((f"\x00hidden{len(options)}", False, f"{HIDDEN_TEXT}"))
+            else:
+                options.append((slot.name, True, slot.name))
+        return tuple(options)
+
     def _variety_visible(self) -> Any:
         resolver = ContentVisibilityResolver(self._mode())
         return lambda text: resolver.is_visible({"positive_prompt": text})
@@ -508,7 +541,13 @@ class PromptAiSuggestions:
         self._variety = self._variety_request = self._variety_suggestion = None
         self._variety_added = set()
 
-    def suggest_variety(self, goal: str) -> None:
+    def suggest_variety(
+        self,
+        goal: str,
+        selected: tuple[str, ...] = (),
+        count: str = str(DEFAULT_VARIETY_PER_SLOT),
+        focus: str = VARIETY_FOCUS_DIRECT,
+    ) -> None:
         dialog = self.dialog
         if dialog is None or self._active_id is not None or self.owner is None:
             return
@@ -522,9 +561,22 @@ class PromptAiSuggestions:
         if not text:
             dialog.show_variety(unavailable_variety_review("Type a goal in your own words first."))
             return
+        per_slot_text = str(count).strip()
+        try:
+            if not selected:
+                raise ContextUnavailable(NO_SELECTION_TEXT)
+            if not (per_slot_text.isascii() and per_slot_text.isdigit()):
+                raise ContextUnavailable(
+                    f"Suggestions per slot must be a whole number from 1 to {MAX_VARIETY_NEW_VALUES}."
+                )
+            check_variety_quantity(int(per_slot_text), len(selected))
+        except (ContextUnavailable, ValueError) as exc:
+            dialog.show_variety(unavailable_variety_review(str(exc)))
+            return
         try:
             context = self._variety_context()
             resolver = ContentVisibilityResolver(self._mode())
+            # Authorization covers the whole workspace's editable slots, not only the selection (AI-214).
             offered = [slot for slot in context.slots if slot.editable]
             subject = {
                 "name": self.tab.workspace_state.get_current_pack_name(),
@@ -543,14 +595,27 @@ class PromptAiSuggestions:
                 content_class="sensitive"
                 if resolver.classify_item(subject).rating == "nsfw"
                 else "standard",
+                selected=selected,
+                per_slot=int(per_slot_text),
+                focus=focus,
             )
         except ContextUnavailable as exc:
             dialog.show_variety(unavailable_variety_review(str(exc)))
             return
-        except ValueError:
+        except ValueError as exc:
+            # Selection and quantity messages are fixed copy from the builder; anything else is the generic limit text.
+            known = (
+                NO_SELECTION_TEXT,
+                "A selected slot",
+                "A slot was",
+                "Select at most",
+                "Unsupported",
+            )
             dialog.show_variety(
                 unavailable_variety_review(
-                    "The goal or the matrix slots do not meet the request limits."
+                    str(exc)
+                    if str(exc).startswith(known)
+                    else "The goal or the matrix slots do not meet the request limits."
                 )
             )
             return
@@ -582,6 +647,7 @@ class PromptAiSuggestions:
             trust_label=trust,
             added=frozenset(self._variety_added),
             excluded_count=context.excluded_count,
+            request=self._variety_request,
         )
 
     def _variety_trust(self) -> str:

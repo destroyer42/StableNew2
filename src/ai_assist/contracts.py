@@ -35,6 +35,31 @@ MAX_VARIETY_INPUT_CHARS = 6000
 MAX_VARIETY_NEW_VALUES = 6
 MAX_VARIETY_VALUE_CHARS = 80
 MAX_VARIETY_RATIONALE_CHARS = 160
+#: Slot-variety coverage controls (AI-214): requested values per selected slot, the aggregate bound and the goal focus.
+DEFAULT_VARIETY_PER_SLOT = 3
+MAX_VARIETY_REQUESTED_TOTAL = 12
+#: Worst-case answer size against the runtime's 768-token answer budget (``RuntimeLimits.max_new_tokens``), at about three
+#: characters per token: each slot entry costs its JSON structure plus a maximal rationale, each value a maximal phrase.
+#: A request whose worst case exceeds the budget is refused before inference rather than risking a truncated answer.
+VARIETY_ANSWER_TOKEN_BUDGET = 768
+_VARIETY_TOKENS_BASE = 30
+_VARIETY_TOKENS_PER_SLOT = 68
+_VARIETY_TOKENS_PER_VALUE = 27
+
+
+def variety_answer_tokens(slot_count: int, per_slot: int) -> int:
+    """Conservative worst-case token estimate of a full answer to ``slot_count`` slots at ``per_slot`` values each."""
+
+    return (
+        _VARIETY_TOKENS_BASE
+        + _VARIETY_TOKENS_PER_SLOT * slot_count
+        + _VARIETY_TOKENS_PER_VALUE * slot_count * per_slot
+    )
+
+
+VARIETY_FOCUS_DIRECT = "direct"
+VARIETY_FOCUS_EXPLORE = "explore"
+VARIETY_FOCUS_MODES: frozenset[str] = frozenset({VARIETY_FOCUS_DIRECT, VARIETY_FOCUS_EXPLORE})
 #: The one stage that takes a workflow; every other allowed stage takes a model target.
 VIDEO_STAGE = "video"
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -131,6 +156,10 @@ class AssistRequest:
     current_target_stages: tuple[str, ...] = ()
     #: ``SLOT_VARIETY`` only: the pack's existing matrix slots as ``(name, existing values)`` (authored data for the model).
     matrix_slots: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    #: ``SLOT_VARIETY`` only (AI-214): requested new values for each slot in ``matrix_slots`` (a target, not a promise) and
+    #: whether proposals should directly support the goal or explore related variations. Instruction data only.
+    variety_per_slot: int = DEFAULT_VARIETY_PER_SLOT
+    variety_focus: str = VARIETY_FOCUS_DIRECT
 
     def __post_init__(self) -> None:
         if not isinstance(self.request_id, str) or not _REQUEST_ID.match(self.request_id):
@@ -169,6 +198,13 @@ class AssistRequest:
         elif self.goal_text or self.allowed_stages:
             raise ValueError("goal_text and allowed_stages belong to plan requests only")
         self._check_current_target()
+        if self.kind is not SuggestionKind.SLOT_VARIETY and (
+            self.variety_per_slot != DEFAULT_VARIETY_PER_SLOT
+            or self.variety_focus != VARIETY_FOCUS_DIRECT
+        ):
+            raise ValueError(
+                "variety_per_slot and variety_focus belong to slot-variety requests only"
+            )
         if self.matrix_slots and self.kind is not SuggestionKind.SLOT_VARIETY:
             raise ValueError("matrix_slots belong to slot-variety requests only")
         if self.kind is SuggestionKind.PROMPT_REWRITE and not self.positive_text.strip():
@@ -235,6 +271,27 @@ class AssistRequest:
                 )
             if not all(isinstance(value, str) for value in values):
                 raise ValueError("matrix slot values must be text")
+        per_slot = self.variety_per_slot
+        if (
+            isinstance(per_slot, bool)
+            or not isinstance(per_slot, int)
+            or not 1 <= per_slot <= MAX_VARIETY_NEW_VALUES
+        ):
+            raise ValueError(
+                f"suggestions per slot must be a whole number from 1 to {MAX_VARIETY_NEW_VALUES}"
+            )
+        if per_slot * len(slots) > MAX_VARIETY_REQUESTED_TOTAL:
+            raise ValueError(
+                f"a request may ask for at most {MAX_VARIETY_REQUESTED_TOTAL} values in total: "
+                "reduce the count per slot or the selected slots"
+            )
+        if variety_answer_tokens(len(slots), per_slot) > VARIETY_ANSWER_TOKEN_BUDGET:
+            raise ValueError(
+                "the answer to this many slots and values could exceed the runtime's answer budget: "
+                "reduce the count per slot or the selected slots"
+            )
+        if self.variety_focus not in VARIETY_FOCUS_MODES:
+            raise ValueError("variety_focus must be 'direct' or 'explore'")
         if self.matrix_chars() > MAX_VARIETY_INPUT_CHARS:
             raise ValueError(
                 f"matrix slot names and values must total at most {MAX_VARIETY_INPUT_CHARS} characters"
@@ -283,6 +340,8 @@ class AssistRequest:
             payload += "\x1f" + "\x1e".join(
                 "\x1d".join((name, *values)) for name, values in self.matrix_slots
             )
+            # AI-214: the requested quantity and goal focus are part of the request identity.
+            payload += f"\x1fvariety:{self.variety_per_slot}:{self.variety_focus}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
@@ -395,6 +454,13 @@ class AssistOutcome:
 __all__ = [
     "CHANGE_CODES",
     "CONTENT_CLASSES",
+    "DEFAULT_VARIETY_PER_SLOT",
+    "MAX_VARIETY_REQUESTED_TOTAL",
+    "VARIETY_ANSWER_TOKEN_BUDGET",
+    "variety_answer_tokens",
+    "VARIETY_FOCUS_DIRECT",
+    "VARIETY_FOCUS_EXPLORE",
+    "VARIETY_FOCUS_MODES",
     "MAX_GOAL_CHARS",
     "MAX_LABEL_CHARS",
     "MAX_LIST_ITEMS",
