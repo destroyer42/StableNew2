@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-968 of 968 modules have a docstring.
+970 of 970 modules have a docstring.
 
 ## src/
 
@@ -474,6 +474,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `storyboard_panel_actions.py`: Storyboard actions for the existing sequence panel; all disk work uses the shared UI work runner
 - `storyboard_tab_frame_v2.py`: The Storyboard tab: a tree of takes as shot columns, a cut viewer and a Continue panel (PR-VID-STORY-380)
 - `svd_tab_frame_v2.py`: Present Native SVD settings, source and folder selection, and queued submission controls
+- `video_eval_editor_dialog.py`: Graphical authoring of video evaluation suite intent
 - `video_eval_panel_v2.py`: Video Workflow tab: queue an eval suite and build its contact sheet (PR-VID-EVAL-320)
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
@@ -1048,6 +1049,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_backend_types.py`: Define backend-neutral video capabilities, execution requests, results, and adapter interfaces
 - `video_eval_assessment.py`: Pure identity and continuity assessment of an eval run (PR-VID-QUALITY-351)
 - `video_eval_assessment_html.py`: HTML fragments for the identity assessment in the eval contact sheet (PR-VID-QUALITY-351)
+- `video_eval_authoring.py`: Edit incomplete video eval suites, then validate and publish a fresh runnable suite
 - `video_eval_catalog.py`: Read-only discovery of video evaluation plans and runs
 - `video_eval_identity.py`: Source-image, clip and job identity for eval reports (PR-VID-QUALITY-351)
 - `video_eval_import.py`: Copy a video suite into Evaluation Plans while keeping its source references usable

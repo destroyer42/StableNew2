@@ -12,18 +12,26 @@ import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
-from src.gui.theme_v2 import DARK_COMBOBOX_STYLE, MUTED_LABEL_STYLE, PRIMARY_BUTTON_STYLE
+from src.gui.theme_v2 import (
+    DARK_COMBOBOX_STYLE,
+    MUTED_LABEL_STYLE,
+    PRIMARY_BUTTON_STYLE,
+    style_text_widget,
+)
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
+from src.gui.views.video_eval_editor_dialog import VideoEvalEditorDialog
 from src.state.eval_plans_paths import initialize_eval_plans
 from src.state.workspace_paths import workspace_paths
 from src.utils.os_shell import open_file
 from src.utils.thread_registry import get_thread_registry
+from src.video.video_eval_authoring import configured_tool_paths
 from src.video.video_eval_catalog import PlanEntry, RunEntry, list_plans, list_runs
 from src.video.video_eval_import import import_suite, is_private_suite
-from src.video.video_eval_run import EVAL_OUTPUT_FOLDER
+from src.video.video_eval_run import EVAL_OUTPUT_FOLDER, EvalRunPlan
 
 
 class VideoEvalPanel(ttk.LabelFrame):
@@ -38,7 +46,7 @@ class VideoEvalPanel(ttk.LabelFrame):
         runner: BackgroundWorkRunner | None = None,
         ask_open: Callable[..., str] = filedialog.askopenfilename,
         eval_plans_dir: Callable[[], str] = lambda: "",
-        confirm: Callable[[str, str], bool] = messagebox.askyesno,
+        confirm: Callable[[str, str], bool] | None = None,
         open_report: Callable[[str], Any] = webbrowser.open,
         confirm_import: Callable[[str, str], bool] = messagebox.askyesno,
     ) -> None:
@@ -53,6 +61,7 @@ class VideoEvalPanel(ttk.LabelFrame):
         self._confirm = confirm
         self._confirm_import = confirm_import
         self._open_report = open_report
+        self._editor: VideoEvalEditorDialog | None = None
         self._busy = False
         self._closed = False
         self._plans: list[PlanEntry] = []
@@ -72,6 +81,9 @@ class VideoEvalPanel(ttk.LabelFrame):
         self.queue_button = ttk.Button(
             plan_actions, text="Queue…", style=PRIMARY_BUTTON_STYLE, command=self.on_queue_suite
         )
+        self.editor_button = ttk.Button(
+            plan_actions, text="Create / Edit Suite…", command=self._open_editor
+        )
         self.refresh_button = ttk.Button(plan_actions, text="Refresh", command=self.refresh)
         self.plan_folder_button = ttk.Button(
             plan_actions, text="Open folder", command=self._open_plan_folder
@@ -81,6 +93,7 @@ class VideoEvalPanel(ttk.LabelFrame):
         )
         for button in (
             self.queue_button,
+            self.editor_button,
             self.refresh_button,
             self.plan_folder_button,
             self.other_file_button,
@@ -132,20 +145,38 @@ class VideoEvalPanel(ttk.LabelFrame):
         index = self.run_combo.current()
         return self._runs[index] if index >= 0 else None
 
-    def refresh(self, *, select_run: str | None = None, status: str | None = None) -> None:
-        if self._busy or self._closed:
+    def refresh(
+        self,
+        *,
+        select_run: str | None = None,
+        status: str | None = None,
+        select_plan: Path | None = None,
+        preview_saved: bool = False,
+    ) -> None:
+        if self._busy or self._closed or self._editor is not None:
             return
         folder = self._plan_folder()
         output = Path(self._output_dir() or "output")
         plan = self._selected_plan()
         run = self._selected_run()
+        current_path = plan.path if plan else None
         run_id = select_run or (run.path.name if run else None)
+
+        def work() -> WorkOutcome:
+            # The root setting can change while the editor is open. Select only the file
+            # actually published, and keep preview bound to that path even after a root change.
+            wanted = current_path
+            if select_plan is not None and folder.resolve() == select_plan.parent:
+                wanted = folder / select_plan.name
+            return WorkOutcome(value=(list_plans(folder), list_runs(output), wanted))
 
         def finish(outcome: WorkOutcome) -> None:
             if outcome.error:
                 self.status_var.set(f"Could not refresh evaluation plans and runs: {outcome.error}")
+                if preview_saved and select_plan is not None:
+                    self._preview(str(select_plan))
                 return
-            self._plans, self._runs = outcome.value
+            self._plans, self._runs, plan_path = outcome.value
             self.plan_combo["values"] = [entry.label for entry in self._plans]
             self.run_combo["values"] = [entry.label for entry in self._runs]
             if self._plans:
@@ -155,7 +186,7 @@ class VideoEvalPanel(ttk.LabelFrame):
                         (
                             i
                             for i, entry in enumerate(self._plans)
-                            if plan and entry.path == plan.path
+                            if plan_path and entry.path == plan_path
                         ),
                         default,
                     )
@@ -172,10 +203,12 @@ class VideoEvalPanel(ttk.LabelFrame):
             self.status_var.set(
                 status or ("" if self._runs else f"No runs in {output / EVAL_OUTPUT_FOLDER}")
             )
+            if preview_saved and select_plan is not None:
+                self._preview(str(select_plan))
 
         self._start(
             "VideoEval-Catalog",
-            lambda: WorkOutcome(value=(list_plans(folder), list_runs(output))),
+            work,
             finish,
             status or "Refreshing evaluation plans and runs…",
         )
@@ -184,11 +217,38 @@ class VideoEvalPanel(ttk.LabelFrame):
         plan = self._selected_plan()
         if plan is None:
             self.plan_status_var.set(
-                f"No plans in {self._plan_folder()} — Open folder or Other file… to import."
+                f"No plans in {self._plan_folder()} — Create / Edit Suite… to get started."
             )
         else:
             self.plan_status_var.set(plan.error)
         self._update_controls()
+
+    def _open_editor(self) -> None:
+        if self._busy or self._closed:
+            return
+        if self._editor is not None:
+            self._editor.lift()
+            self._editor.focus_set()
+            return
+        plan = self._selected_plan()
+        self._editor = VideoEvalEditorDialog(
+            self,
+            plan_root=self._plan_root(),
+            initial_path=plan.path if plan else None,
+            runner=self._work_runner(),
+            on_saved=self._editor_saved,
+            on_close=self._editor_closed,
+            ask_open=self._ask_open,
+        )
+        self._update_controls()
+
+    def _editor_closed(self) -> None:
+        self._editor = None
+        if not self._closed and self.plan_combo.winfo_exists():
+            self._update_controls()
+
+    def _editor_saved(self, path: Path, preview: bool) -> None:
+        self.refresh(select_plan=path, preview_saved=preview, status=f"Saved {path}.")
 
     def _open_plan_folder(self) -> None:
         root = self._plan_root()
@@ -211,11 +271,11 @@ class VideoEvalPanel(ttk.LabelFrame):
 
     def on_queue_suite(self) -> None:
         plan = self._selected_plan()
-        if not self._busy and plan is not None and not plan.error:
+        if not self._busy and self._editor is None and plan is not None and not plan.error:
             self._preview(str(plan.path))
 
     def _choose_other_file(self) -> None:
-        if self._busy:
+        if self._busy or self._editor is not None:
             return
         folder = self._plan_folder()
         selected = self._ask_open(
@@ -264,15 +324,33 @@ class VideoEvalPanel(ttk.LabelFrame):
             self.status_var.set(f"Eval suite not queued: {outcome.error}")
             return
         plan = outcome.value
+        question = _preview_text(plan)
         if not plan.eligible:
             self.status_var.set("Eval suite not queued.\n" + plan.summary())
+            if self._confirm is None:
+                self._show_preview(question, queueable=False)
             return
-        question = plan.summary() + f"\n\nQueue all {len(plan.jobs)} jobs now?"
         if plan.experimental_arms:
             question += "\n\nThe suite opts in to experimental workflows for arms: " + ", ".join(
                 plan.experimental_arms
             )
-        if not self._confirm("Queue eval suite", question):
+        self._busy = True
+        self._update_controls()
+        try:
+            accepted = (
+                self._confirm(
+                    "Queue eval suite", question + f"\n\nQueue all {len(plan.jobs)} jobs now?"
+                )
+                if self._confirm is not None
+                else self._show_preview(question, queueable=True)
+            )
+        finally:
+            self._busy = False
+            if not self._closed:
+                self._update_controls()
+        if self._closed:
+            return
+        if not accepted:
             self.status_var.set("Eval suite preview discarded; nothing was queued.")
             return
         self._start(
@@ -281,6 +359,40 @@ class VideoEvalPanel(ttk.LabelFrame):
             self._finish_queue,
             f"Queueing {len(plan.jobs)} eval jobs...",
         )
+
+    def _show_preview(self, text: str, *, queueable: bool) -> bool:
+        dialog = tk.Toplevel(self)
+        dialog.title("Evaluation Jobs Preview")
+        dialog.transient(self.winfo_toplevel())
+        dialog.geometry("740x480")
+        dialog.minsize(440, 260)
+        content = ScrolledText(dialog, wrap="word", width=70, height=20)
+        style_text_widget(content)
+        content.pack(expand=True, fill="both", padx=12, pady=12)
+        content.insert("1.0", text)
+        content.configure(state="disabled")
+        actions = ttk.Frame(dialog, padding=(12, 0, 12, 12))
+        actions.pack(fill="x")
+        accepted = False
+
+        def queue() -> None:
+            nonlocal accepted
+            accepted = True
+            dialog.destroy()
+
+        dismiss = ttk.Button(
+            actions, text="Cancel" if queueable else "Close", command=dialog.destroy
+        )
+        dismiss.pack(side="right")
+        if queueable:
+            ttk.Button(
+                actions, text="Queue All Jobs", style=PRIMARY_BUTTON_STYLE, command=queue
+            ).pack(side="right", padx=(0, 8))
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dismiss.focus_set()
+        dialog.grab_set()
+        self.wait_window(dialog)
+        return accepted
 
     def _finish_queue(self, outcome: WorkOutcome) -> None:
         if outcome.error:
@@ -370,8 +482,9 @@ class VideoEvalPanel(ttk.LabelFrame):
     def _update_controls(self) -> None:
         plan = self._selected_plan()
         run = self._selected_run()
+        free = not self._busy and self._editor is None
         for combo, entries in ((self.plan_combo, self._plans), (self.run_combo, self._runs)):
-            combo.configure(state="readonly" if entries and not self._busy else "disabled")
+            combo.configure(state="readonly" if entries and free else "disabled")
         for button, available in (
             (self.queue_button, plan is not None and not plan.error),
             (self.report_button, run is not None),
@@ -381,7 +494,8 @@ class VideoEvalPanel(ttk.LabelFrame):
             (self.refresh_button, True),
             (self.other_file_button, True),
         ):
-            button.state(["!disabled"] if available and not self._busy else ["disabled"])
+            button.state(["!disabled"] if available and free else ["disabled"])
+        self.editor_button.state(["disabled"] if self._busy else ["!disabled"])
 
     def _work_runner(self) -> BackgroundWorkRunner:
         if self._runner is None:
@@ -400,6 +514,37 @@ class VideoEvalPanel(ttk.LabelFrame):
     def _on_destroy(self, event: Any = None) -> None:
         if event is None or event.widget is self:
             self._closed = True
+
+
+def _preview_text(plan: EvalRunPlan) -> str:
+    lines = [plan.summary(), ""]
+    tools = [
+        f"{arm.arm_id}: {setting} = {path}"
+        for arm in plan.suite.arms
+        for setting, path in configured_tool_paths(arm.overrides)
+    ]
+    if tools:
+        lines.extend(
+            [
+                "Check that you trust these suite-specified executables and model files before queueing.",
+                *tools,
+                "",
+            ]
+        )
+    if plan.jobs:
+        lines.append("Compiled jobs")
+    for job in plan.jobs:
+        # Use the frozen job identity, including the resolved workflow revision.
+        workflow = job.njr.config.get("video_workflow") or {}
+        engine = job.backend
+        if workflow.get("workflow_id"):
+            engine = f"{workflow['workflow_id']} {workflow.get('workflow_version', '')}"
+        seeds = job.segment_seeds or (job.seed,)
+        lines.append(
+            f"{job.case_id} × {job.arm_id}   |   {engine}   |   "
+            f"Seed {', '.join(map(str, seeds))}   |   {job.frame_count} frames   |   {job.job_id}"
+        )
+    return "\n".join(lines)
 
 
 __all__ = ["VideoEvalPanel"]

@@ -1,10 +1,17 @@
 # Evaluation Plans
 
-Open **Video Workflow → Compare and evaluate** to find video plans and runs. The Plan dropdown reads
+Open **Video Workflow → Evaluate** to find video plans and runs. The Plan dropdown reads
 `<Output>/eval_plans/video/` when the panel opens. **Refresh** looks for changes, and **Open folder**
-creates the Evaluation Plans folders and README on first use. Use **Other file…** to preview a suite
-from another location or copy it into the canonical folder before previewing. Invalid plans show the
-loader's reason and disable **Queue…**. Queueing still requires confirming the preview.
+creates the Evaluation Plans folders and README on first use. **Create / Edit Suite…** opens the selected
+plan for editing. From the editor you can also start a blank suite, open the bundled **Three-engine
+template**, or choose **Open JSON / template…** to edit a suite from any local folder. The editor shows
+every case even when its source image is missing. **Save as New Version** adds an independent plan and
+selects it. **Save & Preview…** also displays the compiled job matrix and any refusals. **Queue All Jobs**
+in that preview is the explicit confirmation.
+
+Use **Other file…** for direct preview or the existing copy/import flow when no edits are needed.
+Invalid plans show the loader's reason and disable **Queue…**. They can still be opened in the editor
+when their JSON structure can be read.
 
 The Run dropdown reads `<Output>/video_eval/<run_id>/run.json`, newest first, including runs that
 have yet to produce a report. Use **Build report**, **Open report**, or **Open folder** for the
@@ -19,14 +26,14 @@ configured Output folder even with a plan-root override.
 
 | Folder | Files | Schema or purpose |
 |---|---|---|
-| `video/` | `YYYYmmdd_slug.suite.json` | `schema: "stablenew.video-eval-suite.v1"`. The schema identifies the suite. |
+| `video/` | `YYYYmmdd_slug_vNNN.suite.json` | `schema: "stablenew.video-eval-suite.v1"`. The schema identifies the suite. |
 | `image/` | `YYYYmmdd_slug.plan.json` | Image comparison plans use the schema of the consuming tool. |
 | `qualification/<tool>/` | One dated directory per default CLI invocation | Frozen qualification plans with each tool's existing schema. |
-| `templates/` | Copies of runbook example suites | Starting points. Copy into `video/` and replace the placeholder images before queueing. |
+| `templates/` | Copies of runbook example suites | Open in the suite editor and bind local source images before saving. |
 | `_imported/` | `imports.jsonl` | Source path, source SHA-256, destination and timestamp for each import. |
 
 Use absolute image paths or paths relative to the suite file. Pin `image_sha256` when you need to
-freeze the exact source bytes. Learning experiments remain in the Learning Library and
+freeze the exact source bytes. The editor saves absolute case-image references with a verified SHA-256 for every case and leaves the source files in place. Learning experiments remain in the Learning Library and
 `data/learning/experiments/`.
 
 ## Import existing suites
