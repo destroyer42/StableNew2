@@ -419,40 +419,22 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         header.grid(row=1, column=0, sticky="ew", padx=6, pady=(6, 4))
         header.columnconfigure(1, weight=1)
 
-        # VID-UX-384: Create | Evaluate and the readiness status chip share the header's first row.
-        top_bar = ttk.Frame(header, style="Panel.TFrame")
-        top_bar.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 6))
-        top_bar.columnconfigure(1, weight=1)
-        self.view_switch = ViewSwitch(top_bar, on_change=self.select_view)
-        self.view_switch.grid(row=0, column=0, sticky="w")
-        self.readiness_chip = ttk.Button(
-            top_bar,
-            text="Source: none selected",
-            style="Dark.TButton",
-            command=self._on_readiness_chip,
-        )
-        self.readiness_chip.grid(row=0, column=2, sticky="e")
-        self.readiness_chip_tooltip = attach_tooltip(
-            self.readiness_chip,
-            "Source and motion readiness at a glance. Click to open the details beside the form.",
-        )
-
         ttk.Label(header, text="Source Image", style="Dark.TLabel").grid(
-            row=1, column=0, sticky="w", padx=(0, 6)
+            row=0, column=0, sticky="w", padx=(0, 6)
         )
         ttk.Entry(header, textvariable=self.source_image_var, style="Dark.TEntry").grid(
-            row=1, column=1, sticky="ew", padx=(0, 6)
+            row=0, column=1, sticky="ew", padx=(0, 6)
         )
         ttk.Button(
             header, text="Browse...", style="Dark.TButton", command=self._on_browse_source
-        ).grid(row=1, column=2, sticky="ew", padx=(0, 6))
+        ).grid(row=0, column=2, sticky="ew", padx=(0, 6))
         self.use_latest_output_button = ttk.Button(
             header,
             text="Use Latest Output",
             style="Dark.TButton",
             command=self._on_use_latest_output,
         )
-        self.use_latest_output_button.grid(row=1, column=3, sticky="ew")
+        self.use_latest_output_button.grid(row=0, column=3, sticky="ew")
         self.use_latest_output_tooltip = attach_tooltip(
             self.use_latest_output_button,
             "Load the newest compatible image output into this workflow tab. This prepares the source input only; it does not queue the workflow yet.",
@@ -460,10 +442,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # PR-VID-UX-360: the first choice is what to make, not which workflow to run.  Choosing a task picks
         # its engine, fills the settings and shows only the inputs that task needs.
         self.task_selector = WorkflowTaskSelector(header, on_select=self._on_task_selected)
-        self.task_selector.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        self.task_selector.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        # VID-UX-384: Create | Evaluate shares the task row; the readiness chip sits at the action bar's right edge.
+        self.view_switch = ViewSwitch(header, on_change=self.select_view)
+        self.view_switch.grid(row=1, column=3, sticky="e", pady=(6, 0))
         # Keep the primary action and its status visible above the scrolling form.
         action_bar = ttk.Frame(header, style="Panel.TFrame")
-        action_bar.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        action_bar.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(6, 0))
         self._action_bar = action_bar
         self.queue_workflow_button = ttk.Button(
             action_bar,
@@ -487,6 +472,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.status_label.pack(side="left", fill="x", expand=True, padx=(12, 0))
         bind_wraplength(self.status_label)
+        self.readiness_chip = ttk.Button(
+            action_bar,
+            text="Source: none selected",
+            style="Dark.TButton",
+            command=self._on_readiness_chip,
+        )
+        self.readiness_chip.pack(side="right", padx=(8, 0))
+        self.readiness_chip_tooltip = attach_tooltip(
+            self.readiness_chip,
+            "Source and motion readiness at a glance. Click to open the details beside the form.",
+        )
         self.queue_block_label = ttk.Label(
             action_bar, textvariable=self.queue_block_reason_var, style="Muted.TLabel"
         )
@@ -494,12 +490,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # Inline, non-modal feedback for Queue: a failure stays visible until dismissed or the next attempt;
         # an accepted job is acknowledged with a "View in queue" action instead of a blocking dialog.
         self.submission_notice = SubmissionNotice(header)
-        self.submission_notice.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(6, 0))
-        # PR-GUI-110: what the job will read stays in view; row 5 is the batch source strip.
+        self.submission_notice.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        # PR-GUI-110: what the job will read stays in view; row 4 is the batch source strip.
         self.source_summary_label = ttk.Label(
             header, textvariable=self.source_summary_var, style="Muted.TLabel", justify="left"
         )
-        self.source_summary_label.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        self.source_summary_label.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(4, 0))
         bind_wraplength(self.source_summary_label)
         self._header_frame = header
 
@@ -534,7 +530,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_mode_change=self._on_batch_mode_change,
             on_status=self.status_var.set,
         )
-        self.batch_panel.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        self.batch_panel.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(4, 0))
         self.batch_panel.grid_remove()
         self.batch_panel.place_details(row=0, column=0, sticky="ew", padx=8, pady=(8, 0))
         self._form_columns = build_form_column_specs(
