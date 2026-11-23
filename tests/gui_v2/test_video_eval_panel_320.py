@@ -9,7 +9,7 @@ from typing import Any
 
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.gui.views.video_eval_panel_v2 import VideoEvalPanel
-from src.video.video_eval_run import RUN_SCHEMA
+from src.video.video_eval_run import RUN_SCHEMA, EvalJobPlan
 from src.video.video_eval_suite import SUITE_SCHEMA
 
 RUN_ID = "20261122_040000_core_12345678"
@@ -40,7 +40,11 @@ class _Controller:
         self.reports: list[tuple[str, bool]] = []
         self.plan = SimpleNamespace(
             eligible=eligible,
-            jobs=[object(), object()],
+            suite=SimpleNamespace(arms=()),
+            jobs=[
+                EvalJobPlan("case", arm, "svd_native", arm, 0, 25, SimpleNamespace(config={}))
+                for arm in ("a", "b")
+            ],
             experimental_arms=experimental,
             summary=lambda: "Eval suite core: 1 cases x 2 arms = 2 jobs",
         )

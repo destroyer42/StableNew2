@@ -12,7 +12,7 @@ graph revision gets one eval run, a contact sheet and the owner's rating.
 * A **suite** (`stablenew.video-eval-suite.v1`, a JSON file in `<Output>/eval_plans/video/`) lists **cases**
   (one source image plus a prompt) and **arms** (one way to make a clip: a native SVD configuration or a Video
   Workflow form). It also fixes one seed and names the baseline arm.
-* **Queue…** for the selected **Plan** (Video Workflow → Compare and evaluate) builds one job per case per arm with the
+* **Queue…** for the selected **Plan** (Video Workflow → Evaluate) builds one job per case per arm with the
   production builders (`SVDController.build_admitted_njr`, `VideoWorkflowNjrBuilder`), shows the plan, and after
   you confirm admits every job in **one** `JobService.submit_njrs` call. All or nothing: if any case cannot be
   built under any arm, nothing is queued and every reason is listed.
@@ -23,7 +23,24 @@ graph revision gets one eval run, a contact sheet and the owner's rating.
 * A case can instead be a **sequence** of 2-12 segments (section 2.1). It runs as one multi-segment job per arm and is
   rated as one clip: the assembled sequence.
 
-## 2. Writing a suite
+## 2. Authoring a suite
+
+In **Video Workflow → Evaluate**, choose **Create / Edit Suite…**. The editor opens the selected plan.
+Use **New**, **Three-engine template**, or **Open JSON / template…** to start from a different suite.
+
+1. Under **Suite**, set the ID, description and shared seed. Choose the baseline from the arm IDs.
+2. Under **Cases**, select each case and use **Bind Image…** to choose its own local image. Edit the
+   prompts and tags, add or remove cases, or use ordered segments for sequence prompts and lengths.
+3. Under **Arms**, add, remove or duplicate candidates. Choose a workflow by exact ID and version, or
+   select Native SVD. Edit the controls shown for the chosen backend. Changing the workflow requires a
+   fresh opt-in if the selected revision is experimental.
+4. Use **Validate** to check sources, IDs, control and sequence compatibility, and the 64-job limit.
+   To accept changed image bytes, bind that image again explicitly.
+5. **Save as New Version** writes a separate file in the configured Evaluation Plans video folder with
+   pinned image hashes. **Save & Preview…** then shows each compiled case × arm job with its engine,
+   seed, frame count and ID. Review any refusals, then choose **Queue All Jobs** or **Cancel**.
+
+Saved plans use the same v1 JSON format. Below is an example for tools that read or produce it.
 
 ```json
 {
