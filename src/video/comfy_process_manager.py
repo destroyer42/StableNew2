@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.utils.config import ConfigManager
 from src.utils.managed_process import ManagedProcess
+from src.utils.process_observation import observe_owned_tcp_listener
 from src.video.comfy_healthcheck import probe_comfy_endpoint, wait_for_comfy_ready
 from src.video.comfy_runtime_setup import ComfyLaunchFacts
 from src.video.managed_comfy_runtime import (
+    CK_ATTENTION_FLAG,
     missing_required_flags,
     plan_comfy_launch,
+    verify_a14b_launch_args,
     workflow_launch_requirements,
 )
 
@@ -84,6 +90,8 @@ class ComfyProcessManager:
         self._managed: ManagedProcess | None = None
         self._running_command: tuple[str, ...] = ()
         self._verified_launch_flags: tuple[str, ...] = ()
+        self._launch_attention_profile: str | None = None
+        self._verified_attention_profile: str | None = None
         self._last_tails: tuple[list[str], list[str]] = ([], [])
         self._stopped = False
         _GLOBAL_COMFY_PROCESS_MANAGER = self
@@ -136,15 +144,122 @@ class ComfyProcessManager:
                 "Wait for the current runtime to be released, then retry."
             )
 
-    def start(self, *, required_flags: Sequence[str] = ()) -> subprocess.Popen:
+    def verified_a14b_endpoint(self, base_url: str) -> str:
+        """Use a numeric local endpoint served exclusively by this live launch tree."""
+
+        pid = self.pid
+        if pid is None or not self.is_running():
+            raise ComfyStartupError(
+                "A14B attention requires a live StableNew-owned ComfyUI process."
+            )
+        try:
+            url = urlsplit(base_url)
+            host = url.hostname
+            if (
+                url.scheme not in {"http", "https"}
+                or host is None
+                or url.username is not None
+                or url.path.rstrip("/")
+                or url.query
+                or url.fragment
+            ):
+                raise ValueError("expected a direct local ComfyUI URL")
+            port = url.port or (443 if url.scheme == "https" else 80)
+            addresses = (
+                [ip_address("127.0.0.1"), ip_address("::1")]
+                if host == "localhost"
+                else [ip_address(host)]
+            )
+            address = observe_owned_tcp_listener(
+                pid, addresses, port, include_descendants=self.contained
+            )
+            if address is not None and self.pid == pid and self.is_running():
+                host = str(address) if address.version == 4 else f"[{address}]"
+                return f"{url.scheme}://{host}:{port}"
+        except (ValueError, OSError) as exc:
+            raise ComfyStartupError("Could not verify the owned A14B ComfyUI listener.") from exc
+        raise ComfyStartupError(
+            "The configured A14B ComfyUI endpoint is not served by the owned launch."
+        )
+
+    def verify_a14b_attention(
+        self, profile: str, system_stats: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Match serving argv to our live child and verify its startup report once per launch."""
+
+        pid = self.pid
+        if pid is None or not self.owns_process or not self.is_running():
+            raise ComfyStartupError(
+                "A14B attention requires a live StableNew-owned ComfyUI process."
+            )
+        command = self.running_command
+        system = system_stats.get("system")
+        argv = system.get("argv") if isinstance(system, Mapping) else None
+        if (
+            not isinstance(argv, list)
+            or not argv
+            or len(argv) >= len(command)
+            or tuple(argv) != command[-len(argv) :]
+            or not isinstance(argv[0], str)
+            or Path(argv[0]).name != "main.py"
+        ):
+            raise ComfyStartupError(
+                "The serving ComfyUI did not report the owned launch arguments."
+            )
+        try:
+            verify_a14b_launch_args(argv, profile)
+        except ValueError as exc:
+            raise ComfyStartupError(str(exc)) from exc
+        if self._verified_attention_profile != profile:
+            lines = [
+                re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
+                for line in (*self.get_stdout_tail(), *self.get_stderr_tail())
+            ]
+            # These are emitted by ComfyUI after selecting the attention implementation and
+            # successfully initializing DynamicVRAM. Only this child's bounded output is read.
+            ck_enabled = any(line.endswith("Using Comfy Kitchen attention") for line in lines)
+            dynamic_vram = any(
+                line.endswith("DynamicVRAM support detected and enabled") for line in lines
+            )
+            if ck_enabled != (profile == "ck") or not dynamic_vram:
+                raise ComfyStartupError(
+                    f"ComfyUI startup did not verify A14B attention profile '{profile}' "
+                    "with dynamic VRAM enabled. Check the managed ComfyUI startup log."
+                )
+            self._verified_attention_profile = profile
+        flags = list(self.verified_launch_flags)
+        if profile == "ck":
+            flags.append(CK_ATTENTION_FLAG)
+        return {"profile": profile, "pid": pid, "flags": flags, "dynamic_vram": True}
+
+    def _check_a14b_running_args(self, profile: str | None) -> None:
+        if profile is None and self._launch_attention_profile == "ck":
+            raise ComfyStartupError(
+                "Release the job-specific CK ComfyUI before running this workflow."
+            )
+        if profile is not None:
+            try:
+                verify_a14b_launch_args(self.running_command, profile)
+            except ValueError as exc:
+                raise ComfyStartupError(
+                    f"{exc} Wait for the owned runtime to be released."
+                ) from exc
+
+    def start(
+        self,
+        *,
+        required_flags: Sequence[str] = (),
+        attention_profile: str | None = None,
+    ) -> subprocess.Popen:
         required = workflow_launch_requirements(self.config.command, required_flags)
         if self._managed is not None and self.is_running():
             process = self._managed.process
             if process is not None:
                 self._check_running_flags(required)
+                self._check_a14b_running_args(attention_profile)
                 return process
-        if self._config.base_url:
-            endpoint_state = probe_comfy_endpoint(self._config.base_url, timeout=0.5)
+        if self._config.base_url or attention_profile is not None:
+            endpoint_state = probe_comfy_endpoint(self._configured_base_url(), timeout=0.5)
             if endpoint_state != "free":
                 detail = (
                     "a healthy external ComfyUI is already serving"
@@ -155,7 +270,12 @@ class ComfyProcessManager:
                     f"Cannot launch managed ComfyUI: {detail}; refusing to adopt, stop, or replace it"
                 )
         try:
-            command = plan_comfy_launch(self.config.command, self.config.working_dir, required)
+            command = plan_comfy_launch(
+                self.config.command,
+                self.config.working_dir,
+                required,
+                attention_profile=attention_profile,
+            )
         except ValueError as exc:
             raise ComfyStartupError(str(exc)) from exc
         managed = self._process_factory(
@@ -174,6 +294,8 @@ class ComfyProcessManager:
         self._managed = managed
         self._running_command = command
         self._verified_launch_flags = required
+        self._launch_attention_profile = attention_profile
+        self._verified_attention_profile = None
         self._stopped = False
         # stop() unregisters this manager; a relaunch must re-register it, or the owned process
         # it just started would be invisible to runtime transitions (PR-RUNTIME-100) that look
@@ -197,6 +319,8 @@ class ComfyProcessManager:
         self._managed = None
         self._running_command = ()
         self._verified_launch_flags = ()
+        self._launch_attention_profile = None
+        self._verified_attention_profile = None
         if _GLOBAL_COMFY_PROCESS_MANAGER is self:
             _GLOBAL_COMFY_PROCESS_MANAGER = None
         return True
@@ -240,6 +364,7 @@ class ComfyProcessManager:
         self,
         *,
         required_flags: Sequence[str] = (),
+        attention_profile: str | None = None,
         cancel_token: CancelToken | None = None,
     ) -> bool:
         options = {} if cancel_token is None else {"cancel_token": cancel_token}
@@ -248,7 +373,8 @@ class ComfyProcessManager:
             cancel_token.check_cancelled()
         if self.is_running():
             self._check_running_flags(required)
-            if required:
+            self._check_a14b_running_args(attention_profile)
+            if required or attention_profile is not None:
                 return self.check_health(**options) and self.is_running()
             try:
                 if self.check_health(**options):
@@ -262,8 +388,10 @@ class ComfyProcessManager:
             self.stop()
         if cancel_token is not None:
             cancel_token.check_cancelled()
-        self.start(required_flags=required_flags)
-        return self.check_health(**options) and (not required or self.is_running())
+        self.start(required_flags=required_flags, attention_profile=attention_profile)
+        return self.check_health(**options) and (
+            (not required and attention_profile is None) or self.is_running()
+        )
 
     def restart(
         self,

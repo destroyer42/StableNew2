@@ -78,7 +78,7 @@ class _FakeManager:
     def is_running(self) -> bool:
         return self.running
 
-    def ensure_running(self, *, required_flags=()) -> bool:
+    def ensure_running(self, *, required_flags=(), attention_profile=None) -> bool:
         if not self.running:
             self.starts += 1
             self.running = True
@@ -86,6 +86,20 @@ class _FakeManager:
             self._next_pid += 1
             self.pid = self._next_pid
         return True
+
+    def verified_a14b_endpoint(self, base_url):
+        if not self.owns_process:
+            raise cpm.ComfyStartupError(
+                "A14B attention requires a live StableNew-owned ComfyUI process."
+            )
+        return base_url
+
+    def verify_a14b_attention(self, profile, system_stats):
+        if not self.owns_process:
+            raise cpm.ComfyStartupError(
+                "A14B attention requires a live StableNew-owned ComfyUI process."
+            )
+        return {"profile": profile, "pid": self.pid, "dynamic_vram": True}
 
     def stop(self, **_kw) -> None:
         self.stops += 1

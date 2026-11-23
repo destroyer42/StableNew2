@@ -70,6 +70,7 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
                 "1.4.0",
             ),  # VID-CLIP-370 eval candidate (720p; superseded by the approved 720p workflow id, VID-CLIP-372)
             *OLDER_TI2V,
+            ("wan22_i2v_a14b_4step_ck_v1", "1.0.0"),
             # VID-A14B-SPEED-374 speed arms of the approved A14B 1.0.0.
             ("wan22_i2v_a14b_4step_v1", "1.1.0"),
             ("wan22_i2v_a14b_4step_v1", "1.2.0"),
@@ -85,22 +86,16 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
             ),
         }
     )
-    assert (
-        len(states) == 20
-    )  # Fun Control, the VID-CLIP-370 candidates, the VID-A14B-SPEED-374 arms and VID-A14B-SVI-375 add identities.
+    assert len(states) == 21
 
 
-def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_is_unchanged() -> (
-    None
-):
+def test_only_approved_versions_are_runnable_without_opt_in() -> None:
     registry = build_default_workflow_registry()
 
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
     ] == [A14B_APPROVED, TI2V_720P_APPROVED, APPROVED, APPROVED_FRAMES_OUT]
-    assert (
-        len(registry.list_offerable_specs("comfy")) == 20
-    )  # + three A14B speed arms (VID-A14B-SPEED-374) and three SVI versions (VID-A14B-SVI-375)
+    assert len(registry.list_offerable_specs("comfy")) == 21
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:
