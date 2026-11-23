@@ -167,6 +167,7 @@ def test_navigation_ids_hold_state_and_unknown_ids():
         "review",
         "photo_optimize",
         "video_workflow",
+        "storyboard",
         "svd",
         "movie_clips",
         "learning",

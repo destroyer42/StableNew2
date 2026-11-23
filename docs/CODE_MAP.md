@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-957 of 957 modules have a docstring.
+964 of 964 modules have a docstring.
 
 ## src/
 
@@ -410,6 +410,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `stale_pack_contract.py`: Toolkit-neutral rules for adding a PromptPack that has unsaved Prompt-tab edits (GUI-TRUTH-912)
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
 - `storyboard_contract.py`: Toolkit-neutral capture and dirty-state for the existing sequence editor; no executable state
+- `storyboard_tree_contract.py`: Tk-free state of the Storyboard tab (PR-VID-STORY-380, spec 7.2)
 - `task_navigation_contract.py`: Task-first navigation contract (PR-GUI-410)
 - `video_batch_contract.py`: Toolkit-neutral state for the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_experiment_contract.py`: Toolkit-neutral state for the Video Workflow "Compare one control" section (PR-VID-194)
@@ -469,7 +470,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `review_tab_frame_v2.py`: Present image selection, ratings, disposition, and reprocessing actions in Review
 - `stage_cards_panel.py`: Re-export the V2 stage cards panel at the existing GUI import path
 - `stage_cards_panel_v2.py`: Compose the Pipeline stage cards and project overrides, resource updates, and dependent dimensions
+- `storyboard_compare_window_v2.py`: Compare-only synchronized playback of sibling takes' own clips (PR-VID-STORY-380, spec 7.2)
 - `storyboard_panel_actions.py`: Storyboard actions for the existing sequence panel; all disk work uses the shared UI work runner
+- `storyboard_tab_frame_v2.py`: The Storyboard tab: a tree of takes as shot columns, a cut viewer and a Continue panel (PR-VID-STORY-380)
 - `svd_tab_frame_v2.py`: Present Native SVD settings, source and folder selection, and queued submission controls
 - `video_eval_panel_v2.py`: Video Workflow tab: queue an eval suite and build its contact sheet (PR-VID-EVAL-320)
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
@@ -507,6 +510,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `reference_map_dialog.py`: The "Create map from image" dialog: thin Tk over ``ReferenceMapFlow`` (PR-IMG-CNET-230)
 - `responsive_wrap_v2.py`: Width-following label wrapping for responsive workspaces (PR-GUI-110)
 - `scrollable_frame_v2.py`: Provide a vertically scrollable Tk frame with shared wheel routing and focus visibility
+- `storyboard_columns_v2.py`: Shot columns with take cards for the Storyboard tab (PR-VID-STORY-380)
+- `storyboard_viewer_v2.py`: Frame viewer with a whole-cut slider and join ticks for the Storyboard tab (PR-VID-STORY-380)
 - `submission_notice_v2.py`: Inline, non-modal submission feedback (PR-VID-UX-313)
 - `tab_overview_panel_v2.py`: Render workspace overviews with optional expanded help for each major tab
 - `task_navigation_bar_v2.py`: Task-first navigation bar for the main window (PR-GUI-410)
@@ -1010,7 +1015,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `storyboard.py`: Versioned, editable Storyboard intent, distinct from an admitted SequencePlan (VID-STORYBOARD-350)
 - `storyboard_cut.py`: The cut manifest of a stitched storyboard cut (PR-VID-STORY-380)
 - `storyboard_cuts.py`: Read storyboard cuts back from the repository and pin lead-ins (PR-VID-STORY-380, spec 7.5)
+- `storyboard_frame_cache.py`: Bounded cache of downscaled storyboard frames and thumbnails (PR-VID-STORY-380, spec 7.2)
 - `storyboard_history.py`: Create new authoring intent only from a canonical frozen sequence snapshot, never from artifacts
+- `storyboard_projection.py`: Read-only projection of a storyboard's takes from the repository (PR-VID-STORY-380, spec 7.7)
 - `storyboard_readiness.py`: Read-only source identity and workflow projections for editable Storyboards; admission stays authoritative
 - `storyboard_reconcile.py`: Adopt a repository job into a storyboard tree by the storyboard link its plan carries (PR-VID-STORY-380, spec…
 - `storyboard_root.py`: Storyboard root preparation (PR-VID-STORY-380, spec 7.3)

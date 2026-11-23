@@ -215,6 +215,24 @@ def route_bundle_to_movie_clips(
     setter(dict(bundle), status_message=status_message)
 
 
+def route_job_to_storyboard(
+    *,
+    main_window: Any,
+    job_id: str,
+    status_message: str | None = None,
+) -> None:
+    """Open a finished clip's job in the Storyboard tab as a new storyboard root (intent only; nothing is queued)."""
+
+    storyboard_tab = getattr(main_window, "storyboard_tab", None)
+    if storyboard_tab is None:
+        raise RuntimeError("Storyboard tab is not available")
+    starter = getattr(storyboard_tab, "start_from_job", None)
+    if not callable(starter):
+        raise RuntimeError("Storyboard tab does not support job handoff")
+    _select_tab(main_window, storyboard_tab)
+    starter(str(job_id), status_message=status_message)
+
+
 __all__ = [
     "route_bundle_to_movie_clips",
     "route_bundle_to_video_workflow",
@@ -224,5 +242,6 @@ __all__ = [
     "route_images_to_photo_optimize",
     "route_images_to_review",
     "route_images_to_video_workflow",
+    "route_job_to_storyboard",
     "show_queue_view",
 ]
