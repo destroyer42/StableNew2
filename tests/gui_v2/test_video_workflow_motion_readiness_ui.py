@@ -541,6 +541,9 @@ def test_an_unsupported_workflow_shows_the_honest_no_guidance_state(tk_root, tmp
     assert view.guidance_title == "No motion guidance for this workflow"
     assert any("no accepted evidence" in line for line in view.guidance_lines)
     assert panel._runner.jobs == []  # no preparation policy, so there is nothing to preview
+    # VID-UX-384: nothing to warn about in the Animate task, so the details stay behind the header chip ...
+    assert not panel.grid_info()
+    tab._on_readiness_chip()  # ... until the operator opens them
     assert panel.grid_info()
     text = panel.guidance_text.get("1.0", "end")
     assert "no accepted evidence" in text and "never edits your prompt" in text
@@ -636,7 +639,7 @@ def test_panel_lives_in_the_scrolled_body_and_thumbnails_wrap(tk_root, tmp_path)
     while node is not None:
         chain.append(node)
         node = getattr(node, "master", None)
-    assert tab._body_scroll.inner in chain  # reachable by scrolling, never clipped
+    assert tab._create_view.right_scroll.inner in chain  # reachable by scrolling, never clipped
 
     session = panel._session
     [work] = session.refresh(

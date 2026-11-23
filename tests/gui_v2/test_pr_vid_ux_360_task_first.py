@@ -22,6 +22,14 @@ from tests.helpers.make_video_313 import ANIMATE2_ID, RECOMMENDED_ID, TI2V_ID, m
 pytestmark = pytest.mark.gui
 
 
+def _ancestors(widget):
+    chain = []
+    while widget is not None:
+        chain.append(widget)
+        widget = getattr(widget, "master", None)
+    return chain
+
+
 def _make_env(tk_root, tmp_path, *, rife: bool):
     app, controller, service = make_app(tmp_path)
     controller.rife_available = lambda: rife
@@ -130,13 +138,11 @@ def test_default_task_hides_everything_it_does_not_need(env):
     for widget in (tab.follow_clip_frame, tab.sequence_panel, tab.batch_panel):
         assert not widget.winfo_manager()
     assert tab.motion_library_panel.master is tab.follow_clip_tools
-    for section in (
-        tab.advanced_section,
-        tab.keyframes_section,
-        tab.compare_section,
-        tab.details_section,
-    ):
+    for section in (tab.advanced_section, tab.keyframes_section, tab.details_section):
         assert not section.is_expanded()
+    # The settings themselves are not behind a disclosure (VID-UX-384).
+    assert tab.workflow_combo.winfo_manager()
+    assert tab.seed_entry.winfo_manager()
 
 
 def test_summary_line_names_the_engine_and_what_was_set(env):
@@ -145,10 +151,11 @@ def test_summary_line_names_the_engine_and_what_was_set(env):
     assert env.tab.workflow_label_var.get() in summary
 
 
-def test_change_button_opens_the_settings_editor(env):
+def test_more_settings_button_opens_the_rarely_changed_controls(env):
+    assert str(env.tab.suggested_line.change_button.cget("text")) == "More settings"
     env.tab.suggested_line.change_button.invoke()
     assert env.tab.advanced_section.is_expanded()
-    assert str(env.tab.suggested_line.change_button.cget("text")) == "Hide"
+    assert str(env.tab.suggested_line.change_button.cget("text")) == "Hide more settings"
     assert env.tab.workflow_combo.winfo_manager()
 
 
@@ -394,7 +401,9 @@ def test_many_images_can_share_one_driving_clip(env, tmp_path):
     assert tab.pose_video_var.get() == str(tmp_path / "walk.mp4")
 
 
-def test_source_preview_and_guidance_are_not_tied_to_the_driving_clip_task(env):
+def test_readiness_details_are_not_inside_the_driving_clip_inputs(env):
+    # VID-UX-384 supersedes the VID-UX-360 rule that readiness shows in every task: it now lives in the right
+    # pane, shows for the driving-clip task / a driving-video engine / a problem, and is a header chip otherwise.
     tab = env.tab
     assert tab.current_task() == "animate"
     panel = tab.motion_readiness_panel
@@ -402,7 +411,12 @@ def test_source_preview_and_guidance_are_not_tied_to_the_driving_clip_task(env):
     while widget is not None and widget is not tab:
         assert widget is not tab.follow_clip_frame
         widget = widget.master
+    assert tab._create_view.right in _ancestors(panel)
+    assert not panel.winfo_manager()  # nothing to say in this task: no panel, only the chip
+    assert tab.readiness_chip.winfo_manager()
     assert tab.select_task("follow_clip")
+    assert panel._relevant is True  # whether it maps also needs readiness content
+
     assert tab.pose_video_frame.winfo_manager() == "grid"
     assert tab.follow_clip_tools.winfo_manager() == "grid"
 

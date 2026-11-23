@@ -46,6 +46,8 @@ class WorkflowMotionReadinessPanel(ttk.LabelFrame):
         read_inputs: Callable[[], Mapping[str, Any]],
         runner: BackgroundWorkRunner | None = None,
         debounce_ms: int = DEBOUNCE_MS,
+        media_allowed: Callable[[], bool] | None = None,
+        on_render: Callable[[MotionReadinessView], None] | None = None,
     ) -> None:
         super().__init__(master, text="Motion source readiness", padding=8)
         self._session = session
@@ -57,6 +59,12 @@ class WorkflowMotionReadinessPanel(ttk.LabelFrame):
         self._photos: list[tk.PhotoImage] = []
         self._thumb_labels: list[ttk.Label] = []
         self._last_view: MotionReadinessView | None = None
+        # VID-UX-384: the owner says whether images may be drawn (Show media AND the application
+        # content-visibility policy) and hears about every new view; ``set_relevant(False)`` keeps the
+        # panel off screen while the owner shows a status chip instead.
+        self._media_allowed = media_allowed
+        self._on_render = on_render
+        self._relevant = True
         self.bind("<Destroy>", self._on_destroy, add="+")
         self.columnconfigure(1, weight=1)
 
@@ -222,18 +230,21 @@ class WorkflowMotionReadinessPanel(ttk.LabelFrame):
     def render(self) -> None:
         view = self._session.view()
         self._last_view = view
+        if self._on_render is not None:
+            self._on_render(view)  # may call set_relevant(); it only stores a flag, so no recursion
         show = bool(view.source_state != "idle" or view.video_state != "idle" or view.guidance_title)
-        if not show:
+        if not show or not self._relevant:
             self.grid_remove()
             return
         self.grid()
         self._photos = []
+        media = self._media_allowed() if self._media_allowed is not None else True
 
         source_lines = list(view.source_lines) or [view.source_message]
         if view.source_state == STATE_ERROR:
             source_lines = [f"Source preview unavailable: {view.source_message}"]
         self.source_text_var.set("\n".join(line for line in source_lines if line))
-        photo = self._photo(view.source_png)
+        photo = self._photo(view.source_png) if media else None
         self.source_image_label.configure(image=photo or "")
 
         video_lines: list[str] = []
@@ -253,7 +264,7 @@ class WorkflowMotionReadinessPanel(ttk.LabelFrame):
             self.video_label.grid()
         else:
             self.video_label.grid_remove()
-        self._render_frames(view)
+        self._render_frames(view, media)
 
         self.timing_var.set("\n".join(view.timing_lines))
         if view.timing_lines:
@@ -280,11 +291,16 @@ class WorkflowMotionReadinessPanel(ttk.LabelFrame):
         self._photos.append(photo)  # a PhotoImage with no Python reference is garbage collected
         return photo
 
-    def _render_frames(self, view: MotionReadinessView) -> None:
+    def set_relevant(self, relevant: bool) -> None:
+        """Whether the panel may be on screen at all; takes effect on the next ``render()``."""
+
+        self._relevant = bool(relevant)
+
+    def _render_frames(self, view: MotionReadinessView, media: bool = True) -> None:
         for label in self._thumb_labels:
             label.destroy()
         self._thumb_labels = []
-        for frame in view.video_frames:
+        for frame in view.video_frames if media else ():
             photo = self._photo(frame.png_bytes)
             if photo is None:
                 continue

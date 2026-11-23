@@ -82,22 +82,31 @@ class SuggestedSettingsLine(ttk.Frame):
         *,
         on_change: Callable[[], None],
         on_reset: Callable[[], None],
+        title: str = "Settings",
+        change_label: str = "Change",
+        hide_label: str = "Hide",
+        show_summary: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style="Panel.TFrame", **kwargs)
+        self._change_label = change_label
+        self._hide_label = hide_label
         self.columnconfigure(1, weight=1)
         self.summary_var = tk.StringVar(master=self, value="")
         self.notes_var = tk.StringVar(master=self, value="")
-        ttk.Label(self, text="Settings", style="Dark.TLabel").grid(
-            row=0, column=0, sticky="w", padx=(0, 8)
-        )
+        self.title_label = ttk.Label(self, text=title, style="Dark.TLabel")
+        self.title_label.grid(row=0, column=0, sticky="w", padx=(0, 8))
         self.summary_label = ttk.Label(
             self, textvariable=self.summary_var, style="Dark.TLabel", justify="left"
         )
         self.summary_label.grid(row=0, column=1, sticky="ew")
         bind_wraplength(self.summary_label)
+        if not title:
+            self.title_label.grid_remove()
+        if not show_summary:
+            self.summary_label.grid_remove()
         self.change_button = ttk.Button(
-            self, text="Change", style="Dark.TButton", command=on_change
+            self, text=change_label, style="Dark.TButton", command=on_change
         )
         self.change_button.grid(row=0, column=2, sticky="e", padx=(8, 0))
         self.reset_button = ttk.Button(
@@ -123,7 +132,7 @@ class SuggestedSettingsLine(ttk.Frame):
             self.notes_label.grid_remove()
 
     def set_editing(self, editing: bool) -> None:
-        self.change_button.configure(text="Hide" if editing else "Change")
+        self.change_button.configure(text=self._hide_label if editing else self._change_label)
 
 
 class PinTracker:

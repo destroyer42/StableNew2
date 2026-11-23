@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-964 of 964 modules have a docstring.
+968 of 968 modules have a docstring.
 
 ## src/
 
@@ -478,12 +478,16 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
+- `video_workflow_evaluate_view_v2.py`: Evaluate view container for the Video Workflow tab (VID-UX-384)
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
+- `video_workflow_layout_v2.py`: Layout scaffolding for the Video Workflow tab (VID-UX-384)
+- `video_workflow_media_pane_v2.py`: Right-pane media and status column of the Video Workflow tab (VID-UX-384)
 - `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_workflow_recent_outputs_panel_v2.py`: Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
 - `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
+- `video_workflow_sections_v2.py`: Section builders for the Video Workflow tab's left pane (VID-UX-384)
 - `video_workflow_sequence_panel_v2.py`: Tk rendering of the Video Workflow "Multi-shot sequence" section (PR-VID-SEQ-331A)
 - `video_workflow_tab_frame_v2.py`: Present workflow video settings, source selection, previews, and queue admission controls
 - `video_workflow_task_panel_v2.py`: Task selector and Suggested-settings line for the Video Workflow tab (PR-VID-UX-360)
