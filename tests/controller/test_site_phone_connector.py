@@ -166,7 +166,7 @@ class _FakePhone(PhoneHttp):
                     "path": "/v1/output/status",
                     "body": None,
                 }
-            return {"session": _SESSION, "ttl": 30000, "call": call}
+            return {"version": 2, "session": _SESSION, "ttl": 30000, "call": call}
         if action == f"fulfill/{_CALL}":
             assert kwargs["session"] == _SESSION
             self.result = json.loads(kwargs["body"].data)

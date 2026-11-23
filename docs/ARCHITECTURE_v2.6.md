@@ -607,14 +607,16 @@ The Windows Operator Site phone connector is an opt-in, application-owned HTTPS
 client. Sites supplies the signed-in browser identity or admits the backend with
 its Site-wide service credential. The Worker requires a separate enrolled host
 credential on the connector routes and signed-in visitor identity everywhere
-else. A browser's phone grant binds one Site owner and one cookie to a separate
-browse and rating policy. Presence belongs to the desktop process and expires
-within 30 seconds of its last heartbeat. Pairing has a 30-day absolute limit.
-The phone resumes the same grant with a renewable 15-minute browser lease.
-Windows stores the host and Site credentials and the approved folder identity
-in current-user DPAPI. Connector and legacy relay both use the existing native
-output readers and rating writers. Queue operations are outside the connector
-route set. [Operator Site runbook](runbooks/stablenew_operator_site.md)
+else. A phone grant binds one Site owner and one browser cookie to browse access and
+separate rating, native Review and queue submission permissions. Device enrollment
+has a 30-day absolute limit. The eight-hour browser inactivity lease is bound to the
+enrolled connector process instance. Presence expires within 30 seconds of its last
+heartbeat. An explicit browser reconnect under the same valid grant authorizes a
+fresh lease after expiry or process replacement. Windows stores the host and Site
+credentials and approved folder identity in current-user DPAPI. Connector and hosted
+relay use existing native output readers and rating writers. Opt-in phone queue
+operations use the frozen native Preview, JobService and native receipt path.
+[Operator Site runbook](runbooks/stablenew_operator_site.md)
 
 The queue stack is constructed in one place: `src/app/runtime_stack.py` builds the
 `JobRepository`, `JobQueue`, `SingleNodeJobRunner` and `JobService`, called from

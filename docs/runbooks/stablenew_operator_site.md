@@ -13,11 +13,17 @@ Site** is in the top toolbar beside **Readiness**.
 3. To work from another device, click **Start remote session** in the paired PC browser. Keep that tab, the StableNew
    window and the PC online. Sign in to the same private Site on the other device and enter the separate remote code.
    Hosted requests are handled by the paired browser on the PC. The local StableNew pairing code stays on the PC.
-4. Active use in the Windows Site tab renews its desktop pairing. An idle desktop pairing expires about 15 minutes
-   after its final renewal. Brief loopback interruptions can recover while that pairing is still valid. Choose
-   **Reconnect StableNew** after the grant expires, StableNew restarts, or you disconnect from the desktop app.
-   A hosted remote session lasts up to 15 minutes. Stop it from its Windows browser tab. A host without a heartbeat
-   for 80 seconds stops accepting new remote requests.
+4. With matching Site and Windows builds, the desktop authorization expires after eight hours without
+   authenticated activity. Active use renews it. Unclaimed pairing codes still expire after about 15 minutes,
+   and the one-time connection ticket has its own shorter lifetime. The connection status shows the type and
+   expiry. Brief loopback interruptions can recover while the authorization is valid. Choose **Reconnect
+   StableNew** after expiry, a StableNew restart, or a disconnect.
+5. A hosted remote session has an absolute eight-hour limit. A host without a heartbeat for 80 seconds stops
+   accepting new remote requests. The same authorized host can return after a temporary outage. Keep its
+   Windows Site tab open because the hosted credentials are held in that tab. The host shows an expiry
+   warning and lets you **Reauthorize remote session** on the StableNew PC. Choose **Stop remote session**
+   from that tab to revoke it. When a submission response is lost, check the native receipt or queue before
+   committing work again. Automatic recovery checks status and receipts without repeating submissions.
 
 ## Pair a phone for browserless review
 
@@ -40,11 +46,12 @@ Wi-Fi or cellular while the PC's browser is closed.
    revoking its current grant and approving a new pairing on Windows. **Allow phone Preview and queue submission** is
    a separate, unchecked permission. Select it and confirm the new pairing on Windows to grant it. Album edits use
    the browser workflow.
-3. Use **Output Library** or **Video Review** on the phone. After a lock or
-   network switch, the Site resumes the paired browser. A 15-minute browser
-   lease renews while the same pairing and Sites sign-in are valid. Pair
-   again after 30 days. Restarting StableNew allocates a new presence lease
-   under the same grant. Reopen a result or clip whose old link expired.
+3. Use **Output Library** or **Video Review** on the phone. After a lock or network switch, the Site can resume
+   the same desktop process while the browser lease, device enrollment and Sites sign-in are valid. The browser
+   lease expires after eight hours without authorized activity. Passive status checks do not reset the timer.
+   Use **Reconnect phone** after expiry or a StableNew restart to authorize a fresh browser lease under the
+   same active enrollment and permissions. Pair again when the 30-day enrollment expires. Open a result or clip
+   again if its individual media link expired.
 4. Choose **Revoke phone** in StableNew to stop new native work for this device
    immediately. StableNew saves the revocation locally and confirms it with
    the Site when reachable. On a disconnect, the hosted presence and result

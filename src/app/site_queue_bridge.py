@@ -29,6 +29,8 @@ SITE_ORIGIN = "https://stablenew-b11960-review.stillbeacon3.chatgpt.site"
 LOOPBACK = "127.0.0.1"
 SITE_PORT = 49381
 PAIR_SECONDS = 15 * 60
+DESKTOP_SECONDS = 8 * 60 * 60
+CONNECTION_VERSION = 2
 MAX_BODY = 160
 _IDENTIFIER = re.compile(r"[a-f0-9]{32}")
 _PREVIEW = "/v1/preview"
@@ -44,6 +46,8 @@ _PREPARE_STATUS = "/v1/prepare-status"
 _RESULT = re.compile(r"/v1/results/([a-f0-9]{32})")
 _OPERATOR_PAIR = re.compile(r"/v1/operator-pair/([a-f0-9]{32})")
 _DESKTOP_KEEPALIVE = "/v1/operator-keepalive"
+_CONNECTION = "/v1/connection"
+_DISCONNECT = "/v1/operator-disconnect"
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,7 @@ class SiteSession:
     ) -> None:
         self.code = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + PAIR_SECONDS
+        self._paired = False
         self._revoked = Event()
         self._lease_lock = Lock()
         self._lock = Lock()
@@ -103,24 +108,61 @@ class SiteSession:
         with self._lease_lock:
             return self._revoked.is_set() or time.monotonic() >= self.expires_at
 
-    def renew_desktop_lease(self) -> bool:
+    def renew_desktop_lease(self, *, initial_only: bool = False) -> bool:
         """Extend a live loopback grant while its operator is using the desktop Site."""
         with self._lease_lock:
             now = time.monotonic()
             if self._revoked.is_set() or now >= self.expires_at:
                 return False
-            self.expires_at = now + PAIR_SECONDS
+            if initial_only and self._paired:
+                return True
+            self._paired = True
+            self.expires_at = now + DESKTOP_SECONDS
             return True
 
+    def invalidate(self) -> None:
+        """Immediately fence admission without waiting for catalog or listener cleanup."""
+        self._revoked.set()
+
     def revoke(self) -> None:
-        with self._lease_lock:
-            self._revoked.set()
+        self.invalidate()
         self.set_output_folder(None)
 
+    def authorization_error(self, value: str) -> str | None:
+        if not hmac.compare_digest(value.encode("utf-8"), f"Bearer {self.code}".encode()):
+            return "pairing_required"
+        with self._lease_lock:
+            if self._revoked.is_set():
+                return "pairing_revoked"
+            if time.monotonic() >= self.expires_at:
+                return "authorization_expired"
+            return None
+
     def authorizes(self, value: str) -> bool:
-        return not self.expired and hmac.compare_digest(
-            value.encode("utf-8"), f"Bearer {self.code}".encode()
-        )
+        return self.authorization_error(value) is None
+
+    def connection_status(self) -> dict[str, Any]:
+        with self._lease_lock:
+            now = time.monotonic()
+            remaining = max(0, int((self.expires_at - now) * 1000))
+            state = (
+                "revoked"
+                if self._revoked.is_set()
+                else (
+                    "expired"
+                    if now >= self.expires_at
+                    else "connected"
+                    if self._paired
+                    else "pairing"
+                )
+            )
+            return {
+                "version": CONNECTION_VERSION,
+                "type": "desktop",
+                "state": state,
+                "remaining_ms": remaining,
+                "lease_ms": DESKTOP_SECONDS * 1000,
+            }
 
     def set_output_folder(self, folder: Path | None) -> None:
         catalog = (
@@ -223,11 +265,13 @@ class SiteSession:
                     "reason": self._reason,
                     "jobs": [],
                     "desktop_keepalive": True,
+                    "connection": self.connection_status(),
                 }
             return {
                 "state": "ready",
                 "preview_id": view.preview_id,
                 "desktop_keepalive": True,
+                "connection": self.connection_status(),
                 **(
                     {
                         "preparation_id": view.preparation_id,
@@ -385,8 +429,11 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 self._reply(HTTPStatus.FORBIDDEN, {"error": "site_origin_refused"})
                 return False
             headers = self.headers.get_all("Authorization") or []
-            if len(headers) != 1 or not session.authorizes(headers[0]):
-                self._reply(HTTPStatus.UNAUTHORIZED, {"error": "pairing_required"})
+            error = (
+                session.authorization_error(headers[0]) if len(headers) == 1 else "pairing_required"
+            )
+            if error:
+                self._reply(HTTPStatus.UNAUTHORIZED, {"error": error})
                 return False
             return True
 
@@ -400,6 +447,8 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 ("GET", _PREPARE_STATUS),
                 ("POST", _PREPARE),
                 ("POST", _DESKTOP_KEEPALIVE),
+                ("GET", _CONNECTION),
+                ("POST", _DISCONNECT),
             }
             legacy_output_read = method == "GET" and (
                 self.path == _OUTPUT_RUNS
@@ -430,9 +479,14 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
             if not self._authorized():
                 return
             if self.path == _PREVIEW:
+                if not session.renew_desktop_lease(initial_only=True):
+                    self._reply(HTTPStatus.UNAUTHORIZED, {"error": "pairing_required"})
+                    return
                 self._reply(HTTPStatus.OK, session.preview())
             elif self.path == _RECEIPT:
                 self._reply(HTTPStatus.OK, session.receipt())
+            elif self.path == _CONNECTION:
+                self._reply(HTTPStatus.OK, session.connection_status())
             elif self.path == _OUTPUT_RUNS or self.path.startswith(_OUTPUT_RUNS + "/"):
                 self._output()
             elif _OUTPUT_MEDIA.fullmatch(self.path):
@@ -527,7 +581,10 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
             if not self._authorized():
                 return
             media_route = output_post(self.path)
-            if self.path not in {_SUBMIT, _PREPARE, _DESKTOP_KEEPALIVE} and not media_route:
+            if (
+                self.path not in {_SUBMIT, _PREPARE, _DESKTOP_KEEPALIVE, _DISCONNECT}
+                and not media_route
+            ):
                 self._reply(HTTPStatus.NOT_FOUND, {"error": "unknown_route"})
                 return
             lengths = self.headers.get_all("Content-Length") or []
@@ -547,11 +604,14 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 return
             try:
                 raw = self.rfile.read(length)
-                if self.path == _DESKTOP_KEEPALIVE:
+                if self.path in {_DESKTOP_KEEPALIVE, _DISCONNECT}:
                     if raw != b"{}":
                         self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
-                    elif session.renew_desktop_lease():
+                    elif self.path == _DISCONNECT:
+                        session.revoke()
                         self._reply(HTTPStatus.NO_CONTENT)
+                    elif session.renew_desktop_lease():
+                        self._reply(HTTPStatus.OK, session.connection_status())
                     else:
                         self._reply(HTTPStatus.UNAUTHORIZED, {"error": "pairing_required"})
                     return
@@ -655,6 +715,7 @@ class SiteListener:
 
     def begin_shutdown(self) -> None:
         """Signal the listener to stop and revoke its session in its worker."""
+        self._session.invalidate()
         self._stop.set()
 
     def close(self) -> None:

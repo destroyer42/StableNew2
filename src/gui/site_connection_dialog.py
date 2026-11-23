@@ -398,9 +398,12 @@ class SiteConnectionDialog:
         ).pack(anchor="w")
         ttk.Label(
             frame,
-            text="Choose Connect on the private Site, or enter this code manually. An active desktop Site keeps its pairing. Idle pairings expire.",
+            text="Choose Connect on the private Site, or enter this code manually within 15 minutes. Authenticated activity keeps an eight-hour desktop inactivity lease alive.",
             wraplength=370,
         ).pack(anchor="w", pady=(5, 12))
+        self._lease_status = ttk.Label(frame, text="Desktop · Waiting for pairing", wraplength=370)
+        self._lease_status.pack(anchor="w")
+        ttk.Button(frame, text="Reconnect", command=self._reconnect).pack(anchor="w")
         ttk.Label(
             frame,
             text="The paired Site can read visible PromptPacks, build Previews and submit its own Preview to the queue. Choose Disconnect to stop sharing.",
@@ -482,6 +485,10 @@ class SiteConnectionDialog:
     def _copy(self, code: str) -> None:
         self.root.clipboard_clear()
         self.root.clipboard_append(code)
+
+    def _reconnect(self) -> None:
+        self.close()
+        self.open()
 
     def _share_packs(self, session: SiteSession, status: ttk.Label | None = None) -> None:
         if session.expired:
@@ -573,9 +580,22 @@ class SiteConnectionDialog:
             self.close()
             return
         if connection.session.expired:
-            self.close()
-            self._timer = self.root.after(1500, self._start)
+            if self.dialog is not None:
+                self._lease_status.configure(text="Desktop · Expired or revoked. Select Reconnect.")
+                if self.listener is not None:
+                    self.listener.close()
+                self.listener = None
+                self.connection = None
+            else:
+                self.close()
+                self._timer = self.root.after(1500, self._start)
             return
+        if self.dialog is not None:
+            lease = connection.session.connection_status()
+            minutes = (lease["remaining_ms"] + 59999) // 60000
+            self._lease_status.configure(
+                text=f"Desktop · {lease['state'].capitalize()} · Expires in {minutes} min"
+            )
         connection.tick()
         if connection is self.connection:
             self._timer = self.root.after(150, self._tick)

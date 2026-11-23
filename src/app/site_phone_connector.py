@@ -68,6 +68,10 @@ class PhoneGrantExpired(PhoneUnauthenticated):
     """The authenticated Worker no longer has this grant."""
 
 
+class PhoneVersionMismatch(PhoneConnectorError):
+    """The Site cannot enforce the current connection boundary."""
+
+
 @dataclass(frozen=True, repr=False)
 class PhoneEnrollment:
     id: str
@@ -101,6 +105,7 @@ class PhoneHttp:
         body: dict[str, Any] | _Reply | None = None,
     ) -> dict[str, Any]:
         headers = {
+            "X-StableNew-Connection": "2",
             "OAI-Sites-Authorization": f"Bearer {site_secret}",
             "Authorization": f"Bearer {credential}",
         }
@@ -122,6 +127,10 @@ class PhoneHttp:
             connection.request("POST", _ENDPOINT + action, body=data, headers=headers)
             response = connection.getresponse()
             raw = response.read(131073)
+            if response.status == 409 and raw == b'{"error":"connection_version_required"}':
+                raise PhoneVersionMismatch(
+                    "Update the Site and StableNew to matching connection versions."
+                )
             if response.status == 410 and raw == b'{"error":"phone_pairing_expired"}':
                 raise PhoneGrantExpired("The phone pairing expired or was revoked.")
             if response.status in {401, 403, 410}:
@@ -472,6 +481,7 @@ class SitePhoneConnector:
                     "enroll",
                     grant.site_secret,
                     grant.pending,
+                    instance=self._instance,
                     body={
                         "host": hashlib.sha256(grant.host_secret.encode()).hexdigest(),
                         "rating": grant.rating,
@@ -485,6 +495,9 @@ class SitePhoneConnector:
                 self._store.save(grant)
                 self._grant = grant
             self._poll(grant)
+        except PhoneVersionMismatch as error:
+            self._drop_presence()
+            self.status = str(error)
         except PhoneGrantExpired:
             self._drop_presence()
             try:
@@ -526,6 +539,10 @@ class SitePhoneConnector:
     def _poll(self, grant: PhoneGrant) -> None:
         started = time.monotonic()
         reply = self._request(grant, "poll", body={"claim": self._claim is None})
+        if reply.get("version") != 2:
+            raise PhoneVersionMismatch(
+                "Update the Site and StableNew to matching connection versions."
+            )
         session, ttl = reply.get("session"), reply.get("ttl")
         if (
             not isinstance(session, str)
