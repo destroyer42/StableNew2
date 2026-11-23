@@ -1,3 +1,5 @@
+"""Maintain the trained character LoRA manifest and resolve actor selections to weights."""
+
 from __future__ import annotations
 
 import json

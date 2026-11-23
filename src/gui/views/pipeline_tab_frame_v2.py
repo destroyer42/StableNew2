@@ -1,3 +1,5 @@
+"""Lay out Pipeline workspaces and bridge responsive presentation, stage controls, and working settings."""
+
 from __future__ import annotations
 
 import logging

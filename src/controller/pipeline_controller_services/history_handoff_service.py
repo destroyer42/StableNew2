@@ -1,3 +1,5 @@
+"""Hydrate History snapshots as normalized job records and coordinate replay handoff."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping

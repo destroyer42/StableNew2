@@ -15,12 +15,21 @@ from __future__ import annotations
 import hashlib
 import threading
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from src.assets.component_evidence import (
+    ARCH_QWEN_IMAGE_VAE,
+    inspect_component_file,
+    is_qwen_image_20b_fp8,
+)
 from src.image_backends.comfy_image_graphs import ComfyImageGraph
-from src.image_backends.comfy_qwen_image_profile import ComfyModelAsset, QwenImageProfile
+from src.image_backends.comfy_qwen_image_profile import (
+    ComfyModelAsset,
+    QwenImageProfile,
+    qwen_transformer_loader_name,
+)
 
 ModelFolders = Mapping[str, Sequence[Path]]
 
@@ -40,14 +49,20 @@ class ComfyInstallationStatus:
     #: Pinned filename -> the local file that satisfied it.
     paths: Mapping[str, str] = field(default_factory=dict)
     sha256_verified: bool = False
+    loader_names: Mapping[str, str] = field(default_factory=dict)
+    sha256: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def summary(self) -> str:
         return "installed" if self.ready else "; ".join(self.problems)
 
 
-def comfy_model_folders() -> dict[str, list[Path]]:
-    """The model folders of StableNew's managed Comfy launch configuration (reads settings, never runs Comfy)."""
+def comfy_model_folders(
+    extra_kinds: Sequence[str] = (), *, use_registered_launcher: bool = True
+) -> dict[str, list[Path]]:
+    """The model folders of StableNew's managed Comfy launch configuration (reads settings, never runs Comfy).
+
+    ``extra_kinds`` (``checkpoints``, ``loras``) adds the SDXL leg's folders; the default is the Qwen-Image set."""
 
     from src.video.comfy_process_manager import (
         build_default_comfy_process_config,
@@ -55,14 +70,18 @@ def comfy_model_folders() -> dict[str, list[Path]]:
     )
     from src.video.workflow_asset_integrity import model_folders
 
-    manager = get_global_comfy_process_manager()
+    manager = get_global_comfy_process_manager() if use_registered_launcher else None
     config = getattr(manager, "config", None) if manager is not None else None
     config = config or build_default_comfy_process_config()
     if config is None:
         raise ValueError("no StableNew-managed ComfyUI launch configuration is set")
-    return model_folders(
-        tuple(getattr(config, "command", ()) or ()), getattr(config, "working_dir", None)
+    command, working_dir = (
+        tuple(getattr(config, "command", ()) or ()),
+        getattr(config, "working_dir", None),
     )
+    if extra_kinds:
+        return model_folders(command, working_dir, extra_kinds=tuple(extra_kinds))
+    return model_folders(command, working_dir)
 
 
 def _sha256(path: Path) -> str:
@@ -117,17 +136,116 @@ def _check_asset(
     return str(found[0]), problems
 
 
+def _diffusion_files(model_name: str, folders: ModelFolders) -> tuple[tuple[str, Path], ...]:
+    loader_name = qwen_transformer_loader_name(model_name)
+    if not loader_name:
+        return ()
+    relative = Path(loader_name)
+    return tuple(
+        dict.fromkeys(
+            (str(relative), path.resolve())
+            for root in folders.get("diffusion_models", ())
+            if (path := root / relative).is_file()
+        )
+    )
+
+
+def has_structural_qwen_checkpoint(model_name: str) -> bool:
+    """Inspect just the selected checkpoint in the configured Comfy diffusion folders."""
+
+    try:
+        candidates = _diffusion_files(
+            model_name, comfy_model_folders(use_registered_launcher=False)
+        )
+        return len(candidates) == 1 and is_qwen_image_20b_fp8(
+            inspect_component_file(candidates[0][1])
+        )
+    except (OSError, ValueError):
+        return False
+
+
+def _check_structural_install(
+    profile: QwenImageProfile,
+    model_name: str,
+    folders: ModelFolders,
+    verify: bool,
+    hasher: Callable[[Path], str],
+) -> ComfyInstallationStatus:
+    encoder = profile.text_encoder
+    encoder_path, problems = _check_asset(encoder, folders, verify, hasher)
+    if encoder_path is None:
+        problems = [
+            "Qwen-Image needs the Qwen2.5-VL-7B text encoder "
+            f"({encoder.filename}, 9.38 GB) in models/text_encoders."
+        ]
+
+    paths: dict[str, str] = {}
+    names: dict[str, str] = {}
+    digests: dict[str, str] = {}
+    if encoder_path is not None:
+        paths[encoder.filename] = encoder_path
+
+    diffusion = _diffusion_files(model_name, folders)
+    if len(diffusion) != 1:
+        problems.append(
+            f"ComfyUI needs one unambiguous {model_name!r} in models/diffusion_models. "
+            "Add its existing checkpoint folder to diffusion_models in the managed Comfy extra_model_paths.yaml."
+        )
+    else:
+        loader_name, path = diffusion[0]
+        if not is_qwen_image_20b_fp8(inspect_component_file(path)):
+            problems.append(
+                f"{loader_name} does not match the standalone Qwen-Image 20B E4M3 FP8 layout."
+            )
+        else:
+            names["diffusion_model"] = loader_name
+            paths[loader_name] = str(path)
+
+    vae = profile.vae
+    vae_path, vae_problems = _check_asset(vae, folders, verify, hasher)
+    if vae_path is None:
+        aliases = {
+            candidate.resolve(): candidate.name
+            for root in folders.get("vae", ())
+            if root.is_dir()
+            for candidate in root.glob("*.safetensors")
+            if candidate.is_file()
+            and candidate.stat().st_size == vae.size
+            and inspect_component_file(candidate).architecture == ARCH_QWEN_IMAGE_VAE
+        }
+        if len(aliases) == 1:
+            loader_name = next(iter(aliases.values()))
+            vae_path, vae_problems = _check_asset(
+                replace(vae, filename=loader_name), folders, verify, hasher
+            )
+            names["vae"] = loader_name
+    problems.extend(vae_problems)
+    if vae_path is not None:
+        paths[names.setdefault("vae", vae.filename)] = vae_path
+
+    if verify and not problems:
+        digests = {name: cached_sha256(Path(path), hasher=hasher) for name, path in paths.items()}
+    return ComfyInstallationStatus(
+        not problems, tuple(problems), paths, verify and not problems, names, digests
+    )
+
+
 def check_installation(
     profile: QwenImageProfile,
     *,
     folders: ModelFolders | None = None,
+    model_name: str | None = None,
     verify_sha256: bool = False,
     hasher: Callable[[Path], str] = _sha256,
 ) -> ComfyInstallationStatus:
-    """Whether every pinned file of ``profile`` is installed exactly (size; optionally SHA-256). Never raises."""
+    """Check pinned assets and any structural selection without loading weights. Never raises."""
 
     try:
         resolved = comfy_model_folders() if folders is None else folders
+        if profile.structural_transformer:
+            return _check_structural_install(
+                profile, model_name or profile.model_name, resolved, verify_sha256, hasher
+            )
     except (OSError, ValueError) as exc:
         return ComfyInstallationStatus(False, (f"Local model identity cannot be verified: {exc}",))
     problems: list[str] = []
@@ -163,28 +281,85 @@ def _input_options(object_info: Mapping[str, Any], node_class: str, input_name: 
     return []
 
 
-def probe_object_info(graph: ComfyImageGraph, object_info: Any) -> tuple[str, ...]:
+def probe_object_info(
+    graph: ComfyImageGraph, object_info: Any, *, loader_names: Mapping[str, str] | None = None
+) -> tuple[str, ...]:
     """Problems that stop the frozen graph from running on this Comfy; empty when it can be queued."""
 
     if not isinstance(object_info, Mapping) or not object_info:
         return ("ComfyUI returned no node information",)
     profile = graph.profile
+    names = loader_names or {}
     problems = [
         f"ComfyUI has no '{node_class}' node (the pinned v0.38.0 runtime provides it)"
         for node_class in graph.required_node_classes
         if node_class not in object_info
     ]
-    for node_class, input_name, expected in (
-        ("UNETLoader", "unet_name", profile.diffusion_model.filename),
+    checks: tuple[tuple[str, str, str], ...] = (
+        ("UNETLoader", "unet_name", names.get("diffusion_model", profile.model_name)),
         ("CLIPLoader", "clip_name", profile.text_encoder.filename),
-        ("VAELoader", "vae_name", profile.vae.filename),
+        ("VAELoader", "vae_name", names.get("vae", profile.vae.filename)),
         ("CLIPLoader", "type", graph.clip_type),
-    ):
+    )
+    if profile.structural_transformer:
+        checks += (("UNETLoader", "weight_dtype", "fp8_e4m3fn"),)
+    for node_class, input_name, expected in checks:
         if node_class in object_info and expected not in _input_options(
             object_info, node_class, input_name
         ):
             problems.append(f"ComfyUI does not list '{expected}' for {node_class}.{input_name}")
     return tuple(problems)
+
+
+def listed_option(
+    object_info: Mapping[str, Any], node_class: str, input_name: str, value: str
+) -> str | None:
+    """The spelling ``/object_info`` lists for ``value`` (path separators compared as ``/``), or ``None`` if unlisted."""
+
+    wanted = str(value).replace("\\", "/")
+    for item in _input_options(object_info, node_class, input_name):
+        if str(item).replace("\\", "/") == wanted:
+            return str(item)
+    return None
+
+
+def _combo_has(
+    object_info: Mapping[str, Any], node_class: str, input_name: str, value: str
+) -> bool:
+    return listed_option(object_info, node_class, input_name, value) is not None
+
+
+def probe_sdxl_graph(
+    prompt_graph: Mapping[str, Any], required_classes: Sequence[str], object_info: Any
+) -> tuple[str, ...]:
+    """Problems that stop the built SDXL graph from running on this Comfy; empty when it can be queued.
+
+    Checks every node class the frozen graph can contain, then that each loader file and the sampler and scheduler names
+    of THIS job are values the running ComfyUI lists (``/object_info``). Nothing is repaired or substituted.
+    """
+
+    if not isinstance(object_info, Mapping) or not object_info:
+        return ("ComfyUI returned no node information",)
+    problems = [
+        f"ComfyUI has no '{node_class}' node (the pinned v0.38.0 runtime provides it)"
+        for node_class in required_classes
+        if node_class not in object_info
+    ]
+    checks = {
+        "CheckpointLoaderSimple": ("ckpt_name",),
+        "LoraLoader": ("lora_name",),
+        "VAELoader": ("vae_name",),
+        "KSampler": ("sampler_name", "scheduler"),
+    }
+    for node in prompt_graph.values():
+        node_class = str(node.get("class_type"))
+        for input_name in checks.get(node_class, ()):
+            value = node.get("inputs", {}).get(input_name)
+            if node_class in object_info and not _combo_has(
+                object_info, node_class, input_name, str(value)
+            ):
+                problems.append(f"ComfyUI does not list '{value}' for {node_class}.{input_name}")
+    return tuple(dict.fromkeys(problems))
 
 
 def _int(value: Any) -> int | None:
@@ -194,7 +369,7 @@ def _int(value: Any) -> int | None:
         return None
 
 
-def evaluate_floors(profile: QwenImageProfile, system_stats: Any) -> dict[str, Any]:
+def evaluate_floors(profile: Any, system_stats: Any) -> dict[str, Any]:
     """Check Comfy's own free VRAM and host RAM against the profile floors; returns the readings or raises."""
 
     stats = system_stats if isinstance(system_stats, Mapping) else {}
@@ -240,5 +415,7 @@ __all__ = [
     "clear_hash_cache",
     "comfy_model_folders",
     "evaluate_floors",
+    "listed_option",
     "probe_object_info",
+    "probe_sdxl_graph",
 ]

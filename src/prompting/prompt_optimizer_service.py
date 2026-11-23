@@ -1,3 +1,5 @@
+"""Gate SDXL prompt optimization by configuration and preserve prompts when disabled or unavailable."""
+
 from __future__ import annotations
 
 import logging

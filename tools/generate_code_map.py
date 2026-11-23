@@ -12,7 +12,12 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
+import os
+import stat
+import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +34,11 @@ def summarize(source: str) -> str:
         docstring = ast.get_docstring(ast.parse(source))
     except SyntaxError:
         return UNPARSEABLE
+    return summarize_docstring(docstring)
+
+
+def summarize_docstring(docstring: str | None) -> str:
+    """Render a summary from an already parsed module docstring."""
     if not docstring:
         return NO_DOCSTRING
     paragraph = " ".join(docstring.strip().split("\n\n", 1)[0].split())
@@ -73,14 +83,96 @@ def render(root: Path = ROOT) -> str:
     return "\n".join(lines) + "\n"
 
 
+def only_added_docstring(before: bytes, after: bytes) -> bool:
+    """Verify that changed source adds a module docstring to the original AST."""
+    original, updated = ast.parse(before), ast.parse(after)
+    if ast.get_docstring(original) is not None or not ast.get_docstring(updated):
+        return False
+    return ast.dump(original) == ast.dump(
+        ast.Module(body=updated.body[1:], type_ignores=updated.type_ignores)
+    )
+
+
+def is_checkout_file(path: Path, root: Path, directory_cache: dict[Path, bool]) -> bool:
+    """Check file type without following a symlink or Windows reparse point."""
+    for directory in reversed(path.relative_to(root).parents):
+        parent = root / directory
+        if parent == root:
+            continue
+        if parent not in directory_cache:
+            directory_cache[parent] = local_file_type(parent, stat.S_ISDIR)
+        if not directory_cache[parent]:
+            return False
+    return local_file_type(path, stat.S_ISREG)
+
+
+def local_file_type(path: Path, matches) -> bool:
+    try:
+        info = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    return matches(info.st_mode) and not (
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
+def verify_docstring_pass(base: str, root: Path = ROOT) -> tuple[int, list[str]]:
+    """Compare all current source modules with a local Git commit."""
+    git_env = {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
+    head = subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", "--verify", "--end-of-options", f"{base}^{{commit}}"],
+        text=True,
+        env=git_env,
+    ).strip()
+    archive = subprocess.check_output(
+        ["git", "-C", str(root), "archive", "--format=zip", head, "--", f"{SOURCE}/*.py"],
+        env=git_env,
+    )
+    current = {path.relative_to(root).as_posix(): path for path in module_files(root)}
+    changed = 0
+    directory_cache: dict[Path, bool] = {}
+    with zipfile.ZipFile(io.BytesIO(archive)) as prior:
+        original = {name for name in prior.namelist() if name.endswith(".py")}
+        problems = [
+            f"Module inventory changed: {path}" for path in sorted(original ^ current.keys())
+        ]
+        for path in sorted(original & current.keys()):
+            if not is_checkout_file(current[path], root, directory_cache):
+                problems.append(f"Could not verify a regular checkout file: {path}")
+                continue
+            before, after = prior.read(path), current[path].read_bytes()
+            if before.replace(b"\r\n", b"\n") == after.replace(b"\r\n", b"\n"):
+                continue
+            try:
+                if only_added_docstring(before, after):
+                    changed += 1
+                    continue
+            except SyntaxError:
+                pass
+            problems.append(f"Could not verify a docstring-only AST change: {path}")
+    return changed, problems
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--check",
         action="store_true",
         help="fail instead of writing when the committed map is stale",
     )
+    mode.add_argument(
+        "--verify-docstrings-from",
+        metavar="COMMIT",
+        help="verify a local docstring-only source pass",
+    )
     args = parser.parse_args(argv)
+    if args.verify_docstrings_from:
+        count, problems = verify_docstring_pass(args.verify_docstrings_from)
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        print(f"Verified {count} docstring-only module changes")
+        return int(bool(problems))
     target = ROOT / OUTPUT
     rendered = render()
     current = target.read_text(encoding="utf-8") if target.is_file() else None

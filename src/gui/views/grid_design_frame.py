@@ -1,6 +1,8 @@
 # Subsystem: Learning
 # Role: Axis designer for the Two-Axis Grid study type (expresses choices; planning lives in src/learning).
 
+"""Edit the two axes of a Learning grid and show proposed cell and image counts."""
+
 from __future__ import annotations
 
 import tkinter as tk

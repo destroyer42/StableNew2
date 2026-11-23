@@ -1,3 +1,5 @@
+"""Parse PromptPack text blocks into rows with negative prompts and inline resource references."""
+
 from __future__ import annotations
 
 import re

@@ -1,3 +1,5 @@
+"""Define serializable prompt source, intent, recommendation, and stage policy analysis contracts."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

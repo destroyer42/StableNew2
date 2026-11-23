@@ -1,3 +1,5 @@
+"""Define the face detection interface for adaptive subject assessment."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

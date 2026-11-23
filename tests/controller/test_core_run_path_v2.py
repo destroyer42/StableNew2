@@ -22,7 +22,7 @@ from src.controller.webui_connection_controller import (
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunResult
-from src.queue.job_model import Job
+from src.queue.job_model import Job, JobStatus
 from src.utils.logger import StructuredLogger, close_all_structured_loggers
 from tests.helpers.njr_factory import make_pipeline_njr
 
@@ -154,78 +154,68 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
         threaded=False,
         tmp_history=tmp_path / "job_history.json",
     )
-    controller.job_service.job_queue.clear()
+    service = controller.job_service
+    queue = service.job_queue
+    queue.clear()
 
-    start_event = threading.Event()
-    release_event = threading.Event()
+    started = threading.Event()
+    release = threading.Event()
     njr = _make_dummy_record()
-    queue_job_id = njr.job_id
 
     class ControlledAsyncRunner:
-        def __init__(self, job_queue, target_job_id: str) -> None:
-            self.job_queue = job_queue
-            self._target_job_id = target_job_id
+        def __init__(self) -> None:
             self._worker: threading.Thread | None = None
-            self._stop_event = threading.Event()
-            self._current_job: Job | None = None
+            self.current_job: Job | None = None
 
         def start(self) -> None:
-            if self.is_running():
-                return
-            self._stop_event.clear()
-            start_event.set()
-
             def _worker() -> None:
-                job = self.job_queue.get_job(self._target_job_id)
+                # This runner stands in for a ready backend. In the headless fixture the
+                # runtime may have applied a WebUI hold before the runner was installed.
+                queue.release_webui_dispatch()
+                job = queue.claim_next_job()
                 if job is None:
                     return
-                self._current_job = job
-                self.job_queue.mark_running(job.job_id)
-                release_event.wait(timeout=2.0)
-                self.job_queue.mark_completed(
-                    job.job_id,
-                    result={"job_id": job.job_id, "status": "completed"},
-                )
-                self._current_job = None
+                self.current_job = job
+                started.set()
+                if release.wait(timeout=2.0):
+                    queue.mark_completed(
+                        job.job_id,
+                        result={"job_id": job.job_id, "status": "completed"},
+                    )
+                self.current_job = None
 
-            self._worker = threading.Thread(
-                target=_worker, name="ControlledAsyncRunner", daemon=True
-            )
+            self._worker = threading.Thread(target=_worker, name="ControlledAsyncRunner")
             self._worker.start()
 
         def stop(self) -> None:
-            self._stop_event.set()
-            worker = self._worker
-            if worker is not None:
-                worker.join(timeout=1.0)
-            self._worker = None
-            self._current_job = None
+            release.set()
+            if self._worker is not None:
+                self._worker.join(timeout=2.0)
 
         def is_running(self) -> bool:
             return self._worker is not None and self._worker.is_alive()
 
         def cancel_current(self, *, return_to_queue: bool = False) -> None:
-            self._stop_event.set()
+            release.set()
 
-        @property
-        def current_job(self) -> Job | None:
-            return self._current_job
-
-    runner = ControlledAsyncRunner(controller.job_service.job_queue, queue_job_id)
+    runner = ControlledAsyncRunner()
     controller.pipeline_controller.replace_queue_runner(runner)
-    assert controller.job_service.runner is runner
+    assert service.runner is runner
     assert controller.pipeline_controller.get_job_execution_controller().get_runner() is runner
-    controller.job_service.auto_run_enabled = True  # Enable auto-run for this test
+    service.auto_run_enabled = True
 
-    start = time.monotonic()
-    controller.job_service.submit_njrs([njr])
-    duration = time.monotonic() - start
-    assert duration < 0.2
+    try:
+        start = time.monotonic()
+        service.submit_njrs([njr])
+        assert time.monotonic() - start < 0.2
 
-    assert start_event.wait(timeout=1.0)
-    release_event.set()
-    controller.job_service.runner.stop()
-    assert not controller.job_service.runner.is_running()
+        assert started.wait(timeout=1.0)
+        assert queue.get_job(njr.job_id).status is JobStatus.RUNNING
+    finally:
+        assert service.stop()
+
+    assert not runner.is_running()
+    assert queue.get_job(njr.job_id).status is JobStatus.COMPLETED
 
 
 def test_app_controller_wires_current_global_prompt_policy_into_pipeline_controller(

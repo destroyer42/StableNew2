@@ -1,3 +1,5 @@
+"""Build positive and negative prompt bucket rules from configured keyword tables."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,5 @@
+"""Probe WebUI readiness through configured endpoints and track backoff after hard connection failures."""
+
 from __future__ import annotations
 
 import logging

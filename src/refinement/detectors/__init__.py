@@ -1,3 +1,5 @@
+"""Expose the subject detector interface and its null and OpenCV implementations."""
+
 from __future__ import annotations
 
 from .base_detector import SubjectDetector

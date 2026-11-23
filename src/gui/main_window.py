@@ -1,6 +1,8 @@
 # V2 GUI entrypoint compatibility shim. Superseded implementations remain in
 # Git history rather than an active archive tree.
 
+"""Expose the GUI entrypoint wrapper used by existing callers and tests."""
+
 import sys
 import tkinter as tk
 from tkinter import ttk

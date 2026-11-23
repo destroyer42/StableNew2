@@ -31,6 +31,14 @@ MANAGED_COMFY_MANIFEST_PATH = (
 DEFAULT_MANAGED_COMFY_PORT = 8188
 _VERSION_PATTERN = re.compile(r'__version__\s*=\s*"([^"]+)"')
 PINNED_MEMORY_FLAG = "--disable-pinned-memory"
+CK_ATTENTION_FLAG = "--use-ck-attention"
+_DYNAMIC_VRAM_CONFLICTS = {
+    "--disable-dynamic-vram",
+    "--highvram",
+    "--gpu-only",
+    "--novram",
+    "--cpu",
+}
 
 
 class ManagedComfyContractError(ValueError):
@@ -301,7 +309,11 @@ def workflow_launch_requirements(
 
 
 def plan_comfy_launch(
-    command: Sequence[str], workdir: str | None, required: Sequence[str]
+    command: Sequence[str],
+    workdir: str | None,
+    required: Sequence[str],
+    *,
+    attention_profile: str | None = None,
 ) -> tuple[str, ...]:
     """Resolve and verify a new argv without executing the interpreter, ComfyUI or custom nodes."""
 
@@ -311,6 +323,13 @@ def plan_comfy_launch(
         raise ValueError(
             "External ComfyUI flags cannot be verified. Configure a StableNew-managed ComfyUI launch command."
         )
+
+    if attention_profile is not None:
+        if attention_profile == "baseline":
+            command = tuple(part for part in command if part != CK_ATTENTION_FLAG)
+        elif attention_profile == "ck":
+            required = (*required, CK_ATTENTION_FLAG)
+        verify_a14b_launch_args(with_required_flags(command, required), attention_profile)
 
     check_configured_pin = PINNED_MEMORY_FLAG in command
     if not required and not check_configured_pin:
@@ -336,6 +355,19 @@ def plan_comfy_launch(
     if not required:
         return tuple(command)
     return tuple(with_required_flags((str(Path(executable).absolute()), *command[1:]), required))
+
+
+def verify_a14b_launch_args(argv: Sequence[str], profile: str) -> None:
+    """Reject a launch that selects the other profile or can disable dynamic VRAM."""
+
+    if profile not in {"baseline", "ck"} or (CK_ATTENTION_FLAG in argv) != (profile == "ck"):
+        raise ValueError(f"ComfyUI launch flags do not match A14B attention profile '{profile}'.")
+    conflicts = sorted(_DYNAMIC_VRAM_CONFLICTS.intersection(argv))
+    if conflicts:
+        raise ValueError(
+            f"A14B attention profile '{profile}' requires dynamic VRAM. "
+            f"Remove conflicting launch flags {' '.join(conflicts)}."
+        )
 
 
 def _inspect_comfy_cli(command: Sequence[str], workdir: str | None) -> tuple[str, Path, set[str]]:

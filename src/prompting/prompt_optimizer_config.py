@@ -1,3 +1,5 @@
+"""Parse, validate, and serialize prompt optimization configuration."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass

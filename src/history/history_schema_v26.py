@@ -1,3 +1,5 @@
+"""Validate persisted v2.6 job history entries against required fields and allowed schema."""
+
 from __future__ import annotations
 
 from typing import Any

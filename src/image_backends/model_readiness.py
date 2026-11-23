@@ -21,13 +21,14 @@ from typing import Any
 
 from src.assets.component_evidence import (
     ARCH_UNRECOGNIZED_DIT,
+    ARCH_Z_IMAGE_DIT,
     ROLE_PREVIEW_DECODER,
     ROLE_TEXT_ENCODER,
     ROLE_TRANSFORMER,
     ROLE_VAE,
     ComponentEvidence,
 )
-from src.assets.flux_variant import VARIANT_FLUX1_DEV, classify_flux_variant
+from src.assets.flux_variant import classify_flux_variant
 
 CONTRACT = "model_readiness/1"
 QUALIFIED_STATUS = "qualified"
@@ -201,6 +202,15 @@ def _module_matches(role: str, required: int | None, module: CatalogModule) -> s
     return "match" if value == required else "mismatch"
 
 
+def z_image_variant_refusal() -> str:
+    from src.image_backends.forge_zimage_profile import ZIMAGE_PROFILE_V1
+
+    return (
+        "This Z-Image header cannot establish Turbo compatibility. "
+        f"Select the exact {ZIMAGE_PROFILE_V1.transformer.filename} checkpoint and its pinned modules."
+    )
+
+
 def assess_model_readiness(
     model_name: str,
     *,
@@ -306,21 +316,34 @@ def assess_model_readiness(
     if flux is not None:
         # PR-IMG-FLUX-130: name the layout class and say exactly why it is refused.
         from src.image_backends.forge_flux1_profile import (
+            FLUX1_DEV_PROFILE_V1,
             FLUX1_UNPROFILED_HINT,
+            flux1_profile_for_variant,
             flux_variant_refusal,
         )
 
         intro += f" Layout: {flux.label}."
-        tail = (
-            FLUX1_UNPROFILED_HINT if flux.variant == VARIANT_FLUX1_DEV
-            else f"{flux_variant_refusal(flux.variant)} {tail}"
-        )
+        profile = flux1_profile_for_variant((flux.variant, flux.bundled))
+        if profile is not None:
+            hint = (
+                FLUX1_UNPROFILED_HINT if profile is FLUX1_DEV_PROFILE_V1 else
+                f"{profile.display_name} requires {profile.profile_id} v{profile.version}. "
+                "Refresh the model inventory and rebuild the job."
+            )
+            tail = f"{hint} This profile requires {', '.join(asset.filename for asset in profile.modules)}."
+        else:
+            tail = f"{flux_variant_refusal(flux.variant)} {tail}"
+    elif checkpoint.architecture == ARCH_Z_IMAGE_DIT:
+        intro = z_image_variant_refusal()
+        tail = "The exact profile requires its pinned Qwen3-4B text encoder and VAE."
     elif checkpoint.architecture == ARCH_UNRECOGNIZED_DIT:
         intro = (
             "This is a transformer-only diffusion model of a layout that no runtime StableNew pins recognises "
             "(no bundled text encoder or VAE)."
         )
         tail = "It has no StableNew profile and is refused before any module write or generation."
+        if checkpoint.fact("declared_architecture") == "f3-image-small":
+            tail = "Owner decision Q3 keeps f3-image-small refused. Choose a checkpoint with a StableNew profile."
     if catalog is None or selected is None:
         missing = "the Forge module catalog" if catalog is None else "Forge's current module selection"
         return ModelReadiness(

@@ -1,3 +1,5 @@
+"""Collect and validate character training form inputs for queued LoRA training."""
+
 from __future__ import annotations
 
 import tkinter as tk

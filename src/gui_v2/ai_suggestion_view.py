@@ -99,7 +99,9 @@ def checked_suggestion(outcome: AssistOutcome, request: AssistRequest) -> Assist
 def result_provider_label(outcome: AssistOutcome) -> str:
     preview = outcome.details.get("trust_tier") == "preview"
     if outcome.details.get("provider") == "remote":
-        return REMOTE_PREVIEW_LABEL if preview else "Remote AI Assist"
+        label = REMOTE_PREVIEW_LABEL if preview else "Remote AI Assist"
+        model = outcome.details.get("model_name")
+        return f"{label} · Ollama · {model}" if isinstance(model, str) else label
     if outcome.details.get("fallback") is True:
         label = "Local fallback (remote unavailable)"
         return f"{label}. {PREVIEW_LABEL}" if preview else label
@@ -109,12 +111,18 @@ def result_provider_label(outcome: AssistOutcome) -> str:
 
 
 def provider_outcome_text(outcome: AssistOutcome) -> str:
-    if outcome.reason in ("remote_approval_required", "remote_identity_mismatch"):
-        return "Remote AI requires verification. No prompt change was made."
+    if outcome.reason == "remote_approval_required":
+        return "Select an approved Ollama model in AI Preview."
+    if outcome.reason == "remote_identity_mismatch":
+        return (
+            "The Ollama endpoint, version, or model identity did not match the selected approval."
+        )
     if outcome.details.get("fallback") is True:
         if outcome.code is OutcomeCode.GENERATION_ACTIVE:
             return "Remote unavailable. Local AI is blocked by generation or GPU quarantine."
         return f"Remote unavailable. {OUTCOME_TEXT[outcome.code]}"
+    if outcome.reason == "remote_response_lost":
+        return "The connection dropped after Ollama may have received the request. Try again when ready."
     if outcome.reason == "remote_generation_http_error":
         return "The remote worker returned an inference error. Authored work is unchanged."
     if outcome.reason == "remote_health_http_error":

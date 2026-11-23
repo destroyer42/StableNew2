@@ -1,3 +1,5 @@
+"""Bridge GUI run requests and witnessed previews to the queue submission worker."""
+
 from __future__ import annotations
 
 import threading

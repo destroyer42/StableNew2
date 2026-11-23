@@ -53,8 +53,8 @@ from src.ai_assist.preview import (
     trust_tier,
 )
 from src.ai_assist.remote import RemoteAssist, RemoteState
-from src.ai_assist.remote_preview import RemoteSettings
-from src.ai_assist.runtime import AiRuntime
+from src.ai_assist.remote_preview import RemoteApproval, RemoteSettings
+from src.ai_assist.runtime import AiRuntime, remote_output_detail
 from src.ai_assist.validators import validate_output
 from src.utils.thread_registry import get_thread_registry
 
@@ -250,6 +250,14 @@ class AiAssistService:
             return self._active is not None or (
                 self._worker is not None and self._worker.is_alive()
             )
+
+    def select_remote_model(self, approval: RemoteApproval) -> None:
+        with self._lock:
+            if self._closed or self.remote is None:
+                raise ValueError("remote service unavailable")
+            if self._active is not None or (self._worker is not None and self._worker.is_alive()):
+                raise ValueError("request active")
+            self.remote.select_model(approval)
 
     def run(self, request: AssistRequest, token: AiCancelToken | None = None) -> AssistOutcome:
         """Admit and run one request on the calling thread. Never raises for an operational failure."""
@@ -479,12 +487,20 @@ class AiAssistService:
             with self._lock:
                 if token.cancelled:
                     code, reason, suggestion = OutcomeCode.CANCELLED, "request_cancelled", None
-                elif self.remote.settings() != settings:
+                elif self.remote.settings().approval != settings.approval:
                     code, reason, suggestion = (
                         OutcomeCode.INTEGRITY_FAILED,
                         "remote_identity_mismatch",
                         None,
                     )
+            # The remote path had no runtime detail, so "Show runtime detail" was always empty for it. A refusal or
+            # malformed answer now keeps its bounded raw output in memory only (never recorded; see RuntimeDetail).
+            detail = (
+                remote_output_detail(result.stdout, reason)
+                if result.code is None
+                and code in (OutcomeCode.REFUSED_BY_MODEL, OutcomeCode.MALFORMED)
+                else None
+            )
             outcome = AssistOutcome(
                 code,
                 request.request_id,
@@ -492,6 +508,7 @@ class AiAssistService:
                 suggestion=suggestion,
                 elapsed_ms=result.elapsed_ms,
                 details=details,
+                runtime_detail=detail,
             )
             return self._record(
                 request, outcome, None, len(result.stdout) if result.code is None else None
@@ -521,7 +538,7 @@ class AiAssistService:
                     ),
                     None,
                 )
-            if self.remote.settings() != settings:
+            if self.remote.settings().approval != settings.approval:
                 return self._record(
                     request,
                     AssistOutcome(

@@ -1,8 +1,13 @@
 from src.api.webui_resource_service import WebUIResourceService
+from src.assets import AssetRegistry
+from src.assets.compatibility import ModelFamily
 from src.assets.picker_compatibility import VaeCatalog, vae_catalog
 from src.image_backends.forge_flux1_profile import flux_variant_refusal
+from src.image_backends.forge_zimage_profile import ZIMAGE_PROFILE_V1
+from src.image_backends.model_policy import resolve_model_policy
 from tests.assets import topology_fixtures_152 as fx
 from tests.assets.checkpoint_fixtures import tensor_checkpoint
+from tests.assets.flux_fixtures_130 import flux1_table, write_gguf
 
 
 def _tensor(shape):
@@ -93,3 +98,36 @@ def test_a_catalog_alias_cannot_substitute_another_file_for_a_rejected_vae():
     assert catalog.resolve("same") is None
     assert catalog.resolve("other.pt", recommendation=True) is None
     assert catalog.resolve("other", recommendation=True) is None
+
+
+def test_picker_explains_ambiguous_z_image_and_missing_flux_modules(tmp_path):
+    z_image = fx.safetensors(
+        tmp_path / "renamed-z.safetensors",
+        {
+            "layers.0.attention.qkv.weight": _tensor([2, 2]),
+            "layers.0.adaLN_modulation.weight": _tensor([2, 2]),
+            "cap_embedder.0.weight": _tensor([2]),
+        },
+    )
+    flux = write_gguf(tmp_path / "renamed-dev.gguf", flux1_table())
+
+    class Client:
+        def get_models(self):
+            return [{"model_name": path.name, "filename": str(path)} for path in (z_image, flux)]
+
+    registry = AssetRegistry(tmp_path, cache_path=tmp_path / "registry.json")
+    compatibility = registry.inspect_checkpoint(z_image).compatibility
+    assert compatibility.family is ModelFamily.Z_IMAGE
+    policy = resolve_model_policy(z_image.name, family_lookup=lambda _: compatibility)
+    assert policy.profile_ref is None
+    assert "cannot establish Turbo compatibility" in policy.refusal
+    assert (
+        resolve_model_policy(ZIMAGE_PROFILE_V1.transformer.filename).profile_ref
+        == ZIMAGE_PROFILE_V1.reference()
+    )
+
+    resources = WebUIResourceService(client=Client(), webui_root=str(tmp_path)).refresh_all()
+    models = {entry.name: entry.picker for entry in resources["models"]}
+    assert models[z_image.name].refusal == policy.refusal
+    assert "clip_l.safetensors" in models[flux.name].refusal
+    assert "t5xxl_fp8_e4m3fn.safetensors" in models[flux.name].refusal

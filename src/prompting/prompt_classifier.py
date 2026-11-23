@@ -1,3 +1,5 @@
+"""Classify prompt chunks into polarity-specific buckets by ordered rules or keyword scores."""
+
 from __future__ import annotations
 
 from src.prompting.prompt_bucket_rules import PromptBucketRules

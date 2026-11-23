@@ -1,3 +1,5 @@
+"""Register video adapters, resolve them by backend or stage, and list task-compatible backends."""
+
 from __future__ import annotations
 
 from src.video.comfy_workflow_backend import ComfyWorkflowVideoBackend

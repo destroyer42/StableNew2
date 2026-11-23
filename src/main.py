@@ -1,4 +1,6 @@
 # --- Standard library imports ---
+"""Start the desktop application and coordinate GUI bootstrap, managed WebUI readiness, and shutdown."""
+
 import atexit
 import builtins
 import importlib
@@ -586,18 +588,49 @@ def _install_file_access_hooks(logger: FileAccessLogger) -> None:
 # --- logging bypass ---
 
 
-def _install_flux_variant_lookup() -> None:
-    """Let the compiler see a checkpoint's recorded FLUX layout (PR-IMG-FLUX-130).
+def _install_image_family_lookups() -> None:
+    """Supply new work with local checkpoint evidence without hashing model files."""
 
-    The lookup reads only ``AssetRegistry``'s persisted snapshot, lazily on first use (no scan, no hashing). Installed
-    here, at the application entry point, so tests and other hosts stay hermetic: without it the compiler stamps no FLUX.1
-    profile and the Forge dependency gate refuses the unprofiled transformer instead.
-    """
-
+    from src.assets import AssetRegistry
+    from src.assets.compatibility import CompatibilityStatus, ModelFamily
+    from src.image_backends.comfy_image_readiness import has_structural_qwen_checkpoint
+    from src.image_backends.comfy_qwen_image_profile import (
+        install_qwen_structure_lookup,
+        qwen_transformer_loader_name,
+    )
     from src.image_backends.forge_flux1_profile import install_variant_lookup
     from src.image_backends.model_policy import RegistryFamilyLookup, registry_variant_lookup
 
-    install_variant_lookup(registry_variant_lookup(RegistryFamilyLookup()))
+    registry = AssetRegistry()
+    family_lookup = RegistryFamilyLookup(registry)
+
+    def is_qwen_20b(model_name: str) -> bool:
+        profile = family_lookup(model_name)
+        if profile is not None and profile.status is CompatibilityStatus.CONFLICTING:
+            return False
+        architecture = getattr(profile, "checkpoint_architecture", None)
+        if profile is not None and architecture not in (None, "unrecognized"):
+            return profile.family is ModelFamily.QWEN_IMAGE and architecture == "qwen_image_20b_fp8"
+        relative = qwen_transformer_loader_name(model_name)
+        if not relative:
+            return False
+        if registry.webui_root is None:
+            return has_structural_qwen_checkpoint(model_name)
+        candidate = registry.webui_root / "models" / "Stable-diffusion" / relative
+        try:
+            if not candidate.is_file():
+                return has_structural_qwen_checkpoint(model_name)
+            inspection = registry.inspect_checkpoint(candidate)
+        except (OSError, ValueError):
+            return False
+        return (
+            inspection.compatibility.status is CompatibilityStatus.RESOLVED
+            and inspection.compatibility.family is ModelFamily.QWEN_IMAGE
+            and inspection.compatibility.checkpoint_architecture == "qwen_image_20b_fp8"
+        )
+
+    install_variant_lookup(registry_variant_lookup(family_lookup))
+    install_qwen_structure_lookup(is_qwen_20b)
 
 
 def main() -> None:
@@ -628,7 +661,7 @@ def main() -> None:
         _install_file_access_hooks(file_access_logger)
 
     logging.info("Starting StableNew V2 GUI (MainWindowV2)")
-    _install_flux_variant_lookup()
+    _install_image_family_lookups()
     # Don't bootstrap WebUI synchronously - do it asynchronously after GUI loads
     webui_manager = None
 

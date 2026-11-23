@@ -1,3 +1,5 @@
+"""Provide a subject detector that always reports no face detections."""
+
 from __future__ import annotations
 
 from pathlib import Path

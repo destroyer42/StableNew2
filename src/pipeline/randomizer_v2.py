@@ -1,3 +1,5 @@
+"""Adapt pipeline settings to randomization plans and expand or count configuration variants."""
+
 from __future__ import annotations
 
 from copy import deepcopy

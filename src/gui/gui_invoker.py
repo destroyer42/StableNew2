@@ -1,3 +1,5 @@
+"""Marshal worker-thread calls through a queue serviced by the Tk main loop."""
+
 from __future__ import annotations
 
 import logging

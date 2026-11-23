@@ -210,6 +210,7 @@ def test_worker_is_off_tk_single_flight_and_never_publishes_stale(operator, monk
 def test_operator_preview_to_run_is_frozen_and_admits_once(operator, monkeypatch):
     from unittest.mock import Mock
 
+    from src.image_backends import comfy_qwen_image_profile
     from src.learning.execution_controller import LearningExecutionController
 
     operator.select()
@@ -221,6 +222,11 @@ def test_operator_preview_to_run_is_frozen_and_admits_once(operator, monkeypatch
     (operator.view._resolve_packs_dir() / "study.json").write_text("now invalid")
     monkeypatch.setattr(
         AssetRegistry, "cached_snapshot", lambda *_: pytest.fail("live registry at Run")
+    )
+    monkeypatch.setattr(
+        comfy_qwen_image_profile,
+        "_structural_lookup",
+        lambda *_: pytest.fail("live Qwen structure lookup at Run"),
     )
     monkeypatch.setattr(AssetRegistry, "refresh", lambda *a, **k: pytest.fail("refresh at Run"))
     monkeypatch.setattr(

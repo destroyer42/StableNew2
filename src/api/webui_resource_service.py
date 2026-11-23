@@ -1,3 +1,5 @@
+"""Refresh WebUI picker resources such as models, samplers, and schedulers as a normalized snapshot."""
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -11,11 +13,19 @@ from src.api.client import DEFAULT_SCHEDULERS, SDWebUIClient, normalize_schedule
 from src.api.webui_resources import DEFAULT_CLIENT, WebUIResource
 from src.api.webui_resources import WebUIResourceService as BaseWebUIResourceService
 from src.assets.compatibility import CompatibilityProfile, CompatibilityStatus, ModelFamily
-from src.assets.component_evidence import ComponentEvidence
+from src.assets.component_evidence import (
+    ARCH_QWEN_IMAGE_DIT,
+    ARCH_Z_IMAGE_DIT,
+    ComponentEvidence,
+    is_qwen_image_20b_fp8,
+)
 from src.assets.flux_variant import classify_flux_variant
 from src.assets.picker_compatibility import PickerEvidence
 from src.assets.registry import AssetRegistry
-from src.image_backends.model_policy import resolve_model_policy
+from src.image_backends.comfy_image_readiness import check_installation
+from src.image_backends.comfy_qwen_image_profile import QwenImageProfile
+from src.image_backends.forge_flux1_profile import Flux1Profile
+from src.image_backends.model_policy import resolve_model_policy, resolve_model_profile_for_policy
 from src.image_backends.model_readiness import assess_model_readiness
 
 logger = logging.getLogger(__name__)
@@ -123,6 +133,19 @@ class WebUIResourceService(BaseWebUIResourceService):
                     if variant is not None
                     else None
                 )
+                if evidence.component.architecture == ARCH_Z_IMAGE_DIT:
+                    compatibility = CompatibilityProfile(
+                        CompatibilityStatus.RESOLVED, ModelFamily.Z_IMAGE, (), ARCH_Z_IMAGE_DIT
+                    )
+                elif evidence.component.architecture == ARCH_QWEN_IMAGE_DIT:
+                    architecture = (
+                        "qwen_image_20b_fp8"
+                        if is_qwen_image_20b_fp8(evidence.component)
+                        else ARCH_QWEN_IMAGE_DIT
+                    )
+                    compatibility = CompatibilityProfile(
+                        CompatibilityStatus.RESOLVED, ModelFamily.QWEN_IMAGE, (), architecture
+                    )
                 policy = resolve_model_policy(
                     entry.name, family_lookup=lambda _, compatibility=compatibility: compatibility
                 )
@@ -137,6 +160,26 @@ class WebUIResourceService(BaseWebUIResourceService):
                 refusal = policy.refusal or (
                     " ".join(readiness.reasons) if readiness.blocks_dispatch else ""
                 )
+                profile = resolve_model_profile_for_policy(policy)
+                if isinstance(profile, QwenImageProfile) and profile.structural_transformer:
+                    installation = check_installation(profile, model_name=entry.name)
+                    if not installation.ready:
+                        refusal = installation.summary
+                elif isinstance(profile, Flux1Profile) and variant is not None:
+                    if variant.precision not in profile.transformer_precisions:
+                        refusal = (
+                            f"{profile.display_name} cannot use {variant.precision} precision. "
+                            f"Select a transformer in one of: {', '.join(profile.transformer_precisions)}."
+                        )
+                    missing = [
+                        asset.filename
+                        for asset in profile.modules
+                        if not (
+                            self.root_path / "models" / asset.models_subdir / asset.filename
+                        ).is_file()
+                    ]
+                    if missing and not refusal:
+                        refusal = f"{profile.display_name} needs {', '.join(missing)} in the Forge model folders."
                 evidence = replace(evidence, refusal=refusal)
             result.append(replace(entry, picker=replace(evidence, path=path)))
         return result

@@ -1,3 +1,5 @@
+"""Remove repeated prompt chunks using normalized keys and report the dropped text."""
+
 from __future__ import annotations
 
 from src.prompting.prompt_normalizer import build_dedupe_key

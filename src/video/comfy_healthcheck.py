@@ -1,3 +1,5 @@
+"""Probe ComfyUI health and wait for system statistics and object metadata readiness."""
+
 from __future__ import annotations
 
 import time

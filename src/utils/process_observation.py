@@ -1,6 +1,8 @@
-"""Read-only snapshots of a bounded child's owned container; no lifecycle authority."""
+"""Read-only observations scoped to owned processes and containers."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from ipaddress import IPv4Address, IPv6Address, ip_address
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,3 +53,44 @@ class OwnedTreeEvidence:
     io_other_bytes: int
     complete: bool
     problems: tuple[str, ...] = ()
+
+
+def observe_owned_tcp_listener(
+    root_pid: int,
+    addresses: Sequence[IPv4Address | IPv6Address],
+    port: int,
+    *,
+    include_descendants: bool,
+) -> IPv4Address | IPv6Address | None:
+    """Return the first endpoint whose matching sockets all belong to the live owned tree."""
+
+    import psutil
+
+    if root_pid <= 0:
+        return None
+    try:
+        root = psutil.Process(root_pid)
+        # The contained Windows venv launcher can start a serving interpreter as a child.
+        tree = [root, *root.children(recursive=True)] if include_descendants else [root]
+        owned = {member.pid for member in tree if member.is_running()}
+        listeners = [
+            (ip_address(connection.laddr.ip), connection.pid)
+            for connection in psutil.net_connections(kind="tcp")
+            if connection.status == psutil.CONN_LISTEN and connection.laddr.port == port
+        ]
+        for address in addresses:
+            owners = {
+                owner
+                for listener, owner in listeners
+                if listener == address
+                or (
+                    address.is_loopback
+                    and listener.is_unspecified
+                    and listener.version == address.version
+                )
+            }
+            if owners and owners <= owned:
+                return address
+    except psutil.Error as exc:
+        raise OSError("Could not observe listeners for the managed launch.") from exc
+    return None

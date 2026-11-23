@@ -1,3 +1,5 @@
+"""Build experiment identities and bounded human-readable labels for Learning artifacts."""
+
 from __future__ import annotations
 
 from datetime import datetime

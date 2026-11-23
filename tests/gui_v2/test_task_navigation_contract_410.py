@@ -8,7 +8,7 @@ import pytest
 
 from src.gui.view_contracts import task_navigation_contract as nav
 
-NINE_TAB_IDS = {
+TAB_IDS = {
     "prompt",
     "pipeline",
     "learning",
@@ -18,14 +18,15 @@ NINE_TAB_IDS = {
     "character_training",
     "svd",
     "video_workflow",
+    "storyboard",
 }
 
 
 def test_every_tab_id_appears_in_exactly_one_group_exactly_once() -> None:
     listed = [tab_id for group in nav.TASK_GROUPS for tab_id in group.tab_ids]
-    assert sorted(listed) == sorted(NINE_TAB_IDS)
-    assert len(listed) == len(set(listed)) == 9
-    assert set(nav.all_tab_ids()) == NINE_TAB_IDS
+    assert sorted(listed) == sorted(TAB_IDS)
+    assert len(listed) == len(set(listed)) == 10
+    assert set(nav.all_tab_ids()) == TAB_IDS
 
 
 def test_groups_and_destinations_keep_their_stable_ids_and_order() -> None:
@@ -33,7 +34,7 @@ def test_groups_and_destinations_keep_their_stable_ids_and_order() -> None:
     assert [(group.group_id, group.tab_ids) for group in nav.TASK_GROUPS] == [
         ("create", ("prompt", "pipeline")),
         ("edit", ("review", "photo_optimize")),
-        ("motion", ("video_workflow", "svd", "movie_clips")),
+        ("motion", ("video_workflow", "storyboard", "svd", "movie_clips")),
         ("learn", ("learning",)),
         ("advanced", ("character_training",)),
     ]
@@ -70,13 +71,16 @@ def test_visible_names_are_spelled_correctly() -> None:
     assert "Optomize" not in " ".join(labels.values())
 
 
-def test_the_legacy_order_is_the_nine_ids_and_matches_historic_indices() -> None:
-    assert set(nav.LEGACY_TAB_ORDER) == NINE_TAB_IDS
-    assert len(nav.LEGACY_TAB_ORDER) == 9
+def test_the_legacy_order_is_the_ten_ids_and_matches_historic_indices() -> None:
+    assert set(nav.LEGACY_TAB_ORDER) == TAB_IDS
+    assert len(nav.LEGACY_TAB_ORDER) == 10
     assert nav.legacy_tab_id_for_index(0) == "prompt"
     assert nav.legacy_tab_id_for_index(1) == "pipeline"
     assert nav.legacy_tab_id_for_index(8) == "video_workflow"
-    for bad in (-1, 9, 100, None, "1", 1.0, True, [], {}):
+    assert (
+        nav.legacy_tab_id_for_index(9) == "storyboard"
+    )  # appended: historic indices 0-8 keep their meaning
+    for bad in (-1, 10, 100, None, "1", 1.0, True, [], {}):
         assert nav.legacy_tab_id_for_index(bad) is None
 
 
@@ -92,7 +96,7 @@ def test_default_tab_for_group_picks_the_first_available_destination() -> None:
     assert nav.default_tab_for_group("nonsense") is None
 
 
-ALL = set(NINE_TAB_IDS)
+ALL = set(TAB_IDS)
 
 
 @pytest.mark.parametrize(

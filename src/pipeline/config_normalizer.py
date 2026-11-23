@@ -1,3 +1,5 @@
+"""Normalize legacy and flat stage settings into the canonical nested pipeline config."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

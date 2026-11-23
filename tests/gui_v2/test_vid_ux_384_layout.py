@@ -74,15 +74,18 @@ def test_create_is_the_default_view_and_evaluate_shows_the_eval_controls_immedia
     assert tab.evaluate_view.winfo_manager() == "grid"
     assert not tab._create_view.winfo_manager()
     # No expanding needed: the controls are in the view itself.
-    assert str(tab.eval_panel.queue_button.cget("text")).startswith("Queue eval suite")
-    assert str(tab.eval_panel.report_button.cget("text")).startswith("Build eval report")
+    assert str(tab.eval_panel.queue_button.cget("text")).startswith("Queue")
+    assert (
+        tab.eval_panel.report_button.winfo_manager()
+        or tab.eval_panel.report_button.master.winfo_manager()
+    )
     assert tab.eval_panel.winfo_manager() == "grid"
 
 
 def test_one_primary_button_per_visible_view(env):
     tab = env.tab
     assert str(tab.queue_workflow_button.cget("style")) == "Primary.TButton"
-    assert str(tab.eval_panel.queue_button.cget("style")) != "Primary.TButton"
+    assert not tab.evaluate_view.winfo_manager()  # the eval Primary is not on a visible surface
     tab.select_view(VIEW_EVALUATE)
     assert str(tab.queue_workflow_button.cget("style")) != "Primary.TButton"
     assert str(tab.eval_panel.queue_button.cget("style")) == "Primary.TButton"

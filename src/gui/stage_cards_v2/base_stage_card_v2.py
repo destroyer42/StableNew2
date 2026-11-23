@@ -1,3 +1,5 @@
+"""Provide the shared Tk stage card header, collapsible body, and configuration hooks."""
+
 from __future__ import annotations
 
 import tkinter as tk

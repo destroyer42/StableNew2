@@ -1,3 +1,5 @@
+"""Present Pipeline working settings, PromptPack selection, base generation values, and run controls."""
+
 from __future__ import annotations
 
 import json

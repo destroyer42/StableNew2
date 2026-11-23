@@ -1,3 +1,5 @@
+"""Present workflow video settings, source selection, previews, and queue admission controls."""
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -742,12 +744,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             view.eval_host,
             get_controller=self._experiment_controller,
             output_dir=lambda: str(getattr(self.app_controller, "output_dir", "") or "output"),
+            eval_plans_dir=self._configured_eval_plans_dir,
             show_prompts=lambda: (
                 str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw") != "sfw"
             ),
             on_queued=self._on_batch_queued_refresh_only,
         )
         self.eval_panel.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+
+    def _configured_eval_plans_dir(self) -> str:
+        manager = getattr(self.app_controller, "_config_manager", None)
+        getter = getattr(manager, "get_setting", None)
+        value = getter("eval_plans_dir", "") if callable(getter) else ""
+        return value if isinstance(value, str) else ""
 
     def _build_details_section(self, body: ttk.Frame) -> None:
         """Row 8: what the job will use, where its output goes, and the reference text for the tab."""
@@ -1643,13 +1652,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             self.evaluate_view.grid_remove()
             self._create_view.grid()
-        # One Primary per visible surface: Queue video is Create's; the eval queue is Evaluate's.
+        # One Primary per visible surface: Queue video is Create's; the eval panel's own Queue is Evaluate's.
         self.queue_workflow_button.configure(
             style="Primary.TButton" if view_id == VIEW_CREATE else "Dark.TButton"
         )
-        eval_queue = getattr(getattr(self, "eval_panel", None), "queue_button", None)
-        if eval_queue is not None:
-            eval_queue.configure(style="Primary.TButton" if view_id == VIEW_EVALUATE else "TButton")
 
     def _content_mode(self) -> str:
         return str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw")

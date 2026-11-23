@@ -1,3 +1,5 @@
+"""Manage a Linux cgroup v2 process container with enforced limits and teardown."""
+
 from __future__ import annotations
 
 import logging

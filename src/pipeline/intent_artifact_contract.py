@@ -1,3 +1,5 @@
+"""Canonicalize and hash the saved intent artifact used for provenance and replay."""
+
 from __future__ import annotations
 
 import hashlib

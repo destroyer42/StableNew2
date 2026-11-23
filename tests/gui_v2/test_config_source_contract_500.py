@@ -92,7 +92,7 @@ def test_pack_config_buttons_say_which_side_is_written() -> None:
     assert "changes the pack files" in contract.SAVE_PACK_CONFIG_TIP
 
 
-def test_nine_stable_tab_identities_and_legacy_order_are_unchanged() -> None:
+def test_ten_stable_tab_identities_and_legacy_order_are_unchanged() -> None:
     assert LEGACY_TAB_ORDER == (
         "prompt",
         "pipeline",
@@ -103,5 +103,6 @@ def test_nine_stable_tab_identities_and_legacy_order_are_unchanged() -> None:
         "character_training",
         "svd",
         "video_workflow",
+        "storyboard",
     )
     assert sorted(all_tab_ids()) == sorted(LEGACY_TAB_ORDER)

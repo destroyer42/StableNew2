@@ -43,6 +43,7 @@ class AiSuggestionDialog(tk.Toplevel):
         on_variety: Callable[[str], None] | None = None,
         on_add_value: Callable[[int], None] | None = None,
         variety_problem: str = "",
+        variety_slots: str = "",
     ) -> None:
         super().__init__(master)
         self.title("AI suggestion review")
@@ -99,6 +100,10 @@ class AiSuggestionDialog(tk.Toplevel):
             ttk.Label(variety, text=VARIETY_NOTICE, wraplength=740, justify="left").pack(
                 fill="x", padx=4, pady=2
             )
+            self.variety_slots_var = tk.StringVar(value=variety_slots)
+            ttk.Label(
+                variety, textvariable=self.variety_slots_var, wraplength=740, justify="left"
+            ).pack(fill="x", padx=4, pady=2)
             row = ttk.Frame(variety)
             row.pack(fill="x", padx=4, pady=2)
             ttk.Label(row, text="Goal:").pack(side="left")

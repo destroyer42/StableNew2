@@ -1,3 +1,5 @@
+"""Coordinate queued video workflows, one-variable experiments, batches, and motion preparation."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
@@ -6,6 +8,7 @@ from typing import Any
 
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
+from src.controller.storyboard_submission_service import build_storyboard_service
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.video_workflow_mixins import VideoWorkflowMixins
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
@@ -58,6 +61,7 @@ class VideoWorkflowController(VideoWorkflowMixins):
         )
         self._experiments = VideoWorkflowExperimentService(self._njr_builder)
         self._batches = VideoWorkflowBatchService(self._njr_builder)
+        self.storyboards = build_storyboard_service(self)  # the Storyboard tab's submission service
 
     def list_workflow_specs(self) -> list[dict[str, Any]]:
         specs = latest_spec_per_workflow(
@@ -170,8 +174,6 @@ class VideoWorkflowController(VideoWorkflowMixins):
             "source_preparation": dict(built.source_preparation),
         }
         return job_ids[0]
-
-    # ---------------------------------------------------------------- one-variable experiments
 
     def resolve_experiment_baseline(self, form_data: dict[str, Any], variable_name: str) -> Any:
         """The current resolved effective value of one declared control."""

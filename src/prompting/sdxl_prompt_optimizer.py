@@ -1,3 +1,5 @@
+"""Bucket, deduplicate, and reorder SDXL prompt chunks while preserving network anchors and attention scope."""
+
 from __future__ import annotations
 
 import re

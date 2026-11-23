@@ -1,4 +1,6 @@
 # Used by tests and entrypoint contract
+"""Compose the V2 Tk window, workspace tabs, runtime wiring, and operator status controls."""
+
 from __future__ import annotations
 
 import logging
@@ -44,6 +46,7 @@ from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
+from src.gui.views.storyboard_tab_frame_v2 import StoryboardTabFrameV2
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.gui.widgets.task_navigation_bar_v2 import (
@@ -416,6 +419,17 @@ class MainWindowV2:
             _make_video_workflow,
         )
         self._restore_video_workflow_tab_state()
+
+        def _make_storyboard(parent: tk.Misc) -> StoryboardTabFrameV2:
+            return StoryboardTabFrameV2(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.storyboard_tab = self.add_tab(
+            "storyboard", self._support_tab_title("storyboard", "Storyboard"), _make_storyboard
+        )
 
         # PR-GUI-410: task-first navigation over the one notebook (the stored tab is restored after the panels attach)
         self._install_task_navigation()
@@ -1040,6 +1054,10 @@ class MainWindowV2:
                 self.video_workflow_tab.app_state = self.app_state
             except Exception:
                 pass
+        storyboard_tab = getattr(self, "storyboard_tab", None)
+        if isinstance(storyboard_tab, StoryboardTabFrameV2):
+            storyboard_tab.app_controller = controller
+            storyboard_tab.app_state = self.app_state
         if hasattr(self, "movie_clips_tab"):
             try:
                 self.movie_clips_tab.app_controller = controller

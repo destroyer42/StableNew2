@@ -1,6 +1,8 @@
 # Subsystem: Learning
 # Role: Read-only card describing exactly what a frozen experiment Preview would submit.
 
+"""Display the frozen Learning preview headline, plan details, candidate prompts, and stale-state warnings."""
+
 from __future__ import annotations
 
 import tkinter as tk

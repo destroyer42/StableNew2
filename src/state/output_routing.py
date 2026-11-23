@@ -1,3 +1,5 @@
+"""Classify output routes, resolve artifact locations, and reconcile legacy output layouts."""
+
 from __future__ import annotations
 
 import json

@@ -210,7 +210,7 @@
     "model_comparison": {
      "adapted_negative_prompt": "global negative, bad",
      "adapted_positive_prompt": "(red dress:1.2) in forest BREAK soft window light",
-     "arm_sha256": "997167bb73b222291c990fea0e1472f11988947942c1e220dddd9af497b2d907",
+     "arm_sha256": "bcb26f341685ff95b578a177ebf45d053058099b207a646a456b8d1c2533761e",
      "candidate_index": 0,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -312,7 +312,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {
@@ -785,7 +786,7 @@
     "model_comparison": {
      "adapted_negative_prompt": "global negative, bad",
      "adapted_positive_prompt": "(red dress:1.2) in forest BREAK soft window light",
-     "arm_sha256": "997167bb73b222291c990fea0e1472f11988947942c1e220dddd9af497b2d907",
+     "arm_sha256": "bcb26f341685ff95b578a177ebf45d053058099b207a646a456b8d1c2533761e",
      "candidate_index": 0,
      "causal_one_variable": false,
      "checkpoint_evidence": {},
@@ -887,7 +888,8 @@
       "contract": {
        "allowed_backends": [
         "forge_webui",
-        "a1111_webui"
+        "a1111_webui",
+        "comfyui"
        ],
        "controls": {
         "cfg_scale": {

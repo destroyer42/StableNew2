@@ -54,7 +54,10 @@ from src.video.workflow_input_integrity import (
     verify_exact_motion,
     workflow_identity,
 )
-from src.video.workflow_source_preparation import prepare_declared_workflow_source
+from src.video.workflow_source_preparation import (
+    passthrough_declared_workflow_source,
+    prepare_declared_workflow_source,
+)
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 # Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
@@ -478,12 +481,16 @@ class VideoWorkflowNjrBuilder:
         *,
         shared: SharedFrozenInputs | None = None,
         prompt_per_segment: bool = False,
+        exact_source: bool = False,
     ) -> FrozenVideoInputs:
         """Validate, then freeze the admission-scoped inputs (a random seed becomes concrete).
 
         ``shared`` lets a batch reuse one hash of the source-independent inputs for every source;
         omitted, they are frozen here exactly as a single submission always did.
-        ``prompt_per_segment`` is set only by sequence admission (see ``capability_errors``)."""
+        ``prompt_per_segment`` is set only by sequence admission (see ``capability_errors``).
+        ``exact_source`` is set only for a storyboard take's handoff frame: when the workflow
+        declares a preparation policy the frame is recorded as is (it must already be the target
+        size) instead of being cover-cropped and re-saved."""
 
         self._require_valid(
             source_image_path, form_data, prompt_per_segment=prompt_per_segment
@@ -499,11 +506,16 @@ class VideoWorkflowNjrBuilder:
             "source_preparation"
         )
         if isinstance(preparation_policy, Mapping):
-            prepared = prepare_declared_workflow_source(
-                source_path=source_image_path,
-                output_root=self._output_dir(),
-                policy=preparation_policy,
-            )
+            if exact_source:
+                prepared = passthrough_declared_workflow_source(
+                    source_path=source_image_path, policy=preparation_policy
+                )
+            else:
+                prepared = prepare_declared_workflow_source(
+                    source_path=source_image_path,
+                    output_root=self._output_dir(),
+                    policy=preparation_policy,
+                )
             source_preparation = prepared.to_stage_config()
             prepared_source_path = prepared.prepared_image_path
 

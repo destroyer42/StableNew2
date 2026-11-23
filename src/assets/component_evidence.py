@@ -244,6 +244,10 @@ def _qwen_image_dit(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) 
         "layers": _indices(shapes, r"^transformer_blocks\.(\d+)\."),
         "input_channels": img_in[1],
         "joint_input_dim": txt_in[1],
+        "additional_conditioning": any(
+            name.startswith(("time_text_embed.addition_", "time_text_embed.additional_"))
+            for name in shapes
+        ),
         "required_text_encoder_hidden_size": txt_in[1],
         "tensor_count": len(shapes),
         "bundled_text_encoder_or_vae": bundled,
@@ -252,6 +256,23 @@ def _qwen_image_dit(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) 
         facts["required_vae_latent_channels"] = img_in[1] // _PATCH_FACTOR
     return ComponentEvidence(
         ROLE_TRANSFORMER if not bundled else ROLE_BUNDLED, ARCH_QWEN_IMAGE_DIT, facts, dependency_bearing=not bundled
+    )
+
+
+def is_qwen_image_20b_fp8(component: ComponentEvidence) -> bool:
+    """The standalone 20B text-to-image FP8 layout accepted by the stock Comfy graph."""
+
+    return (
+        component.architecture == ARCH_QWEN_IMAGE_DIT
+        and component.role == ROLE_TRANSFORMER
+        and component.fact("hidden_size") == 3072
+        and component.fact("layers") == 60
+        and component.fact("required_text_encoder_hidden_size") == 3584
+        and component.fact("required_vae_latent_channels") == 16
+        and component.fact("dominant_dtype_by_bytes") == "F8_E4M3"
+        and component.fact("quantized_dtypes") == ["F8_E4M3"]
+        and component.fact("scale_key_count") == 0
+        and not component.fact("additional_conditioning")
     )
 
 
@@ -382,7 +403,9 @@ def _preview_decoder(shapes: Mapping[str, list[int]], _dtypes: Mapping[str, str]
     return None
 
 
-def classify_tensor_table(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) -> ComponentEvidence:
+def classify_tensor_table(
+    shapes: Mapping[str, list[int]], dtypes: Mapping[str, str], metadata: Mapping[str, Any] | None = None
+) -> ComponentEvidence:
     """Classify an already-validated header. First matching structural signature wins; otherwise unrecognized."""
 
     precision = precision_facts(shapes, dtypes)
@@ -392,7 +415,10 @@ def classify_tensor_table(shapes: Mapping[str, list[int]], dtypes: Mapping[str, 
     ):
         found = classify(shapes, dtypes)
         if found is not None:
-            return replace(found, facts={**found.facts, **precision})
+            facts = {**found.facts, **precision}
+            if found.architecture == ARCH_UNRECOGNIZED_DIT and (metadata or {}).get("model") == "f3-image-small":
+                facts["declared_architecture"] = "f3-image-small"
+            return replace(found, facts=facts)
     shape_architecture, _error = classify_checkpoint_shapes(dict(shapes))
     if shape_architecture != "unrecognized" or _prefixed(shapes, "model.diffusion_model.input_blocks."):
         architecture = (
@@ -446,10 +472,10 @@ def inspect_component_file(path: Path | str) -> ComponentEvidence:
     if target.suffix.lower() != ".safetensors":
         return ComponentEvidence(error="unsupported format for structural recognition")
     try:
-        shapes, dtypes, _metadata = read_tensor_table(target)
+        shapes, dtypes, metadata = read_tensor_table(target)
     except (OSError, ValueError, TypeError, UnicodeDecodeError):
         return ComponentEvidence(error="malformed, truncated or unreadable safetensors header")
-    return classify_tensor_table(shapes, dtypes)
+    return classify_tensor_table(shapes, dtypes, metadata)
 
 
 __all__ = [

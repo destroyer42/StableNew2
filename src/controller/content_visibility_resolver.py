@@ -1,3 +1,5 @@
+"""Classify content from recorded metadata and filter or redact operator-facing projections."""
+
 from __future__ import annotations
 
 import re

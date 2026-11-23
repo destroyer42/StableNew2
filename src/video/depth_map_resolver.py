@@ -1,3 +1,5 @@
+"""Validate supplied depth maps or materialize estimated depth images for conditioned video workflows."""
+
 from __future__ import annotations
 
 import hashlib

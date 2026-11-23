@@ -1,3 +1,5 @@
+"""Evaluate prompt-informed setting candidates against source values and record stage policy decisions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

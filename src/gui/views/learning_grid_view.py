@@ -1,6 +1,8 @@
 # Subsystem: Learning
 # Role: Interactive Two-Axis Grid comparison view (cells at their frozen X/Y coordinates).
 
+"""Render frozen Learning grid cells as scrollable result tiles with contact-sheet export."""
+
 from __future__ import annotations
 
 import json

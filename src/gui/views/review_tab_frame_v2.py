@@ -1,3 +1,5 @@
+"""Present image selection, ratings, disposition, and reprocessing actions in Review."""
+
 from __future__ import annotations
 
 import os

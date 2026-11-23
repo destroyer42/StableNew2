@@ -11,8 +11,15 @@ from unittest.mock import Mock
 import pytest
 
 from src.ai_assist import remote_transport
-from src.ai_assist.contracts import AiCancelToken, AssistRequest, OutcomeCode, SuggestionKind
+from src.ai_assist.contracts import (
+    MAX_RUNTIME_DETAIL_BYTES,
+    AiCancelToken,
+    AssistRequest,
+    OutcomeCode,
+    SuggestionKind,
+)
 from src.ai_assist.events import EventLog
+from src.ai_assist.framing import build_json_schema
 from src.ai_assist.host import GenerationActivity
 from src.ai_assist.paths import events_path
 from src.ai_assist.remote import RemoteAssist, RemoteState
@@ -23,7 +30,10 @@ from src.ai_assist.remote_preview import (
     SETTINGS_NAME,
     RemoteApproval,
     disable_remote_preview,
+    enable_remote_preview,
     read_remote_settings,
+    revoke_remote_approval,
+    select_remote_model,
     write_remote_approval,
 )
 from src.ai_assist.remote_transport import TransportFailure, loopback_request
@@ -41,6 +51,7 @@ from .conftest import attest, idle, request_for, roomy
 from .test_service_runtime import SpawnSpy
 
 APPROVAL = RemoteApproval(ENDPOINT, DEFAULT_MODEL, "a" * 64, RUNTIME_VERSION)
+LFM = RemoteApproval(ENDPOINT, "lfm3:1.7b", "b" * 64, RUNTIME_VERSION)
 PROMPT = "private authored canary <lora:barn:0.8>"
 REWRITE = {
     "schema": "ai_assist.suggestion/1",
@@ -58,6 +69,7 @@ class Worker:
         self.failures = {}
         self.digest = APPROVAL.digest
         self.version = APPROVAL.version
+        self.other_models = []
         self.output = json.dumps(REWRITE)
         self.reply_model = APPROVAL.model_reference
         self.before_response = lambda _token: None
@@ -74,7 +86,7 @@ class Worker:
             return 200, json.dumps({"version": self.version}).encode()
         if path == "/api/tags":
             return 200, json.dumps(
-                {"models": [{"name": APPROVAL.model, "digest": self.digest}]}
+                {"models": [{"name": APPROVAL.model, "digest": self.digest}, *self.other_models]}
             ).encode()
         self.before_response(token)
         return 200, json.dumps(
@@ -124,6 +136,203 @@ def test_approval_is_explicit_persistent_and_confined(tmp_path):
         RemoteApproval("http://192.168.1.22:11434", DEFAULT_MODEL, APPROVAL.digest, RUNTIME_VERSION)
     assert admin(["--root", str(tmp_path), "disable-remote-preview"]) == 0
     assert not read_remote_settings(tmp_path).preferred
+
+
+def test_legacy_approval_survives_multi_model_selection_and_independent_revocation(tmp_path):
+    path = tmp_path / SETTINGS_NAME
+    path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "preferred": True,
+                "approval": {
+                    "endpoint": ENDPOINT,
+                    "model": APPROVAL.model,
+                    "digest": APPROVAL.digest,
+                    "version": RUNTIME_VERSION,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert read_remote_settings(tmp_path).approval == APPROVAL
+    write_remote_approval(tmp_path, LFM)
+    assert json.loads(path.read_bytes())["schema"] == 2
+    assert read_remote_settings(tmp_path).approval == APPROVAL
+    select_remote_model(tmp_path, LFM)
+    assert read_remote_settings(tmp_path).approval == LFM
+    disable_remote_preview(tmp_path)
+    assert read_remote_settings(tmp_path).approval is None
+    assert read_remote_settings(tmp_path).approvals == (APPROVAL, LFM)
+    enable_remote_preview(tmp_path)
+    assert read_remote_settings(tmp_path).approval == LFM
+    revoke_remote_approval(tmp_path, LFM.model)
+    assert read_remote_settings(tmp_path).approval is None
+    assert read_remote_settings(tmp_path).approvals == (APPROVAL,)
+    with pytest.raises(ValueError):
+        select_remote_model(tmp_path, LFM)
+    select_remote_model(tmp_path, APPROVAL)
+    assert read_remote_settings(tmp_path).approval == APPROVAL
+
+
+def test_default_prefers_qwen_without_overriding_explicit_lfm_choice(tmp_path):
+    write_remote_approval(tmp_path, LFM)
+    assert read_remote_settings(tmp_path).approval == LFM
+    write_remote_approval(tmp_path, APPROVAL)
+    assert read_remote_settings(tmp_path).approval == APPROVAL
+    select_remote_model(tmp_path, LFM)
+    write_remote_approval(tmp_path, APPROVAL)
+    assert read_remote_settings(tmp_path).approval == LFM
+
+
+@pytest.mark.parametrize("damage", ["duplicate", "unapproved_active", "conflicting_digests"])
+def test_ambiguous_registry_fails_closed(tmp_path, damage):
+    write_remote_approval(tmp_path, APPROVAL)
+    write_remote_approval(tmp_path, LFM)
+    path = tmp_path / SETTINGS_NAME
+    raw = path.read_text(encoding="utf-8")
+    if damage == "duplicate":
+        raw = raw.replace('"schema": 2', '"schema": 1, "schema": 2')
+    elif damage == "unapproved_active":
+        raw = raw.replace('"active_model": "default"', '"active_model": "other"')
+    else:
+        raw = raw.replace(LFM.digest, APPROVAL.digest)
+    path.write_text(raw, encoding="utf-8")
+    settings = read_remote_settings(tmp_path)
+    assert settings.damaged and settings.preferred and settings.approval is None
+    with pytest.raises(ValueError):
+        write_remote_approval(tmp_path, LFM)
+    assert path.read_text(encoding="utf-8") == raw
+
+
+def test_selection_uses_exact_displayed_identity_and_does_no_io_to_worker(installation):
+    worker = Worker()
+    worker.other_models = [{"name": LFM.model, "digest": LFM.digest}]
+    worker.reply_model = LFM.model_reference
+    service, spy, _remote = service_for(installation, worker)
+    write_remote_approval(installation.root, LFM)
+    stale = RemoteApproval(ENDPOINT, LFM.model, "c" * 64, RUNTIME_VERSION)
+    with pytest.raises(ValueError):
+        service.select_remote_model(stale)
+    service.select_remote_model(LFM)
+    assert not worker.calls
+    outcome = service.run(assist_request())
+    assert outcome.ok and LFM.model in result_provider_label(outcome)
+    assert json.loads(worker.calls[-1][1])["model"] == LFM.model_reference
+    assert spy.calls == 0
+
+
+WIRE_CASES = [
+    (
+        SuggestionKind.PROMPT_REWRITE,
+        {"positive_text": PROMPT},
+        {
+            "positive": REWRITE["positive"],
+            "negative": "",
+        },
+        {"positive": "missing protected token"},
+    ),
+    (
+        SuggestionKind.TARGET_FIT_ADVICE,
+        {"allowed_targets": ("juggernautXL_ragnarokBy",)},
+        {
+            "target": "juggernautXL_ragnarokBy",
+        },
+        {"target": "invented"},
+    ),
+    (
+        SuggestionKind.WORKFLOW_CHOICE,
+        {"allowed_workflows": ("svd_xt",)},
+        {
+            "workflow": "svd_xt",
+        },
+        {"workflow": "invented"},
+    ),
+    (
+        SuggestionKind.PLAN_PROPOSAL,
+        {
+            "goal_text": "A barn",
+            "allowed_targets": ("juggernautXL_ragnarokBy",),
+            "allowed_stages": ("txt2img",),
+        },
+        {
+            "steps": [
+                {
+                    "stage": "txt2img",
+                    "target": "juggernautXL_ragnarokBy",
+                    "workflow": None,
+                    "count": 1,
+                    "rationale": "Fits the goal",
+                }
+            ]
+        },
+        {"steps": []},
+    ),
+    (
+        SuggestionKind.SLOT_VARIETY,
+        {
+            "goal_text": "More cakes",
+            "matrix_slots": (("cake", ("chocolate cake",)),),
+        },
+        {"slots": [{"slot": "cake", "values": ["carrot cake"], "rationale": "More variety"}]},
+        {"slots": [{"slot": "other", "values": ["carrot cake"], "rationale": "More variety"}]},
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "kind,inputs,fields,invalid", WIRE_CASES, ids=[case[0].value for case in WIRE_CASES]
+)
+def test_ollama_wire_schema_and_canonical_validation(installation, kind, inputs, fields, invalid):
+    worker = Worker()
+    service, spy, _remote = service_for(installation, worker)
+    request = AssistRequest("wire", kind, **inputs)
+    good = {"schema": REWRITE["schema"], "status": "ok", "kind": kind.value, **fields}
+    for response, expected in [
+        (json.dumps(good), OutcomeCode.SUGGESTION),
+        ("{invalid", OutcomeCode.MALFORMED),
+        (json.dumps(good | {"schema": "other"}), OutcomeCode.MALFORMED),
+        (json.dumps(good | {"kind": "other"}), OutcomeCode.MALFORMED),
+        (json.dumps(good | {"extra": 1}), OutcomeCode.MALFORMED),
+        (json.dumps(good | invalid), OutcomeCode.MALFORMED),
+        (
+            json.dumps({key: value for key, value in good.items() if key not in fields}),
+            OutcomeCode.MALFORMED,
+        ),
+        (
+            json.dumps(
+                {"schema": REWRITE["schema"], "status": "refused", "refusal_reason": "Declined"}
+            ),
+            OutcomeCode.REFUSED_BY_MODEL,
+        ),
+    ]:
+        worker.output = response
+        assert service.run(request).code is expected
+        assert json.loads(worker.calls[-1][1])["format"] == build_json_schema(request)
+    assert spy.calls == 0
+
+
+@pytest.mark.parametrize(
+    "change", ["missing_negative", "null_negative", "extra_null", "duplicate_status"]
+)
+def test_remote_contract_rejects_ambiguous_or_incomplete_envelope(installation, change):
+    worker = Worker()
+    response = REWRITE.copy()
+    if change == "missing_negative":
+        del response["negative"]
+    elif change == "null_negative":
+        response["negative"] = None
+    elif change == "extra_null":
+        response["workflow"] = None
+    worker.output = json.dumps(response)
+    if change == "duplicate_status":
+        worker.output = worker.output.replace(
+            '"status": "ok"', '"status": "refused", "status": "ok"'
+        )
+    service, spy, _remote = service_for(installation, worker)
+    outcome = service.run(assist_request())
+    assert outcome.code is OutcomeCode.MALFORMED and outcome.suggestion is None
+    assert spy.calls == 0
 
 
 def test_startup_does_only_prompt_free_checks_off_the_caller_thread(installation):
@@ -185,6 +394,8 @@ def test_active_generation_and_local_quarantine_do_not_gate_remote(installation,
     assert payload["think"] is False and payload["stream"] is False
     assert isinstance(payload["format"], dict)
     assert PROMPT in payload["prompt"]
+    assert 'set status to "ok"' in payload["prompt"]
+    assert '"refusal_reason": "..."' not in payload["prompt"]
     event = EventLog(events_path(installation.root)).tail(1)[0]
     assert event["provider"] == "remote" and event["strict_offline"] is False
     assert event["model_sha256_prefix"] == APPROVAL.digest[:12]
@@ -368,6 +579,30 @@ def test_non_transport_failures_never_use_local(installation, failure, expected,
     assert "private" not in caplog.text
 
 
+@pytest.mark.parametrize("failure", ["refused", "malformed", "ok", "timeout"])
+def test_remote_refusal_and_malformed_keep_bounded_in_memory_runtime_detail_only(
+    installation, failure, caplog
+):
+    worker = Worker()
+    service, _spy, _ = service_for(installation, worker)
+    if failure == "refused":
+        worker.output = '{"schema":"ai_assist.suggestion/1","status":"refused","refusal_reason":"private canary"}'
+    elif failure == "malformed":
+        worker.output = "private canary {invalid " + "x" * 5000
+    elif failure == "timeout":
+        worker.failures["/api/generate"] = "timeout"
+
+    outcome = service.run(assist_request())
+    detail = outcome.runtime_detail
+    if failure in ("refused", "malformed"):
+        assert detail is not None and "private canary" in detail.stdout_head
+        assert detail.reason == outcome.reason
+        assert len(detail.stdout_head.encode("utf-8")) <= MAX_RUNTIME_DETAIL_BYTES
+        assert "private" not in repr(outcome) and "private" not in caplog.text
+    else:
+        assert detail is None
+
+
 def test_present_but_damaged_approval_fails_closed_and_explicit_disable_allows_local(installation):
     worker = Worker()
     service, spy, remote = service_for(installation, worker)
@@ -405,6 +640,8 @@ def test_in_flight_remote_fences_late_results_without_local_yield(installation, 
         assert entered.wait(5)
         assert remote.state() is RemoteState.RUNNING
         assert service.run(assist_request()).code is OutcomeCode.BUSY
+        with pytest.raises(ValueError, match="request active"):
+            service.select_remote_model(LFM)
         activity.return_value = GenerationActivity(1, True)
         if end == "cancel":
             assert service.cancel("remote-case")
@@ -556,6 +793,23 @@ def test_transport_direct_loopback_and_bounded_http(monkeypatch, reply, limit, e
     assert len(connection.writes) == 1
     assert connection.writes[0].startswith(b"GET /api/version HTTP/1.1\r\n")
     assert b"outside.invalid" not in connection.writes[0]
+
+
+def test_lost_generation_response_does_not_fall_back(installation, monkeypatch):
+    connection = FakeSocket(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\n{}")
+    monkeypatch.setattr(remote_transport, "_RequestSocket", lambda *_args: connection)
+    worker = Worker()
+
+    def transport(path, body, *args):
+        if path == "/api/generate":
+            return loopback_request(path, body, *args)
+        return worker(path, body, *args)
+
+    service, spy, _remote = service_for(installation, transport)
+    outcome = service.run(assist_request())
+    assert outcome.code is OutcomeCode.UNAVAILABLE and outcome.reason == "remote_response_lost"
+    assert not outcome.details["fallback"] and spy.calls == 0
+    assert connection.writes[0].startswith(b"POST /api/generate HTTP/1.1\r\n")
 
 
 def test_transport_reader_enforces_deadline_across_multiple_partial_reads(monkeypatch):

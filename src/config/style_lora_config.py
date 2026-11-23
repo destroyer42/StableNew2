@@ -1,3 +1,5 @@
+"""Load curated style LoRA definitions and normalize model-family compatibility settings."""
+
 from __future__ import annotations
 
 import json
