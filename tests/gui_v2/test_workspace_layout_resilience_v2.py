@@ -182,7 +182,15 @@ def test_long_form_tabs_reach_their_lowest_control_on_a_laptop_viewport(
         view_top, view_bottom = scroll._canvas.winfo_rooty(), scroll._canvas.winfo_rooty() + scroll._canvas.winfo_height()
         control_top = control.winfo_rooty()
         control_bottom = control_top + control.winfo_height()
-        assert control_top >= view_top and control_bottom <= view_bottom + 1, "lowest control must be inside the viewport"
+        diag = (
+            f"stacked={getattr(getattr(tab, '_create_view', None), 'stacked', None)} "
+            f"tab={tab.winfo_width()}x{tab.winfo_height()} root={tk_root.winfo_width()}x{tk_root.winfo_height()} "
+            f"viewport={view_top}..{view_bottom} control={control_top}..{control_bottom} "
+            f"screen={tk_root.winfo_screenwidth()}x{tk_root.winfo_screenheight()}"
+        )
+        assert control_top >= view_top and control_bottom <= view_bottom + 1, (
+            "lowest control must be inside the viewport: " + diag
+        )
     finally:
         tab.destroy()
         tk_root.withdraw()
