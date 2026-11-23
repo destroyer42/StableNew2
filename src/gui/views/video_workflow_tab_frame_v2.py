@@ -36,6 +36,8 @@ from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_evaluate_view_v2 import VideoWorkflowEvaluateView
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
 from src.gui.views.video_workflow_layout_v2 import (
+    PANE_FORM,
+    PANE_MEDIA,
     VIEW_CREATE,
     VIEW_EVALUATE,
     TwoPaneLayout,
@@ -444,8 +446,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.task_selector = WorkflowTaskSelector(header, on_select=self._on_task_selected)
         self.task_selector.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         # VID-UX-384: Create | Evaluate shares the task row; the readiness chip sits at the action bar's right edge.
-        self.view_switch = ViewSwitch(header, on_change=self.select_view)
-        self.view_switch.grid(row=1, column=3, sticky="e", pady=(6, 0))
+        view_controls = ttk.Frame(header, style="Panel.TFrame")
+        view_controls.grid(row=1, column=3, sticky="e", pady=(6, 0))
+        self.view_switch = ViewSwitch(view_controls, on_change=self.select_view)
+        self.view_switch.grid(row=0, column=0, sticky="e")
+        # Shown only while the panes are stacked (a narrow window): one pane at a time, each at full height.
+        self.pane_switch = ViewSwitch(
+            view_controls,
+            on_change=self._on_pane_chosen,
+            choices=((PANE_FORM, "Form"), (PANE_MEDIA, "Media")),
+            initial=PANE_FORM,
+        )
         # Keep the primary action and its status visible above the scrolling form.
         action_bar = ttk.Frame(header, style="Panel.TFrame")
         action_bar.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(6, 0))
@@ -502,13 +513,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def _build_body(self) -> None:
         # VID-UX-384: below the fixed header sit two views.  Create is a two-pane layout (the form on the
         # left, media and status on the right); Evaluate is the full-width eval kit.
-        self._create_view = TwoPaneLayout(self)
+        self._create_view = TwoPaneLayout(self, on_mode_change=self._sync_pane_switch)
         self._create_view.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
         self.evaluate_view = VideoWorkflowEvaluateView(self)
         self.evaluate_view.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
         self.evaluate_view.grid_remove()
         right = self._create_view.right
-        self._media_scroll = self._create_view.right_scroll  # the right pane's scroll region
         # PR-GUI-100: the workflow body keeps growing with workflow controls; it scrolls instead of growing the window.
         self._body_scroll = ScrollableFrame(self._create_view.left, style="Panel.TFrame")
         self._body_scroll.grid(row=0, column=0, sticky="nsew")
@@ -578,6 +588,32 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # the newest finished clips.
         self._build_media_pane(right)
         self._build_compare_section(self.evaluate_view)
+
+    @property
+    def _media_scroll(self) -> ScrollableFrame:
+        return self._create_view.media_scroller
+
+    def reveal_media_pane(self) -> None:
+        """Make the media pane visible: always in two-pane mode, by switching panes when stacked."""
+
+        self._create_view.show_pane(PANE_MEDIA)
+        self._sync_pane_switch()
+
+    def _on_pane_chosen(self, pane: str) -> None:
+        self._create_view.show_pane(pane)
+
+    def _sync_pane_switch(self) -> None:
+        """The Form | Media toggle exists only while the panes are stacked in the Create view."""
+
+        switch = getattr(self, "pane_switch", None)
+        if switch is None:
+            return
+        pane_view = getattr(self, "_create_view", None)
+        if pane_view is not None and pane_view.stacked and self._view == VIEW_CREATE:
+            switch.set_view(pane_view.active_pane)
+            switch.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        else:
+            switch.grid_remove()
 
     def _build_media_pane(self, right: ttk.Frame) -> None:
         # The readiness panel and Recent outputs are built by the pane module; the tab keeps its attribute names.
@@ -1648,6 +1684,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             self.evaluate_view.grid_remove()
             self._create_view.grid()
+        self._sync_pane_switch()
         # One Primary per visible surface: Queue video is Create's; the eval panel's own Queue is Evaluate's.
         self.queue_workflow_button.configure(
             style="Primary.TButton" if view_id == VIEW_CREATE else "Dark.TButton"
@@ -1697,6 +1734,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         self._readiness_opened = True
         self.select_view(VIEW_CREATE)
+        self.reveal_media_pane()
         panel = self.motion_readiness_panel
         panel.set_relevant(True)
         panel.render()

@@ -40,7 +40,7 @@ def media_allowed(mode: str | None, path: str) -> bool:
 
 
 class ViewSwitch(ttk.Frame):
-    """Segmented Create | Evaluate control; the owner decides what each view shows."""
+    """Segmented control (Create | Evaluate by default); the owner decides what each choice shows."""
 
     def __init__(
         self,
@@ -48,13 +48,14 @@ class ViewSwitch(ttk.Frame):
         *,
         on_change: Callable[[str], None],
         initial: str = VIEW_CREATE,
+        choices: tuple[tuple[str, str], ...] = VIEWS,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style="Panel.TFrame", **kwargs)
         self._on_change = on_change
         self.view_var = tk.StringVar(master=self, value=initial)
         self.buttons: dict[str, ttk.Radiobutton] = {}
-        for view_id, label in VIEWS:
+        for view_id, label in choices:
             button = ttk.Radiobutton(
                 self,
                 text=label,
@@ -80,15 +81,30 @@ class ViewSwitch(ttk.Frame):
             self.view_var.set(view_id)
 
 
+PANE_FORM = "form"
+PANE_MEDIA = "media"
+
+
 class TwoPaneLayout(ttk.Frame):
-    """Left (weight 3) and right (weight 2, at least ``RIGHT_MIN_PX``) scrolling panes."""
+    """Left (weight 3) and right (weight 2, at least ``RIGHT_MIN_PX``) scrolling panes.
+
+    Below ``breakpoint_px`` the panes do not share the height (two small nested viewports would leave each a few
+    lines tall on a small display); one pane shows at a time, each with the full height, chosen by ``show_pane``.
+    """
 
     def __init__(
-        self, master: tk.Misc, *, breakpoint_px: int = BREAKPOINT_PX, **kwargs: Any
+        self,
+        master: tk.Misc,
+        *,
+        breakpoint_px: int = BREAKPOINT_PX,
+        on_mode_change: Callable[[], None] | None = None,
+        **kwargs: Any,
     ) -> None:
         super().__init__(master, style="Panel.TFrame", **kwargs)
         self._breakpoint = breakpoint_px
+        self._on_mode_change = on_mode_change
         self.stacked = False
+        self.active_pane = PANE_FORM
         self.left_pane = ttk.Frame(self, style="Panel.TFrame")
         self.right_scroll = ScrollableFrame(self, style="Panel.TFrame")
         self.right_scroll.inner.columnconfigure(0, weight=1)
@@ -101,6 +117,18 @@ class TwoPaneLayout(ttk.Frame):
         self.left_pane.rowconfigure(0, weight=1)
         self._layout()
         self.bind("<Configure>", self._on_configure, add="+")
+
+    @property
+    def media_scroller(self) -> ScrollableFrame:
+        return self.right_scroll
+
+    def show_pane(self, pane: str) -> None:
+        """Choose the pane shown while stacked (a no-op in two-pane mode, where both show)."""
+
+        if pane not in (PANE_FORM, PANE_MEDIA) or pane == self.active_pane:
+            return
+        self.active_pane = pane
+        self._layout()
 
     def apply_width(self, width: int) -> bool:
         """Switch between one and two columns for ``width``; returns whether the mode changed."""
@@ -124,20 +152,25 @@ class TwoPaneLayout(ttk.Frame):
             self.rowconfigure(index, weight=0)
         if self.stacked:
             self.columnconfigure(0, weight=1)
-            self.rowconfigure(0, weight=3)
-            self.rowconfigure(1, weight=2)
-            self.left_pane.grid(row=0, column=0, sticky="nsew")
-            self.right_scroll.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+            self.rowconfigure(0, weight=1)
+            if self.active_pane == PANE_MEDIA:
+                self.right_scroll.grid(row=0, column=0, sticky="nsew")
+            else:
+                self.left_pane.grid(row=0, column=0, sticky="nsew")
         else:
             self.rowconfigure(0, weight=1)
             self.columnconfigure(0, weight=LEFT_WEIGHT)
             self.columnconfigure(1, weight=RIGHT_WEIGHT, minsize=RIGHT_MIN_PX)
             self.left_pane.grid(row=0, column=0, sticky="nsew")
             self.right_scroll.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        if self._on_mode_change is not None:
+            self._on_mode_change()
 
 
 __all__ = [
     "BREAKPOINT_PX",
+    "PANE_FORM",
+    "PANE_MEDIA",
     "RIGHT_MIN_PX",
     "TwoPaneLayout",
     "VIEWS",

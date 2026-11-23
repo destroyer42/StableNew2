@@ -10,6 +10,8 @@ import pytest
 from src.gui.views import video_workflow_layout_v2 as layout_module
 from src.gui.views.video_workflow_layout_v2 import (
     BREAKPOINT_PX,
+    PANE_FORM,
+    PANE_MEDIA,
     VIEW_CREATE,
     VIEW_EVALUATE,
     TwoPaneLayout,
@@ -42,7 +44,7 @@ def env(tk_root, tmp_path):
 # ---------------------------------------------------------------- layout scaffolding
 
 
-def test_two_pane_layout_stacks_below_the_breakpoint(tk_root):
+def test_two_pane_layout_shows_one_pane_at_a_time_below_the_breakpoint(tk_root):
     panes = TwoPaneLayout(tk_root)
     try:
         assert panes.apply_width(BREAKPOINT_PX + 200) is False  # starts two-column
@@ -51,14 +53,38 @@ def test_two_pane_layout_stacks_below_the_breakpoint(tk_root):
         assert int(panes.right_scroll.grid_info()["column"]) == 1
         assert panes.apply_width(BREAKPOINT_PX - 100) is True
         assert panes.stacked
-        assert int(panes.left_pane.grid_info()["row"]) == 0
-        assert int(panes.right_scroll.grid_info()["row"]) == 1
+        # Stacked: one pane at a time, each with the full height (no tiny nested viewport).
+        assert panes.left_pane.winfo_manager() == "grid" and not panes.right_scroll.winfo_manager()
+        panes.show_pane(PANE_MEDIA)
+        assert panes.right_scroll.winfo_manager() == "grid" and not panes.left_pane.winfo_manager()
+        panes.show_pane(PANE_FORM)
+        assert panes.left_pane.winfo_manager() == "grid"
         assert panes.apply_width(BREAKPOINT_PX + 1) is True
         assert not panes.stacked
+        assert (
+            panes.left_pane.winfo_manager() == "grid"
+            and panes.right_scroll.winfo_manager() == "grid"
+        )
         assert int(panes.columnconfigure(0)["weight"]) > int(panes.columnconfigure(1)["weight"])
         assert int(panes.columnconfigure(1)["minsize"]) >= 360
     finally:
         panes.destroy()
+
+
+def test_the_form_media_toggle_exists_only_while_stacked(env):
+    tab = env.tab
+    panes = tab._create_view
+    panes.apply_width(BREAKPOINT_PX + 200)
+    assert not tab.pane_switch.winfo_manager()
+    panes.apply_width(BREAKPOINT_PX - 100)
+    assert tab.pane_switch.winfo_manager() == "grid"
+    tab.pane_switch.buttons[PANE_MEDIA].invoke()
+    assert panes.active_pane == PANE_MEDIA and panes.right_scroll.winfo_manager() == "grid"
+    tab.select_view(VIEW_EVALUATE)
+    assert not tab.pane_switch.winfo_manager()
+    tab.select_view(VIEW_CREATE)
+    tab._on_readiness_chip()  # the chip opens the details, which live in the media pane
+    assert panes.active_pane == PANE_MEDIA
 
 
 # ---------------------------------------------------------------- Create / Evaluate

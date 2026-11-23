@@ -187,8 +187,8 @@ The VID-UX-360 task model, pins and suggestions are unchanged; the layout around
 
 - **Fixed header:** a **Create | Evaluate** switch and the readiness chip, the source row, the task selector, the
   action bar (Queue video is Create's one Primary) and the inline submission notice. The header never scrolls.
-- **Create view:** two panes (left weight 3, right weight 2 with a 360 px minimum; below 1100 px the right pane stacks
-  under the left). Left: the prompt, the **Settings block always visible** (engine, motion, length, seed, smoothing,
+- **Create view:** two panes (left weight 3, right weight 2 with a 360 px minimum; below 1100 px one pane shows at a
+  time, each at full height, chosen by a Form | Media toggle on the task row). Left: the prompt, the **Settings block always visible** (engine, motion, length, seed, smoothing,
   with *Why these settings?* behind a button), **Reset to suggested** and **More settings** (negative prompt,
   declared workflow controls, *Use native SVD*; it opens itself for a required control or an experimental engine),
   then only the active task's inputs, Keyframes and conditioning (only if the engine declares them) and Details.

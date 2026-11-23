@@ -171,6 +171,10 @@ def test_long_form_tabs_reach_their_lowest_control_on_a_laptop_viewport(
     try:
         tab.pack(fill="both", expand=True)
         tk_root.update()
+        reveal = getattr(tab, "reveal_media_pane", None)
+        if scroll_attr == "_media_scroll" and callable(reveal):
+            reveal()  # VID-UX-384: stacked (narrow) windows show one pane at a time
+            tk_root.update()
         scroll = getattr(tab, scroll_attr)
         control = getattr(tab, last_control_attr)
 
@@ -235,6 +239,7 @@ def test_recent_video_controls_and_detach_return_fit_the_compact_viewport(tk_roo
     try:
         tab.pack(fill="both", expand=True)
         tk_root.deiconify()
+        tab.reveal_media_pane()  # VID-UX-384: stacked (narrow) windows show one pane at a time
         settle(lambda: panel.session.loaded)
         panel.session.outputs = (RecentVideoOutput(
             job_id="recorded", video_path=str(clip_path), completed_at=None,
