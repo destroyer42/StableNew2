@@ -26,11 +26,13 @@ from src.gui_v2.ai_plan_advice import (
 )
 from src.gui_v2.ai_slot_variety import (
     REASON_TEXT,
+    VARIETY_REFUSED_HINT,
     VarietyContext,
     VarietyReview,
     build_variety_request,
     judge_variety,
     matrix_state,
+    slots_line,
     unavailable_variety_review,
     variety_review,
 )
@@ -271,6 +273,7 @@ class PromptAiSuggestions:
             on_variety=self.suggest_variety,
             on_add_value=self.add_variety_value,
             variety_problem=self._variety_problem(),
+            variety_slots=self._variety_slots_text(),
         )
         return self.dialog
 
@@ -489,6 +492,14 @@ class PromptAiSuggestions:
         except Exception:  # noqa: BLE001 - fixed copy only
             return "The matrix slots could not be read safely."
 
+    def _variety_slots_text(self) -> str:
+        """The read-only line naming the slots a variety request can use; fixed copy when the matrix is unreadable."""
+
+        try:
+            return slots_line(self._capture_matrix().slots, is_visible=self._variety_visible())
+        except Exception:  # noqa: BLE001 - fixed copy only, no raw context
+            return ""
+
     def _variety_visible(self) -> Any:
         resolver = ContentVisibilityResolver(self._mode())
         return lambda text: resolver.is_visible({"positive_prompt": text})
@@ -608,6 +619,8 @@ class PromptAiSuggestions:
             self._drop_variety()
             code = outcome.code if not outcome.ok else OutcomeCode.MALFORMED
             text = provider_outcome_text(outcome) if code is outcome.code else OUTCOME_TEXT[code]
+            if code is OutcomeCode.REFUSED_BY_MODEL:
+                text += VARIETY_REFUSED_HINT
             dialog.show_variety(unavailable_variety_review(text, trust_label=trust))
             dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
             self.refresh()

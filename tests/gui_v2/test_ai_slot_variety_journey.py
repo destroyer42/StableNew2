@@ -17,14 +17,20 @@ import textwrap
 
 import pytest
 
-from src.ai_assist.contracts import SUGGESTION_SCHEMA_ID, AssistOutcome, OutcomeCode, SuggestionKind
+from src.ai_assist.contracts import (
+    SUGGESTION_SCHEMA_ID,
+    AssistOutcome,
+    OutcomeCode,
+    RuntimeDetail,
+    SuggestionKind,
+)
 from src.ai_assist.preview import PREVIEW_LABEL
 from src.ai_assist.validators import validate_output
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.models.prompt_pack_model import MatrixSlot
 from src.gui.prompt_ai_suggestions import PromptAiSuggestions
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
-from src.gui_v2.ai_slot_variety import VARIETY_NOTICE
+from src.gui_v2.ai_slot_variety import VARIETY_NOTICE, VARIETY_REFUSED_HINT
 from src.gui_v2.ai_suggestion_view import OUTCOME_TEXT
 from tests.gui_v2.test_ai_suggestions_112 import journey  # noqa: F401 - shared fixture
 from tests.gui_v2.test_prompt_target_130b import SDXL, _projection, _resolver
@@ -170,6 +176,46 @@ def test_a_blank_goal_or_unavailable_service_submits_nothing(variety):
     dialog.variety_button.invoke()
     assert not j.service.requests
     assert OUTCOME_TEXT[OutcomeCode.GENERATION_ACTIVE] in dialog.status_var.get()
+
+
+def test_the_dialog_names_the_slots_a_request_can_use_and_the_limit(variety):
+    dialog = variety.flow.open()
+    line = dialog.variety_slots_var.get()
+    assert "character, location, lighting" in line
+    assert "cannot take a new value" not in line
+    assert "already exist in this pack's Matrix tab" in VARIETY_NOTICE
+
+
+def test_a_slot_that_cannot_take_values_is_counted_not_listed(variety):
+    j = variety
+    _matrix(j.frame, (("lighting", ("soft light",)), ("location", ("forest, at dusk",))))
+    line = j.flow.open().variety_slots_var.get()
+    assert "lighting" in line and "location" not in line
+    assert "1 other slot(s) cannot take a new value" in line
+
+
+def test_a_refused_variety_request_points_to_the_matrix_tab_and_offers_raw_detail(variety):
+    j = variety
+    dialog, request = _ask(j, "lighting prompts for hyperrealism")
+    raw = (
+        '{"schema":"ai_assist.suggestion/1","status":"refused","refusal_reason":"no fitting slot"}'
+    )
+    _deliver(
+        j,
+        AssistOutcome(
+            OutcomeCode.REFUSED_BY_MODEL,
+            request.request_id,
+            "status_refused",
+            runtime_detail=RuntimeDetail(stdout_head=raw, reason="status_refused"),
+        ),
+    )
+    status = dialog.status_var.get()
+    assert OUTCOME_TEXT[OutcomeCode.REFUSED_BY_MODEL] in status
+    assert VARIETY_REFUSED_HINT.strip() in status
+    assert "no fitting slot" not in status and "no fitting slot" not in _text(dialog)
+    assert dialog.detail_button.instate(["!disabled"])
+    assert "no fitting slot" in dialog._detail_text
+    assert not j.frame.workspace_state.dirty
 
 
 # -- review and per-value acceptance --------------------------------------------------------------------------------------

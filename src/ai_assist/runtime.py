@@ -101,6 +101,14 @@ def runtime_detail(
     )
 
 
+def remote_output_detail(output: bytes | str, reason: str) -> RuntimeDetail:
+    """In-memory detail for a remote (Ollama) answer that was refused or malformed: the first 2 KB of the model's own
+    output plus the outcome's reason code. Same label, bounds and never-persisted rules as the local detail."""
+
+    raw = output.encode("utf-8", errors="replace") if isinstance(output, str) else output
+    return RuntimeDetail(stdout_head=_printable(raw[:MAX_RUNTIME_DETAIL_BYTES]), reason=reason)
+
+
 class AiRuntime:
     def __init__(
         self,
