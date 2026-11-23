@@ -1,3 +1,5 @@
+"""Check declared Comfy workflow dependencies against reported stock nodes and loader options."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

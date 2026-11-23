@@ -1,6 +1,8 @@
 # Subsystem: Learning
 # Role: Shows learning run results and feedback controls.
 
+"""Present Learning result images, ratings, comparisons, and recommendation summaries."""
+
 from __future__ import annotations
 
 import logging

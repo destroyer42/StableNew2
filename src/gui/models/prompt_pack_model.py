@@ -1,3 +1,5 @@
+"""Represent editable PromptPack slots and matrix settings while preserving untouched stored JSON values."""
+
 from __future__ import annotations
 
 import copy

@@ -1,3 +1,5 @@
+"""Extract LoRA, embedding, and matrix references from GUI prompt text for display."""
+
 from __future__ import annotations
 
 import re

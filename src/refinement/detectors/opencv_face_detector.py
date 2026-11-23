@@ -1,3 +1,5 @@
+"""Detect faces offline with CPU YuNet and project deduplicated boxes into original-image coordinates."""
+
 from __future__ import annotations
 
 import hashlib

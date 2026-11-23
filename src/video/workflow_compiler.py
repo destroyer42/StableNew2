@@ -1,3 +1,5 @@
+"""Compile declared workflow inputs into a backend request by rendering graph templates."""
+
 from __future__ import annotations
 
 import re

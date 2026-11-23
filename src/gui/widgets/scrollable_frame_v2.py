@@ -1,3 +1,5 @@
+"""Provide a vertically scrollable Tk frame with shared wheel routing and focus visibility."""
+
 from __future__ import annotations
 
 import tkinter as tk

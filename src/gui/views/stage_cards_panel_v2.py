@@ -1,3 +1,5 @@
+"""Compose the Pipeline stage cards and project overrides, resource updates, and dependent dimensions."""
+
 from __future__ import annotations
 
 import tkinter as tk

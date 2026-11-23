@@ -1,3 +1,5 @@
+"""Hold GUI configuration and runtime projections and notify subscribers of state changes."""
+
 from __future__ import annotations
 
 import logging

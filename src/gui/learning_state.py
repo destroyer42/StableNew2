@@ -1,6 +1,8 @@
 # Subsystem: Learning
 # Role: Stores learning-mode UI state and user selections.
 
+"""Define serializable Learning experiment, variant, and image-reference state."""
+
 from __future__ import annotations
 
 import copy

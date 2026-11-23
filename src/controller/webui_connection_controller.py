@@ -1,3 +1,5 @@
+"""Coordinate WebUI connection checks, readiness epochs, reconnects, and resource notifications."""
+
 from __future__ import annotations
 
 import logging

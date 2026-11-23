@@ -1,3 +1,5 @@
+"""Observe runtime progress and queue activity for stalls and report diagnosed violations."""
+
 import threading
 import time
 from collections import defaultdict

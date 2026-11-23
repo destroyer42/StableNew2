@@ -1,3 +1,5 @@
+"""Collect a lightweight system snapshot for diagnostics bundles."""
+
 from __future__ import annotations
 
 import getpass

@@ -1,3 +1,5 @@
+"""Coordinate GUI and WebUI readiness, queue projection, and deferred queue autostart."""
+
 from __future__ import annotations
 
 import logging

@@ -16,6 +16,7 @@ import pytest
 from src.controller.runtime_state import CancellationError
 from src.services.runtime_transition_service import RuntimeTransitionCoordinator
 from src.services.runtime_warm_hold import RuntimeWarmHold
+from src.video.comfy_process_manager import ComfyStartupError
 from src.video.comfy_workflow_backend import _keep_warm_seconds
 from src.video.workflow_catalog_wan_a14b import WAN_A14B_ID, WAN_A14B_VERSION
 from src.video.workflow_readiness import WorkflowResourceReadiness
@@ -306,10 +307,11 @@ def test_an_unowned_runtime_is_never_held(tmp_path: Path, _no_encode) -> None:
     backend = _a14b_backend(_client(tmp_path), tmp_path, warm_hold=slot)
     backend.fake_manager._owns = False
 
-    result = _run(backend, tmp_path, "job-1")
+    with pytest.raises(ComfyStartupError, match="StableNew-owned"):
+        _run(backend, tmp_path, "job-1")
 
     assert spawned.calls == [] and slot.snapshot() is None
-    assert result.backend_metadata["runtime_release"]["ownership"] == "not_owned"
+    assert backend.fake_manager.stops == 0
 
 
 def test_an_unarmed_hold_falls_back_to_the_release(tmp_path: Path, _no_encode) -> None:

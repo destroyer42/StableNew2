@@ -1,3 +1,5 @@
+"""Hold the active Prompt tab pack, selection, and edits and coordinate save and load actions."""
+
 from __future__ import annotations
 
 import copy

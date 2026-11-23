@@ -1,3 +1,5 @@
+"""Validate and hydrate replay inputs and invoke the canonical NJR runner."""
+
 from __future__ import annotations
 
 import inspect

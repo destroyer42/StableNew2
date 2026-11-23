@@ -1,3 +1,5 @@
+"""Project secondary-motion provenance into Learning metrics and a bounded risk score."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

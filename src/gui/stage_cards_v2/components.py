@@ -1,3 +1,5 @@
+"""Provide reusable Tk controls for stage sliders, prompts, samplers, and seeds."""
+
 from __future__ import annotations
 
 import tkinter as tk

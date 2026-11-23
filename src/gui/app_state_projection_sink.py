@@ -1,3 +1,5 @@
+"""Apply runtime projections and operator log entries through a single writer into AppStateV2."""
+
 from __future__ import annotations
 
 import threading

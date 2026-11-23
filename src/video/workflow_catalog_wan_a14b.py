@@ -52,6 +52,7 @@ from src.video.workflow_contracts import (
 
 WAN_A14B_ID = "wan22_i2v_a14b_4step_v1"
 WAN_A14B_VERSION = "1.0.0"
+WAN_A14B_CK_LAUNCH_ID = "wan22_i2v_a14b_4step_ck_v1"
 WAN_A14B_REPACKAGED_REPO = "Comfy-Org/Wan-2.2"
 WAN_A14B_REPACKAGED_REVISION = "ee6f4a40737a995bf5818954cfce6d59443b0f04"
 WAN_A14B_LORA_REPO = "lightx2v/Wan2.2-Distill-Loras"
@@ -656,14 +657,52 @@ def build_wan_a14b_gpu_text_encoder_spec() -> WorkflowSpec:
     )
 
 
+def build_wan_a14b_ck_launch_spec() -> WorkflowSpec:
+    """The benchmark's stock A14B graph with process-wide CK attention."""
+
+    baseline = build_wan_a14b_spec()
+    defaults = deepcopy(baseline.backend_defaults)
+    defaults["make_video_default"] = False
+    defaults["provenance"]["qualification"] = "Experimental; WAN-BENCH-373 comparison only"
+    defaults["operator_projection"]["fixed_settings"]["attention"] = (
+        "Comfy Kitchen attention via the managed ComfyUI launch. "
+        "Pose, framing, and other output details can differ from baseline."
+    )
+    return replace(
+        baseline,
+        workflow_id=WAN_A14B_CK_LAUNCH_ID,
+        display_name="Wan2.2 I2V-A14B 4-step CK attention (Experimental)",
+        description=(
+            "Uses Comfy Kitchen attention for potentially faster generation. Pose, framing, "
+            "and other output details can differ from baseline."
+        ),
+        governance_state=WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+        pinned_revision=f"catalog:{WAN_A14B_CK_LAUNCH_ID}@{WAN_A14B_VERSION}",
+        governance_notes="Explicit per-job opt-in. Requires verified CK attention and dynamic VRAM.",
+        backend_defaults=defaults,
+    )
+
+
+def a14b_launch_attention(spec: WorkflowSpec) -> str | None:
+    """Resolve launch mode from the immutable workflow identity, including old baseline jobs."""
+
+    if getattr(spec, "workflow_version", None) == WAN_A14B_VERSION:
+        if spec.workflow_id == WAN_A14B_ID:
+            return "baseline"
+        if spec.workflow_id == WAN_A14B_CK_LAUNCH_ID:
+            return "ck"
+    return None
+
+
 def build_wan_a14b_specs() -> tuple[WorkflowSpec, ...]:
-    """The approved 1.0.0 and its three experimental speed arms, in version order."""
+    """The approved workflow, historical speed arms, and separate CK launch profile."""
 
     return (
         build_wan_a14b_spec(),
         build_wan_a14b_ck_attention_spec(),
         build_wan_a14b_merged_spec(),
         build_wan_a14b_gpu_text_encoder_spec(),
+        build_wan_a14b_ck_launch_spec(),
     )
 
 
@@ -671,6 +710,7 @@ __all__ = [
     "WAN_A14B_ATTENTION_NODE",
     "WAN_A14B_CK_ATTENTION",
     "WAN_A14B_CK_ATTENTION_VERSION",
+    "WAN_A14B_CK_LAUNCH_ID",
     "WAN_A14B_FRAME_COUNT_POLICY",
     "WAN_A14B_GPU_TEXT_ENCODER_VERSION",
     "WAN_A14B_ID",

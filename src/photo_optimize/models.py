@@ -1,3 +1,5 @@
+"""Define serializable Managed Photo Set assets, baselines, history entries, and stage defaults."""
+
 from __future__ import annotations
 
 from copy import deepcopy

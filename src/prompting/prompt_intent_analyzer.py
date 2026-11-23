@@ -1,3 +1,5 @@
+"""Infer prompt style and conflicts and classify explicit human subject counts in rendered text."""
+
 from __future__ import annotations
 
 import re

@@ -1,3 +1,5 @@
+"""Install and restore process, thread, and Tk exception hooks that forward failures to diagnostics."""
+
 from __future__ import annotations
 
 import sys

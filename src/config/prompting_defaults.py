@@ -1,3 +1,5 @@
+"""Declare default prompt optimizer settings and polarity-specific classification keyword tables."""
+
 from __future__ import annotations
 
 from typing import Any

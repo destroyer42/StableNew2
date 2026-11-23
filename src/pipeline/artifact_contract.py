@@ -1,3 +1,5 @@
+"""Build canonical artifact records and manifests from stage outputs and variant entries."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence

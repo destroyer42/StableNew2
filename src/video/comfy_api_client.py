@@ -1,3 +1,5 @@
+"""Access local ComfyUI health, queue, history, and media endpoints through a typed client."""
+
 from __future__ import annotations
 
 import hashlib
@@ -53,7 +55,12 @@ class ComfyApiClient:
         *,
         base_url: str = "http://127.0.0.1:8188",
         session: requests.Session | None = None,
+        direct: bool = False,
     ) -> None:
+        if direct:
+            session = session or requests.Session()
+            session.trust_env = False
+        self._request_options = {"allow_redirects": False} if direct else {}
         self._transport = HttpTransport(base_url, session)
         self.base_url = self._transport.base_url
 
@@ -91,6 +98,7 @@ class ComfyApiClient:
             "/prompt",
             policy=RequestPolicy(timeout=timeout, idempotent=False),
             json=dict(payload or {}),
+            **self._request_options,
         )
 
     def interrupt(
@@ -107,6 +115,7 @@ class ComfyApiClient:
             "/interrupt",
             policy=RequestPolicy(timeout=timeout, idempotent=True),
             json=body,
+            **self._request_options,
         )
 
     def delete_from_queue(
@@ -119,6 +128,7 @@ class ComfyApiClient:
             "/queue",
             policy=RequestPolicy(timeout=timeout, idempotent=True),
             json={"delete": [str(item) for item in prompt_ids]},
+            **self._request_options,
         )
 
     def upload_image(
@@ -137,6 +147,7 @@ class ComfyApiClient:
                 "/upload/image",
                 policy=RequestPolicy(timeout=timeout, idempotent=True),
                 files={"image": (path.name, handle, "application/octet-stream")},
+                **self._request_options,
                 data={
                     "type": str(image_type or "input"),
                     "overwrite": "true" if overwrite else "false",
@@ -163,6 +174,7 @@ class ComfyApiClient:
             policy=RequestPolicy(timeout=timeout, idempotent=True),
             params={"filename": filename, "subfolder": subfolder, "type": file_type},
             stream=True,
+            **self._request_options,
         )
         try:
             with target.open("wb") as handle:
@@ -183,7 +195,10 @@ class ComfyApiClient:
 
     def _get_json(self, path: str, *, timeout: float | tuple[float, float]) -> dict[str, Any]:
         return self._transport.request_json(
-            "GET", path, policy=RequestPolicy(timeout=timeout, idempotent=True)
+            "GET",
+            path,
+            policy=RequestPolicy(timeout=timeout, idempotent=True),
+            **self._request_options,
         )
 
 

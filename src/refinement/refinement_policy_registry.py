@@ -1,3 +1,5 @@
+"""Define the refinement policy registry and derive stage policy bundles from observed subject cues."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

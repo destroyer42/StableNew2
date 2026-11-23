@@ -6,14 +6,14 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-809 of 964 modules have a docstring.
+964 of 964 modules have a docstring.
 
 ## src/
 
 - `__init__.py`: StableNew - Stable Diffusion WebUI Automation Package
-- `app_factory.py`: (no docstring)
+- `app_factory.py`: Assemble the V2 application stack with injectable runtime components for GUI startup and tests
 - `cli.py`: Command-line interface for StableNew
-- `main.py`: (no docstring)
+- `main.py`: Start the desktop application and coordinate GUI bootstrap, managed WebUI readiness, and shutdown
 
 ## src/ai_assist/
 
@@ -43,22 +43,22 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: API module for SD WebUI interaction
 - `client.py`: API client for Stable Diffusion WebUI
 - `forge_client.py`: Forge WebUI transport adapter (PR-IMG-FORGE-100)
-- `healthcheck.py`: (no docstring)
+- `healthcheck.py`: Probe WebUI readiness through configured endpoints and track backoff after hard connection failures
 - `http_transport.py`: A small typed HTTP transport (audit E1, P3-4)
 - `types.py`: API result and error types for StableNew V2
 - `webui_api.py`: WebUI API helpers with throttled options plumbing
 - `webui_failure_evidence.py`: Bounded, content-free classification of WebUI execution failures (PR-QUEUE-WEBUI-171)
 - `webui_identity_attestation.py`: Same-session attestation of a StableNew-owned managed Forge (PR-RUNTIME-FORGE-IDENTITY-150)
-- `webui_process_manager.py`: (no docstring)
-- `webui_resource_service.py`: (no docstring)
-- `webui_resources.py`: (no docstring)
+- `webui_process_manager.py`: Manage owned WebUI processes, launch configuration, OS containment, and readiness epochs
+- `webui_resource_service.py`: Refresh WebUI picker resources such as models, samplers, and schedulers as a normalized snapshot
+- `webui_resources.py`: Discover WebUI models, VAEs, and other resources through the API with local file fallbacks
 - `webui_runtime_identity.py`: Read-only WebUI-family runtime identity classification (PR-IMG-FORGE-100)
 
 ## src/app/
 
 - `__init__.py`: Shared application bootstrap and capability helpers
-- `bootstrap.py`: (no docstring)
-- `optional_dependency_probes.py`: (no docstring)
+- `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
+- `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
 - `site_media_files.py`: Filesystem operations for a revocable, approved Site output root
 - `site_native_review.py`: Project and reconcile a phone judgment using native Review evidence
@@ -129,32 +129,32 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/config/
 
 - `app_config.py`: Application-level configuration flags for GUI toggles
-- `prompting_defaults.py`: (no docstring)
-- `style_lora_config.py`: (no docstring)
+- `prompting_defaults.py`: Declare default prompt optimizer settings and polarity-specific classification keyword tables
+- `style_lora_config.py`: Load curated style LoRA definitions and normalize model-family compatibility settings
 
 ## src/contracts/
 
-- `__init__.py`: (no docstring)
-- `models.py`: (no docstring)
-- `projections.py`: (no docstring)
+- `__init__.py`: Expose shared job drafts and runtime projection contracts
+- `models.py`: Define editable job drafts, pack entries and summaries, and the current run config facade
+- `projections.py`: Define revisioned runtime projections, Preview and submission requests, and the projection sink protocol
 
 ## src/controller/
 
-- `__init__.py`: (no docstring)
+- `__init__.py`: Group application services and coordinators that bridge intent, runtime state, and queue operations
 - `app_controller.py`: StableNew - App Controller (Skeleton + CancelToken + Worker Thread Stub)
 - `batch_operations_service.py`: Unified Review / Video Workflow batch operations (PR-BATCH-OPS-201)
 - `batch_output_resolution.py`: Resolve a batch's recorded outputs against the file system (PR-BATCH-OPS-201)
-- `content_visibility_resolver.py`: (no docstring)
+- `content_visibility_resolver.py`: Classify content from recorded metadata and filter or redact operator-facing projections
 - `core_pipeline_controller.py`: Controller-owned base pipeline controller
 - `generation_profile_controller.py`: Controller adapter for model-aware generation profiles and startup defaults (PR-IMG-PROFILE-630)
 - `global_prompt_policy_service.py`: Controller-side projection of current global prompt intent
 - `gpu_loss_coordinator.py`: Contain a confirmed GPU device loss inside the existing queue/worker boundaries
 - `job_execution_controller.py`: Job execution bridge for queue-backed pipeline runs
 - `job_history_service.py`: Controller-facing service for job history and queue introspection
-- `job_lifecycle_logger.py`: (no docstring)
+- `job_lifecycle_logger.py`: Format structured job lifecycle events for the application state operator log
 - `job_service.py`: JobService bridges JobQueue, runner, and history for higher-level orchestration
 - `job_service_auto_run.py`: Continuous-dispatch policy owned by the JobService boundary
-- `job_service_dispatch.py`: (no docstring)
+- `job_service_dispatch.py`: Request one queued dispatch with auto-run off or start the worker with auto-run on
 - `job_service_outage.py`: WebUI outage and GPU device-loss containment owned at the JobService boundary (PR-QUEUE-WEBUI-171, PR-QUEUE-G…
 - `job_service_shutdown.py`: Shutdown admission fence and runner quiescence owned at the JobService boundary (PR-RUNTIME-SHUTDOWN-140)
 - `learning_execution_controller.py`: Controller wrapper for learning execution (non-GUI)
@@ -178,9 +178,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_preflight_controller.py`: Read-only workflow readiness on the Video Workflow controller (PR-VID-UX-311)
 - `video_recent_outputs_controller.py`: Make Video support on the Video Workflow controller (PR-VID-UX-313/314)
 - `video_sequence_controller.py`: Admit, resume and replay multi-segment video jobs on the Video Workflow controller (PR-VID-SEQ-330-CORE)
-- `video_workflow_controller.py`: (no docstring)
+- `video_workflow_controller.py`: Coordinate queued video workflows, one-variable experiments, batches, and motion preparation
 - `video_workflow_mixins.py`: The controller surfaces ``VideoWorkflowController`` is composed of (kept apart so the controller module stays…
-- `webui_connection_controller.py`: (no docstring)
+- `webui_connection_controller.py`: Coordinate WebUI connection checks, readiness epochs, reconnects, and resource notifications
 - `webui_outage_coordinator.py`: Contain a WebUI outage inside the existing queue/worker/manager boundaries
 - `webui_runtime_handoff.py`: Give a queued WebUI image job the runtime it needs, through the existing owners only
 - `webui_runtime_handoff_gate.py`: Decide, before the worker claims the next workload, whether its WebUI runtime must be started or the work held
@@ -190,25 +190,25 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: app_controller_services — extracted service helpers for AppController
 - `ai_assist_integration.py`: Application-scoped AI Assist composition; read generation truth, never own it
-- `application_runtime_coordinator.py`: (no docstring)
-- `background_task_coordinator.py`: (no docstring)
-- `diagnostics_coordinator.py`: (no docstring)
+- `application_runtime_coordinator.py`: Coordinate GUI and WebUI readiness, queue projection, and deferred queue autostart
+- `background_task_coordinator.py`: Coordinate keyed background tasks with latest-wins submission, tracked threads, and shutdown accounting
+- `diagnostics_coordinator.py`: Install and restore process, thread, and Tk exception hooks that forward failures to diagnostics
 - `diagnostics_read_model.py`: Diagnostics read model: job explanations, diagnostics snapshots and the heavy cache
 - `dispatch_hold_status.py`: Operator-facing reason a non-empty queue is not dispatching
-- `gui_config_service.py`: (no docstring)
+- `gui_config_service.py`: Capture GUI drafts and project randomizer, stage, and LoRA values through the config adapter
 - `learning_completion_router.py`: learning_completion_router — routes job-completion events to the learning controller without hard-wiring AppC…
 - `pack_draft_service.py`: Build selected PromptPack entries through the existing Add to Job lifecycle
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
-- `run_submission_service.py`: (no docstring)
-- `runtime_projection_coordinator.py`: (no docstring)
+- `run_submission_service.py`: Bridge GUI run requests and witnessed previews to the queue submission worker
+- `runtime_projection_coordinator.py`: Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink
 - `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
 
 ## src/controller/pipeline_controller_services/
 
-- `history_handoff_service.py`: (no docstring)
+- `history_handoff_service.py`: Hydrate History snapshots as normalized job records and coordinate replay handoff
 - `preview_admission.py`: Which NJRs a queue submission admits: the accepted Preview, never a silent recompile (PR-GUI-UX-560)
 - `preview_build_timing.py`: Preview build timing evidence (extracted from ``PipelineController``; behavior unchanged)
-- `queue_submission_service.py`: (no docstring)
+- `queue_submission_service.py`: Prepare normalized Preview and History records for admission through the job service
 
 ## src/controller/ports/
 
@@ -249,19 +249,19 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `ai_preview_dialog.py`: AI Assist Preview enablement dialog (owner decision D13): the one place an operator enables or revokes Preview
 - `ai_suggestion_dialog.py`: Read-only AI review dialog; only an explicit Accept callback can edit the authoring buffer
 - `api_status_panel.py`: APIStatusPanel - UI component for displaying API connection status
-- `app_state_projection_sink.py`: (no docstring)
-- `app_state_v2.py`: (no docstring)
+- `app_state_projection_sink.py`: Apply runtime projections and operator log entries through a single writer into AppStateV2
+- `app_state_v2.py`: Hold GUI configuration and runtime projections and notify subscribers of state changes
 - `artifact_metadata_inspector_dialog.py`: Read-only artifact metadata inspector dialog
 - `base_generation_panel_v2.py`: Base generation panel for GUI V2
 - `batch_operations_panel_v2.py`: Tk "Batches" view inside the Queue/History operator workflow (PR-BATCH-OPS-201)
 - `batch_retry_dialog.py`: Modal review of a selected retry (PR-BATCH-OPS-201)
 - `controller.py`: GUI compatibility export for the controller-owned base pipeline controller
 - `design_system_v2.py`: Tk/ttk style registration and primitive helpers for the StableNew V2 GUI
-- `dropdown_loader_v2.py`: (no docstring)
+- `dropdown_loader_v2.py`: Normalize WebUI resources and populate Pipeline dropdowns across the stage cards and sidebar
 - `engine_settings_dialog.py`: Modern engine settings dialog for GUI V2
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
 - `generation_profile_strip.py`: Compact generation-profile selector for the Base Generation panel (PR-IMG-PROFILE-630)
-- `gui_invoker.py`: (no docstring)
+- `gui_invoker.py`: Marshal worker-thread calls through a queue serviced by the Tk main loop
 - `guided_reprocess_dialog.py`: Editable guided draft using Review's established batch Preview and admission dialog
 - `guided_review_dialog.py`: Inspect & Improve in Review, with explicit observation, draft and feedback actions
 - `history_browser_panel_v2.py`: Searchable, paged browser over the whole job history (every row, not only the newest few)
@@ -269,12 +269,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `history_iterate_dialog.py`: The "Iterate from History" choice dialog (PR-HISTORY-610A)
 - `job_history_panel_v2.py`: Compact job history renderer for the Pipeline tab
 - `klein_lora_selection_dialog.py`: One batch review of ordered verified candidates, on the Tk thread only
-- `layout_v2.py`: (no docstring)
+- `layout_v2.py`: Apply shared Tk grid rules and reversible compact layout adjustments to workspace widgets
 - `learning_review_dialog_v2.py`: Simple dialog for reviewing recent learning runs
-- `learning_state.py`: (no docstring)
+- `learning_state.py`: Define serializable Learning experiment, variant, and image-reference state
 - `log_trace_panel_v2.py`: Trace and operator log panel for GUI V2
-- `main_window.py`: (no docstring)
-- `main_window_v2.py`: (no docstring)
+- `main_window.py`: Expose the GUI entrypoint wrapper used by existing callers and tests
+- `main_window_v2.py`: Compose the V2 Tk window, workspace tabs, runtime wiring, and operator status controls
 - `mask_editor_dialog.py`: Review's still-image mask editor
 - `model_comparison_readiness.py`: Single-flight worker mailbox; all Tk calls remain in the polling owner
 - `model_list_adapter_v2.py`: Thin adapter to fetch available models/VAEs for GUI V2 without GUI/toolkit deps
@@ -292,12 +292,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_pack_adapter_v2.py`: Thin adapter that exposes prompt pack summaries for GUI V2 widgets
 - `prompt_pack_list_manager.py`: Manages loading, saving, and editing custom prompt pack lists
 - `prompt_target_presenter.py`: Tk application of a ``PromptTargetProjection`` to the Prompt tab (PR-IMG-130B)
-- `prompt_workspace_state.py`: (no docstring)
+- `prompt_workspace_state.py`: Hold the active Prompt tab pack, selection, and edits and coordinate save and load actions
 - `randomizer_panel_v2.py`: Randomizer panel for GUI v2 - Full plan builder UI
 - `review_batch_dialog.py`: Transient whole-selection review; confirmation admits the exact prepared NJRs
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
 - `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply actions (PR-GUI-UX-520)
-- `sidebar_panel_v2.py`: (no docstring)
+- `sidebar_panel_v2.py`: Present Pipeline working settings, PromptPack selection, base generation values, and run controls
 - `site_connection_dialog.py`: Native consent and frozen Preview attachment for the StableNew operator Site
 - `site_phone_dialog.py`: Local consent and connection status for the optional phone connector
 - `smart_review_dialog.py`: Review's opt-in Smart Review panel: point/box object selection and caption suggestions (PR-IMG-REVIEW-320)
@@ -305,23 +305,23 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `theme.py`: Legacy theming shim
 - `theme_v2.py`: StableNew V2 theme definitions and helpers
 - `tooltip.py`: Tooltips for V2 GUI widgets
-- `ui_dispatcher.py`: (no docstring)
+- `ui_dispatcher.py`: Provide the UI dispatcher adapter and manage one Tk dispatch pump per root
 - `ui_tokens.py`: Toolkit-agnostic UI design tokens for StableNew
 - `zimage_optional_control_projection.py`: Presentation-only availability for Z-Image's unsupported optional controls
-- `zone_map_v2.py`: (no docstring)
+- `zone_map_v2.py`: Declare the main window grid zones and Pipeline stage layout order
 
 ## src/gui/controllers/
 
 - `history_compare_service.py`: Read-only "Compare with Parent" (PR-HISTORY-610B): resolve and assess ONE direct parent/child pair
 - `history_iterate_service.py`: Glue for "Iterate from History" (PR-HISTORY-610A): re-reads the canonical record, then hands off - never queu…
-- `learning_controller.py`: (no docstring)
+- `learning_controller.py`: Coordinate Learning experiment design, plan construction, execution, review, and ratings
 - `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
 - `model_evidence_next_test.py`: Adapter between the Model Evidence window and the read-only Learning intelligence service
 - `model_evidence_probe.py`: Window-independent helpers for the catalog's Compatibility Probe (MEC-901 / MEC-905)
 - `model_evidence_proposals.py`: Proposal draft/Preview adapter; never binds JobService or changes the visible Learning state
 - `qualification_review.py`: Worker-only qualification follow-up validation through existing catalog/compiler seams
-- `video_workspace_handoff.py`: (no docstring)
+- `video_workspace_handoff.py`: Route selected media and provenance between Review, Photo Optimize, Video Workflow, and Movie Clips
 
 ## src/gui/dialogs/
 
@@ -334,12 +334,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `adetailer_help.py`: Help text definitions for ADetailer configuration options
 - `inpaint_help.py`: Help text definitions for Img2Img inpaint configuration options
 - `stage_setting_help_v2.py`: Centralized operator help text for stage-card and video setting tooltips
-- `workflow_guidance_v2.py`: (no docstring)
+- `workflow_guidance_v2.py`: Build operator guidance for Review, staged queue actions, SVD, Video Workflow, and Movie Clips
 
 ## src/gui/models/
 
-- `prompt_metadata.py`: (no docstring)
-- `prompt_pack_model.py`: (no docstring)
+- `prompt_metadata.py`: Extract LoRA, embedding, and matrix references from GUI prompt text for display
+- `prompt_pack_model.py`: Represent editable PromptPack slots and matrix settings while preserving untouched stored JSON values
 
 ## src/gui/panels_v2/
 
@@ -368,18 +368,18 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/gui/stage_cards_v2/
 
-- `adetailer_stage_card_v2.py`: (no docstring)
+- `adetailer_stage_card_v2.py`: Present ADetailer face, hand, and prompt settings and track the operator's draft
 - `advanced_img2img_stage_card_v2.py`: Advanced Img2Img stage card for V2 GUI
 - `advanced_txt2img_stage_card_v2.py`: Advanced Txt2Img stage card for V2 GUI
 - `advanced_upscale_stage_card_v2.py`: Advanced Upscale stage card for V2 GUI
-- `base_stage_card_v2.py`: (no docstring)
-- `components.py`: (no docstring)
+- `base_stage_card_v2.py`: Provide the shared Tk stage card header, collapsible body, and configuration hooks
+- `components.py`: Provide reusable Tk controls for stage sliders, prompts, samplers, and seeds
 - `validation_result.py`: Validation result for stage cards
 
 ## src/gui/utils/
 
 - `display_helpers.py`: Display helper functions for GUI components
-- `lora_embedding_parser.py`: (no docstring)
+- `lora_embedding_parser.py`: Parse LoRA and embedding references from prompts for GUI metadata
 
 ## src/gui/view_contracts/
 
@@ -421,31 +421,31 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_review_contract.py`: Toolkit-neutral state for the Video Experiment Review window (PR-VID-QUALITY-211)
 - `video_runtime_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_sequence_contract.py`: Toolkit-neutral state of the Video Workflow "Multi-shot sequence" section (PR-VID-SEQ-331A)
-- `video_workspace_contract.py`: (no docstring)
+- `video_workspace_contract.py`: Format selected media and workflow capability summaries for Video Workflow and Movie Clips
 - `window_layout_contract.py`: Screen-aware main-window geometry policy (PR-GUI-100)
 - `workspace_density_contract.py`: Pure sizing/disclosure rules for the focused operator workspace (PR-GUI-110)
 
 ## src/gui/views/
 
 - `__init__.py`: Views package for GUI v2
-- `character_training_frame.py`: (no docstring)
+- `character_training_frame.py`: Collect and validate character training form inputs for queued LoRA training
 - `compatibility_probe_dialog.py`: Compatibility probe dialog (MEC-901): choose 2–4 lineage recipes, a prompt and an image budget, then queue
 - `diagnostics_dashboard_v2.py`: Diagnostics dashboard for StableNew V2
 - `discovered_review_inbox_panel.py`: DiscoveredReviewInboxPanel — lists discovered groups with status controls
 - `discovered_review_table.py`: DiscoveredReviewTable — shows all items in a discovered group for comparison
 - `embedding_experiment_design_frame.py`: Embedding experiment authoring inside the existing scrollable Learning Design surface
 - `error_modal_v2.py`: Modal that presents structured error envelopes to the user
-- `experiment_design_panel.py`: (no docstring)
-- `grid_design_frame.py`: (no docstring)
+- `experiment_design_panel.py`: Present Learning study selection, experiment inputs, and Preview controls
+- `grid_design_frame.py`: Edit the two axes of a Learning grid and show proposed cell and image counts
 - `learning_analytics_panel.py`: Analytics display panel for learning system
 - `learning_baseline_editor.py`: Editor for Learning's own experiment baseline (the fixed settings every variant shares)
-- `learning_grid_view.py`: (no docstring)
-- `learning_plan_table.py`: (no docstring)
-- `learning_preview_card.py`: (no docstring)
+- `learning_grid_view.py`: Render frozen Learning grid cells as scrollable result tiles with contact-sheet export
+- `learning_plan_table.py`: Present Learning variants with selection, stage status, image details, and ratings
+- `learning_preview_card.py`: Display the frozen Learning preview headline, plan details, candidate prompts, and stale-state warnings
 - `learning_profile_publication.py`: Progressively disclosed findings review inside Learning's existing Recommendations area
-- `learning_review_panel.py`: (no docstring)
-- `learning_tab_frame_v2.py`: (no docstring)
-- `learning_workflow_bar.py`: (no docstring)
+- `learning_review_panel.py`: Present Learning result images, ratings, comparisons, and recommendation summaries
+- `learning_tab_frame_v2.py`: Compose the Learning workspace and guide navigation through Design, Preview, Run, Compare, and Rate
+- `learning_workflow_bar.py`: Render Learning step buttons, experiment status, current guidance, and the primary action
 - `lora_composition_design_frame.py`: LoRA Composition authoring inside the existing scrollable Learning Design surface
 - `model_evidence_proposals_dialog.py`: Operator selection of offline qualification drafts; no execution controls or admission
 - `model_evidence_window.py`: Explicit operator catalog journey
@@ -458,8 +458,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `photo_optimize_layout.py`: Photo Optimize presentation builders, extracted from the tab without new execution authority
 - `photo_optimize_results.py`: Result browser and read-only thumbnail worker; the existing store owns promotion/revert
 - `photo_optimize_scope.py`: Photo editing/review orchestration in the existing view and worker seams
-- `photo_optimize_tab_frame_v2.py`: (no docstring)
-- `pipeline_tab_frame_v2.py`: (no docstring)
+- `photo_optimize_tab_frame_v2.py`: Present the managed photo workspace for import, baseline edits, and result selection
+- `pipeline_tab_frame_v2.py`: Lay out Pipeline workspaces and bridge responsive presentation, stage controls, and working settings
 - `probe_verdict_dialog.py`: Review Probe Result dialog (MEC-902): record an advisory verdict, then optionally classify explicitly
 - `prompt_model_matrix_design_frame.py`: Prompt x Model Matrix authoring: the Prompt Slot candidate editor with the matrix's own bounds and shared-set…
 - `prompt_slot_design_frame.py`: Ordered Prompt Slot authoring inside the existing scrollable Learning Design surface
@@ -467,13 +467,13 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `qualification_rating_card.py`: One image's existing overall/details rating controls in guided qualification review
 - `qualification_review_window.py`: Guided Compare & Rate over verified qualification pairs and existing image ratings
 - `review_set_picker.py`: A small picker for Review's Open menu (Recent job and Batch)
-- `review_tab_frame_v2.py`: (no docstring)
-- `stage_cards_panel.py`: (no docstring)
-- `stage_cards_panel_v2.py`: (no docstring)
+- `review_tab_frame_v2.py`: Present image selection, ratings, disposition, and reprocessing actions in Review
+- `stage_cards_panel.py`: Re-export the V2 stage cards panel at the existing GUI import path
+- `stage_cards_panel_v2.py`: Compose the Pipeline stage cards and project overrides, resource updates, and dependent dimensions
 - `storyboard_compare_window_v2.py`: Compare-only synchronized playback of sibling takes' own clips (PR-VID-STORY-380, spec 7.2)
 - `storyboard_panel_actions.py`: Storyboard actions for the existing sequence panel; all disk work uses the shared UI work runner
 - `storyboard_tab_frame_v2.py`: The Storyboard tab: a tree of takes as shot columns, a cut viewer and a Continue panel (PR-VID-STORY-380)
-- `svd_tab_frame_v2.py`: (no docstring)
+- `svd_tab_frame_v2.py`: Present Native SVD settings, source and folder selection, and queued submission controls
 - `video_eval_panel_v2.py`: Video Workflow tab: queue an eval suite and build its contact sheet (PR-VID-EVAL-320)
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
@@ -485,12 +485,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_recent_outputs_panel_v2.py`: Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
 - `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workflow_sequence_panel_v2.py`: Tk rendering of the Video Workflow "Multi-shot sequence" section (PR-VID-SEQ-331A)
-- `video_workflow_tab_frame_v2.py`: (no docstring)
+- `video_workflow_tab_frame_v2.py`: Present workflow video settings, source selection, previews, and queue admission controls
 - `video_workflow_task_panel_v2.py`: Task selector and Suggested-settings line for the Video Workflow tab (PR-VID-UX-360)
 
 ## src/gui/widgets/
 
-- `action_explainer_panel_v2.py`: (no docstring)
+- `action_explainer_panel_v2.py`: Render collapsible inline guidance for workflow choices and high-risk actions
 - `config_sweep_widget_v2.py`: Config Sweep Widget for PR-CORE-E
 - `controlnet_units_panel.py`: Guided authoring of up to two ordered ControlNet units; resource discovery is off Tk, never a compiler
 - `disclosure_section_v2.py`: Keyboard-accessible collapsible section (PR-GUI-110)
@@ -501,7 +501,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_browser_dialog.py`: Paged local LoRA browser
 - `lora_keyword_dialog.py`: Dialog for displaying and copying LoRA keywords
 - `lora_picker_panel.py`: Authored LoRA controls and local browser; all discovery is off Tk
-- `matrix_helper_widget.py`: (no docstring)
+- `matrix_helper_widget.py`: Build a PromptPack matrix expression from alternatives entered in a Tk dialog
 - `matrix_slot_picker.py`: MatrixSlotPickerDialog - Modal dialog for selecting matrix slot to insert
 - `matrix_tab_panel.py`: MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab
 - `media_inspector.py`: Shared local media controls, bounded inspection and safely recreated dock/detach renderers
@@ -509,11 +509,11 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `reference_map_browser.py`: Searchable reference-map list with a bounded thumbnail (PR-GUI-UX-550)
 - `reference_map_dialog.py`: The "Create map from image" dialog: thin Tk over ``ReferenceMapFlow`` (PR-IMG-CNET-230)
 - `responsive_wrap_v2.py`: Width-following label wrapping for responsive workspaces (PR-GUI-110)
-- `scrollable_frame_v2.py`: (no docstring)
+- `scrollable_frame_v2.py`: Provide a vertically scrollable Tk frame with shared wheel routing and focus visibility
 - `storyboard_columns_v2.py`: Shot columns with take cards for the Storyboard tab (PR-VID-STORY-380)
 - `storyboard_viewer_v2.py`: Frame viewer with a whole-cut slider and join ticks for the Storyboard tab (PR-VID-STORY-380)
 - `submission_notice_v2.py`: Inline, non-modal submission feedback (PR-VID-UX-313)
-- `tab_overview_panel_v2.py`: (no docstring)
+- `tab_overview_panel_v2.py`: Render workspace overviews with optional expanded help for each major tab
 - `task_navigation_bar_v2.py`: Task-first navigation bar for the main window (PR-GUI-410)
 - `thumbnail_widget_v2.py`: Thumbnail display widget for GUI V2
 - `video_preview_widget_v2.py`: Looping in-app video preview (PR-VID-UX-314)
@@ -552,15 +552,15 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/adapters/
 
 - `__init__.py`: Namespace for Tk-free GUI v2 adapters
-- `config_adapter_v26.py`: (no docstring)
+- `config_adapter_v26.py`: Expose a toolkit-neutral facade over canonical config layers and GUI draft state
 - `learning_adapter_v2.py`: Tk-free helpers for GUI v2 learning hooks
 - `randomizer_adapter_v2.py`: Tk-free randomizer adapter for GUI v2
 
 ## src/history/
 
 - `duration_stats.py`: Calculate job duration statistics for time estimates
-- `history_record.py`: (no docstring)
-- `history_schema_v26.py`: (no docstring)
+- `history_record.py`: Represent immutable persisted NJR history and hydrate snapshots for replay
+- `history_schema_v26.py`: Validate persisted v2.6 job history entries against required fields and allowed schema
 
 ## src/image_backends/
 
@@ -634,10 +634,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `experiment_execution.py`: Frozen experiment preview and one-boundary queue admission helpers
 - `experiment_freeze.py`: Immutable controlled-experiment seed policy helpers
 - `experiment_lifecycle.py`: Pure lifecycle rules for Working Draft and Experiment Library placement
-- `experiment_naming.py`: (no docstring)
+- `experiment_naming.py`: Build experiment identities and bounded human-readable labels for Learning artifacts
 - `experiment_outcome.py`: The derived outcome of a Learning experiment, and the operator's closure of it
 - `experiment_reconciliation.py`: Exact admitted Learning identity and repository evidence projections; never dispatches
-- `experiment_store.py`: (no docstring)
+- `experiment_store.py`: Persist Learning sessions and their index while preserving closure decisions and batch associations
 - `feedback_manager.py`: Feedback capture helpers for pipeline runs
 - `feedback_save.py`: Post-append projections cannot change the authoritative feedback save outcome
 - `grid_contact_sheet.py`: Labeled PNG contact sheet for a Two-Axis Grid, rendered only from recorded artifacts
@@ -661,7 +661,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `library_status.py`: Experiment Library status from exact recorded job IDs; a read-only projection
 - `lora_composition.py`: Controlled LoRA composition: one designated LoRA position varies, every other input is frozen
 - `lora_inventory.py`: Registry-backed LoRA identity and compatibility projection for Learning composition
-- `lora_variable_service.py`: (no docstring)
+- `lora_variable_service.py`: Collect LoRA choices for Learning experiment variables
 - `lora_variant.py`: Deterministic LoRA-strength variants for controlled Learning experiments
 - `model_capabilities.py`: Pure stage/model intersection
 - `model_comparison.py`: Learning's explicit target-envelope study: plan once, materialize frozen arms
@@ -686,21 +686,21 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `qualification_batch.py`: Whole-selection preflight and bounded coordination over existing Learning admission
 - `qualification_followup.py`: Explicit create-only follow-up drafts through existing proposal and Learning authorities
 - `qualification_review.py`: Read-only qualification pairing and findings from frozen execution and saved ratings
-- `rating_schema.py`: (no docstring)
+- `rating_schema.py`: Define context-dependent Learning rating categories and their score blend
 - `recommendation_engine.py`: Automated Parameter Recommendation Engine (APRE)
 - `recommendation_summary.py`: Operator-facing reading of a ``RecommendationSet``: what, where, on what evidence, and what Apply may do
 - `resource_access.py`: Canonical projected WebUI resource access for Learning surfaces
 - `review_workspace.py`: Pure experiment-wide review projection and navigation rules
 - `run_metadata.py`: Helpers for run metadata capture
 - `setting_evidence.py`: Frozen Research -> selection -> compiled -> dispatch -> reported comparison
-- `stage_capabilities.py`: (no docstring)
+- `stage_capabilities.py`: Declare which stages and variables Learning experiment design can offer
 - `staged_recommendations.py`: Non-mutating recommendation patches for staged-curation derived jobs
 - `study_catalog.py`: One declarative catalog of the Learning study types: data and references, no behaviour
 - `study_eligibility.py`: What the Learning baseline's model can be tested with, before the operator picks a study form (LEARN-NAV-871)
 - `two_axis_grid.py`: Two-axis (CFG Scale / Steps / LoRA Strength) exploratory comparison: plan once, materialize frozen cells
 - `value_identity.py`: Deterministic grouping identity for JSON-like Learning variant values
 - `variable_metadata.py`: Variable metadata registry for learning experiments
-- `variable_selection_contract.py`: (no docstring)
+- `variable_selection_contract.py`: Normalize Learning resource choices into distinct display labels and internal values
 - `video_quality_review.py`: Durable video quality-review evidence (PR-VID-QUALITY-211)
 - `video_review_service.py`: Open, rate and reopen a Video Workflow experiment review (PR-VID-QUALITY-211)
 
@@ -722,15 +722,15 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/photo_optimize/
 
-- `__init__.py`: (no docstring)
+- `__init__.py`: Expose Managed Photo Set assets, baseline records, and the photo store
 - `editing.py`: Toolkit-neutral masked draft edits
 - `managed_import.py`: Operator-confirmed import of existing image files into the managed Photo Optimize workspace (PR-GUI-UX-580)
 - `migration.py`: Verified copy-only legacy migration with per-asset recovery
-- `models.py`: (no docstring)
+- `models.py`: Define serializable Managed Photo Set assets, baselines, history entries, and stage defaults
 - `paths.py`: Windows extended paths for managed photo files with long provenance names
 - `results.py`: Read-only result projection/validation
 - `settings.py`: Photo draft settings projection; NJRs are still compiled by ReprocessJobBuilder
-- `store.py`: (no docstring)
+- `store.py`: Manage photo sidecars, imports, archives, baseline revisions, and result promotion
 - `submission.py`: Prepare Photo Optimize intent using the existing reprocess compiler only
 
 ## src/pipeline/
@@ -742,13 +742,13 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `adetailer_localized.py`: Localized-only ADetailer refinement (PR-IMG-ADETAILER-LOCAL-240B): execution mode, mask evidence and preserva…
 - `adetailer_profiles.py`: Authoring profiles and compile-time ADetailer settings
 - `animatediff_retirement.py`: AnimateDiff execution retirement policy: one predicate, one error, one stable message
-- `artifact_contract.py`: (no docstring)
+- `artifact_contract.py`: Build canonical artifact records and manifests from stage outputs and variant entries
 - `backend_setting_evidence.py`: Allow-listed values explicitly reported in a generation response or dispatched request
-- `cli_njr_builder.py`: (no docstring)
+- `cli_njr_builder.py`: Translate CLI stage settings into inputs for compiling a normalized job record
 - `compile_evidence.py`: One bounded, read-only model/LoRA evidence context per PromptPack build (PR-PROMPT-140)
-- `config_contract_v26.py`: (no docstring)
+- `config_contract_v26.py`: Canonicalize v2.6 intent, execution, and backend options and validate stage settings
 - `config_merger_v2.py`: ConfigMergerV2: Merge PromptPack-derived base configs with stage card overrides
-- `config_normalizer.py`: (no docstring)
+- `config_normalizer.py`: Normalize legacy and flat stage settings into the canonical nested pipeline config
 - `config_variant_plan_v2.py`: Config Variant Plan V2 — Config Sweep Support (PR-CORE-E)
 - `controlnet_compile.py`: Multi-unit adapter at the existing PromptPack conditioning compile seam
 - `exact_profile_effective_config.py`: Effective-configuration preparation for the generic (non-PromptPack) NJR builder (PR-IMG-MODELS-159)
@@ -759,11 +759,11 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `history_variation_marker.py`: The persisted marker of an edited history variation (PR-HISTORY-610A); dependency-free so projections can rea…
 - `image_edit_inputs.py`: Bounded, content-addressed image-edit inputs in existing mutable state, like OpenPose snapshots
 - `image_performance.py`: Bounded, per-run observations at the image executor's controlled boundaries
-- `intent_artifact_contract.py`: (no docstring)
+- `intent_artifact_contract.py`: Canonicalize and hash the saved intent artifact used for provenance and replay
 - `job_builder_v2.py`: JobBuilderV2: the expansion planner for merged image configurations, and the generic (Pipeline tab) route
 - `job_models_v2.py`: Job models for V2 queue system
 - `klein_edit_reprocess.py`: FLUX.2 Klein single-reference edit as a normal Review/reprocess job (PR-IMG-116)
-- `last_run_store_v2_5.py`: (no docstring)
+- `last_run_store_v2_5.py`: Translate and persist the last-run snapshot used to restore working configuration
 - `learning_sample_evidence.py`: Forward artifact-to-observed-seed association at the existing image-save boundary
 - `matrix_expansion_plan.py`: Pure PromptPack Matrix expansion plan
 - `model_synchronizer.py`: Deterministic A1111 checkpoint synchronization for pipeline execution
@@ -774,17 +774,17 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `payload_builder.py`: Canonical payload builder for SDXL pipeline stages
 - `pipeline_runner.py`: Production pipeline runner integration
 - `prompt_pack_job_builder.py`: Builder pipeline that converts PromptPack entries into NormalizedJobRecords
-- `prompt_pack_parser.py`: (no docstring)
-- `randomizer_v2.py`: (no docstring)
-- `replay_engine.py`: (no docstring)
+- `prompt_pack_parser.py`: Parse PromptPack text blocks into rows with negative prompts and inline resource references
+- `randomizer_v2.py`: Adapt pipeline settings to randomization plans and expand or count configuration variants
+- `replay_engine.py`: Validate and hydrate replay inputs and invoke the canonical NJR runner
 - `replay_input_verification.py`: Verify that the files a persisted NJR froze are still present and unchanged before it is replayed
 - `replay_njr_compiler.py`: Pure history-replay compiler for canonical NJRs
 - `reprocess_builder.py`: ReprocessJobBuilder: Create jobs to reprocess existing images through specific stages
 - `resolution_layer.py`: Deterministic prompt and pipeline config resolution helpers
-- `result_contract_v26.py`: (no docstring)
+- `result_contract_v26.py`: Project execution results into canonical artifacts and replay and diagnostics descriptors
 - `retired_execution.py`: One admission check for every retired execution (AnimateDiff, secondary motion)
 - `run_config.py`: Run configuration model with prompt source tracking
-- `run_plan.py`: (no docstring)
+- `run_plan.py`: Derive the ordered stage execution plan from a normalized job record
 - `run_stage_handlers.py`: Per-stage execution handlers for ``PipelineRunner.run_njr`` (roadmap P4-1)
 - `secondary_motion_retirement.py`: Secondary-motion retirement policy: one predicate, one error, one stable message (owner decision D8)
 - `site_create_settings.py`: Typed txt2img overrides and safe catalog projection for Site-created drafts
@@ -797,28 +797,28 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/prompting/
 
-- `__init__.py`: (no docstring)
-- `contracts.py`: (no docstring)
+- `__init__.py`: Expose prompt analysis, optimization, and stage policy contracts and services
+- `contracts.py`: Define serializable prompt source, intent, recommendation, and stage policy analysis contracts
 - `global_prompt_paths.py`: Resolve the per-user directory that owns the saved Global Positive/Negative prompt text
 - `pack_lora_evidence.py`: Complete exact-admission evidence for explicit fresh PromptPack preflight
 - `pack_lora_selection.py`: Explicit Klein selection over canonical exact-admission evidence; no I/O or rendering
 - `pack_target_readiness.py`: PromptPack editor readiness (PR-IMG-MODELS-158): structure and target readiness are different answers
 - `prompt_adaptation.py`: Explicit, deterministic, policy-driven prompt adaptation (PR-IMG-130C)
-- `prompt_bucket_rules.py`: (no docstring)
-- `prompt_classifier.py`: (no docstring)
+- `prompt_bucket_rules.py`: Build positive and negative prompt bucket rules from configured keyword tables
+- `prompt_classifier.py`: Classify prompt chunks into polarity-specific buckets by ordered rules or keyword scores
 - `prompt_compatibility.py`: Prompt-target compatibility analysis (PR-IMG-130B): what the selected model's policy means for the current pr…
-- `prompt_deduper.py`: (no docstring)
-- `prompt_intent_analyzer.py`: (no docstring)
-- `prompt_normalizer.py`: (no docstring)
-- `prompt_optimizer_config.py`: (no docstring)
-- `prompt_optimizer_errors.py`: (no docstring)
-- `prompt_optimizer_orchestrator.py`: (no docstring)
-- `prompt_optimizer_registry.py`: (no docstring)
-- `prompt_optimizer_service.py`: (no docstring)
-- `prompt_splitter.py`: (no docstring)
-- `prompt_types.py`: (no docstring)
-- `sdxl_prompt_optimizer.py`: (no docstring)
-- `stage_policy_engine.py`: (no docstring)
+- `prompt_deduper.py`: Remove repeated prompt chunks using normalized keys and report the dropped text
+- `prompt_intent_analyzer.py`: Infer prompt style and conflicts and classify explicit human subject counts in rendered text
+- `prompt_normalizer.py`: Normalize prompt matching keys while preserving attention syntax and extra-network identity
+- `prompt_optimizer_config.py`: Parse, validate, and serialize prompt optimization configuration
+- `prompt_optimizer_errors.py`: Define distinct optimizer errors for prompt splitting, classification, and invalid settings
+- `prompt_optimizer_orchestrator.py`: Combine prompt optimization, contextual intent analysis, stage decisions, and recommendations
+- `prompt_optimizer_registry.py`: Build and write versioned prompt optimization and analysis provenance records
+- `prompt_optimizer_service.py`: Gate SDXL prompt optimization by configuration and preserve prompts when disabled or unavailable
+- `prompt_splitter.py`: Split comma-separated prompt chunks outside nested syntax and identify weighted and LoRA references
+- `prompt_types.py`: Define prompt polarities, bucket order, and typed chunk and optimization results
+- `sdxl_prompt_optimizer.py`: Bucket, deduplicate, and reorder SDXL prompt chunks while preserving network anchors and attention scope
+- `stage_policy_engine.py`: Evaluate prompt-informed setting candidates against source values and record stage policy decisions
 
 ## src/promptpacks/
 
@@ -846,25 +846,25 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/randomizer/
 
-- `__init__.py`: (no docstring)
-- `randomizer_engine_v2.py`: (no docstring)
+- `__init__.py`: Expose the GUI-independent randomization plan, seed modes, and configuration variant generator
+- `randomizer_engine_v2.py`: Expand run configurations from configured parameter overrides and seed policies
 
 ## src/refinement/
 
-- `__init__.py`: (no docstring)
-- `prompt_intent_analyzer.py`: (no docstring)
-- `prompt_patcher.py`: (no docstring)
-- `quality_metrics.py`: (no docstring)
-- `refinement_policy_models.py`: (no docstring)
-- `refinement_policy_registry.py`: (no docstring)
-- `subject_scale_policy_service.py`: (no docstring)
+- `__init__.py`: Expose adaptive refinement intent, decision bundles, and the policy registry interface
+- `prompt_intent_analyzer.py`: Derive adaptive refinement cues for subject framing, pose, and face detail from prompt text
+- `prompt_patcher.py`: Apply validated positive and negative prompt token edits and report their effects
+- `quality_metrics.py`: Measure image sharpness and assemble refinement observations for Learning evidence
+- `refinement_policy_models.py`: Define versioned adaptive refinement intent and decision bundle serialization contracts
+- `refinement_policy_registry.py`: Define the refinement policy registry and derive stage policy bundles from observed subject cues
+- `subject_scale_policy_service.py`: Assess subject scale from face detections and pass measured face ratios into refinement decisions
 
 ## src/refinement/detectors/
 
-- `__init__.py`: (no docstring)
-- `base_detector.py`: (no docstring)
-- `null_detector.py`: (no docstring)
-- `opencv_face_detector.py`: (no docstring)
+- `__init__.py`: Expose the subject detector interface and its null and OpenCV implementations
+- `base_detector.py`: Define the face detection interface for adaptive subject assessment
+- `null_detector.py`: Provide a subject detector that always reports no face detections
+- `opencv_face_detector.py`: Detect faces offline with CPU YuNet and project deduplicated boxes into original-image coordinates
 
 ## src/review/
 
@@ -898,46 +898,46 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/services/
 
-- `config_service.py`: (no docstring)
-- `diagnostics_service_v2.py`: (no docstring)
+- `config_service.py`: Read and write PromptPack configuration and named pack lists as JSON
+- `diagnostics_service_v2.py`: Coordinate diagnostic bundle creation and track asynchronous work through shutdown
 - `duration_stats_service.py`: Duration statistics service for queue ETA estimation
 - `operator_readiness_service.py`: Read-only operator readiness projection built from existing authorities
 - `persistence_worker.py`: PR-HB-004: Async Persistence Worker
 - `runtime_transition_service.py`: PR-RUNTIME-100: coordinate release of conflicting StableNew-owned GPU runtimes
 - `runtime_warm_hold.py`: One idle warm hold of a StableNew-owned runtime between consecutive jobs (VID-WARM-373)
 - `ui_state_store.py`: UI state persistence for StableNew v2.6
-- `watchdog_system_v2.py`: (no docstring)
+- `watchdog_system_v2.py`: Observe runtime progress and queue activity for stalls and report diagnosed violations
 
 ## src/state/
 
 - `__init__.py`: Runtime-state and workspace-path helpers for StableNew
-- `content_visibility.py`: (no docstring)
+- `content_visibility.py`: Normalize and serialize the global content visibility mode for operator-facing surfaces
 - `eval_plans_paths.py`: Names and first-use contents of the Evaluation Plans workspace
-- `output_routing.py`: (no docstring)
+- `output_routing.py`: Classify output routes, resolve artifact locations, and reconcile legacy output layouts
 - `workspace_paths.py`: Centralized paths for mutable StableNew workspace data
 
 ## src/training/
 
-- `character_embedder.py`: (no docstring)
-- `lora_manager.py`: (no docstring)
-- `style_lora_manager.py`: (no docstring)
+- `character_embedder.py`: Wrap the external LoRA trainer subprocess and report session status and produced weights
+- `lora_manager.py`: Maintain the trained character LoRA manifest and resolve actor selections to weights
+- `style_lora_manager.py`: Validate curated style LoRA selections against model compatibility and local inventory evidence
 
 ## src/utils/
 
 - `__init__.py`: Utilities module with lazy exports to avoid heavy imports at package load
 - `api_failure_store_v2.py`: Central store for recent API failure records
 - `atomic_io.py`: Crash-safe small-file writes (temp file in the same directory, fsync, atomic replace)
-- `cgroup_v2.py`: (no docstring)
+- `cgroup_v2.py`: Manage a Linux cgroup v2 process container with enforced limits and teardown
 - `config.py`: Configuration management utilities
 - `config_helpers.py`: Helpers for logging when default configuration values are used
 - `debug_shutdown_inspector.py`: Utilities for logging detailed shutdown state diagnostics
-- `diagnostics_bundle_v2.py`: (no docstring)
-- `embedding_prompt_utils.py`: (no docstring)
+- `diagnostics_bundle_v2.py`: Collect bounded runtime diagnostics into ZIP bundles with single-flight and cooldown controls
+- `embedding_prompt_utils.py`: Normalize textual-inversion references and read the backend's embedding usage report
 - `embedding_scanner.py`: Compatibility projection from AssetRegistry; it owns no scan or cache
 - `error_envelope_v2.py`: Unified error envelope for structured errors across StableNew phases
 - `exceptions_v2.py`: Exception taxonomy for StableNew Unified Error Model
 - `experiment_snapshot_ref.py`: The one rule for a frozen Learning experiment snapshot carried by reference (LEARN-SNAPSHOT-914)
-- `file_access_log_v2_5_2025_11_26.py`: (no docstring)
+- `file_access_log_v2_5_2025_11_26.py`: Record unique paths touched at runtime through a shared file-access logger
 - `file_io.py`: File I/O utilities with UTF-8 support
 - `file_writer_lock.py`: A bounded cross-process lock for a file that may be atomically replaced
 - `gpu_device_health.py`: Read-only host GPU evidence and the accelerator-fault vocabulary (PR-QUEUE-GPU-180)
@@ -956,35 +956,35 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `os_shell.py`: Open a file in the system viewer or reveal it in the file manager (PR-VID-UX-314)
 - `process_container_v2.py`: OS-level process container helpers (job objects / cgroup v2) for StableNew
 - `process_inspector_v2.py`: Utilities for inspecting and describing Python processes
-- `process_observation.py`: Read-only snapshots of a bounded child's owned container; no lifecycle authority
+- `process_observation.py`: Read-only observations scoped to owned processes and containers
 - `prompt_pack_utils.py`: Utilities for reading metadata from native JSON PromptPacks
 - `prompt_packs.py`: Prompt pack discovery and descriptors for Architecture_v2
-- `prompt_templates.py`: (no docstring)
+- `prompt_templates.py`: Load and cache prompt templates and compose text from named placeholder values
 - `prompt_txt_parser.py`: Utilities for parsing prompt pack TXT files into structured components
 - `randomizer.py`: Prompt randomization utilities for txt2img pipeline
 - `retry_policy_v2.py`: Retry policy definitions for StableNew WebUI interactions
 - `single_instance.py`: Simple localhost socket lock to enforce single StableNew V2 instance
 - `snapshot_builder_v2.py`: Snapshot helpers for Phase 9: Job Snapshotting + Deterministic Replay
-- `system_info_v2.py`: (no docstring)
+- `system_info_v2.py`: Collect a lightweight system snapshot for diagnostics bundles
 - `thread_registry.py`: Thread Registry for Centralized Thread Lifecycle Management
-- `watchdog_v2.py`: (no docstring)
+- `watchdog_v2.py`: Watch an external job process for configured runtime and resource limit violations
 - `webui_discovery.py`: One-shot WebUI API health summary used by ``SDWebUIClient.check_api_ready``
-- `webui_resource_names.py`: (no docstring)
-- `win_jobobject.py`: (no docstring)
+- `webui_resource_names.py`: Normalize WebUI resource suffixes and VAE display values for lookup and comparison
+- `win_jobobject.py`: Bind Windows Job Object APIs for child process containment, limits, observation, and teardown
 
 ## src/video/
 
 - `__init__.py`: Video utilities package for StableNew v2.6
 - `assembly_models.py`: Typed models for stitched and interpolated assembled-video outputs
-- `comfy_api_client.py`: (no docstring)
-- `comfy_dependency_probe.py`: (no docstring)
-- `comfy_healthcheck.py`: (no docstring)
-- `comfy_process_manager.py`: (no docstring)
+- `comfy_api_client.py`: Access local ComfyUI health, queue, history, and media endpoints through a typed client
+- `comfy_dependency_probe.py`: Check declared Comfy workflow dependencies against reported stock nodes and loader options
+- `comfy_healthcheck.py`: Probe ComfyUI health and wait for system statistics and object metadata readiness
+- `comfy_process_manager.py`: Own managed ComfyUI startup, health checks, launch flag evidence, and child process shutdown
 - `comfy_runtime_setup.py`: Toolkit-neutral facts about how ComfyUI is configured, what this process is running, and what that means (PR-…
-- `comfy_workflow_backend.py`: (no docstring)
+- `comfy_workflow_backend.py`: Execute frozen Comfy video requests and collect artifacts, provenance, and runtime liveness evidence
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
-- `continuity_models.py`: (no docstring)
-- `depth_map_resolver.py`: (no docstring)
+- `continuity_models.py`: Model continuity packs, their anchors and references, and the links stored with video jobs
+- `depth_map_resolver.py`: Validate supplied depth maps or materialize estimated depth images for conditioned video workflows
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
@@ -1029,7 +1029,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_errors.py`: Typed error surface for native SVD runtime
 - `svd_history.py`: Read-only history summaries for the native SVD tab
 - `svd_models.py`: Typed models and registry for native SVD
-- `svd_native_backend.py`: (no docstring)
+- `svd_native_backend.py`: Prepare the owned runtime transition and adapt native SVD results to the video backend contract
 - `svd_portable_provenance.py`: Portable, immutable provenance for native-SVD MP4 artifacts
 - `svd_postprocess.py`: Optional postprocess pipeline for native SVD frame sequences
 - `svd_postprocess_worker.py`: Helper process for SVD frame enhancement stages
@@ -1040,8 +1040,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_service.py`: Native Diffusers-backed Stable Video Diffusion service
 - `svd_target.py`: Source-aware target geometry policy for the native SVD XT path
 - `video_artifact_helpers.py`: Generic helpers for normalizing workflow-video output bundles
-- `video_backend_registry.py`: (no docstring)
-- `video_backend_types.py`: (no docstring)
+- `video_backend_registry.py`: Register video adapters, resolve them by backend or stage, and list task-compatible backends
+- `video_backend_types.py`: Define backend-neutral video capabilities, execution requests, results, and adapter interfaces
 - `video_eval_assessment.py`: Pure identity and continuity assessment of an eval run (PR-VID-QUALITY-351)
 - `video_eval_assessment_html.py`: HTML fragments for the identity assessment in the eval contact sheet (PR-VID-QUALITY-351)
 - `video_eval_catalog.py`: Read-only discovery of video evaluation plans and runs
@@ -1063,13 +1063,13 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_njr_builder.py`: The single Video Workflow NJR construction path (PR-VID-194)
 - `workflow_admission.py`: Workflow-specific admission constraints at the canonical JobService boundary
 - `workflow_asset_integrity.py`: Read-only verification of catalog-pinned assets in the configured Comfy model folders
-- `workflow_catalog.py`: (no docstring)
+- `workflow_catalog.py`: Assemble the versioned Comfy catalog with governance, dependencies, and runtime policies
 - `workflow_catalog_fun_control.py`: Pinned stock-node Fun Control graph; no installation or physical qualification
 - `workflow_catalog_wan_a14b.py`: Wan2.2 I2V-A14B lightx2v 4-step workflow spec (VID-CLIP-370; approved by VID-CLIP-372)
 - `workflow_catalog_wan_a14b_svi.py`: Experimental Wan2.2 I2V-A14B + SVI 2.0 workflow for multi-segment sequences (VID-A14B-SVI-375)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
-- `workflow_compiler.py`: (no docstring)
-- `workflow_contracts.py`: (no docstring)
+- `workflow_compiler.py`: Compile declared workflow inputs into a backend request by rendering graph templates
+- `workflow_contracts.py`: Define workflow versions, governance, capabilities, bindings, and compiled requests
 - `workflow_controls.py`: Neutral, spec-declared operator controls for workflow-owned generation inputs (PR-VID-192)
 - `workflow_frame_count.py`: Neutral, spec-declared generation-length contract (PR-VID-190)
 - `workflow_input_integrity.py`: Exact prepared-motion admission/dispatch policy, opt-in by workflow declaration
@@ -1077,16 +1077,16 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_picker.py`: Operator-facing workflow choices for the Video Workflow tab (PR-VID-UX-313)
 - `workflow_preflight.py`: Read-only readiness gates for a Comfy video workflow, answered before the job is queued (PR-VID-UX-311)
 - `workflow_readiness.py`: Bounded, workflow-specific resource-readiness check (PR-VID-130)
-- `workflow_registry.py`: (no docstring)
+- `workflow_registry.py`: Resolve exact workflow versions and list offerable entries under the catalog's governance rules
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
 - `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
 
 ## src/video/motion/
 
 - `__init__.py`: Secondary-motion records (owner decision D8: execution is retired)
-- `secondary_motion_metrics.py`: (no docstring)
-- `secondary_motion_models.py`: (no docstring)
-- `secondary_motion_provenance.py`: (no docstring)
+- `secondary_motion_metrics.py`: Project secondary-motion provenance into Learning metrics and a bounded risk score
+- `secondary_motion_models.py`: Define versioned secondary-motion intent and policy payloads for stored job records
+- `secondary_motion_provenance.py`: Build and read secondary-motion manifest blocks and normalized result summaries
 
 ## src/video/motion_conversion/
 

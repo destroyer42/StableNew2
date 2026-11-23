@@ -1,3 +1,5 @@
+"""Expose Managed Photo Set assets, baseline records, and the photo store."""
+
 from .models import (
     PHOTO_OPTIMIZE_SCHEMA_VERSION,
     PhotoOptimizeAsset,

@@ -1,6 +1,8 @@
 # Subsystem: Learning
 # Role: Renders a table of learning plans and planned runs.
 
+"""Present Learning variants with selection, stage status, image details, and ratings."""
+
 from __future__ import annotations
 
 import tkinter as tk

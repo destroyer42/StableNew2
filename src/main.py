@@ -1,4 +1,6 @@
 # --- Standard library imports ---
+"""Start the desktop application and coordinate GUI bootstrap, managed WebUI readiness, and shutdown."""
+
 import atexit
 import builtins
 import importlib

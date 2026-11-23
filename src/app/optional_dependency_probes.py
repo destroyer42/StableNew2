@@ -1,3 +1,5 @@
+"""Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field

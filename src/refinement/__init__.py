@@ -1,3 +1,5 @@
+"""Expose adaptive refinement intent, decision bundles, and the policy registry interface."""
+
 from __future__ import annotations
 
 from .refinement_policy_models import (

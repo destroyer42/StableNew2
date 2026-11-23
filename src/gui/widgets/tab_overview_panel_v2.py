@@ -1,3 +1,5 @@
+"""Render workspace overviews with optional expanded help for each major tab."""
+
 from __future__ import annotations
 
 import tkinter as tk

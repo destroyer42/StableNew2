@@ -1,3 +1,5 @@
+"""Coordinate keyed background tasks with latest-wins submission, tracked threads, and shutdown accounting."""
+
 from __future__ import annotations
 
 import logging

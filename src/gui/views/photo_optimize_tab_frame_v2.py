@@ -1,3 +1,5 @@
+"""Present the managed photo workspace for import, baseline edits, and result selection."""
+
 from __future__ import annotations
 
 import tkinter as tk
