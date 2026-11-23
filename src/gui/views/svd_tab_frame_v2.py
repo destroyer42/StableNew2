@@ -1,3 +1,5 @@
+"""Present Native SVD settings, source and folder selection, and queued submission controls."""
+
 from __future__ import annotations
 
 import logging

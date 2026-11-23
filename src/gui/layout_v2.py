@@ -1,3 +1,5 @@
+"""Apply shared Tk grid rules and reversible compact layout adjustments to workspace widgets."""
+
 from __future__ import annotations
 
 import tkinter as tk

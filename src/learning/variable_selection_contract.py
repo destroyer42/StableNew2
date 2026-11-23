@@ -1,3 +1,5 @@
+"""Normalize Learning resource choices into distinct display labels and internal values."""
+
 from __future__ import annotations
 
 from typing import Any

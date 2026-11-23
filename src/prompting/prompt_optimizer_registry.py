@@ -1,3 +1,5 @@
+"""Build and write versioned prompt optimization and analysis provenance records."""
+
 from __future__ import annotations
 
 import json

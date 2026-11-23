@@ -1,3 +1,5 @@
+"""Define versioned adaptive refinement intent and decision bundle serialization contracts."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

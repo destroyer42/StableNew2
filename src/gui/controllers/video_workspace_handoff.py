@@ -1,3 +1,5 @@
+"""Route selected media and provenance between Review, Photo Optimize, Video Workflow, and Movie Clips."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence

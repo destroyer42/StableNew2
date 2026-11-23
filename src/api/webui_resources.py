@@ -1,3 +1,5 @@
+"""Discover WebUI models, VAEs, and other resources through the API with local file fallbacks."""
+
 from __future__ import annotations
 
 import os

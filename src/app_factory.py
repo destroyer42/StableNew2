@@ -1,3 +1,5 @@
+"""Assemble the V2 application stack with injectable runtime components for GUI startup and tests."""
+
 from __future__ import annotations
 
 import tkinter as tk

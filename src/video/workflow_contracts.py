@@ -1,3 +1,5 @@
+"""Define workflow versions, governance, capabilities, bindings, and compiled requests."""
+
 from __future__ import annotations
 
 from copy import deepcopy

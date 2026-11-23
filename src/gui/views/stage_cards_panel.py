@@ -1,3 +1,5 @@
+"""Re-export the V2 stage cards panel at the existing GUI import path."""
+
 from __future__ import annotations
 
 from src.gui.views.stage_cards_panel_v2 import StageCardsPanel

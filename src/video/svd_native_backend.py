@@ -1,3 +1,5 @@
+"""Prepare the owned runtime transition and adapt native SVD results to the video backend contract."""
+
 from __future__ import annotations
 
 from typing import Any

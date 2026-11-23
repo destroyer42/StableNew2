@@ -1,3 +1,5 @@
+"""Build operator guidance for Review, staged queue actions, SVD, Video Workflow, and Movie Clips."""
+
 from __future__ import annotations
 
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent

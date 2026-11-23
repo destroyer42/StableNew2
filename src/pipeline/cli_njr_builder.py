@@ -1,3 +1,5 @@
+"""Translate CLI stage settings into inputs for compiling a normalized job record."""
+
 from __future__ import annotations
 
 from copy import deepcopy

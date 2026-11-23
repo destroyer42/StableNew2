@@ -1,3 +1,5 @@
+"""Coordinate queued video workflows, one-variable experiments, batches, and motion preparation."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
@@ -172,8 +174,6 @@ class VideoWorkflowController(VideoWorkflowMixins):
             "source_preparation": dict(built.source_preparation),
         }
         return job_ids[0]
-
-    # ---------------------------------------------------------------- one-variable experiments
 
     def resolve_experiment_baseline(self, form_data: dict[str, Any], variable_name: str) -> Any:
         """The current resolved effective value of one declared control."""

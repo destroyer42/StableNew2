@@ -1,3 +1,5 @@
+"""Assemble the versioned Comfy catalog with governance, dependencies, and runtime policies."""
+
 from __future__ import annotations
 
 from copy import deepcopy

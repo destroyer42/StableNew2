@@ -1,3 +1,5 @@
+"""Define context-dependent Learning rating categories and their score blend."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

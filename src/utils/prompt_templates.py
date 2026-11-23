@@ -1,3 +1,5 @@
+"""Load and cache prompt templates and compose text from named placeholder values."""
+
 from __future__ import annotations
 
 import json

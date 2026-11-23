@@ -1,3 +1,5 @@
+"""Capture GUI drafts and project randomizer, stage, and LoRA values through the config adapter."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

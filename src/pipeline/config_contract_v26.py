@@ -1,3 +1,5 @@
+"""Canonicalize v2.6 intent, execution, and backend options and validate stage settings."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

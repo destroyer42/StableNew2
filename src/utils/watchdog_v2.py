@@ -1,3 +1,5 @@
+"""Watch an external job process for configured runtime and resource limit violations."""
+
 from __future__ import annotations
 
 import threading

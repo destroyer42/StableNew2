@@ -1,3 +1,5 @@
+"""Build the shared GUI and CLI application kernel with injected configuration and runtime adapters."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,5 @@
+"""Build a PromptPack matrix expression from alternatives entered in a Tk dialog."""
+
 from __future__ import annotations
 
 import tkinter as tk

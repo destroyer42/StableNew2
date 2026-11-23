@@ -1,4 +1,6 @@
 # Used by tests and entrypoint contract
+"""Compose the V2 Tk window, workspace tabs, runtime wiring, and operator status controls."""
+
 from __future__ import annotations
 
 import logging

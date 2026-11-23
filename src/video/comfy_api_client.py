@@ -1,3 +1,5 @@
+"""Access local ComfyUI health, queue, history, and media endpoints through a typed client."""
+
 from __future__ import annotations
 
 import hashlib

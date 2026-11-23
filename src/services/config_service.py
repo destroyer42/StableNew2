@@ -1,3 +1,5 @@
+"""Read and write PromptPack configuration and named pack lists as JSON."""
+
 import json
 from pathlib import Path
 from typing import Any, cast

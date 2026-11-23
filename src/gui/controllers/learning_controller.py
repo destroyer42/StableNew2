@@ -1,6 +1,8 @@
 # Subsystem: Learning
 # Role: Bridges the learning GUI tab and the core learning subsystem.
 
+"""Coordinate Learning experiment design, plan construction, execution, review, and ratings."""
+
 from __future__ import annotations
 
 import copy

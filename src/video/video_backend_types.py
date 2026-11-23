@@ -1,3 +1,5 @@
+"""Define backend-neutral video capabilities, execution requests, results, and adapter interfaces."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -1,3 +1,5 @@
+"""Format selected media and workflow capability summaries for Video Workflow and Movie Clips."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

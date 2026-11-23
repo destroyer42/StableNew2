@@ -1,3 +1,5 @@
+"""Record unique paths touched at runtime through a shared file-access logger."""
+
 from __future__ import annotations
 
 import json

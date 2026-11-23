@@ -1,3 +1,5 @@
+"""Resolve exact workflow versions and list offerable entries under the catalog's governance rules."""
+
 from __future__ import annotations
 
 from typing import Any

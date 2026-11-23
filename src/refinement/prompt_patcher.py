@@ -1,3 +1,5 @@
+"""Apply validated positive and negative prompt token edits and report their effects."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

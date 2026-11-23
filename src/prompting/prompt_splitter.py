@@ -1,3 +1,5 @@
+"""Split comma-separated prompt chunks outside nested syntax and identify weighted and LoRA references."""
+
 from __future__ import annotations
 
 import re

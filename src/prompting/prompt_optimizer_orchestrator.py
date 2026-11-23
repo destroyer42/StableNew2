@@ -1,3 +1,5 @@
+"""Combine prompt optimization, contextual intent analysis, stage decisions, and recommendations."""
+
 from __future__ import annotations
 
 import re

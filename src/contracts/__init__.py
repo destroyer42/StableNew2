@@ -1,3 +1,5 @@
+"""Expose shared job drafts and runtime projection contracts."""
+
 from .models import CurrentConfig, JobDraft, JobDraftPart, JobDraftSummary, PackJobEntry
 from .projections import (
     UNSET,

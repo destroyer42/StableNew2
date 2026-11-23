@@ -1,3 +1,5 @@
+"""Format structured job lifecycle events for the application state operator log."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

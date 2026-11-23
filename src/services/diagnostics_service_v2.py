@@ -1,3 +1,5 @@
+"""Coordinate diagnostic bundle creation and track asynchronous work through shutdown."""
+
 from __future__ import annotations
 
 import threading

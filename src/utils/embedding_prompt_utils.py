@@ -1,3 +1,5 @@
+"""Normalize textual-inversion references and read the backend's embedding usage report."""
+
 from __future__ import annotations
 
 import re

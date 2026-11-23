@@ -1,6 +1,8 @@
 # Subsystem: Learning
 # Role: Step indicator, status and single primary action for the guided Designed Experiments workflow.
 
+"""Render Learning step buttons, experiment status, current guidance, and the primary action."""
+
 from __future__ import annotations
 
 import tkinter as tk

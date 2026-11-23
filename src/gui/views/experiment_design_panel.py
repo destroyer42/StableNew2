@@ -1,3 +1,5 @@
+"""Present Learning study selection, experiment inputs, and Preview controls."""
+
 from __future__ import annotations
 
 import tkinter as tk

@@ -1,3 +1,5 @@
+"""Present ADetailer face, hand, and prompt settings and track the operator's draft."""
+
 from __future__ import annotations
 
 import logging

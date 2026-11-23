@@ -1,3 +1,5 @@
+"""Prepare normalized Preview and History records for admission through the job service."""
+
 from __future__ import annotations
 
 import logging

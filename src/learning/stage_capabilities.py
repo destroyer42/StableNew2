@@ -1,3 +1,5 @@
+"""Declare which stages and variables Learning experiment design can offer."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

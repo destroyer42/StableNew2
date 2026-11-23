@@ -1,3 +1,5 @@
+"""Model continuity packs, their anchors and references, and the links stored with video jobs."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

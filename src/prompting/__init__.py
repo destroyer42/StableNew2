@@ -1,3 +1,5 @@
+"""Expose prompt analysis, optimization, and stage policy contracts and services."""
+
 from src.prompting.contracts import (
     PromptContext,
     PromptIntentBundle,

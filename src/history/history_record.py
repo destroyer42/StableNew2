@@ -1,3 +1,5 @@
+"""Represent immutable persisted NJR history and hydrate snapshots for replay."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

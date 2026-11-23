@@ -1,3 +1,5 @@
+"""Compose the Learning workspace and guide navigation through Design, Preview, Run, Compare, and Rate."""
+
 from __future__ import annotations
 
 import logging
