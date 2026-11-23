@@ -153,7 +153,7 @@ def test_saved_geometry_is_normalized_for_the_current_screen(saved, expected) ->
         # prompt moved into the collapsed Advanced options).
         (SVDTabFrameV2, "_body_scroll", "open_manifest_btn"),
         pytest.param(
-            VideoWorkflowTabFrameV2, "_body_scroll", "recent_outputs_panel",
+            VideoWorkflowTabFrameV2, "_media_scroll", "recent_outputs_panel",
             marks=pytest.mark.skipif(
                 sys.platform != "win32", reason="Windows desktop pixel geometry; enforced in the Windows lane"
             ),
@@ -236,18 +236,18 @@ def test_recent_video_controls_and_detach_return_fit_the_compact_viewport(tk_roo
         settle(lambda: panel.preview._video is not None and panel.preview._video.session.clip is not None)
         if viewport_height is not None:
             # Reproduce the actual 327px viewport measured in the failing hosted desktop.
-            tk_root.geometry(f"1024x{layout.height}+0+0")
+            tk_root.geometry(f"1280x{layout.height}+0+0")  # VID-UX-384: two-pane width, so the height maps 1:1
             tk_root.update()
-            height = tk_root.winfo_height() + viewport_height - tab._body_scroll._canvas.winfo_height()
-            tk_root.geometry(f"1024x{height}+0+0")
+            height = tk_root.winfo_height() + viewport_height - tab._media_scroll._canvas.winfo_height()
+            tk_root.geometry(f"1280x{height}+0+0")
             tk_root.update()
-            assert tab._body_scroll._canvas.winfo_height() == viewport_height
+            assert tab._media_scroll._canvas.winfo_height() == viewport_height
         for detached in (False, True, False):
             panel.preview.detach() if detached else panel.preview.dock()
             tk_root.update()
-            tab._body_scroll._canvas.yview_moveto(1.0)
+            tab._media_scroll._canvas.yview_moveto(1.0)
             tk_root.update()
-            viewport = tab._body_scroll._canvas
+            viewport = tab._media_scroll._canvas
             left, top = viewport.winfo_rootx(), viewport.winfo_rooty()
             right, bottom = left + viewport.winfo_width(), top + viewport.winfo_height()
             if panel.winfo_height() <= viewport.winfo_height():
@@ -260,14 +260,14 @@ def test_recent_video_controls_and_detach_return_fit_the_compact_viewport(tk_roo
                 assert font_scale == 1.5
             for unit in (panel.tree, panel.preview):
                 assert unit.winfo_height() <= viewport.winfo_height()
-                tab._body_scroll.reveal(unit)
+                tab._media_scroll.reveal(unit)
                 tk_root.update()
                 assert left <= unit.winfo_rootx()
                 assert unit.winfo_rootx() + unit.winfo_width() <= right + 1
                 assert top <= unit.winfo_rooty()
                 assert unit.winfo_rooty() + unit.winfo_height() <= bottom + 1
             for control in (panel.refresh_button, panel.open_button, panel.reveal_button,
-                            panel.movie_button, panel.preview.show_button, panel.preview.detach_button):
+                            panel.movie_button, panel.preview.detach_button):
                 # Exercise the production FocusIn router, starting with the panel scrolled away.
                 tk_root.focus_force()
                 viewport.yview_moveto(0.0)

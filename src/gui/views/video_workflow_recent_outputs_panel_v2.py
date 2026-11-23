@@ -41,6 +41,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         on_library_changed: Callable[[], None] | None = None,
         ask_library_details: Callable[[RecentVideoOutput], Mapping[str, Any] | None] | None = None,
         decode: Any = None,
+        shown_var: tk.BooleanVar | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(
@@ -107,8 +108,15 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
         self.tree.bind("<Double-Button-1>", lambda _e: self._on_open())
 
+        # VID-UX-384: a tab-level Show media variable replaces this preview's own checkbox.
         self.preview = VideoPreviewWidget(
-            self, decode=decode, edge=256, scale=1, allow_original=False
+            self,
+            decode=decode,
+            edge=256,
+            scale=1,
+            allow_original=False,
+            shown_var=shown_var,
+            show_control=shown_var is None,
         )
         self.preview.grid(row=1, column=1, sticky="n")
         ttk.Label(self, textvariable=self.status_var, style="Muted.TLabel", justify="left").grid(

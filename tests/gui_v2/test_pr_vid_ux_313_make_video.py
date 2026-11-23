@@ -293,31 +293,35 @@ def _under(widget: tk.Misc, ancestor: tk.Misc) -> bool:
 
 
 def test_basic_controls_are_separate_from_the_collapsed_advanced_options(env) -> None:
-    # PR-VID-UX-360 regrouped the form: the prompt and readiness stay in the open; the engine and its
-    # settings sit in the Settings editor; everything else has a named, collapsed disclosure.
+    # VID-UX-384: the prompt and the settings people change (engine, length, motion, seed, smoothing) stay in
+    # the open; rarely changed controls sit in More settings; everything else has a named, collapsed
+    # disclosure; the eval kit lives in the Evaluate view, not in a disclosure.
     tab = env.tab
     sections = (
         tab.advanced_section,
         tab.keyframes_section,
-        tab.compare_section,
         tab.details_section,
     )
-    for widget in (tab.prompt_text, tab.runtime_readiness_strip, tab.suggested_line):
-        assert not any(_under(widget, section) for section in sections)
     for widget in (
+        tab.prompt_text,
+        tab.runtime_readiness_strip,
+        tab.suggested_line,
         tab.workflow_combo,
         tab.frame_count_combo,
         tab.seed_entry,
-        tab.negative_prompt_text,
         tab.smooth_check,
-        tab.workflow_controls_panel,
-        tab.use_svd_button,
     ):
+        assert not any(_under(widget, section) for section in sections)
+    for widget in (tab.workflow_combo, tab.frame_count_combo, tab.seed_entry, tab.smooth_check):
+        assert _under(widget, tab.settings_block)
+    for widget in (tab.negative_prompt_text, tab.workflow_controls_panel, tab.use_svd_button):
         assert _under(widget, tab._advanced_frame)
     for widget in (tab.end_anchor_entry, tab.mid_anchors_entry, tab.conditioning_section):
         assert _under(widget, tab.keyframes_section)
     for widget in (tab.experiment_panel, tab.eval_panel):
-        assert _under(widget, tab.compare_section)
+        assert _under(widget, tab.evaluate_view)
+        assert not _under(widget, tab._create_view)
+    assert tab.compare_section is tab.evaluate_view
     assert all(section.is_expanded() is False for section in sections)
 
 

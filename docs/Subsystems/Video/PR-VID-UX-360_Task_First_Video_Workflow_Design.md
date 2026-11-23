@@ -114,8 +114,11 @@ Disclosure rules:
 - A disclosure opens itself only when it contains a required input that is empty.
 - A collapsed disclosure that hides non-default values shows "modified" in its header (the existing conditioning
   header behaviour, generalised).
-- Motion Library and Prepare Motion Source exist only in `follow_clip`. Motion readiness (the exact source crop
-  and motion guidance) shows for any engine that declares it, in every task.
+- Motion Library and Prepare Motion Source exist only in `follow_clip`. **Superseded by VID-UX-384** (owner request
+  2026-11-22): motion readiness (the exact source crop and motion guidance) no longer shows in every task. It is
+  a header status chip, and its full panel (right pane) shows only for `follow_clip`, an engine that accepts a
+  driving video, a reported problem or warning, or when the operator opens it from the chip. Its images render
+  only while **Show media** is on and the application content-visibility policy allows the source.
 - The batch strip and table show in `batch`, in `follow_clip` (many images can share one driving clip), and for as
   long as a batch is in force; the sequence panel only in `sequence`.
 
@@ -177,3 +180,25 @@ Data flow: workflow records → `workflow_tasks` → task panel sets the existin
 
 `VIDEO_PIPELINE.md` section 4 (operator surface), `STATUS.md` video capability line, and the W4 research note's
 "Flows" entry.
+
+## 8. Layout redesign (VID-UX-384)
+
+The VID-UX-360 task model, pins and suggestions are unchanged; the layout around them is:
+
+- **Fixed header:** a **Create | Evaluate** switch and the readiness chip, the source row, the task selector, the
+  action bar (Queue video is Create's one Primary) and the inline submission notice. The header never scrolls.
+- **Create view:** two panes (left weight 3, right weight 2 with a 360 px minimum; below 1100 px the right pane stacks
+  under the left). Left: the prompt, the **Settings block always visible** (engine, motion, length, seed, smoothing,
+  with *Why these settings?* behind a button), **Reset to suggested** and **More settings** (negative prompt,
+  declared workflow controls, *Use native SVD*; it opens itself for a required control or an experimental engine),
+  then only the active task's inputs, Keyframes and conditioning (only if the engine declares them) and Details.
+  Right: one **Show media** checkbox (default on, saved with the tab state, never submitted) driving the source
+  preview, the readiness crop and Recent outputs, then the readiness details (rule in section 6) and Recent outputs.
+  An application "hidden" content-visibility mode wins over Show media.
+- **Evaluate view:** the eval kit (`VideoEvalPanel`) and *Compare one control* (its empty state says when it is
+  available) full width, with their actions visible immediately; the eval queue is that view's Primary. Switching
+  views keeps every form value.
+- Attribute names kept: `advanced_section` (now *More settings*), `compare_section` (the Evaluate container),
+  `eval_panel`, `experiment_panel`, `motion_readiness_panel`, `suggested_line`.
+- Modules: `video_workflow_layout_v2.py`, `video_workflow_evaluate_view_v2.py`, `video_workflow_media_pane_v2.py`,
+  `video_workflow_sections_v2.py`. Tests: `tests/gui_v2/test_vid_ux_384_layout.py`.
