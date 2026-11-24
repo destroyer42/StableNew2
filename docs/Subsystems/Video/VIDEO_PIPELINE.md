@@ -376,7 +376,10 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
     (`src/pipeline/video_sequence_executor.py`).
   - *Root preparation* (`src/video/storyboard_root.py`): a finished clip or an image becomes the storyboard root. Frames are decoded to
     `<output root>/storyboards/<storyboard_id>/root/` with a root cut manifest; an existing `root/` is refused, and a smoothed clip
-    uses its generated frames at the workflow's fps with the fixed note about the smoothing.
+    uses its generated frames at the workflow's fps with the fixed note about the smoothing. An MP4 chosen by file
+    (`src/video/storyboard_import.py`, PR-VID-STORY-IMPORT) is matched to its job only by repository output-path evidence and
+    then uses the same job route; any other MP4 is probed with `inspect_driving_video`, decoded once (`decode_clip_to_frames`,
+    basis `decoded`) and published through `publish_root` as an `origin: external` root with an `import_record.json`.
   - *Storyboard file* (`src/video/storyboard_tree.py`, `storyboard_tree_store.py`, `stablenew.storyboard-tree.v1`):
     `%LOCALAPPDATA%/StableNew/storyboard_trees/<storyboard_id>.json`, written through `src/utils/atomic_io.py` with a revision
     compare-and-swap, an exclusive `.lock` and a 2 MB cap. It holds the root, the takes (parent, label, attempts, marks, job ids)

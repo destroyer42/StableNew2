@@ -11,7 +11,7 @@ import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from tkinter import ttk
+from tkinter import filedialog, ttk
 from typing import Any
 
 from PIL import Image, ImageTk
@@ -19,17 +19,34 @@ from PIL import Image, ImageTk
 from src.controller.storyboard_submission_service import ContinueRequest, ContinueRow
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
-from src.gui.view_contracts.storyboard_tree_contract import AI_NOT_SET_UP, StoryboardTreeContract
+from src.gui.view_contracts.storyboard_import_contract import (
+    MediaPrefs,
+    clip_dialog_options,
+    image_dialog_options,
+    import_actions,
+    load_media_prefs,
+    save_media_prefs,
+)
+from src.gui.view_contracts.storyboard_tree_contract import (
+    AI_NOT_SET_UP,
+    MODE_TIPS,
+    SEED_FIXED,
+    SEED_RANDOM,
+    StoryboardTreeContract,
+)
 from src.gui.views.storyboard_compare_window_v2 import StoryboardCompareWindowV2
 from src.gui.widgets.storyboard_columns_v2 import StoryboardColumnsV2
+from src.gui.widgets.storyboard_continue_rows_v2 import ContinueRowFields, ContinueRowsV2
 from src.gui.widgets.storyboard_viewer_v2 import StoryboardViewerV2
+from src.services.ui_state_store import get_ui_state_store
 from src.utils.os_shell import reveal_in_file_manager
 from src.video.review_preview import prepare_review_preview
 from src.video.sequence_plan import ROOT_PARENT
 from src.video.storyboard_cut import CutManifest
 from src.video.storyboard_frame_cache import FrameCache
+from src.video.storyboard_import import ClipImportPlan, source_text
 from src.video.storyboard_projection import TakeView
-from src.video.storyboard_tree import MAX_ROWS, StoryboardTree
+from src.video.storyboard_tree import StoryboardTree
 
 REFRESH_MS = 6000
 _LIVE_STATES = frozenset({"pending", "queued", "running"})
@@ -41,6 +58,15 @@ class _State:
     views: dict[str, TakeView]
     root_thumbnail: str | None
     notice: str = ""
+
+
+def _application_ui_store() -> Any:
+    """The application's UI state store, or ``None`` when it cannot be opened (preferences then last one session)."""
+
+    try:
+        return get_ui_state_store()
+    except OSError:
+        return None
 
 
 def _timecode(frames: int, fps: int) -> str:
@@ -60,10 +86,24 @@ def _saved_text(tree: StoryboardTree) -> str:
 
 
 class StoryboardTabFrameV2(ttk.Frame):
-    def __init__(self, parent: tk.Misc, *, app_controller: Any, app_state: Any) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        app_controller: Any,
+        app_state: Any,
+        ui_state_store: Any = None,
+    ) -> None:
         super().__init__(parent, style="Panel.TFrame")
         self.app_controller = app_controller
         self.app_state = app_state
+        #: Presentation preferences (thumbnails and viewer on/off) live in the application's UI state file.
+        self._ui_store = ui_state_store if ui_state_store is not None else _application_ui_store()
+        self.media: MediaPrefs = load_media_prefs(self._ui_store)
+        #: Bumped whenever thumbnails are switched, so a load started before the switch is ignored when it lands.
+        self._thumb_generation = 0
+        #: The native file browser; tests replace it.
+        self.ask_open_file: Callable[..., str] = filedialog.askopenfilename
         self.runner = build_edit_work_runner(self)
         self.cache = FrameCache()
         self.tree: StoryboardTree | None = None
@@ -84,6 +124,8 @@ class StoryboardTabFrameV2(ttk.Frame):
         self.title_var = tk.StringVar(value="Storyboard")
         self.show_dropped_var = tk.BooleanVar(value=False)
         self.dropped_text_var = tk.StringVar(value="Show dropped (0)")
+        self.show_thumbnails_var = tk.BooleanVar(value=self.media.thumbnails)
+        self.show_viewer_var = tk.BooleanVar(value=self.media.viewer)
         self.rowconfigure(2, weight=1)
         self.columnconfigure(0, weight=1)
         self._build_toolbar()
@@ -95,11 +137,11 @@ class StoryboardTabFrameV2(ttk.Frame):
             on_resume=self.resume_take,
             on_replay=self.replay_take,
         )
+        self.columns.set_thumbnails_visible(self.media.thumbnails)
         self.columns.grid(row=1, column=0, sticky="ew", padx=8)
         body = ttk.Frame(self, style="Panel.TFrame")
+        self._body = body
         body.grid(row=2, column=0, sticky="nsew", padx=8, pady=4)
-        body.columnconfigure(0, weight=3)
-        body.columnconfigure(1, weight=2)
         body.rowconfigure(0, weight=1)
         self.viewer = StoryboardViewerV2(
             body,
@@ -107,7 +149,9 @@ class StoryboardTabFrameV2(ttk.Frame):
             on_continue=self._continue_from_frame,
             readout=self._readout,
         )
+        self.viewer.set_media_visible(self.media.viewer)
         self.viewer.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        self._apply_body_weights()
         self.continue_host = ttk.Frame(body, style="Panel.TFrame")
         self.continue_host.grid(row=0, column=1, sticky="nsew")
         self._build_continue_panel(self.continue_host)
@@ -133,6 +177,23 @@ class StoryboardTabFrameV2(ttk.Frame):
             variable=self.show_dropped_var,
             command=self.render,
         )
+        self.thumbnails_check = ttk.Checkbutton(
+            bar,
+            text="Thumbnails",
+            variable=self.show_thumbnails_var,
+            command=self._toggle_thumbnails,
+        )
+        self.viewer_check = ttk.Checkbutton(
+            bar, text="Viewer", variable=self.show_viewer_var, command=self._toggle_viewer
+        )
+        attach_tooltip(
+            self.thumbnails_check,
+            "Show a thumbnail on each take card. Off: the cards are text only and no thumbnail is loaded.",
+        )
+        attach_tooltip(
+            self.viewer_check,
+            "Show the frame viewer. Off: no frame is drawn or played; the slider, readout and Continue still work.",
+        )
         self.export_button = ttk.Button(
             bar, text="Export cut…", style="Dark.TButton", command=self._ask_export
         )
@@ -151,6 +212,8 @@ class StoryboardTabFrameV2(ttk.Frame):
             self.rename_button,
             self.export_button,
             self.dropped_check,
+            self.viewer_check,
+            self.thumbnails_check,
             self.open_button,
             self.new_button,
         ):
@@ -222,6 +285,74 @@ class StoryboardTabFrameV2(ttk.Frame):
             return self._load_state(tree.storyboard_id, reconcile=False)
 
         self._work("create", work, self._apply_state)
+
+    def inspect_clip_file(
+        self,
+        path: str,
+        settings: dict[str, Any],
+        on_plan: Callable[[ClipImportPlan], None],
+        on_error: Callable[[Exception], None],
+    ) -> None:
+        """Probe and identify a picked MP4 on a worker (read only; nothing is created, queued or changed)."""
+
+        service = self._service()
+        self._say("Inspecting the clip…")
+
+        def failed(error: Exception) -> None:
+            self._fail(error)
+            on_error(error)
+
+        def shown(plan: ClipImportPlan) -> None:
+            self._say(f"Inspected {plan.facts.filename}.")
+            on_plan(plan)
+
+        self.runner.submit(
+            "inspect",
+            lambda: service.inspect_clip(path, settings),
+            on_result=shown,
+            on_error=failed,
+        )
+
+    def start_from_clip_file(
+        self,
+        path: str,
+        title: str,
+        settings: dict[str, Any],
+        *,
+        expected_sha256: str | None = None,
+        accept_conversion: bool = False,
+        import_as_media: bool = False,
+        on_done: Callable[[], None] | None = None,
+        on_error: Callable[[Exception], None] | None = None,
+    ) -> None:
+        """Make a storyboard from a picked MP4 on a worker; success opens it, a refusal stays inline."""
+
+        service = self._service()
+        self._say("Preparing the storyboard from the clip…")
+
+        def work() -> _State:
+            tree = service.create_from_clip_file(
+                path,
+                title,
+                settings,
+                expected_sha256=expected_sha256,
+                accept_conversion=accept_conversion,
+                import_as_media=import_as_media,
+            )
+            state = self._load_state(tree.storyboard_id, reconcile=False)
+            return replace(state, notice=source_text(tree.root))
+
+        def done(state: _State) -> None:
+            self._apply_state(state)
+            if on_done is not None:
+                on_done()
+
+        def failed(error: Exception) -> None:
+            self._fail(error)
+            if on_error is not None:
+                on_error(error)
+
+        self.runner.submit("create", work, on_result=done, on_error=failed)
 
     def _apply_state(self, state: _State, *, keep_selection: bool = False) -> None:
         previous = self.contract.selected_id if (keep_selection and self.contract) else ROOT_PARENT
@@ -309,10 +440,13 @@ class StoryboardTabFrameV2(ttk.Frame):
         return sources
 
     def _load_thumbnails(self) -> None:
+        if not self.media.thumbnails:
+            return  # hidden: nothing is read, decoded or kept for a thumbnail nobody can see
         sources = self._thumbnail_sources()
         if not sources:
             return
         cache = self.cache
+        generation = self._thumb_generation
 
         def work() -> dict[str, Image.Image]:
             loaded: dict[str, Image.Image] = {}
@@ -323,9 +457,15 @@ class StoryboardTabFrameV2(ttk.Frame):
                     continue  # a missing frame leaves the placeholder; the status text carries the reason
             return loaded
 
-        self._work("thumbnails", work, self._apply_thumbnails)
+        self._work("thumbnails", work, lambda loaded: self._apply_thumbnails(loaded, generation))
 
-    def _apply_thumbnails(self, loaded: dict[str, Image.Image]) -> None:
+    def _apply_thumbnails(
+        self, loaded: dict[str, Image.Image], generation: int | None = None
+    ) -> None:
+        if not self.media.thumbnails or (
+            generation is not None and generation != self._thumb_generation
+        ):
+            return  # a result from before the switch must not bring hidden thumbnails back
         for take_id, image in loaded.items():
             photo = ImageTk.PhotoImage(image, master=self)
             self._photos[take_id] = photo
@@ -387,8 +527,9 @@ class StoryboardTabFrameV2(ttk.Frame):
             cut.fps,
             title=f"{contract.label(node_id)} · cut · {len(cut.frames) / cut.fps:.1f} s",
         )
-        smoothing = self.tree.root.smoothing_text if self.tree is not None else ""
-        self.viewer.note_var.set(smoothing)
+        root = self.tree.root if self.tree is not None else None
+        note = "" if root is None else (root.smoothing_text or source_text(root))
+        self.viewer.note_var.set(note)
         self._update_continue_panel()
 
     def _readout(self, index: int) -> str:
@@ -402,7 +543,7 @@ class StoryboardTabFrameV2(ttk.Frame):
 
     def _request_frame(self, index: int) -> None:
         cut = self.cut
-        if cut is None or not 0 <= index < len(cut.frames):
+        if not self.media.viewer or cut is None or not 0 <= index < len(cut.frames):
             return
         path = cut.frames[index].path
         self._frame_path = path
@@ -410,7 +551,39 @@ class StoryboardTabFrameV2(ttk.Frame):
         self._work("frame", lambda: cache.frame(path), self._apply_frame)
 
     def _apply_frame(self, image: Image.Image) -> None:
+        if not self.media.viewer:
+            return  # the viewer was hidden while this frame was loading
         self.viewer.show_image(ImageTk.PhotoImage(image, master=self))
+
+    # ------------------------------------------------------------------ media visibility
+
+    def _apply_body_weights(self) -> None:
+        """With the picture gone the Continue panel takes the space the viewer was holding."""
+
+        self._body.columnconfigure(0, weight=3 if self.media.viewer else 1)
+        self._body.columnconfigure(1, weight=2 if self.media.viewer else 3)
+
+    def _toggle_thumbnails(self) -> None:
+        self.media = replace(self.media, thumbnails=bool(self.show_thumbnails_var.get()))
+        self._thumb_generation += 1
+        if not self.media.thumbnails:
+            self._photos.clear()
+        self.columns.set_thumbnails_visible(self.media.thumbnails)
+        if self.media.thumbnails:
+            self._load_thumbnails()
+        self._save_media()
+
+    def _toggle_viewer(self) -> None:
+        """Hide or restore the picture only: the selected take, frame and Continue target are never touched."""
+
+        self.media = replace(self.media, viewer=bool(self.show_viewer_var.get()))
+        self.viewer.set_media_visible(self.media.viewer)
+        self._apply_body_weights()
+        self._save_media()
+
+    def _save_media(self) -> None:
+        store, prefs = self._ui_store, self.media
+        self._work("media_prefs", lambda: save_media_prefs(store, prefs))
 
     # ------------------------------------------------------------------ marks and titles
 
@@ -464,6 +637,12 @@ class StoryboardTabFrameV2(ttk.Frame):
     def _ask_new(self) -> None:
         _NewStoryboardDialog(self)
 
+    def default_browse_root(self) -> str | None:
+        try:
+            return str(self._service().output_root())
+        except (RuntimeError, AttributeError, OSError):
+            return None
+
     def _ask_open(self) -> None:
         service = self._service()
         self._work("list", lambda: service.store.list_trees(), self._show_open_dialog)
@@ -500,7 +679,6 @@ class StoryboardTabFrameV2(ttk.Frame):
 
     def _build_continue_panel(self, host: ttk.Frame) -> None:
         self.target = None
-        self._row_widgets: list[_RowWidgets] = []
         self._busy = False
         self.continue_title_var = tk.StringVar(value="Continue")
         self.mode_var = tk.StringVar(value="parallel")
@@ -529,13 +707,16 @@ class StoryboardTabFrameV2(ttk.Frame):
         )
         self.parallel_radio.pack(side="left")
         self.sequential_radio.pack(side="left", padx=6)
+        attach_tooltip(self.parallel_radio, MODE_TIPS["parallel"])
+        attach_tooltip(self.sequential_radio, MODE_TIPS["sequential"])
         self.ai_button = ttk.Button(top, text="Write with AI…", state="disabled")
         self.ai_button.pack(side="right")
         ttk.Label(host, textvariable=self.ai_reason_var, style="Dark.TLabel").grid(
             row=2, column=0, sticky="e"
         )
-        self.rows_frame = ttk.Frame(host, style="Panel.TFrame")
-        self.rows_frame.grid(row=3, column=0, sticky="ew")
+        self.rows_widget = ContinueRowsV2(host, on_change=self._rows_changed)
+        self.rows_frame = self.rows_widget
+        self.rows_widget.grid(row=3, column=0, sticky="ew")
         self.add_row_button = ttk.Button(
             host, text="+ Add row (up to 6)", style="Dark.TButton", command=self.add_row
         )
@@ -571,23 +752,24 @@ class StoryboardTabFrameV2(ttk.Frame):
             self._ai_tooltip_text = text
             attach_tooltip(self.ai_button, text)
 
-    def add_row(self, prompt: str = "", negative: str = "", seed: str = "") -> None:
-        if len(self._row_widgets) >= MAX_ROWS:
-            return
-        row = _RowWidgets(
-            self.rows_frame, len(self._row_widgets) + 1, prompt, negative, seed, self.remove_row
-        )
-        self._row_widgets.append(row)
-        self._refresh_rows()
+    @property
+    def _row_widgets(self) -> list[ContinueRowFields]:
+        return self.rows_widget.rows
 
-    def remove_row(self, row: _RowWidgets) -> None:
-        if len(self._row_widgets) <= 1:
-            return
-        self._row_widgets.remove(row)
-        row.destroy()
-        for number, remaining in enumerate(self._row_widgets, start=1):
-            remaining.renumber(number)
-        self._refresh_rows()
+    def add_row(self, prompt: str = "", negative: str = "", seed: str = "") -> None:
+        """Add a row; ``seed`` is blank/``random`` (Random) or a number (Fixed), as the service reads it."""
+
+        text = seed.strip()
+        random_seed = text.lower() in ("", "random")
+        self.rows_widget.add_row(
+            prompt,
+            negative,
+            SEED_RANDOM if random_seed else SEED_FIXED,
+            "" if random_seed else text,
+        )
+
+    def remove_row(self, row: ContinueRowFields) -> None:
+        self.rows_widget.remove_row(row)
 
     def set_rows(self, prompts: list[str]) -> None:
         while len(self._row_widgets) > 1:
@@ -596,13 +778,8 @@ class StoryboardTabFrameV2(ttk.Frame):
         for prompt in prompts[1:]:
             self.add_row(prompt)
 
-    def _refresh_rows(self) -> None:
-        full = len(self._row_widgets) >= MAX_ROWS
-        self.add_row_button.configure(state="disabled" if full else "normal")
-        for row in self._row_widgets:
-            row.remove_button.configure(
-                state="normal" if len(self._row_widgets) > 1 else "disabled"
-            )
+    def _rows_changed(self) -> None:
+        self.add_row_button.configure(state="disabled" if self.rows_widget.full else "normal")
         self._refresh_queue_label()
 
     def _refresh_queue_label(self) -> None:
@@ -610,11 +787,20 @@ class StoryboardTabFrameV2(ttk.Frame):
             text=StoryboardTreeContract.queue_label(self.mode_var.get(), len(self._row_widgets))
         )
 
-    def _continue_rows(self) -> tuple[ContinueRow, ...]:
-        return tuple(
-            ContinueRow(row.prompt_var.get(), row.negative_var.get(), row.seed_var.get())
-            for row in self._row_widgets
-        )
+    def _continue_rows(self) -> tuple[tuple[ContinueRow, ...], list[str]]:
+        """The rows as the service reads them, and the seed problems found (Random never has one)."""
+
+        rows: list[ContinueRow] = []
+        problems: list[str] = []
+        for number, row in enumerate(self._row_widgets, start=1):
+            seed, problem = StoryboardTreeContract.seed_text(
+                row.seed_mode, row.seed_var.get(), number
+            )
+            if problem:
+                problems.append(problem)
+                seed = SEED_RANDOM.lower()  # judged once, above
+            rows.append(ContinueRow(row.prompt_var.get(), row.negative_var.get(), seed))
+        return tuple(rows), problems
 
     def _set_target(self, node_id: str, handoff_index: int | None) -> None:
         self.target = (node_id, handoff_index)
@@ -644,6 +830,7 @@ class StoryboardTabFrameV2(ttk.Frame):
         else:
             self.target = None
         self.engine_var.set(contract.engine_line())
+        self.rows_widget.hint_var.set(contract.negative_hint())
         allowed = False
         if self.target is None:
             self.continue_title_var.set("Continue")
@@ -675,8 +862,8 @@ class StoryboardTabFrameV2(ttk.Frame):
         if tree is None or target is None or self.contract is None:
             self._say("Choose a take and a frame to continue from.")
             return None
-        rows = self._continue_rows()
-        errors = self.contract.validate_rows(rows)
+        rows, problems = self._continue_rows()
+        errors = [*self.contract.validate_rows(rows), *problems]
         if errors:
             self._say(" ".join(errors))
             return None
@@ -927,86 +1114,111 @@ class _ExportDialog(tk.Toplevel):
         self.buttons[text] = button
 
 
-class _RowWidgets:
-    """One Continue row: positive, negative, seed and a remove button."""
-
-    def __init__(
-        self,
-        parent: ttk.Frame,
-        number: int,
-        prompt: str,
-        negative: str,
-        seed: str,
-        on_remove: Callable[[_RowWidgets], None],
-    ) -> None:
-        self.frame = ttk.Frame(parent, style="Panel.TFrame")
-        self.frame.pack(fill="x", pady=1)
-        self.prompt_var = tk.StringVar(value=prompt)
-        self.negative_var = tk.StringVar(value=negative)
-        self.seed_var = tk.StringVar(value=seed)
-        self.number_label = ttk.Label(self.frame, text=str(number), width=2)
-        self.number_label.pack(side="left")
-        ttk.Entry(self.frame, textvariable=self.prompt_var, width=26).pack(side="left", padx=1)
-        ttk.Entry(self.frame, textvariable=self.negative_var, width=18).pack(side="left", padx=1)
-        ttk.Entry(self.frame, textvariable=self.seed_var, width=9).pack(side="left", padx=1)
-        self.remove_button = ttk.Button(
-            self.frame, text="✕", width=3, command=lambda: on_remove(self)
-        )
-        self.remove_button.pack(side="left")
-
-    def renumber(self, number: int) -> None:
-        self.number_label.configure(text=str(number))
-
-    def destroy(self) -> None:
-        self.frame.destroy()
-
-
 class _NewStoryboardDialog(tk.Toplevel):
-    """Start from a finished clip (job id) or a still image plus the workflow to use. Non-modal; the tab does the work."""
+    """Start from a video clip (MP4) or a still image, picked with the native file browser. Non-modal; the tab works.
+
+    The clip is inspected on a worker as soon as it is chosen; Create stays unavailable (with the reason beside it)
+    until the clip can be used, any conversion it needs has been accepted, and, for a clip StableNew cannot continue
+    from its own job, importing the encoded MP4 as media has been chosen."""
 
     def __init__(self, tab: StoryboardTabFrameV2) -> None:
         super().__init__(tab)
         self.title("New storyboard")
         self.transient(tab.winfo_toplevel())
         self._tab = tab
-        self.source_var = tk.StringVar(value="clip")
-        self.job_var = tk.StringVar()
-        self.image_var = tk.StringVar()
+        self.plan: ClipImportPlan | None = None
+        self._known_refused = False
+        self._title_edited = False
+        self._checked: tuple[str, str, str, str] | None = None
+        self._inspection = 0  # the latest inspection request; an older answer is ignored
         self.title_var = tk.StringVar(value="New storyboard")
+        self.clip_var = tk.StringVar()
+        self.image_var = tk.StringVar()
+        self.summary_var = tk.StringVar(value="No clip chosen.")
+        self.hint_var = tk.StringVar()
+        self.convert_var = tk.BooleanVar(value=False)
+        self.media_var = tk.BooleanVar(value=False)
         self.workflow_var = tk.StringVar(value=self._default_workflow())
         self.version_var = tk.StringVar()
         self.frames_var = tk.StringVar()
         body = ttk.Frame(self, padding=10)
         body.pack(fill="both", expand=True)
+        body.columnconfigure(1, weight=1)
         ttk.Label(body, text="Title").grid(row=0, column=0, sticky="w")
-        ttk.Entry(body, textvariable=self.title_var, width=44).grid(row=0, column=1, sticky="ew")
-        ttk.Radiobutton(
-            body,
-            text="From a finished clip (job id from Recent outputs)",
-            variable=self.source_var,
-            value="clip",
-        ).grid(row=1, column=0, columnspan=2, sticky="w")
-        ttk.Entry(body, textvariable=self.job_var).grid(row=2, column=1, sticky="ew")
-        ttk.Radiobutton(
-            body, text="From a still image", variable=self.source_var, value="image"
-        ).grid(row=3, column=0, columnspan=2, sticky="w")
-        ttk.Entry(body, textvariable=self.image_var).grid(row=4, column=1, sticky="ew")
-        ttk.Button(body, text="Browse…", command=self._browse).grid(row=4, column=0)
+        title_entry = ttk.Entry(body, textvariable=self.title_var, width=52)
+        title_entry.grid(row=0, column=1, sticky="ew")
+        title_entry.bind("<Key>", lambda _e: setattr(self, "_title_edited", True), add="+")
+
+        clip = ttk.LabelFrame(body, text="Video clip (MP4)", padding=6)
+        clip.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        clip.columnconfigure(1, weight=1)
+        self.browse_clip_button = ttk.Button(
+            clip, text="Browse for video clip…", command=self.browse_clip
+        )
+        self.browse_clip_button.grid(row=0, column=0, sticky="w")
+        self.clip_entry = ttk.Entry(clip, textvariable=self.clip_var, state="readonly")
+        self.clip_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        attach_tooltip(self.clip_entry, "The full path of the chosen clip.")
+        ttk.Label(clip, textvariable=self.summary_var, justify="left", wraplength=520).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+        self.convert_check = ttk.Checkbutton(
+            clip,
+            text="Apply this conversion (the original file is not changed)",
+            variable=self.convert_var,
+            command=self._refresh,
+        )
+        self.media_check = ttk.Checkbutton(
+            clip,
+            text="Import the encoded MP4 as media instead (no StableNew job provenance)",
+            variable=self.media_var,
+            command=self._refresh,
+        )
+
+        still = ttk.LabelFrame(body, text="Still image", padding=6)
+        still.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        still.columnconfigure(1, weight=1)
+        self.browse_image_button = ttk.Button(
+            still, text="Browse for still image…", command=self.browse_image
+        )
+        self.browse_image_button.grid(row=0, column=0, sticky="w")
+        self.image_entry = ttk.Entry(still, textvariable=self.image_var, state="readonly")
+        self.image_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+        flow = ttk.LabelFrame(body, text="Workflow for the new takes", padding=6)
+        flow.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        flow.columnconfigure(1, weight=1)
+        ttk.Label(
+            flow,
+            text="Used for a still image, or an MP4 StableNew did not make. A StableNew clip keeps its own job's workflow.",
+            wraplength=520,
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        self._workflow_entries: list[ttk.Entry] = []
         for row, (label, var) in enumerate(
             (
                 ("Workflow id", self.workflow_var),
                 ("Version (optional)", self.version_var),
                 ("Frames (optional)", self.frames_var),
             ),
-            start=5,
+            start=1,
         ):
-            ttk.Label(body, text=label).grid(row=row, column=0, sticky="w")
-            ttk.Entry(body, textvariable=var).grid(row=row, column=1, sticky="ew")
+            ttk.Label(flow, text=label).grid(row=row, column=0, sticky="w")
+            entry = ttk.Entry(flow, textvariable=var)
+            entry.grid(row=row, column=1, sticky="ew")
+            entry.bind("<FocusOut>", lambda _e: self._recheck(), add="+")
+            self._workflow_entries.append(entry)
+
+        ttk.Label(body, textvariable=self.hint_var, wraplength=560, justify="left").grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
         buttons = ttk.Frame(body)
-        buttons.grid(row=8, column=0, columnspan=2, sticky="e", pady=(8, 0))
-        ttk.Button(buttons, text="Create", command=self.create).pack(side="right")
+        buttons.grid(row=5, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        self.create_button = ttk.Button(buttons, text="Create", command=self.create)
+        self.create_button.pack(side="right")
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right", padx=4)
-        body.columnconfigure(1, weight=1)
+        self._refresh()
+
+    # ------------------------------------------------------------------ inputs
 
     def _default_workflow(self) -> str:
         window = self._tab.winfo_toplevel()
@@ -1016,33 +1228,164 @@ class _NewStoryboardDialog(tk.Toplevel):
         except tk.TclError:
             return ""
 
-    def _browse(self) -> None:
-        from tkinter import filedialog
+    def settings(self) -> dict[str, Any]:
+        settings: dict[str, Any] = {"workflow_id": self.workflow_var.get().strip()}
+        if self.version_var.get().strip():
+            settings["workflow_version"] = self.version_var.get().strip()
+        if self.frames_var.get().strip():
+            settings["frame_count"] = self.frames_var.get().strip()
+        return settings
 
-        chosen = filedialog.askopenfilename(parent=self, title="Choose the still image")
-        if chosen:
-            self.image_var.set(chosen)
+    def _signature(self) -> tuple[str, str, str, str]:
+        return (
+            self.clip_var.get(),
+            self.workflow_var.get().strip(),
+            self.version_var.get().strip(),
+            self.frames_var.get().strip(),
+        )
+
+    # ------------------------------------------------------------------ browsing (the picker never changes anything)
+
+    def browse_clip(self) -> None:
+        chosen = self._tab.ask_open_file(
+            parent=self, **clip_dialog_options(self._tab.default_browse_root())
+        )
+        if not chosen:
+            return  # cancelled: nothing changes, here or in the open storyboard
+        self._known_refused = False
+        self.convert_var.set(False)
+        self.media_var.set(False)
+        self.clip_var.set(str(chosen))
+        self.image_var.set("")
+        self._inspect()
+
+    def browse_image(self) -> None:
+        chosen = self._tab.ask_open_file(
+            parent=self, **image_dialog_options(self._tab.default_browse_root())
+        )
+        if not chosen:
+            return
+        self.image_var.set(str(chosen))
+        self.clip_var.set("")
+        self._inspection += (
+            1  # an inspection still running belongs to a clip that is no longer chosen
+        )
+        self.plan = None
+        self.summary_var.set("No clip chosen.")
+        self._checked = None
+        self._refresh()
+
+    def _inspect(self) -> None:
+        path = self.clip_var.get()
+        if not path:
+            return
+        self._checked = self._signature()
+        self._inspection += 1
+        ticket = self._inspection
+        self.summary_var.set("Inspecting…")
+        self._tab.inspect_clip_file(
+            path,
+            self.settings(),
+            lambda plan: self._show_plan(plan, ticket),
+            lambda error: self._show_problem(error, ticket),
+        )
+
+    def _recheck(self) -> None:
+        if self.clip_var.get() and self._checked is not None and self._signature() != self._checked:
+            self._inspect()
+
+    def _alive(self) -> bool:
+        try:
+            return bool(self.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def _show_plan(self, plan: ClipImportPlan, ticket: int) -> None:
+        if not self._alive() or ticket != self._inspection:
+            return
+        self.plan = plan
+        if not self._title_edited:
+            self.title_var.set(plan.title)
+        self.summary_var.set("\n".join(plan.lines()))
+        self._refresh()
+
+    def _show_problem(self, error: Exception, ticket: int) -> None:
+        if not self._alive() or ticket != self._inspection:
+            return
+        self.plan = None
+        self.summary_var.set(str(error))
+        self._refresh()
+
+    # ------------------------------------------------------------------ actions
+
+    def _actions(self) -> Any:
+        return import_actions(
+            self.plan,
+            conversion_accepted=bool(self.convert_var.get()),
+            media_chosen=bool(self.media_var.get()),
+            known_refused=self._known_refused,
+        )
+
+    def _refresh(self) -> None:
+        if not self.clip_var.get():
+            self.convert_check.grid_remove()
+            self.media_check.grid_remove()
+            self.hint_var.set("")
+            self.create_button.configure(state="normal" if self.image_var.get() else "disabled")
+            return
+        actions = self._actions()
+        for check, shown, row in (
+            (self.convert_check, actions.show_conversion, 2),
+            (self.media_check, actions.show_media_choice, 3),
+        ):
+            if shown:
+                check.grid(row=row, column=0, columnspan=2, sticky="w")
+            else:
+                check.grid_remove()
+        self.hint_var.set(actions.hint)
+        self.create_button.configure(state="normal" if actions.can_create else "disabled")
 
     def create(self) -> None:
         title = self.title_var.get().strip() or "New storyboard"
-        if self.source_var.get() == "clip":
-            job_id = self.job_var.get().strip()
-            if not job_id:
-                self._tab._say("Enter the job id of a finished clip.")
-                return
-            self._tab.start_from_job(job_id)
-        else:
-            settings: dict[str, Any] = {"workflow_id": self.workflow_var.get().strip()}
-            if self.version_var.get().strip():
-                settings["workflow_version"] = self.version_var.get().strip()
-            if self.frames_var.get().strip():
-                settings["frame_count"] = self.frames_var.get().strip()
+        if not self.clip_var.get():
             image = self.image_var.get().strip()
             if not image:
-                self._tab._say("Choose a still image.")
+                self._tab._say("Choose a video clip or a still image.")
                 return
-            self._tab.start_from_image(image, settings, title)
-        self.destroy()
+            self._tab.start_from_image(image, self.settings(), title)
+            self.destroy()
+            return
+        actions = self._actions()
+        if not actions.can_create or self.plan is None:
+            self._tab._say(actions.hint)
+            return
+        self._tab.start_from_clip_file(
+            self.clip_var.get(),
+            title,
+            self.settings(),
+            expected_sha256=self.plan.facts.sha256,
+            accept_conversion=bool(self.convert_var.get()),
+            import_as_media=bool(self.media_var.get()),
+            on_done=self._finished,
+            on_error=self._refused,
+        )
+
+    def _finished(self) -> None:
+        if self._alive():
+            self.destroy()
+
+    def _refused(self, error: Exception) -> None:
+        """A refusal stays here, inline; StableNew's own refusal of a known clip offers the media import."""
+
+        if not self._alive():
+            return
+        from src.video.storyboard_import import KnownClipRefused
+
+        if isinstance(error, KnownClipRefused):
+            self._known_refused = True
+        self.hint_var.set(str(error))
+        self._refresh()
+        self.hint_var.set(str(error))
 
 
 class _OpenStoryboardDialog(tk.Toplevel):

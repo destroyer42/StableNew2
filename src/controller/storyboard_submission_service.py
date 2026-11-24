@@ -36,6 +36,7 @@ from src.video.sequence_plan import (
 from src.video.storyboard import timestamp
 from src.video.storyboard_cut import CutManifest
 from src.video.storyboard_cuts import read_job, root_cut, take_cut, write_lead_in
+from src.video.storyboard_import import ClipImporter, ClipImportPlan
 from src.video.storyboard_projection import TakeView, first_missing_frame, project_storyboard
 from src.video.storyboard_reconcile import adopt_job
 from src.video.storyboard_root import (
@@ -52,7 +53,7 @@ from src.video.storyboard_tree import (
     check_storyboard_id,
 )
 from src.video.storyboard_tree_store import StoryboardTreeStore
-from src.video.video_workflow_intent import EXPERIMENTAL_OPT_IN_FIELD
+from src.video.video_workflow_intent import EXPERIMENTAL_OPT_IN_FIELD, parse_seed_input
 from src.video.video_workflow_njr_builder import (
     FrozenVideoInputs,
     VideoWorkflowBuild,
@@ -125,6 +126,7 @@ class StoryboardSubmissionService:
         output_root: Callable[[], str],
         new_id: Callable[[], str] = lambda: uuid.uuid4().hex,
         draw_seed: Callable[[], int] = lambda: secrets.randbelow(2**31),
+        clip_importer: ClipImporter | None = None,
     ) -> None:
         self._njr_builder = njr_builder
         self._registry = workflow_registry
@@ -134,8 +136,26 @@ class StoryboardSubmissionService:
         self._output_root = output_root
         self._new_id = new_id
         self._draw_seed = draw_seed
+        self.clip_importer = clip_importer or ClipImporter(
+            repository=repository, registry=workflow_registry, output_root=output_root
+        )
 
     # ------------------------------------------------------------------------------------------ roots
+
+    def inspect_clip(self, path: str, settings: Mapping[str, Any]) -> ClipImportPlan:
+        """What a picked MP4 is and what using it needs (read only; nothing is created or queued)."""
+
+        return self.clip_importer.inspect(path, settings)
+
+    def create_from_clip_file(
+        self, path: str, title: str, settings: Mapping[str, Any], **choices: Any
+    ) -> StoryboardTree:
+        """A storyboard from an MP4: its StableNew job when known, else its decoded frames (``storyboard_import``)."""
+
+        _check_title(title)
+        storyboard_id = check_storyboard_id(self._new_id())
+        prepared = self.clip_importer.prepare(path, settings, storyboard_id, **choices)
+        return self._create(storyboard_id, title, prepared)
 
     def create_from_clip(self, job_id: str, title: str) -> StoryboardTree:
         _check_title(title)
@@ -172,6 +192,7 @@ class StoryboardSubmissionService:
                 "width": prepared.width,
                 "height": prepared.height,
                 "smoothing_text": "" if prepared.smoothing is None else prepared.smoothing.text(),
+                **(prepared.external or {}),
             }
         )
         tree = replace(StoryboardTree.new(title, root), storyboard_id=storyboard_id)
@@ -526,6 +547,10 @@ def _check_rows(request: ContinueRequest) -> tuple[ContinueRow, ...]:
     for number, row in enumerate(rows, start=1):
         if not row.prompt.strip():
             raise StoryboardTreeError(f"Row {number} needs a positive prompt.")
+        try:
+            parse_seed_input(row.seed)
+        except ValueError as exc:
+            raise StoryboardTreeError(f"Row {number}: {exc}") from exc
     return rows
 
 

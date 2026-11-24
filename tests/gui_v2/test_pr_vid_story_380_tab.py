@@ -6,6 +6,7 @@ import pytest
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.views.storyboard_tab_frame_v2 import StoryboardTabFrameV2
+from src.services.ui_state_store import UIStateStore
 from src.video.sequence_plan import ROOT_PARENT
 from tests.gui_v2.storyboard_tab_helpers import FakeService, fake_controller
 
@@ -18,9 +19,12 @@ def fake_service(tmp_path):
 
 
 @pytest.fixture
-def storyboard_tab(tk_root, fake_service):
+def storyboard_tab(tk_root, fake_service, tmp_path):
     tab = StoryboardTabFrameV2(
-        tk_root, app_controller=fake_controller(fake_service), app_state=AppStateV2()
+        tk_root,
+        app_controller=fake_controller(fake_service),
+        app_state=AppStateV2(),
+        ui_state_store=UIStateStore(tmp_path / "ui_state.json"),
     )
     tab.pack()
     yield tab
@@ -194,10 +198,11 @@ def test_a_seventh_row_is_not_offered(storyboard_tab, fake_service):
 
 def test_invalid_rows_are_refused_inline_and_nothing_is_sent(storyboard_tab, fake_service):
     _continue_from(storyboard_tab, "t1b", index=13, rows=["", "ok"])
+    storyboard_tab._row_widgets[1].seed_mode_var.set("Fixed")
     storyboard_tab._row_widgets[1].seed_var.set("12x")
     storyboard_tab.queue_button.invoke()
     assert "Row 1 needs a positive prompt." in storyboard_tab.status_var.get()
-    assert "Row 2 seed must be blank, random or a whole number" in storyboard_tab.status_var.get()
+    assert "Row 2: a Fixed seed must be a whole number" in storyboard_tab.status_var.get()
     assert all(call[0] != "submit" for call in fake_service.calls)
 
 
