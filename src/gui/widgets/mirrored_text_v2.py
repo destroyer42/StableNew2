@@ -15,6 +15,7 @@ import tkinter as tk
 from typing import Any
 
 from src.gui import theme_v2
+from src.gui.widgets.scrollable_frame_v2 import forward_wheel
 
 REST_LINES = 3
 FOCUS_LINES = 8
@@ -51,6 +52,8 @@ class MirroredText(tk.Text):
         for sequence in ("<Shift-Tab>", "<ISO_Left_Tab>"):
             self.bind(sequence, lambda event: self._move_focus(event, backwards=True))
         self.bind("<Control-a>", self._select_all)
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.bind(sequence, self._on_wheel)
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<FocusOut>", self._on_focus_out)
         self.bind("<Destroy>", self._on_destroy, add="+")
@@ -102,6 +105,13 @@ class MirroredText(tk.Text):
     def _select_all(self, _event: tk.Event) -> str:
         self.tag_add("sel", "1.0", "end-1c")
         return "break"
+
+    def _on_wheel(self, event: tk.Event) -> str | None:
+        """A field whose text fits has nothing to scroll, so the wheel goes to the panel around it (else its own)."""
+
+        if self.yview() != (0.0, 1.0):
+            return None
+        return forward_wheel(self, event)
 
     # ------------------------------------------------------------------ growing with focus
 

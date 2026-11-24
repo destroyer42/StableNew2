@@ -22,6 +22,7 @@ from src.gui.view_contracts.storyboard_tree_contract import (
     SEED_TIPS,
 )
 from src.gui.widgets.mirrored_text_v2 import MirroredText
+from src.gui.widgets.scrollable_frame_v2 import forward_wheel
 from src.video.storyboard_tree import MAX_ROWS
 
 PROMPT_MINSIZE = 140
@@ -63,6 +64,8 @@ class ContinueRowFields:
             width=7,
         )
         self.seed_entry = ttk.Entry(self.seed_frame, textvariable=self.seed_var, width=11)
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.seed_box.bind(sequence, self._on_seed_wheel)
         self.seed_box.pack(side="left")
         self.seed_entry.pack(side="left", padx=(3, 0))
         self.remove_button = ttk.Button(parent, text="✕", width=3, command=lambda: on_remove(self))
@@ -76,6 +79,11 @@ class ContinueRowFields:
     @property
     def seed_mode(self) -> str:
         return SEED_FIXED if self.seed_mode_var.get() == SEED_FIXED else SEED_RANDOM
+
+    def _on_seed_wheel(self, event: tk.Event) -> str | None:
+        """Scrolling over the panel must never flip a seed between Random and Fixed (a combobox's wheel does)."""
+
+        return forward_wheel(self.seed_box, event, consume=True)
 
     def _mode_changed(self, on_change: Callable[[], None]) -> None:
         self.sync_seed()

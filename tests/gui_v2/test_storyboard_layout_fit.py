@@ -16,8 +16,8 @@ from PIL import Image
 from src.gui import theme_v2
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.design_system_v2 import SELECTED_CARD_FRAME, Colors
-from src.gui.view_contracts.storyboard_tree_contract import Card, Column
-from src.gui.views.storyboard_tab_frame_v2 import StoryboardTabFrameV2
+from src.gui.view_contracts.storyboard_tree_contract import SEED_FIXED, Card, Column
+from src.gui.views.storyboard_tab_frame_v2 import NO_TARGET_TEXT, StoryboardTabFrameV2
 from src.gui.widgets.mirrored_text_v2 import FOCUS_LINES, FOCUS_SHRINK_MS, REST_LINES, MirroredText
 from src.gui.widgets.storyboard_columns_v2 import StoryboardColumnsV2
 from src.gui.widgets.storyboard_viewer_v2 import MIN_IMAGE_HEIGHT, StoryboardViewerV2, fit_size
@@ -34,7 +34,8 @@ pytestmark = pytest.mark.gui
 def test_selected_card_style_has_a_thick_accent_border(tk_root):
     style = theme_v2.apply_theme(tk_root)
     assert style.lookup(SELECTED_CARD_FRAME, "bordercolor") == Colors.PRIMARY_ACCENT
-    assert int(style.lookup(SELECTED_CARD_FRAME, "borderwidth")) >= 3
+    # The app runs ttk's "alt" theme, which only honours ``bordercolor`` at widths 1 and 2 (3+ draws black).
+    assert int(style.lookup(SELECTED_CARD_FRAME, "borderwidth")) == 2
     assert int(style.lookup("Card.TFrame", "borderwidth")) == 1
     assert isinstance(style, ttk.Style)
 
@@ -445,3 +446,63 @@ def test_six_rows_scroll_instead_of_clipping_and_queue_stays_reachable(tab, fake
         assert (
             button.winfo_rooty() + button.winfo_height() <= host.winfo_rooty() + host.winfo_height()
         )
+
+
+# ---------------------------------------------------------------- review fixes
+
+
+def test_rendering_again_does_not_pile_up_wheel_handlers(tk_root):
+    widget = _columns(tk_root, _tree())
+    first = widget._inner.bind("<MouseWheel>")
+    for _ in range(20):
+        widget.render(_tree())
+    assert widget._inner.bind("<MouseWheel>") == first
+
+
+def test_wheel_is_bound_on_the_empty_part_of_the_strip(tk_root):
+    widget = _columns(tk_root, _tree())
+    assert widget._canvas.bind("<MouseWheel>")
+
+
+def test_prompt_wheel_goes_to_the_panel_when_its_text_fits(tab, fake_service):
+    _open_tab(tab, fake_service, height=480)
+    while not tab.rows_widget.full:
+        tab.add_row("a prompt")
+    _settle(tab.winfo_toplevel(), 0.2)
+    field = tab._row_widgets[1].prompt_entry
+    canvas = tab.continue_scroll._canvas
+    before = canvas.yview()[0]
+    assert field._on_wheel(SimpleNamespace(delta=-120, state=0, widget=field)) == "break"
+    assert canvas.yview()[0] > before
+
+
+def test_prompt_keeps_its_own_wheel_when_its_text_overflows(tk_root):
+    field, _ = _field(tk_root, "word " * 400)
+    assert field._on_wheel(SimpleNamespace(delta=-120, state=0, widget=field)) is None
+
+
+def test_seed_wheel_never_changes_the_seed_mode(tab, fake_service):
+    _open_tab(tab, fake_service)
+    row = tab._row_widgets[0]
+    row.seed_mode_var.set(SEED_FIXED)
+    assert row._on_seed_wheel(SimpleNamespace(delta=-120, state=0, widget=row.seed_box)) == "break"
+    assert row.seed_mode == SEED_FIXED
+    assert row.seed_box.bind("<MouseWheel>")
+
+
+def test_selecting_a_take_clears_the_banner_until_its_cut_arrives(tab, fake_service):
+    tab.open_storyboard(fake_service.diner_id)
+    tab.select_take("t1")
+    assert tab.banner_var.get() != NO_TARGET_TEXT
+    tab._work = lambda *_args, **_kwargs: None  # the cut never arrives (a slow or failed worker)
+    tab.select_take("t3")
+    assert tab.banner_var.get() == NO_TARGET_TEXT
+    assert str(tab.queue_button.cget("state")) == "disabled"
+
+
+def test_continue_rows_are_not_clipped_on_a_narrower_window(tab, fake_service):
+    _open_tab(tab, fake_service, width=1100, height=600)
+    row = tab._row_widgets[0]
+    canvas = tab.continue_scroll._canvas
+    right = row.remove_button.winfo_rootx() + row.remove_button.winfo_width()
+    assert right <= canvas.winfo_rootx() + canvas.winfo_width()

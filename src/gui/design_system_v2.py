@@ -67,12 +67,13 @@ def apply_card_styles(style: ttk.Style) -> None:
         bordercolor=Colors.BORDER,
         padding=(Spacing.MD, Spacing.MD),
     )
-    # The selected Storyboard take: a thick accent border; the fill matches CARD_FRAME because the labels inside
-    # paint their own background.
+    # The selected Storyboard take: an accent border; the fill matches CARD_FRAME because the labels inside paint
+    # their own background. Width 2, not wider: the "alt" theme draws ``bordercolor`` only at widths 1 and 2 and falls
+    # back to a black Motif border at 3 and up, which would hide the selection.
     style.configure(
         SELECTED_CARD_FRAME,
         background=Colors.CARD_BG,
-        borderwidth=3,
+        borderwidth=2,
         relief="solid",
         bordercolor=Colors.PRIMARY_ACCENT,
         padding=(Spacing.MD, Spacing.MD),

@@ -19,6 +19,36 @@ _RULER_COLUMN = 999
 _RULER_ROWSPAN = 999
 
 
+def _wheel_units(event: tk.Event) -> int:
+    """Notches to scroll for a wheel event (negative is up); Windows/macOS ``delta`` or the X11 wheel buttons."""
+
+    number = getattr(event, "num", 0)
+    if number in (4, 5):
+        return -1 if number == 4 else 1
+    delta = int(getattr(event, "delta", 0) or 0)
+    return int(-1 * (delta / 120)) or (-1 if delta > 0 else (1 if delta < 0 else 0))
+
+
+def forward_wheel(widget: tk.Misc, event: tk.Event, *, consume: bool = False) -> str | None:
+    """Scroll the nearest ``ScrollableFrame`` around ``widget`` for a wheel event that ``widget`` would otherwise keep.
+
+    For a self-scrolling widget with nothing of its own to scroll (a text field whose text fits), or one the wheel
+    must never change (a combobox). Returns ``"break"`` when the frame scrolled, or always when ``consume`` is set;
+    otherwise ``None`` so the widget's own wheel binding runs.
+    """
+
+    units = _wheel_units(event)
+    node: tk.Misc | None = widget
+    while node is not None:
+        if isinstance(node, ScrollableFrame):
+            if units and node.can_scroll(units):
+                node.scroll_units(units)
+                return "break"
+            break
+        node = getattr(node, "master", None)
+    return "break" if consume else None
+
+
 class _WheelRouter:
     """The single mouse-wheel dispatcher of one Tk interpreter (PR-GUI-100).
 
@@ -136,9 +166,7 @@ class _WheelRouter:
         return None
 
     def _on_wheel(self, event: tk.Event) -> str | None:
-        delta = int(getattr(event, "delta", 0) or 0)
-        units = int(-1 * (delta / 120)) or (-1 if delta > 0 else (1 if delta < 0 else 0))
-        return self._dispatch(event, units)
+        return self._dispatch(event, _wheel_units(event))
 
     def _on_button_wheel(self, event: tk.Event) -> str | None:
         """Linux X11 wheel buttons."""
@@ -189,9 +217,18 @@ class ScrollableFrame(ttk.Frame):
     """
 
     def __init__(
-        self, master: tk.Misc, *, style: str | None = None, fill_height: bool = False, **kwargs
+        self,
+        master: tk.Misc,
+        *,
+        style: str | None = None,
+        fill_height: bool = False,
+        request_width: bool = False,
+        **kwargs,
     ) -> None:
         super().__init__(master, style=style, **kwargs)
+        #: ``request_width``: the viewport asks for the content's natural width, so a panel is not clipped on the
+        #: right by a narrow window the way a viewport that asks for nothing would be.
+        self._request_width = request_width
 
         self._canvas = tk.Canvas(
             self,
@@ -225,6 +262,8 @@ class ScrollableFrame(ttk.Frame):
 
     def _on_inner_configure(self, event: tk.Event) -> None:
         self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+        if self._request_width:
+            self._canvas.configure(width=max(1, int(self.inner.winfo_reqwidth())))
 
     def _on_canvas_configure(self, event: tk.Event) -> None:
         canvas_width = event.width
@@ -312,4 +351,4 @@ class ScrollableFrame(ttk.Frame):
             return
 
 
-__all__ = ["ScrollableFrame"]
+__all__ = ["ScrollableFrame", "forward_wheel"]

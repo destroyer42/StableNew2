@@ -521,6 +521,10 @@ class StoryboardTabFrameV2(ttk.Frame):
             return
         self.cut = None
         self._say("")
+        if (
+            self.target is None
+        ):  # a different take: until its cut arrives the banner and Queue must not name the old one
+            self._update_continue_panel()
         allowed, reason = contract.continue_allowed(node_id)
         if not allowed:
             self.viewer.clear()
@@ -751,7 +755,7 @@ class StoryboardTabFrameV2(ttk.Frame):
         )
         # The title, mode bar and Queue/Preview stay put; the rows (up to 6 roomy prompt fields) scroll between them.
         host.rowconfigure(3, weight=1)
-        self.continue_scroll = ScrollableFrame(host)
+        self.continue_scroll = ScrollableFrame(host, request_width=True)
         self.continue_scroll.grid(row=3, column=0, sticky="nsew")
         scrolled = self.continue_scroll.inner
         scrolled.columnconfigure(0, weight=1)

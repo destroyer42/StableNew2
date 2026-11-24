@@ -72,6 +72,9 @@ class StoryboardColumnsV2(ttk.Frame):
         self._inner.bind(
             "<Configure>", lambda _e: self._canvas.configure(scrollregion=self._canvas.bbox("all"))
         )
+        # The canvas and ``_inner`` outlive every render, so they are bound once; render binds only what it builds.
+        self._bind_wheel(self._canvas, recursive=False)
+        self._bind_wheel(self._inner, recursive=False)
 
     # ------------------------------------------------------------------ rendering
 
@@ -99,17 +102,19 @@ class StoryboardColumnsV2(ttk.Frame):
                 )
                 button.pack(fill="x", pady=(4, 0))
                 self.compare_buttons[column.title] = button
-        self._bind_wheel(self._inner)
+        for holder in self._inner.winfo_children():
+            self._bind_wheel(holder)
 
     # ------------------------------------------------------------------ scrolling
 
-    def _bind_wheel(self, widget: tk.Misc) -> None:
-        """Route the wheel from every widget in the tree to :meth:`_on_wheel` (the canvas alone would miss cards)."""
+    def _bind_wheel(self, widget: tk.Misc, *, recursive: bool = True) -> None:
+        """Route the wheel from a widget (and its descendants) to :meth:`_on_wheel`; the canvas alone would miss cards."""
 
         for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
             widget.bind(sequence, self._on_wheel, add="+")
-        for child in widget.winfo_children():
-            self._bind_wheel(child)
+        if recursive:
+            for child in widget.winfo_children():
+                self._bind_wheel(child)
 
     def _on_wheel(self, event: Any) -> str | None:
         """Wheel scrolls up/down, Shift+wheel sideways; not consumed when there is nowhere to go (the page may scroll)."""
