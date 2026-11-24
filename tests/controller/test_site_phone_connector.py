@@ -16,6 +16,7 @@ from src.app.site_output_catalog import SiteOutputCatalog
 from src.app.site_phone_connector import (
     PhoneConnectorError,
     PhoneHttp,
+    PhoneVersionMismatch,
     SitePhoneConnector,
     _desktop_call,
 )
@@ -36,6 +37,7 @@ _CALL = "3" * 32
 _CHALLENGE = "4" * 32
 _SITE = "fixture-only-site-secret"
 _HOST = "5" * 64
+_COMPATIBILITY = {"version": 2, "capabilities": ["enrollment", "presence", "browser_lease"]}
 
 
 def _grant(root: Path) -> PhoneGrant:
@@ -142,10 +144,18 @@ class _FakePhone(PhoneHttp):
         self.result = None
         self.rating = rating
         self.enrollment = {}
+        self.compatibility = _COMPATIBILITY
+        self.rejection = None
 
     def request(self, action, site_secret, credential, **kwargs):
         assert site_secret == _SITE
         self.actions.append(action)
+        if action == "compatibility":
+            return self.compatibility
+        if action == self.rejection:
+            raise PhoneVersionMismatch(
+                "Update the Site and StableNew to matching connection versions."
+            )
         if action == "inspect":
             assert credential == _CHALLENGE
             return {"id": _GRANT, "name": "Fixture phone"}
@@ -166,7 +176,7 @@ class _FakePhone(PhoneHttp):
                     "path": "/v1/output/status",
                     "body": None,
                 }
-            return {"session": _SESSION, "ttl": 30000, "call": call}
+            return {"version": 2, "session": _SESSION, "ttl": 30000, "call": call}
         if action == f"fulfill/{_CALL}":
             assert kwargs["session"] == _SESSION
             self.result = json.loads(kwargs["body"].data)
@@ -174,6 +184,215 @@ class _FakePhone(PhoneHttp):
         if action == "revoke" and self.offline:
             raise PhoneConnectorError("fixture offline")
         return {}
+
+
+@pytest.mark.parametrize(
+    "compatibility",
+    [
+        {},
+        {"version": 1, "capabilities": _COMPATIBILITY["capabilities"]},
+        {"version": 2.0, "capabilities": _COMPATIBILITY["capabilities"]},
+        {"version": 3, "capabilities": _COMPATIBILITY["capabilities"]},
+        {"version": 2, "capabilities": "enrollment presence browser_lease"},
+        {"version": 2, "capabilities": ["enrollment", "presence"]},
+        {"version": 2, "capabilities": [*_COMPATIBILITY["capabilities"], "presence"]},
+        {"version": 2, "capabilities": [*_COMPATIBILITY["capabilities"], {}]},
+    ],
+)
+def test_incompatible_worker_cannot_prepare_or_persist_new_enrollment(compatibility):
+    store = _MemoryStore()
+    http = _FakePhone()
+    http.compatibility = compatibility
+    connector = SitePhoneConnector(store, http)
+    inspected = connector.inspect(_SITE, _CHALLENGE)
+    connector._commands.get_nowait()()
+    with pytest.raises(PhoneConnectorError, match="Update the Site and StableNew"):
+        inspected.result()
+    assert http.actions == ["compatibility"]
+    assert store.grant is None
+
+
+@pytest.mark.parametrize("downgrade", ["compatibility", "enroll"])
+def test_enrollment_rechecks_compatibility_and_refusal_does_not_strand_pending_grant(
+    tmp_path, downgrade
+):
+    store = _MemoryStore()
+    http = _FakePhone()
+    connector = SitePhoneConnector(store, http)
+    inspected = connector.inspect(_SITE, _CHALLENGE)
+    connector._commands.get_nowait()()
+    if downgrade == "compatibility":
+        http.compatibility = {}
+    else:
+        http.rejection = "enroll"
+    enrolled = connector.enroll(inspected.result(), tmp_path, True)
+    connector._commands.get_nowait()()
+    with pytest.raises(PhoneVersionMismatch):
+        enrolled.result()
+    assert store.grant is None
+    assert http.actions == ["compatibility", "inspect", "compatibility"] + (
+        ["enroll"] if downgrade == "enroll" else []
+    )
+
+
+@pytest.mark.parametrize("failure", ["unavailable", "incompatible"])
+def test_saved_grant_survives_failed_preflight_and_resumes_only_after_compatibility(
+    tmp_path, failure
+):
+    grant = _grant(tmp_path)
+    store = _MemoryStore(grant)
+
+    class InterruptiblePhone(_FakePhone):
+        def request(self, action, *args, **options):
+            if failure == "unavailable" and self.offline and action == "compatibility":
+                self.actions.append(action)
+                raise PhoneConnectorError("fixture offline")
+            return super().request(action, *args, **options)
+
+    http = InterruptiblePhone(offline=True)
+    if failure == "incompatible":
+        http.compatibility = {}
+    connector = SitePhoneConnector(store, http)
+    connector._step(grant)
+    assert store.grant == grant
+    assert connector._presence is None
+    assert http.actions == ["compatibility"]
+    assert ("Update the Site" if failure == "incompatible" else "offline") in connector.status
+    http.offline = False
+    http.compatibility = _COMPATIBILITY
+    connector._step(grant)
+    assert connector._presence[0] == _SESSION
+    assert http.actions == ["compatibility", "compatibility", "poll"]
+    http.rejection = "poll"
+    connector._step(grant)
+    assert connector._presence is None
+    assert store.grant == grant
+    assert "Update the Site" in connector.status
+    assert http.actions[-1] == "poll"
+
+
+def test_transient_poll_failure_fences_native_access_and_resumes_same_catalog(tmp_path):
+    grant = _grant(tmp_path)
+    store = _MemoryStore(grant)
+
+    class InterruptedPoll(_FakePhone):
+        def request(self, action, *args, **options):
+            if self.offline and action == "poll":
+                self.actions.append(action)
+                raise PhoneConnectorError("fixture offline")
+            result = super().request(action, *args, **options)
+            if action == "poll":
+                result["call"] = None
+            return result
+
+    http = InterruptedPoll()
+    connector = SitePhoneConnector(store, http)
+    connector._step(grant)
+    catalog = connector._catalog
+    assert connector._live(_SESSION, grant.folder)
+    http.offline = True
+    connector._step(grant)
+    assert not connector._live(_SESSION, grant.folder)
+    assert store.grant == grant
+    assert connector._catalog is catalog
+    http.offline = False
+    connector._step(grant)
+    assert http.actions[-2:] == ["compatibility", "poll"]
+    assert connector._live(_SESSION, grant.folder)
+    assert connector._catalog is catalog
+    connector._drop_presence()
+
+
+def test_credential_replacement_requires_a_compatible_worker(tmp_path):
+    grant = _grant(tmp_path)
+    store = _MemoryStore(grant)
+    new_credential = "fixture-replacement-site-secret"
+
+    class ReplacementPhone(PhoneHttp):
+        supported = False
+
+        def request(self, action, site_secret, credential, **options):
+            assert action == "compatibility"
+            assert site_secret == new_credential
+            assert credential == grant.host_secret
+            return _COMPATIBILITY if self.supported else {}
+
+    http = ReplacementPhone()
+    connector = SitePhoneConnector(store, http)
+    connector._grant = grant
+    first = connector.update_site_credential(new_credential)
+    connector._commands.get_nowait()()
+    with pytest.raises(PhoneVersionMismatch):
+        first.result()
+    assert store.grant == grant
+    http.supported = True
+    second = connector.update_site_credential(new_credential)
+    connector._commands.get_nowait()()
+    assert second.result() is None
+    assert store.grant.site_secret == new_credential
+    assert store.grant.host_secret == grant.host_secret
+    assert store.grant.rating == grant.rating
+
+
+def test_http_uses_v2_routes_and_distinguishes_legacy_refusal_from_unavailability(
+    monkeypatch, tmp_path
+):
+    replies = iter(
+        [
+            (404, b'{"error":"unknown_operation"}'),
+            (503, b'{"error":"relay_unavailable"}'),
+            (200, b"not-json"),
+            (200, b'{"version":1,"version":2}'),
+            (409, b'{ "error": "connection_version_required" }'),
+            (410, b'{"error":"phone_pairing_expired"}'),
+            (410, b'{"error":"phone_pairing_revoked"}'),
+        ]
+    )
+    paths = []
+
+    class FixtureHttps:
+        def __init__(self, *_args, **_options):
+            pass
+
+        def request(self, method, path, *, headers, **_options):
+            assert method == "POST"
+            assert headers["X-StableNew-Connection"] == "2"
+            assert headers["OAI-Sites-Authorization"] == "Bearer " + _SITE
+            paths.append(path)
+
+        def getresponse(self):
+            self.status, self.raw = next(replies)
+            return self
+
+        def read(self, size):
+            return self.raw[:size]
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("src.app.site_phone_connector.http.client.HTTPSConnection", FixtureHttps)
+    http = PhoneHttp()
+    with pytest.raises(PhoneVersionMismatch):
+        http.request("compatibility", _SITE, _HOST)
+    with pytest.raises(PhoneConnectorError) as error:
+        http.request("compatibility", _SITE, _HOST)
+    assert not isinstance(error.value, PhoneVersionMismatch)
+    with pytest.raises(PhoneVersionMismatch):
+        http.request("compatibility", _SITE, _HOST)
+    with pytest.raises(PhoneVersionMismatch):
+        http.request("compatibility", _SITE, _HOST)
+    with pytest.raises(PhoneVersionMismatch):
+        http.request("poll", _SITE, _HOST)
+    grant = _grant(tmp_path)
+    for _ in range(2):
+        store = _MemoryStore(grant)
+        connector = SitePhoneConnector(store, http)
+        connector._grant = grant
+        connector._step(grant)
+        assert store.grant == grant
+        assert connector._presence is None
+    compatibility = "/api/stablenew/connector/v2/compatibility"
+    assert paths == [compatibility] * 4 + ["/api/stablenew/connector/v2/poll"] + [compatibility] * 2
 
 
 def test_enroll_resume_same_grant_and_graceful_close(tmp_path):

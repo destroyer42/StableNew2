@@ -71,6 +71,13 @@ CI then fails the job if `git diff --exit-code` or `git status --porcelain --unt
 
 Pytest configuration is `pyproject.toml` only (`tests/system/test_ci_truth_sync_v2.py` asserts there is no `pytest.ini`). `addopts`: `-ra --strict-markers --strict-config --showlocals --import-mode=importlib`, and `--ignore` for `tests/legacy`, `tests/quarantine`, `tests/scripts` (and an already-absent `gui_v1_legacy` tree). `testpaths = ["tests"]`, `python_files = test_*.py`.
 
+For Operator Site connection changes, the required smoke runs the native versioned HTTP and
+enrollment sequencing contract tests from `tests/controller/test_site_phone_connector.py`. The
+census runs that full file plus `test_site_pairing_protocol.py`, `test_site_queue_bridge.py`, and
+`test_site_phone_admission.py` in the same directory. The [Operator Site runbook](../../runbooks/stablenew_operator_site.md#maintained-regression-coverage)
+maps the protected behaviors to the companion's deterministic and browser suites.
+
+
 ## 5. The census and its sharding
 
 The census is every active test file: `tools/ci/census_shards.py` `active_test_files` mirrors pytest selection (`testpaths`, `test_*.py`, `norecursedirs`, and `DEFAULT_COLLECTION_EXCLUDES` imported from `run_collection_gate.py`) instead of defining a second universe.

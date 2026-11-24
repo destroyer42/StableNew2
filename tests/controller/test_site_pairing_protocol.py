@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.app.site_pairing_protocol import SCHEME, TICKET_SECONDS, PairingTickets, handle_protocol
-from src.app.site_queue_bridge import PAIR_SECONDS, SiteSession
+from src.app.site_queue_bridge import DESKTOP_SECONDS, PAIR_SECONDS, SiteSession
 from src.gui import site_connection_dialog
 from tests.controller.test_site_queue_bridge import request
 
@@ -72,8 +72,8 @@ def test_desktop_activity_extends_only_authenticated_live_pairing(monkeypatch):
         request(session, "POST", route, body=b'{"unexpected":true}', token=session.code)[0] == 400
     )
     assert session.expires_at == original_expiry
-    assert request(session, "POST", route, body=b"{}", token=session.code)[0] == 204
-    assert session.expires_at == now + PAIR_SECONDS
+    assert request(session, "POST", route, body=b"{}", token=session.code)[0] == 200
+    assert session.expires_at == now + DESKTOP_SECONDS
     now += 2
     preview = request(session, "GET", "/v1/preview", token=session.code)
     assert preview[0] == 200
@@ -91,8 +91,76 @@ def test_pairing_claim_starts_a_full_desktop_window(monkeypatch):
     session = SiteSession(claim_ticket=lambda _nonce: True)
     now += PAIR_SECONDS - 1
     assert request(session, "POST", "/v1/operator-pair/" + "a" * 32)[0] == 200
-    assert session.expires_at == now + PAIR_SECONDS
+    assert session.expires_at == now + DESKTOP_SECONDS
     session.revoke()
+    assert not session.renew_desktop_lease()
+
+
+def test_eight_hour_inactivity_is_exact_and_status_does_not_slide(monkeypatch):
+    from src.app import site_queue_bridge
+
+    now = 100.0
+    monkeypatch.setattr(site_queue_bridge, "time", Mock(monotonic=lambda: now))
+    session = SiteSession()
+    assert request(session, "GET", "/v1/preview", token=session.code)[0] == 200
+    deadline = session.expires_at
+    assert deadline == now + 8 * 3600
+    for elapsed in (16 * 60, 3600, 8 * 3600 - 1):
+        now = 100.0 + elapsed
+        status, _, payload = request(session, "GET", "/v1/connection", token=session.code)
+        assert status == 200 and payload["version"] == 2
+        assert payload["remaining_ms"] == int((deadline - now) * 1000)
+        assert request(session, "GET", "/v1/preview", token=session.code)[0] == 200
+        assert session.expires_at == deadline
+    now = deadline
+    expired, _, expired_payload = request(session, "GET", "/v1/connection", token=session.code)
+    assert expired == 401 and expired_payload == {"error": "authorization_expired"}
+    assert (
+        request(session, "POST", "/v1/operator-keepalive", token=session.code, body=b"{}")[0] == 401
+    )
+    assert not session.renew_desktop_lease()
+    assert session.connection_status()["state"] == "expired"
+
+
+def test_live_activity_slides_but_disconnect_and_shutdown_are_terminal(monkeypatch):
+    from src.app import site_queue_bridge
+
+    now = 100.0
+    monkeypatch.setattr(site_queue_bridge, "time", Mock(monotonic=lambda: now))
+    session = SiteSession()
+    assert session.renew_desktop_lease()
+    now += 7 * 3600
+    response = request(session, "POST", "/v1/operator-keepalive", token=session.code, body=b"{}")
+    assert response[0] == 200
+    assert session.expires_at == now + 8 * 3600
+    assert (
+        request(session, "POST", "/v1/operator-disconnect", token=session.code, body=b"{}")[0]
+        == 204
+    )
+    assert session.connection_status()["state"] == "revoked"
+    revoked, _, revoked_payload = request(session, "GET", "/v1/connection", token=session.code)
+    assert revoked == 401 and revoked_payload == {"error": "pairing_revoked"}
+    invalid, _, invalid_payload = request(session, "GET", "/v1/connection", token="x" * 43)
+    assert invalid == 401 and invalid_payload == {"error": "pairing_required"}
+    assert not session.renew_desktop_lease()
+    assert request(session, "GET", "/v1/receipt", token=session.code)[0] == 401
+    listener = site_queue_bridge.SiteListener.__new__(site_queue_bridge.SiteListener)
+    listener._session = SiteSession()
+    listener._stop = Mock()
+    listener.begin_shutdown()
+    assert listener._session.expired
+
+
+def test_unclaimed_pairing_stays_short_and_cannot_enter_an_eight_hour_lease(monkeypatch):
+    from src.app import site_queue_bridge
+
+    now = 100.0
+    monkeypatch.setattr(site_queue_bridge, "time", Mock(monotonic=lambda: now))
+    session = SiteSession(claim_ticket=lambda _nonce: True)
+    now += PAIR_SECONDS
+    assert session.expired
+    assert request(session, "GET", "/v1/preview", token=session.code)[0] == 401
+    assert request(session, "POST", "/v1/operator-pair/" + "a" * 32)[0] == 409
     assert not session.renew_desktop_lease()
 
 

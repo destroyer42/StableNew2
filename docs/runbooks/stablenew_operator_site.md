@@ -13,11 +13,17 @@ Site** is in the top toolbar beside **Readiness**.
 3. To work from another device, click **Start remote session** in the paired PC browser. Keep that tab, the StableNew
    window and the PC online. Sign in to the same private Site on the other device and enter the separate remote code.
    Hosted requests are handled by the paired browser on the PC. The local StableNew pairing code stays on the PC.
-4. Active use in the Windows Site tab renews its desktop pairing. An idle desktop pairing expires about 15 minutes
-   after its final renewal. Brief loopback interruptions can recover while that pairing is still valid. Choose
-   **Reconnect StableNew** after the grant expires, StableNew restarts, or you disconnect from the desktop app.
-   A hosted remote session lasts up to 15 minutes. Stop it from its Windows browser tab. A host without a heartbeat
-   for 80 seconds stops accepting new remote requests.
+4. With matching Site and Windows builds, the desktop authorization expires after eight hours without
+   authenticated activity. Active use renews it. Unclaimed pairing codes still expire after about 15 minutes,
+   and the one-time connection ticket has its own shorter lifetime. The connection status shows the type and
+   expiry. Brief loopback interruptions can recover while the authorization is valid. Choose **Reconnect
+   StableNew** after expiry, a StableNew restart, or a disconnect.
+5. A hosted remote session has an absolute eight-hour limit. A host without a heartbeat for 80 seconds stops
+   accepting new remote requests. The same authorized host can return after a temporary outage. Keep its
+   Windows Site tab open because the hosted credentials are held in that tab. The host shows an expiry
+   warning and lets you **Reauthorize remote session** on the StableNew PC. Choose **Stop remote session**
+   from that tab to revoke it. When a submission response is lost, check the native receipt or queue before
+   committing work again. Automatic recovery checks status and receipts without repeating submissions.
 
 ## Pair a phone for browserless review
 
@@ -40,11 +46,12 @@ Wi-Fi or cellular while the PC's browser is closed.
    revoking its current grant and approving a new pairing on Windows. **Allow phone Preview and queue submission** is
    a separate, unchecked permission. Select it and confirm the new pairing on Windows to grant it. Album edits use
    the browser workflow.
-3. Use **Output Library** or **Video Review** on the phone. After a lock or
-   network switch, the Site resumes the paired browser. A 15-minute browser
-   lease renews while the same pairing and Sites sign-in are valid. Pair
-   again after 30 days. Restarting StableNew allocates a new presence lease
-   under the same grant. Reopen a result or clip whose old link expired.
+3. Use **Output Library** or **Video Review** on the phone. After a lock or network switch, the Site can resume
+   the same desktop process while the browser lease, device enrollment and Sites sign-in are valid. The browser
+   lease expires after eight hours without authorized activity. Passive status checks do not reset the timer.
+   Use **Reconnect phone** after expiry or a StableNew restart to authorize a fresh browser lease under the
+   same active enrollment and permissions. Pair again when the 30-day enrollment expires. Open a result or clip
+   again if its individual media link expired.
 4. Choose **Revoke phone** in StableNew to stop new native work for this device
    immediately. StableNew saves the revocation locally and confirms it with
    the Site when reachable. On a disconnect, the hosted presence and result
@@ -158,18 +165,88 @@ from the current pairing. Both clients use the same Add to Job, immutable Previe
 admission. The paired session stores only preparation and delivery state. The existing queue and repository own execution
 and persistence.
 
+## Connection protocol and release
+
+The Windows phone connector requires protocol 2 with enrollment, presence and browser lease
+capabilities. The private Site authenticates its capability probe with the existing service
+credential. Windows checks before inspecting or saving a new pairing, when restoring or recovering
+presence, and before saving a replacement credential. Each connector operation uses a versioned
+route and header. The v25 Worker rejects those routes before handling enrollment or presence, even
+if a version switch happens after the probe. Windows retains existing saved grants during an outage
+or mismatch. From the Windows Phone review dialog, update the Site and StableNew to matching
+versions before retrying. Confirmed expiration or revocation requires pairing again.
+
+Browser status, expiration, pending requests and timers belong to the desktop, hosted viewer or
+phone authorization that started them. Switching increments the browser's connection generation.
+Phone grant and browser lease changes have their own identity. An uncertain submit keeps its exact
+receipt reference. Restore the original authorization or check the native queue if a different
+connection is selected. Phone Queue persists its pending receipt by grant and exact ID across page
+reload. Recovery only reads the receipt. Native JobService and the repository own admission and the
+committed jobs.
+
+| Windows phone connector | Site Worker | Supported behavior |
+| --- | --- | --- |
+| Existing | v25 | Legacy phone enrollment and presence, with the v25 lease policy. |
+| Updated | v25 | Compatibility probe and versioned mutation routes are refused. Existing Windows grants are retained. |
+| Existing | v2 | Legacy connector routes are refused before state changes. |
+| Updated | v2 | Authenticated enrollment, eight-hour phone inactivity lease, and same-device reconnect with the stored scopes. |
+
+Stage both reviewed versions first. The mixed versions refuse phone operations, so schedule the
+cutover while the paired PC and Site workflows are idle. If that would interrupt active use, get an
+owner decision on the maintenance window before proceeding. Only after authorization, deploy the
+v2 Site with its additive migration, verify the migration and the v2 capability response, and then
+start the updated Windows build. A v25 presence can hold the old process slot for up to 30 seconds.
+The v2 browser requires v2 presence and an explicit reconnect for a migrated grant. Start a new
+desktop pairing or hosted browser session when needed. Live gateway, real-phone recovery and
+eight-hour operation require a separate authorized acceptance run.
+
+The migration keeps phone grants, permission flags and existing relay records. Legacy browser
+leases start unbound. Sites applies the journal before uploading the Worker. Verify the completed
+journal and all three columns before enabling the connector. A missing column blocks the v2
+capability response. A partial or uncertain migration requires inspecting the actual schema and
+journal before retrying. The raw ALTER statements are one-time steps.
+
+For rollback, stop the v2 connector and drain its presence before returning to both v25 and the
+existing Windows build. The v25 Worker can read the additive schema. Keep the added columns, align
+the Windows and Site versions, and renew the browser authorization under the restored policy.
+Resolve any ambiguous submission through its native receipt or queue. A backup and production
+rollback decision are part of the separately authorized rollout.
+
+## Maintained regression coverage
+
+| Protected behavior | Deterministic suites | Browser acceptance |
+| --- | --- | --- |
+| D1–D2 Protocol and authorization order | Native `test_site_phone_connector.py`; Site `worker/phone-connector.test.mjs` | `worker/phone-queue.browser.mjs` covers version refusal. |
+| D3–D4 Connection ownership and async ordering | Site `worker/connection-recovery.test.mjs`, `phone-client.test.mjs`, `desktop-activity.test.mjs`, `autoconnect.test.mjs` and `relay-client.test.mjs` use controlled responses and timers. Worker tests fence requests during revocation. | Phone Queue separates server revocation from browser awareness and checks the in-flight read. |
+| D5 Session limits and recovery | Native `test_site_pairing_protocol.py` and `test_site_queue_bridge.py`; Site `connection-recovery.test.mjs`, `phone-connector.test.mjs` and `relay.test.mjs`. | Phone Queue exercises expiry and explicit reconnect. |
+| D6 Admission and receipts | Native `test_site_phone_admission.py` and `test_site_queue_bridge.py`; Site `connection-recovery.test.mjs`, `phone-connector.test.mjs` and `relay.test.mjs`. | Phone Queue checks one submission, one canonical job and exact receipt recovery after reload. |
+| D7 Browser permissions and workflow continuity | Native `test_site_pairing_protocol.py` checks the precise loopback origin. | Site `offline-albums.browser.mjs`, `phone-queue.browser.mjs` and `phone-video-eval.browser.mjs`; keep Chromium network protections enabled and grant fixture access only to the test origin. |
+| D8 Migration and compatibility matrix | Site `phone-connector.test.mjs` uses the actual v25 Worker in Git history and the built v2 Worker with synthetic SQLite. | Covered by the deterministic transition tests before rollout. |
+
+The native test files are in `tests/controller/`. The standard Python 3.14 census includes all four.
+The required smoke includes the native HTTP and enrollment sequencing contract checks. Run
+`node worker/build.mjs` and `node --test worker/*.test.mjs` from the Site root, then the three
+maintained browser scripts for changes to connection, scope, receipts or protocol. The companion's
+`worker/CONNECTION_AND_REVIEW.md` describes its local review gate and fixture setup.
+
+SITE-MOTION-500, SITE-STORY-510, SITE-STORY-520, SITE-MEDIA-530 and later Site packages must identify
+affected invariants and reference this coverage. Run the affected focused tests during implementation
+and the corresponding broader suite when shared connection, authorization, receipt or protocol
+code changes. Use the prescribed final gate. Weakening or removing a protected behavior requires
+owner-approved equivalent coverage.
+
 ## Execution profile and validation
 
-Architectural Windows and hosted Site integration. Claude Code Opus 5.5 High or Codex GPT-6 Astra High. Prefer local
-Windows for the host adapter and mock queue, with the current session for Sites publication. Expected usage is about
-10M–30M cache-read and 100k output tokens. A single higher-tier session reduces retries across pairing authorization,
-model-policy overrides and the asynchronous native draft lifecycle.
+Architectural Windows and hosted Site integration. Use Claude Code Opus 5.5 High or Codex GPT-6 Astra
+High on local Windows for access to both worktrees and scoped Chrome loopback. This tier reduces
+retries across the asynchronous browser, Worker and native authorization boundaries.
 
-Controller Surface Assessment. Reuse the existing Add to Job service and immutable Preview submission seam. The
-AppController ceiling is unchanged. The relay has no second compiler, queue, runner or history store.
+Controller Surface Assessment. The connector and browser apply connection consent and lifecycle
+rules through their existing transport boundaries. AppController and JobService stay unchanged.
+The native Preview, queue and repository remain authoritative for admissions and receipts.
 
-Token-Efficient Validation Plan. Run the focused startup, bridge, PromptPack draft and queue tests on Python 3.14.
-Use synthetic media and an isolated queue. Verify settings in the compiled records, that a stale Preview is refused, and
-that pairing removes both desktop prompts for a Site-owned draft. Exercise both browser workspaces and the hosted relay
-with an in-memory SQLite database and temporary media storage. Run the local PR gate once near closeout. At authorized publication verify `required`, `full-suite`
-and `windows` at the PR head. Live generation is outside deterministic validation.
+Token-Efficient Validation Plan. Reproduce connection defects with focused native and Site tests,
+using controlled clocks, deferred responses, synthetic grants and isolated storage. Run the Site
+build and maintained deterministic and browser suites with Chrome protections enabled. Run the
+native PR gate near closeout and review the two aggregate diffs against their exact heads. At
+authorized publication verify `required`, `full-suite` and `windows` at the native PR head.
