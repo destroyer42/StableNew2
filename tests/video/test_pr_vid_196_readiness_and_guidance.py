@@ -595,6 +595,8 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
 
     expected = {
         "wan22_fun_control_5b_canny_i2v_v1@1.0.0": "8882daeda0571cc4cc00cf6d96e6a4fff25411a571f62626dd5bfc87389beac5",
+        # Trial: the identical 1.0.0 graph; only the resource policy (VRAM floor instead of a hard refusal) differs.
+        "wan22_fun_control_5b_canny_i2v_v1@1.1.0": "ed7b2ec74ff8971a3276d8510be0e28b47a19754b5cc115bdb1493b91640fed9",
         "wan22_i2v_a14b_4step_ck_v1@1.0.0": "a8fa85df6368981879c65153deb740b3bb4ec606193723e45b276d4b529fc50a",
         # VID-WARM-373 changed the runtime policy only; VID-A14B-SPEED-374 raised the frame-count maximum to 121 and
         # added advisory_above 81. The graph digest is pinned separately and did not move.
