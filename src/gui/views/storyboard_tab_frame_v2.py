@@ -17,6 +17,8 @@ from typing import Any
 from PIL import Image, ImageTk
 
 from src.controller.storyboard_submission_service import ContinueRequest, ContinueRow
+from src.gui import theme_v2
+from src.gui.design_system_v2 import Colors, Typography
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
 from src.gui.view_contracts.storyboard_import_contract import (
@@ -35,6 +37,7 @@ from src.gui.view_contracts.storyboard_tree_contract import (
     StoryboardTreeContract,
 )
 from src.gui.views.storyboard_compare_window_v2 import StoryboardCompareWindowV2
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.storyboard_columns_v2 import StoryboardColumnsV2
 from src.gui.widgets.storyboard_continue_rows_v2 import ContinueRowFields, ContinueRowsV2
 from src.gui.widgets.storyboard_viewer_v2 import StoryboardViewerV2
@@ -49,6 +52,10 @@ from src.video.storyboard_projection import TakeView
 from src.video.storyboard_tree import StoryboardTree
 
 REFRESH_MS = 6000
+COLUMNS_MIN_HEIGHT = 90  # the tree strip can be dragged this small, never to nothing
+BODY_MIN_HEIGHT = 160
+NO_TARGET_TEXT = "Nothing selected to continue from"
+BANNER_FONT = (Typography.FAMILY, 11, "bold")
 _LIVE_STATES = frozenset({"pending", "queued", "running"})
 
 
@@ -126,11 +133,22 @@ class StoryboardTabFrameV2(ttk.Frame):
         self.dropped_text_var = tk.StringVar(value="Show dropped (0)")
         self.show_thumbnails_var = tk.BooleanVar(value=self.media.thumbnails)
         self.show_viewer_var = tk.BooleanVar(value=self.media.viewer)
-        self.rowconfigure(2, weight=1)
+        self.banner_var = tk.StringVar(value=NO_TARGET_TEXT)
+        self.rowconfigure(1, weight=1)
         self.columnconfigure(0, weight=1)
         self._build_toolbar()
-        self.columns = StoryboardColumnsV2(
+        #: The take tree above and the viewer + Continue panel below, with a sash Rob can drag.
+        self.pane = tk.PanedWindow(
             self,
+            orient="vertical",
+            sashwidth=6,
+            sashrelief="raised",
+            bd=0,
+            bg=theme_v2.BACKGROUND_DARK,
+        )
+        self.pane.grid(row=1, column=0, sticky="nsew", padx=8, pady=4)
+        self.columns = StoryboardColumnsV2(
+            self.pane,
             on_select=self.select_take,
             on_mark=self.set_mark,
             on_compare=self._compare_hook,
@@ -138,11 +156,19 @@ class StoryboardTabFrameV2(ttk.Frame):
             on_replay=self.replay_take,
         )
         self.columns.set_thumbnails_visible(self.media.thumbnails)
-        self.columns.grid(row=1, column=0, sticky="ew", padx=8)
-        body = ttk.Frame(self, style="Panel.TFrame")
+        body = ttk.Frame(self.pane, style="Panel.TFrame")
         self._body = body
-        body.grid(row=2, column=0, sticky="nsew", padx=8, pady=4)
-        body.rowconfigure(0, weight=1)
+        self.pane.add(self.columns, stretch="always", minsize=COLUMNS_MIN_HEIGHT)
+        self.pane.add(body, stretch="always", minsize=BODY_MIN_HEIGHT)
+        body.rowconfigure(1, weight=1)
+        self.banner_label = ttk.Label(
+            body,
+            textvariable=self.banner_var,
+            style="Dark.TLabel",
+            font=BANNER_FONT,
+            foreground=Colors.PRIMARY_ACCENT,
+        )
+        self.banner_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
         self.viewer = StoryboardViewerV2(
             body,
             on_frame=self._request_frame,
@@ -150,13 +176,13 @@ class StoryboardTabFrameV2(ttk.Frame):
             readout=self._readout,
         )
         self.viewer.set_media_visible(self.media.viewer)
-        self.viewer.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        self.viewer.grid(row=1, column=0, sticky="nsew", padx=(0, 8))
         self._apply_body_weights()
         self.continue_host = ttk.Frame(body, style="Panel.TFrame")
-        self.continue_host.grid(row=0, column=1, sticky="nsew")
+        self.continue_host.grid(row=1, column=1, sticky="nsew")
         self._build_continue_panel(self.continue_host)
         ttk.Label(self, textvariable=self.status_var, style="Dark.TLabel", wraplength=900).grid(
-            row=3, column=0, sticky="ew", padx=8, pady=(0, 6)
+            row=2, column=0, sticky="ew", padx=8, pady=(0, 6)
         )
 
     # ------------------------------------------------------------------ construction
@@ -371,7 +397,7 @@ class StoryboardTabFrameV2(ttk.Frame):
         self.contract.select(selected)
         self.title_var.set(f"{self.tree.title} · {_saved_text(self.tree)}")
         self.dropped_text_var.set(f"Show dropped ({self.contract.dropped_count()})")
-        self.render()
+        self.render(reveal_selected=not keep_selection)
         if not (same_tree and keep_selection and self.cut is not None):
             self._load_cut(selected)
         else:
@@ -419,10 +445,15 @@ class StoryboardTabFrameV2(ttk.Frame):
 
     # ------------------------------------------------------------------ rendering
 
-    def render(self) -> None:
+    def render(self, *, reveal_selected: bool = False) -> None:
+        """Rebuild the tree. Only a selection or an open scrolls the selected card into view (``reveal_selected``):
+        the periodic refresh and mark changes leave wherever Rob has scrolled to."""
+
         if self.contract is None:
             return
         self.columns.render(self.contract.columns(self.show_dropped_var.get()))
+        if reveal_selected:
+            self.columns.see(self.contract.selected_id)
         self._load_thumbnails()
 
     def _thumbnail_sources(self) -> dict[str, str]:
@@ -476,8 +507,12 @@ class StoryboardTabFrameV2(ttk.Frame):
     def select_take(self, take_id: str) -> None:
         if self.contract is None:
             return
+        if take_id != self.contract.selected_id:
+            # A different take is a different clip to extend: aim Continue at its last frame (where the viewer starts)
+            # instead of keeping an ancestor's frame that merely sits on the path.
+            self.target = None
         self.contract.select(take_id)
-        self.render()
+        self.render(reveal_selected=True)
         self._load_cut(take_id)
 
     def _load_cut(self, node_id: str) -> None:
@@ -486,6 +521,10 @@ class StoryboardTabFrameV2(ttk.Frame):
             return
         self.cut = None
         self._say("")
+        if (
+            self.target is None
+        ):  # a different take: until its cut arrives the banner and Queue must not name the old one
+            self._update_continue_panel()
         allowed, reason = contract.continue_allowed(node_id)
         if not allowed:
             self.viewer.clear()
@@ -553,7 +592,7 @@ class StoryboardTabFrameV2(ttk.Frame):
     def _apply_frame(self, image: Image.Image) -> None:
         if not self.media.viewer:
             return  # the viewer was hidden while this frame was loading
-        self.viewer.show_image(ImageTk.PhotoImage(image, master=self))
+        self.viewer.show_image(image)
 
     # ------------------------------------------------------------------ media visibility
 
@@ -714,23 +753,29 @@ class StoryboardTabFrameV2(ttk.Frame):
         ttk.Label(host, textvariable=self.ai_reason_var, style="Dark.TLabel").grid(
             row=2, column=0, sticky="e"
         )
-        self.rows_widget = ContinueRowsV2(host, on_change=self._rows_changed)
+        # The title, mode bar and Queue/Preview stay put; the rows (up to 6 roomy prompt fields) scroll between them.
+        host.rowconfigure(3, weight=1)
+        self.continue_scroll = ScrollableFrame(host, request_width=True)
+        self.continue_scroll.grid(row=3, column=0, sticky="nsew")
+        scrolled = self.continue_scroll.inner
+        scrolled.columnconfigure(0, weight=1)
+        self.rows_widget = ContinueRowsV2(scrolled, on_change=self._rows_changed)
         self.rows_frame = self.rows_widget
-        self.rows_widget.grid(row=3, column=0, sticky="ew")
+        self.rows_widget.grid(row=0, column=0, sticky="ew")
         self.add_row_button = ttk.Button(
-            host, text="+ Add row (up to 6)", style="Dark.TButton", command=self.add_row
+            scrolled, text="+ Add row (up to 6)", style="Dark.TButton", command=self.add_row
         )
-        self.add_row_button.grid(row=4, column=0, sticky="w", pady=2)
-        ttk.Label(host, textvariable=self.engine_var, style="Dark.TLabel", wraplength=480).grid(
-            row=5, column=0, sticky="w"
+        self.add_row_button.grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Label(scrolled, textvariable=self.engine_var, style="Dark.TLabel", wraplength=480).grid(
+            row=2, column=0, sticky="w"
         )
         self.experimental_check = ttk.Checkbutton(
-            host,
+            scrolled,
             text="This workflow is experimental: allow it for this Continue only",
             variable=self.experimental_var,
         )
         actions = ttk.Frame(host, style="Panel.TFrame")
-        actions.grid(row=7, column=0, sticky="e", pady=4)
+        actions.grid(row=4, column=0, sticky="e", pady=4)
         self.preview_button = ttk.Button(
             actions, text="Preview", style="Dark.TButton", command=self.preview
         )
@@ -834,15 +879,26 @@ class StoryboardTabFrameV2(ttk.Frame):
         allowed = False
         if self.target is None:
             self.continue_title_var.set("Continue")
+            self.banner_var.set(NO_TARGET_TEXT)
         else:
             owner, handoff = self.target
             allowed = contract.continue_allowed(owner)[0]
             where = "the still image" if handoff is None else f"its frame {handoff + 1}"
             self.continue_title_var.set(f"Continue {contract.label(owner)} from {where}")
+        self.banner_var.set(self._banner_text())
         state = "normal" if allowed and not self._busy else "disabled"
         self.preview_button.configure(state=state)
         self.queue_button.configure(state=state)
         self._sync_experimental()
+
+    def _banner_text(self) -> str:
+        """Which take and frame the next Continue extends: the Continue target, said where Rob is looking."""
+
+        if self.target is None or self.contract is None:
+            return NO_TARGET_TEXT
+        owner, handoff = self.target
+        where = "the still image" if handoff is None else f"frame {handoff + 1}"
+        return f"Continuing from: {self.contract.label(owner)} · {where}"
 
     def _sync_experimental(self) -> None:
         tree = self.tree
@@ -852,7 +908,7 @@ class StoryboardTabFrameV2(ttk.Frame):
             getattr(self._service(), "needs_experimental_opt_in", lambda _tree: False)(tree)
         )
         if needs:
-            self.experimental_check.grid(row=6, column=0, sticky="w")
+            self.experimental_check.grid(row=3, column=0, sticky="w")
         else:
             self.experimental_check.grid_remove()
             self.experimental_var.set(False)

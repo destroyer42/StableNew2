@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-982 of 982 modules have a docstring.
+983 of 983 modules have a docstring.
 
 ## src/
 
@@ -514,6 +514,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `matrix_slot_picker.py`: MatrixSlotPickerDialog - Modal dialog for selecting matrix slot to insert
 - `matrix_tab_panel.py`: MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab
 - `media_inspector.py`: Shared local media controls, bounded inspection and safely recreated dock/detach renderers
+- `mirrored_text_v2.py`: A word-wrapped, multi-line text field that mirrors a ``StringVar`` (Storyboard Continue prompts)
 - `openpose_picker_panel.py`: PromptPack OpenPose reference picker (PR-IMG-CNET-210)
 - `reference_map_browser.py`: Searchable reference-map list with a bounded thumbnail (PR-GUI-UX-550)
 - `reference_map_dialog.py`: The "Create map from image" dialog: thin Tk over ``ReferenceMapFlow`` (PR-IMG-CNET-230)
