@@ -2,7 +2,9 @@
 
 One column per tree depth, scrolling sideways. Cards show a lazily loaded thumbnail, the label, a prompt excerpt, the
 status and Keep ★ / Drop ✕ toggles. The widget holds no tree: the tab hands it :class:`Column` values and callbacks, and
-supplies thumbnails (already loaded on a worker) through :meth:`set_thumbnail`.
+supplies thumbnails (already loaded on a worker) through :meth:`set_thumbnail`. With thumbnails switched off
+(:meth:`set_thumbnails_visible`) a card has no thumbnail widget at all, so its text and buttons take the space;
+labels, excerpts, status, marks and actions are unchanged.
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ class StoryboardColumnsV2(ttk.Frame):
         self._mark_buttons: dict[str, tuple[ttk.Button, ttk.Button]] = {}
         self.compare_buttons: dict[str, ttk.Button] = {}
         self.card_frames: dict[str, ttk.Frame] = {}
+        self._show_thumbnails = True
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self._canvas = tk.Canvas(self, height=210, highlightthickness=0)
@@ -84,6 +87,20 @@ class StoryboardColumnsV2(ttk.Frame):
                 button.pack(fill="x", pady=(4, 0))
                 self.compare_buttons[column.title] = button
 
+    @property
+    def thumbnails_visible(self) -> bool:
+        return self._show_thumbnails
+
+    def set_thumbnails_visible(self, visible: bool) -> None:
+        """Show or hide every card's thumbnail and re-render the cards in place (no state is lost)."""
+
+        if visible == self._show_thumbnails:
+            return
+        self._show_thumbnails = visible
+        if not visible:
+            self._photos.clear()  # nothing hidden is kept alive, and nothing late can bring it back
+        self.render(self._columns)
+
     def _build_card(self, holder: ttk.Frame, card: Card) -> None:
         frame = ttk.Frame(
             holder, style="Card.TFrame" if card.on_path else "Panel.TFrame", padding=4
@@ -92,19 +109,23 @@ class StoryboardColumnsV2(ttk.Frame):
         frame.configure(width=CARD_WIDTH)
         self.card_frames[card.take_id] = frame
         marker = "▶ " if card.selected else ""
-        thumb = ttk.Label(frame, text="…", width=14, anchor="center")
-        thumb.grid(row=0, column=0, rowspan=3, sticky="nw", padx=(0, 6))
-        self._thumb_labels[card.take_id] = thumb
-        if card.take_id in self._photos:
-            thumb.configure(image=self._photos[card.take_id], text="")
+        thumb: ttk.Label | None = None
+        text_column = 0
+        if self._show_thumbnails:
+            thumb = ttk.Label(frame, text="…", width=14, anchor="center")
+            thumb.grid(row=0, column=0, rowspan=3, sticky="nw", padx=(0, 6))
+            self._thumb_labels[card.take_id] = thumb
+            if card.take_id in self._photos:
+                thumb.configure(image=self._photos[card.take_id], text="")
+            text_column = 1
         ttk.Label(frame, text=f"{marker}{card.label}", style="Dark.TLabel").grid(
-            row=0, column=1, sticky="w"
+            row=0, column=text_column, sticky="w"
         )
-        ttk.Label(frame, text=card.excerpt, style="Dark.TLabel", wraplength=110).grid(
-            row=1, column=1, sticky="w"
-        )
+        ttk.Label(
+            frame, text=card.excerpt, style="Dark.TLabel", wraplength=110 if thumb else 190
+        ).grid(row=1, column=text_column, sticky="w")
         ttk.Label(frame, text=card.status_text, style="Dark.TLabel").grid(
-            row=2, column=1, sticky="w"
+            row=2, column=text_column, sticky="w"
         )
         if card.take_id != ROOT_PARENT:
             keep = ttk.Button(
@@ -119,24 +140,30 @@ class StoryboardColumnsV2(ttk.Frame):
                 width=3,
                 command=lambda: self.toggle_drop(card.take_id),
             )
-            keep.grid(row=0, column=2, padx=2)
-            drop.grid(row=1, column=2, padx=2)
+            keep.grid(row=0, column=text_column + 1, padx=2)
+            drop.grid(row=1, column=text_column + 1, padx=2)
             self._mark_buttons[card.take_id] = (keep, drop)
         if card.can_resume and self._on_resume is not None:
-            self._action(frame, card.take_id, "Resume", self._on_resume, 3)
+            self._action(frame, card.take_id, "Resume", self._on_resume, 3, text_column)
         if card.can_replay and self._on_replay is not None:
-            self._action(frame, card.take_id, "Replay", self._on_replay, 4)
-        for widget in (frame, thumb, *frame.winfo_children()):
+            self._action(frame, card.take_id, "Replay", self._on_replay, 4, text_column)
+        for widget in (frame, *frame.winfo_children()):
             if not isinstance(widget, ttk.Button):
                 widget.bind("<Button-1>", partial(self._clicked, card.take_id))
 
     # ------------------------------------------------------------------ queries and actions
 
     def _action(
-        self, frame: ttk.Frame, take_id: str, text: str, handler: Callable[[str], None], row: int
+        self,
+        frame: ttk.Frame,
+        take_id: str,
+        text: str,
+        handler: Callable[[str], None],
+        row: int,
+        column: int = 1,
     ) -> None:
         button = ttk.Button(frame, text=text, command=partial(handler, take_id))
-        button.grid(row=row, column=1, sticky="w")
+        button.grid(row=row, column=column, sticky="w")
         self.action_buttons[(take_id, text)] = button
 
     def _clicked(self, take_id: str, _event: Any) -> None:
@@ -181,6 +208,8 @@ class StoryboardColumnsV2(ttk.Frame):
             self._on_compare(title)
 
     def set_thumbnail(self, take_id: str, photo: Any) -> None:
+        if not self._show_thumbnails:
+            return  # a late result must not bring a hidden thumbnail back
         self._photos[take_id] = photo
         label = self._thumb_labels.get(take_id)
         if label is not None and label.winfo_exists():
