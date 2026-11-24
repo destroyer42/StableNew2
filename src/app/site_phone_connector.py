@@ -154,7 +154,7 @@ class PhoneHttp:
                 response.status == 409 and reason == "connection_version_required"
             ):
                 raise PhoneVersionMismatch(_VERSION_MESSAGE)
-            if response.status == 410:
+            if response.status == 410 and action in {"inspect", "enroll", "poll"}:
                 if reason == "phone_pairing_expired":
                     raise PhoneGrantExpired("The phone pairing expired.")
                 if reason == "phone_pairing_revoked":

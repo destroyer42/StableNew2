@@ -334,7 +334,9 @@ def test_credential_replacement_requires_a_compatible_worker(tmp_path):
     assert store.grant.rating == grant.rating
 
 
-def test_http_uses_v2_routes_and_distinguishes_legacy_refusal_from_unavailability(monkeypatch):
+def test_http_uses_v2_routes_and_distinguishes_legacy_refusal_from_unavailability(
+    monkeypatch, tmp_path
+):
     replies = iter(
         [
             (404, b'{"error":"unknown_operation"}'),
@@ -342,6 +344,8 @@ def test_http_uses_v2_routes_and_distinguishes_legacy_refusal_from_unavailabilit
             (200, b"not-json"),
             (200, b'{"version":1,"version":2}'),
             (409, b'{ "error": "connection_version_required" }'),
+            (410, b'{"error":"phone_pairing_expired"}'),
+            (410, b'{"error":"phone_pairing_revoked"}'),
         ]
     )
     paths = []
@@ -379,9 +383,16 @@ def test_http_uses_v2_routes_and_distinguishes_legacy_refusal_from_unavailabilit
         http.request("compatibility", _SITE, _HOST)
     with pytest.raises(PhoneVersionMismatch):
         http.request("poll", _SITE, _HOST)
-    assert paths == ["/api/stablenew/connector/v2/compatibility"] * 4 + [
-        "/api/stablenew/connector/v2/poll"
-    ]
+    grant = _grant(tmp_path)
+    for _ in range(2):
+        store = _MemoryStore(grant)
+        connector = SitePhoneConnector(store, http)
+        connector._grant = grant
+        connector._step(grant)
+        assert store.grant == grant
+        assert connector._presence is None
+    compatibility = "/api/stablenew/connector/v2/compatibility"
+    assert paths == [compatibility] * 4 + ["/api/stablenew/connector/v2/poll"] + [compatibility] * 2
 
 
 def test_enroll_resume_same_grant_and_graceful_close(tmp_path):
