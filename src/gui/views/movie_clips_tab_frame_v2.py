@@ -300,7 +300,15 @@ class MovieClipsTabFrameV2(ttk.Frame):
             style="Dark.TButton",
             command=self._on_clear_all,
         )
-        self.clear_all_btn.pack(side="left")
+        self.clear_all_btn.pack(side="left", padx=(0, 6))
+
+        self.harvest_btn = ttk.Button(
+            btn_row,
+            text="Harvest Motion...",
+            style="Dark.TButton",
+            command=self._on_harvest_motion,
+        )
+        self.harvest_btn.pack(side="left")
 
         duration_row = ttk.Frame(list_frame, style="Panel.TFrame")
         duration_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
@@ -650,6 +658,38 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._update_summary()
         self._update_source_summary()
         self._set_status("")
+
+    def _on_harvest_motion(self) -> None:
+        """Open Harvest Motion on the one selected video clip.
+
+        The clip list carries only file paths (a loaded bundle names no job), so the handoff is path-based: no
+        originating job is claimed.  Nothing is queued, copied or edited."""
+
+        selected = [
+            self._image_paths[i]
+            for i in self._selected_indices()
+            if i < len(self._image_paths) and is_video_path(self._image_paths[i])
+        ]
+        if len(selected) != 1:
+            self._set_status("Select exactly one video clip to harvest motion from.")
+            return
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            self._set_status("Harvest Motion is not available: the main window is missing.")
+            return
+        from src.gui.controllers.video_workspace_handoff import route_video_to_motion_harvest
+        from src.video.motion_library.harvest_service import HarvestSourceRef
+
+        path = Path(selected[0])
+        try:
+            route_video_to_motion_harvest(
+                main_window=main_window,
+                source=HarvestSourceRef(path=str(path), label=path.name, surface="movie_clips"),
+            )
+        except (RuntimeError, OSError, ValueError) as exc:
+            self._set_status(f"Harvest Motion failed: {exc}")
+            return
+        self._set_status(f"Opened Harvest Motion for {path.name}.")
 
     def _on_use_latest_video_output(self) -> None:
         controller = self.app_controller

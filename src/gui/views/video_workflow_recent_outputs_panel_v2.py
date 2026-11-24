@@ -39,6 +39,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         send_to_movie: Callable[[RecentVideoOutput], Any] | None = None,
         add_to_library: Callable[[RecentVideoOutput, Mapping[str, Any]], Any] | None = None,
         on_library_changed: Callable[[], None] | None = None,
+        harvest_motion: Callable[[RecentVideoOutput], None] | None = None,
         ask_library_details: Callable[[RecentVideoOutput], Mapping[str, Any] | None] | None = None,
         decode: Any = None,
         shown_var: tk.BooleanVar | None = None,
@@ -48,6 +49,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             master, text="Recent outputs", style="Dark.TLabelframe", padding=8, **kwargs
         )
         self._closed = False
+        self._harvest_motion = harvest_motion
         self._runner: BackgroundWorkRunner | None = None
         self._previewed: str = ""
         self.status_var = tk.StringVar(value="")
@@ -78,12 +80,20 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             command=self._on_add_to_library,
             state="disabled",
         )
+        self.harvest_button = ttk.Button(
+            actions,
+            text="Harvest Motion...",
+            style="Dark.TButton",
+            command=self._on_harvest,
+            state="disabled",
+        )
         for button in (
             self.refresh_button,
             self.open_button,
             self.reveal_button,
             self.movie_button,
             self.library_button,
+            self.harvest_button,
         ):
             button.pack(side="left", padx=(0, 6))
 
@@ -183,6 +193,11 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             self.library_button.configure(
                 state="normal" if self.session.can_add_to_library else "disabled"
             )
+            self.harvest_button.configure(
+                state="normal"
+                if selected is not None and self._harvest_motion is not None
+                else "disabled"
+            )
             self.refresh_button.configure(state="disabled" if self.session.busy else "normal")
             self.status_var.set(
                 "Reading recent outputs..." if self.session.busy else self.session.status
@@ -234,6 +249,13 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
 
     def _on_send_to_movie(self) -> None:
         self.session.send_selected_to_movie()
+
+    def _on_harvest(self) -> None:
+        """Open the Harvest Motion workspace on the selected clip (nothing is queued or copied)."""
+
+        output = self.session.selected
+        if output is not None and self._harvest_motion is not None:
+            self._harvest_motion(output)
 
     def _on_add_to_library(self) -> None:
         output = self.session.selected

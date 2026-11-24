@@ -35,6 +35,7 @@ from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_evaluate_view_v2 import VideoWorkflowEvaluateView
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
+from src.gui.views.video_workflow_harvest_host import HarvestHost
 from src.gui.views.video_workflow_layout_v2 import (
     PANE_FORM,
     PANE_MEDIA,
@@ -75,6 +76,7 @@ from src.video.motion_library.handoff import (
     HandoffPlan,
     binding_for_submission,
 )
+from src.video.motion_library.harvest_service import HarvestSourceRef
 from src.video.recent_video_outputs import RecentVideoOutput
 from src.video.workflow_frame_count import frame_count_advisory
 from src.video.workflow_picker import workflow_choices
@@ -166,7 +168,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._workflow_map: dict[str, dict[str, Any]] = {}
         # Identity of the Motion Library clip last handed to the driving-video field
         # (PR-VID-MOTION-LIB-353); frozen with a job only while the field still names that file.
-        self._library_binding: dict[str, str] | None = None
+        self._library_binding: dict[str, Any] | None = None
         self._library_bound_path = ""
         self._last_folder = ""
         self._source_bundle: dict[str, Any] | None = None
@@ -631,6 +633,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 "send_to_movie": self._send_output_to_movie,
                 "add_to_library": self._add_output_to_library,
                 "on_library_changed": self._refresh_motion_library,
+                "harvest_motion": self._harvest_recent_output,
             },
         )
         self.show_media_check = self._media_pane.check
@@ -720,6 +723,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_convert=self._open_motion_conversion,
             on_batch_convert=self._open_motion_batch,
             on_preview_conditioning=self._open_conditioning_preview,
+            on_harvest=self.open_motion_harvest,
         )
         self.motion_library_panel.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 
@@ -1905,6 +1909,34 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         size = (480, 832) if portrait else (832, 480)
         window.show_clip(
             detail.media_path, asset.sha256, size, f"{asset.display_name} - {size[0]}x{size[1]}"
+        )
+
+    def open_motion_harvest(self, ref: HarvestSourceRef) -> None:
+        """PR-VID-MOTION-400: the one non-modal Harvest Motion workspace (offline; queues nothing, edits no field)."""
+
+        host = getattr(self, "_harvest_host", None)
+        if host is None:
+            host = self._harvest_host = HarvestHost(
+                self,
+                controller=self._library_controller,
+                read_form=self._read_motion_prep_form,
+                mode_provider=lambda: str(
+                    getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw"
+                ),
+                source_image=lambda: self.source_image_var.get().strip(),
+                on_saved=lambda record: self._refresh_motion_library(),
+            )
+        host.open(ref)
+
+    def _harvest_recent_output(self, output: RecentVideoOutput) -> None:
+        self.open_motion_harvest(
+            HarvestSourceRef(
+                path=output.video_path,
+                label=output.file_name,
+                job_id=output.job_id,
+                surface="recent_outputs",
+                subject=output.visibility_subject or {"name": output.file_name},
+            )
         )
 
     def _selected_workflow_identity(self) -> tuple[str, str]:

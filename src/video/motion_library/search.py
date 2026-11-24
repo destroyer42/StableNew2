@@ -38,6 +38,14 @@ class SearchQuery:
     min_frames: int | None = None
     max_frames: int | None = None
     good_for_motion_only: bool = False
+    # PR-VID-MOTION-400.  Each is an operator opinion or a recorded fact about the asset, never transfer evidence.
+    harvested_only: bool = False
+    #: ``native`` or ``normalized_24``; empty means either.  Matches harvested assets only.
+    cadence: str = ""
+    motion_achieved_only: bool = False
+    visual_quality: str = ""
+    start_pose: str = ""
+    end_pose: str = ""
 
     @property
     def is_empty(self) -> bool:
@@ -54,7 +62,10 @@ def _haystack(asset: MotionAsset) -> str:
         asset.end_pose,
         asset.quality_notes,
         asset.provenance_notes,
-        asset.origin.motion_label if asset.origin is not None else "",
+        asset.effective_motion_label,
+        asset.known_defects,
+        asset.reuse_conditions,
+        asset.harvest.original_name if asset.harvest is not None else "",
     ]
     return " ".join(parts).lower()
 
@@ -89,6 +100,20 @@ def matches(asset: MotionAsset, query: SearchQuery) -> bool:
         return False
     if query.good_for_motion_only and asset.good_for_motion is not True:
         return False
+    if query.harvested_only and asset.harvest is None:
+        return False
+    if query.cadence and (asset.harvest is None or asset.harvest.cadence != query.cadence):
+        return False
+    if query.motion_achieved_only and asset.effective_motion_achieved is not True:
+        return False
+    if query.visual_quality and asset.visual_quality != query.visual_quality:
+        return False
+    for wanted_pose, pose in (
+        (query.start_pose, asset.start_pose),
+        (query.end_pose, asset.end_pose),
+    ):
+        if wanted_pose and wanted_pose.lower() not in pose.lower():
+            return False
     if query.min_seconds is not None or query.max_seconds is not None:
         if asset.duration_seconds is None:
             return False

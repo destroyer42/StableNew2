@@ -312,7 +312,7 @@ def _runs(indices: Sequence[int]) -> list[tuple[int, int]]:
     return runs
 
 
-def ffmpeg_filter_chain(plan: FramePlan) -> str:
+def ffmpeg_filter_chain(plan: FramePlan, *, compact_timestamps: bool = False) -> str:
     """The ``-vf`` chain that makes exactly ``plan.source_indices`` the output, in order.
 
     The unique source frames are kept by ``select``; each is stamped with the output slot where it
@@ -320,14 +320,25 @@ def ffmpeg_filter_chain(plan: FramePlan) -> str:
     extra clone of the last frame is stamped at slot ``output_frames`` so the frame before it is
     never FFmpeg's end-of-stream frame (whose handling differs between filters and builds); the
     caller keeps exactly ``output_frames`` frames with ``-frames:v``.  No resampling decision is
-    left to FFmpeg."""
+    left to FFmpeg.
+
+    ``compact_timestamps`` (PR-VID-MOTION-400) writes ``N * tick`` instead of one ``gte`` term per frame when every
+    kept frame takes the next output slot (a native-cadence window): the same timestamps, but an expression that does
+    not grow with the window, so a long action is not stopped by FFmpeg's expression-depth limit (about 100 terms).
+    The default keeps the PR-VID-MOTION-210 text byte-for-byte."""
 
     unique = plan.used_sources
     slots = [plan.source_indices.index(index) for index in unique] + [plan.output_frames]
     rate = plan.output_rate
     selection = "+".join(f"between(n,{low},{high})" for low, high in _runs(unique))
-    stamp = "+".join(
-        f"gte(N,{i})*{(slots[i] - slots[i - 1]) * rate.denominator}" for i in range(1, len(slots))
+    uniform = all(slots[i] - slots[i - 1] == 1 for i in range(1, len(slots)))
+    stamp = (
+        f"N*{rate.denominator}"
+        if compact_timestamps and uniform
+        else "+".join(
+            f"gte(N,{i})*{(slots[i] - slots[i - 1]) * rate.denominator}"
+            for i in range(1, len(slots))
+        )
     )
     return ",".join(
         [

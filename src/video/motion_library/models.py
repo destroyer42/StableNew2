@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -69,6 +69,20 @@ INTENSITIES = ("low", "medium", "high", UNKNOWN)
 LOOP_LOOPABLE = "loopable"
 LOOP_ONE_SHOT = "one_shot"
 LOOP_SUITABILITIES = (LOOP_LOOPABLE, LOOP_ONE_SHOT, UNKNOWN)
+#: The operator's opinion of how the clip looks, kept apart from whether the requested motion happened and from
+#: whether it is a good driving reference (PR-VID-MOTION-400).  None of the three is evidence of transfer success.
+VISUAL_QUALITIES = ("poor", "fair", "good", "excellent", UNKNOWN)
+
+HARVEST_SCHEMA = "stablenew.motion-harvest.v1"
+CADENCE_NATIVE = "native"
+CADENCE_NORMALIZED_24 = "normalized_24"
+CADENCES = (CADENCE_NATIVE, CADENCE_NORMALIZED_24)
+#: How strongly the originating job/artifact identity of a harvest is established.
+LINEAGE_NONE = "none"
+LINEAGE_PATH_ONLY = "path_only"
+LINEAGE_RECORDED = "recorded"
+LINEAGE_VERIFIED = "verified"
+LINEAGE_STATES = (LINEAGE_NONE, LINEAGE_PATH_ONLY, LINEAGE_RECORDED, LINEAGE_VERIFIED)
 
 # --- bounds -------------------------------------------------------------------------------------
 MAX_NAME_CHARS = 120
@@ -363,6 +377,157 @@ class DerivationRecord:
         )
 
 
+def _rate_text(value: Any) -> str:
+    """An exact frame rate as ``numerator/denominator`` (e.g. ``30000/1001``), or ``""``."""
+
+    text = str(value or "").strip()
+    match = re.fullmatch(r"(\d{1,9})(?:/(\d{1,9}))?", text)
+    if match is None or int(match.group(2) or 1) == 0 or int(match.group(1)) == 0:
+        return ""
+    return f"{int(match.group(1))}/{int(match.group(2) or 1)}"
+
+
+def _sha_or_empty(value: Any) -> str:
+    return str(value) if is_sha256(value) else ""
+
+
+@dataclass(frozen=True, slots=True)
+class HarvestRecord:
+    """How a harvested motion asset was made from an original video (PR-VID-MOTION-400).
+
+    The asset's own ``sha256`` is the identity of the *derivative*; ``original_sha256`` is the identity of the unchanged
+    video it was cut from.  The two are never merged, and the original is never required for the derivative to verify:
+    a missing parent is shown, not an error.  Frame numbers count from 0 in decode order; ``end_frame`` is exclusive.
+    The record is workflow-independent: it says nothing about any generation length or model."""
+
+    original_sha256: str
+    start_frame: int
+    end_frame: int
+    cadence: str = CADENCE_NATIVE
+    original_path: str = ""
+    original_name: str = ""
+    original_frame_rate: str = ""
+    original_frame_count: int | None = None
+    original_width: int | None = None
+    original_height: int | None = None
+    original_rotation_quadrants: int = 0
+    requested_start: float | None = None
+    requested_end: float | None = None
+    requested_unit: str = "frames"
+    derivative_frames: int | None = None
+    derivative_frame_rate: str = ""
+    derivative_width: int | None = None
+    derivative_height: int | None = None
+    omitted_frames: int = 0
+    repeated_frames: int = 0
+    frame_digest: str = ""
+    method: str = ""
+    tool_version: str = ""
+    schema: str = HARVEST_SCHEMA
+    lineage_state: str = LINEAGE_NONE
+    lineage_job_id: str = ""
+    lineage_artifact_path: str = ""
+    lineage_artifact_sha256: str = ""
+    lineage_note: str = ""
+    warnings: tuple[str, ...] = ()
+    created_at: str = ""
+
+    @property
+    def window_frames(self) -> int:
+        return max(0, self.end_frame - self.start_frame)
+
+    def same_window(self, other: HarvestRecord) -> bool:
+        """The same cut of the same original (identity of a reproducible harvest, not of its annotations)."""
+
+        return (
+            self.original_sha256 == other.original_sha256
+            and self.start_frame == other.start_frame
+            and self.end_frame == other.end_frame
+            and self.cadence == other.cadence
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        data = {name: getattr(self, name) for name in self.__slots__}
+        data["warnings"] = list(self.warnings)
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Any) -> HarvestRecord:
+        if not isinstance(data, Mapping):
+            raise AssetFormatError("harvest must be an object")
+        original = str(data.get("original_sha256") or "")
+        if not is_sha256(original):
+            raise AssetFormatError("harvest needs the original video's sha256")
+        start = _non_negative_int(data.get("start_frame"))
+        end = _positive_int(data.get("end_frame"))
+        if start is None or end is None or end <= start:
+            raise AssetFormatError("harvest needs a start frame and a later exclusive end frame")
+        rotation = _non_negative_int(data.get("original_rotation_quadrants")) or 0
+        state = str(data.get("lineage_state") or LINEAGE_NONE)
+        warnings = data.get("warnings")
+        req_start, req_end = data.get("requested_start"), data.get("requested_end")
+        return cls(
+            original_sha256=original,
+            start_frame=start,
+            end_frame=end,
+            cadence=choice(data.get("cadence"), CADENCES, CADENCE_NATIVE),
+            original_path=str(data.get("original_path") or "")[:1000],
+            original_name=clean_text(data.get("original_name"), MAX_NAME_CHARS),
+            original_frame_rate=_rate_text(data.get("original_frame_rate")),
+            original_frame_count=_positive_int(data.get("original_frame_count")),
+            original_width=_positive_int(data.get("original_width")),
+            original_height=_positive_int(data.get("original_height")),
+            original_rotation_quadrants=rotation % 4,
+            requested_start=_non_negative_float(req_start),
+            requested_end=_non_negative_float(req_end),
+            requested_unit="seconds" if data.get("requested_unit") == "seconds" else "frames",
+            derivative_frames=_positive_int(data.get("derivative_frames")),
+            derivative_frame_rate=_rate_text(data.get("derivative_frame_rate")),
+            derivative_width=_positive_int(data.get("derivative_width")),
+            derivative_height=_positive_int(data.get("derivative_height")),
+            omitted_frames=_non_negative_int(data.get("omitted_frames")) or 0,
+            repeated_frames=_non_negative_int(data.get("repeated_frames")) or 0,
+            frame_digest=_sha_or_empty(data.get("frame_digest")),
+            method=clean_text(data.get("method"), 300),
+            tool_version=clean_text(data.get("tool_version"), 160),
+            schema=clean_text(data.get("schema"), 80) or HARVEST_SCHEMA,
+            lineage_state=state if state in LINEAGE_STATES else LINEAGE_NONE,
+            lineage_job_id=clean_text(data.get("lineage_job_id"), 120),
+            lineage_artifact_path=str(data.get("lineage_artifact_path") or "")[:1000],
+            lineage_artifact_sha256=_sha_or_empty(data.get("lineage_artifact_sha256")),
+            lineage_note=clean_text(data.get("lineage_note"), 300),
+            warnings=tuple(clean_text(w, 300) for w in warnings[:20])
+            if isinstance(warnings, list)
+            else (),
+            created_at=clean_text(data.get("created_at"), 40),
+        )
+
+
+def _non_negative_float(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 and number == number and number != float("inf") else None
+
+
+#: Keys ``MotionAsset.to_dict`` writes; any other key in a stored record is kept in ``extra`` and written back, so a
+#: record carrying fields a different version added is not narrowed by an edit.
+_ASSET_KEYS = frozenset(
+    {
+        "asset_id", "display_name", "sha256", "locator", "source_category", "source_reference",
+        "source_url", "tags", "duration_seconds", "width", "height", "fps", "frame_count", "thumbnail",
+        "subject_kind", "subject_count", "framing", "camera_movement", "viewpoint", "motion_intensity",
+        "motion_direction", "start_pose", "end_pose", "loop_suitability", "review_status",
+        "quality_notes", "provenance_notes", "usage_terms", "imported_at", "aliases", "origin",
+        "good_for_motion", "derivation", "motion_label", "motion_achieved", "known_defects",
+        "reuse_conditions", "visual_quality", "harvest",
+    }
+)  # fmt: skip
+
+
 @dataclass(frozen=True, slots=True)
 class MotionAsset:
     """One catalog entry.  Technical facts come from the bounded FFprobe inspection; everything else is
@@ -405,12 +570,49 @@ class MotionAsset:
     good_for_motion: bool | None = None
     #: Set only for a clip converted from an animation file (the original's identity, not the clip's).
     derivation: DerivationRecord | None = None
+    # PR-VID-MOTION-400.  Asset-level action metadata; a generated clip's ``origin`` keeps its own copies, and the
+    # ``effective_*`` accessors prefer what the operator wrote on the asset.
+    motion_label: str = ""
+    motion_achieved: bool | None = None
+    known_defects: str = ""
+    reuse_conditions: str = ""
+    visual_quality: str = UNKNOWN
+    #: Set only for a clip cut from a longer original with Harvest Motion (the original's identity, not the clip's).
+    harvest: HarvestRecord | None = None
+    #: Fields of the stored record this version does not know; written back unchanged.
+    extra: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
     # ------------------------------------------------------------------ derived
 
     @property
     def is_generated(self) -> bool:
         return self.source_category == SOURCE_STABLENEW_GENERATED
+
+    @property
+    def is_harvested(self) -> bool:
+        return self.harvest is not None
+
+    @property
+    def effective_motion_label(self) -> str:
+        return self.motion_label or (self.origin.motion_label if self.origin is not None else "")
+
+    @property
+    def effective_motion_achieved(self) -> bool | None:
+        if self.motion_achieved is not None:
+            return self.motion_achieved
+        return self.origin.motion_achieved if self.origin is not None else None
+
+    @property
+    def effective_known_defects(self) -> str:
+        return self.known_defects or (
+            self.origin.known_artifacts if self.origin is not None else ""
+        )
+
+    @property
+    def effective_reuse_conditions(self) -> str:
+        return self.reuse_conditions or (
+            self.origin.reuse_conditions if self.origin is not None else ""
+        )
 
     def with_changes(self, **changes: Any) -> MotionAsset:
         return replace(self, **changes)
@@ -419,6 +621,7 @@ class MotionAsset:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            **self.extra,
             "asset_id": self.asset_id,
             "display_name": self.display_name,
             "sha256": self.sha256,
@@ -452,6 +655,12 @@ class MotionAsset:
             "origin": self.origin.to_dict() if self.origin is not None else None,
             "good_for_motion": self.good_for_motion,
             "derivation": self.derivation.to_dict() if self.derivation is not None else None,
+            "motion_label": self.motion_label,
+            "motion_achieved": self.motion_achieved,
+            "known_defects": self.known_defects,
+            "reuse_conditions": self.reuse_conditions,
+            "visual_quality": self.visual_quality,
+            "harvest": self.harvest.to_dict() if self.harvest is not None else None,
         }
 
     @classmethod
@@ -468,6 +677,9 @@ class MotionAsset:
         name = clean_text(data.get("display_name"), MAX_NAME_CHARS)
         if not name:
             raise AssetFormatError("display_name is empty")
+        raw_harvest = data.get("harvest")
+        harvest = HarvestRecord.from_dict(raw_harvest) if raw_harvest is not None else None
+        achieved = data.get("motion_achieved")
         raw_aliases = data.get("aliases")
         aliases: list[AssetAlias] = []
         if isinstance(raw_aliases, list):
@@ -519,6 +731,13 @@ class MotionAsset:
             origin=origin,
             good_for_motion=good if isinstance(good, bool) else None,
             derivation=derivation,
+            motion_label=clean_text(data.get("motion_label"), MAX_NAME_CHARS),
+            motion_achieved=achieved if isinstance(achieved, bool) else None,
+            known_defects=clean_note(data.get("known_defects")),
+            reuse_conditions=clean_note(data.get("reuse_conditions")),
+            visual_quality=choice(data.get("visual_quality"), VISUAL_QUALITIES),
+            harvest=harvest,
+            extra={k: v for k, v in data.items() if k not in _ASSET_KEYS},
         )
 
 
@@ -545,6 +764,12 @@ ANNOTATION_FIELDS: dict[str, Any] = {
     "provenance_notes": clean_note,
     "usage_terms": clean_note,
     "good_for_motion": lambda v: v if isinstance(v, bool) else None,
+    # PR-VID-MOTION-400
+    "motion_label": lambda v: clean_text(v, MAX_NAME_CHARS),
+    "motion_achieved": lambda v: v if isinstance(v, bool) else None,
+    "known_defects": clean_note,
+    "reuse_conditions": clean_note,
+    "visual_quality": lambda v: choice(v, VISUAL_QUALITIES),
 }
 
 
@@ -583,9 +808,20 @@ __all__ = [
     "UNKNOWN",
     "VIEWPOINTS",
     "AssetAlias",
+    "CADENCES",
+    "CADENCE_NATIVE",
+    "CADENCE_NORMALIZED_24",
+    "HARVEST_SCHEMA",
+    "LINEAGE_NONE",
+    "LINEAGE_PATH_ONLY",
+    "LINEAGE_RECORDED",
+    "LINEAGE_STATES",
+    "LINEAGE_VERIFIED",
+    "VISUAL_QUALITIES",
     "AssetFormatError",
     "AssetLocator",
     "GeneratedOrigin",
+    "HarvestRecord",
     "MotionAsset",
     "choice",
     "clean_note",
