@@ -90,6 +90,11 @@ def _block_reason(record: Mapping[str, Any]) -> str:
     return str(projection.get("admission_block_reason") or "")
 
 
+def _is_trial(record: Mapping[str, Any]) -> bool:
+    projection = record.get("operator_projection")
+    return isinstance(projection, Mapping) and bool(projection.get("trial_unqualified"))
+
+
 def _is_eligible(task_id: str, record: Mapping[str, Any]) -> bool:
     if not record.get("workflow_id"):
         return False
@@ -136,12 +141,13 @@ def choose_workflow(
     approved = approved_in_preference_order(eligible)
     if approved:
         return _choice(approved[0], "Recommended: approved for production.")
-    for record in eligible:
-        if not _block_reason(record):
-            return _choice(
-                record,
-                "The only kind of engine for this task is experimental; it needs this job's opt-in.",
-            )
+    # A declared trial (queueable only for owner testing) is never the default while another engine can run.
+    unblocked = [record for record in eligible if not _block_reason(record)]
+    for record in sorted(unblocked, key=_is_trial):
+        return _choice(
+            record,
+            "The only kind of engine for this task is experimental; it needs this job's opt-in.",
+        )
     return _choice(eligible[0], "No engine for this task can run here yet.")
 
 

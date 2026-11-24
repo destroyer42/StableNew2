@@ -6,7 +6,10 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
-from src.video.workflow_catalog_fun_control import build_fun_control_spec
+from src.video.workflow_catalog_fun_control import (
+    build_fun_control_spec,
+    build_fun_control_trial_spec,
+)
 from src.video.workflow_catalog_wan_a14b import build_wan_a14b_specs
 from src.video.workflow_catalog_wan_a14b_svi import build_wan_a14b_svi_specs
 from src.video.workflow_catalog_wan_animate2 import build_wan_animate2_specs
@@ -22,6 +25,7 @@ from src.video.workflow_contracts import (
 
 
 def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
+    fun_control_published = build_fun_control_spec(_build_wan22_ti2v_5b_i2v_v1_3())
     return (
         _build_wan22_ti2v_5b_i2v_v1(),
         _build_wan22_ti2v_5b_i2v_v1_1(),
@@ -30,7 +34,8 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_wan22_ti2v_5b_i2v_v1_4(),
         _build_wan22_ti2v_5b_i2v_720p_v1(),
         *build_wan_animate2_specs(),
-        build_fun_control_spec(_build_wan22_ti2v_5b_i2v_v1_3()),
+        fun_control_published,
+        build_fun_control_trial_spec(fun_control_published),
         *build_wan_a14b_specs(),
         *build_wan_a14b_svi_specs(),
     )

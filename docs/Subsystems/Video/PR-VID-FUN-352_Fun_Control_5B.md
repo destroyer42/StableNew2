@@ -40,6 +40,26 @@ not borrowed. A future separately authorized qualification must establish host a
 headroom and GPU evidence before an executable resource policy can be accepted. Because
 published versions are immutable, qualification must not silently alter this frozen version.
 
+### 1.1.0 owner trial (2026-11-24)
+
+The owner asked for Fun Control to be queueable so it can be tested and evaluated. 1.0.0 is unchanged and still
+refused. **1.1.0** is the identical graph (same `prompt_template`, assets and digest of the graph) registered as a
+separate `experimental` version, so the picker offers it as the newest Fun Control version and 1.0.0 stays replayable.
+
+* The hard `not_qualified` refusal is replaced by the standard readiness policy (`wan22_fun_control_5b_trial`,
+  `qualification_status: trial_unqualified`): a **blocking VRAM floor of 10000 MiB available to ComfyUI** and a **16 GB
+  RAM advisory**, evaluated by the same `WorkflowResourceReadiness` as every other workflow, at Preview, Queue, preflight,
+  `JobService` admission and backend start.
+* **These floors are the TI2V-5B figures, borrowed.** That departs from the 1.0.0 rule above and is provisional. The only
+  Fun Control hardware evidence is PR-VID-MOTION-354 run 3 (14/14 FEASIBLE on one RTX 4070 Ti 12 GB host, peak 11.0-11.9 GB
+  VRAM used), which shows 10000 MiB is a necessary guard, not a headroom guarantee. A measured floor should replace it once
+  trial jobs have produced evidence.
+* Still `experimental` with per-job opt-in; `required_launch_flags` (`--disable-pinned-memory`, `--disable-auto-launch`),
+  asset integrity, exact-motion input integrity and the 49-frame ceiling are unchanged. This is **not** a qualification,
+  promotion or visual-quality claim.
+* Driving clips with an edge above 832 px are resized by Prepare Motion Source before they reach the graph (the 4K stalls
+  recorded in runs 1 and 2 came from unscaled sources).
+
 ## Verified upstream and assets
 
 Installed managed source: clean ComfyUI v0.38.0 at

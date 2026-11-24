@@ -100,6 +100,19 @@ def test_unblocked_experimental_beats_blocked_one():
     assert only.block_reason == "hardware unqualified"
 
 
+def test_a_declared_trial_is_never_the_default_while_another_engine_can_run():
+    trial = _rec("a_trial", experimental=True, pose=True)
+    trial["operator_projection"] = {"trial_unqualified": True}
+    other = _rec("z_other", experimental=True, pose=True)
+    # Catalog order puts the trial first; the default still skips it.
+    assert choose_workflow(TASK_FOLLOW_CLIP, [trial, other]).workflow_id == "z_other"
+    # It stays a legitimate pinned choice and the fallback when nothing else is runnable.
+    assert choose_workflow(TASK_FOLLOW_CLIP, [trial, other], "a_trial").workflow_id == "a_trial"
+    assert choose_workflow(TASK_FOLLOW_CLIP, [trial]).workflow_id == "a_trial"
+    blocked_other = _rec("z_other", experimental=True, pose=True, block="unqualified")
+    assert choose_workflow(TASK_FOLLOW_CLIP, [trial, blocked_other]).workflow_id == "a_trial"
+
+
 def test_no_eligible_engine_returns_none():
     assert choose_workflow(TASK_FOLLOW_CLIP, [_rec("a", approved=True)]) is None
 
