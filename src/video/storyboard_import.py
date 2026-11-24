@@ -136,7 +136,8 @@ def default_clip_folder(output_root: str | Path | None) -> str:
 def suggest_title(path: str | Path) -> str:
     """A storyboard title from the file name: the stem, with separators turned into spaces."""
 
-    stem = Path(str(path)).stem
+    name = re.split(r"[\\/]", str(path))[-1]  # either separator, whatever platform this runs on
+    stem = Path(name).stem
     text = " ".join(re.sub(r"[_\-.]+", " ", stem).split())
     return (text or "Imported clip")[:_TITLE_LIMIT]
 
