@@ -908,9 +908,12 @@ class PromptAiSuggestions:
             )
 
     def _proposal_review(self, context: ProposalContext, trust: str) -> ProposalReview:
+        request = self._proposal_request
+        if request is None:
+            return unavailable_proposal_review(PROPOSAL_STALE_TEXT, trust_label=trust)
         rows = judge_proposals(
             self._proposal_suggestion,
-            self._proposal_request,
+            request,
             context,
             matrix_mapping=self.tab.workspace_state.get_matrix_config().to_mapping(),
             is_visible=self._variety_visible(),
