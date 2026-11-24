@@ -35,6 +35,7 @@ from src.video.motion_library.models import (
     AssetLocator,
     DerivationRecord,
     GeneratedOrigin,
+    HarvestRecord,
     MotionAsset,
     clean_text,
     utc_now_iso,
@@ -140,13 +141,15 @@ def import_video(
     annotations: Mapping[str, Any] | None = None,
     origin: GeneratedOrigin | None = None,
     derivation: DerivationRecord | None = None,
+    harvest: HarvestRecord | None = None,
     inspect: Inspector = _default_inspector,
     cancel: threading.Event | None = None,
     clock: Callable[[], str] = utc_now_iso,
 ) -> ImportOutcome:
     """Add one video.  ``mode`` ``linked`` references the file where it is; ``managed`` also copies it
     into the library after the copy hashes to the verified SHA-256.  ``derivation`` names the animation file a
-    converted clip was rendered from; it is kept beside, never instead of, the clip's own identity."""
+    converted clip was rendered from; it is kept beside, never instead of, the clip's own identity.  ``harvest`` records the
+    unchanged longer video a Harvest Motion derivative was cut from (PR-VID-MOTION-400), under the same rule."""
 
     text = str(path or "").strip()
     if not text:
@@ -182,7 +185,7 @@ def import_video(
 
     existing = store.find_by_sha(digest)
     if existing is not None:
-        return _record_duplicate(store, existing, source, edits, origin, derivation)
+        return _record_duplicate(store, existing, source, edits, origin, derivation, harvest)
 
     inspection = inspect(source, cancel)
     if inspection.status == STATUS_FAILED or inspection.facts is None:
@@ -226,6 +229,7 @@ def import_video(
             imported_at=clock(),
             origin=origin,
             derivation=derivation,
+            harvest=harvest,
             **fields,
         )
         store.add(asset)
@@ -233,7 +237,7 @@ def import_video(
         _discard_new_copy(store, managed_name)
         existing = store.get(exc.existing_id)
         if existing is not None:
-            return _record_duplicate(store, existing, source, edits, origin, derivation)
+            return _record_duplicate(store, existing, source, edits, origin, derivation, harvest)
         return _failed(source, "These bytes are already in the library.")
     except HashCancelled:
         _discard_new_copy(store, managed_name)
@@ -264,6 +268,7 @@ def _record_duplicate(
     edits: Mapping[str, Any],
     origin: GeneratedOrigin | None = None,
     derivation: DerivationRecord | None = None,
+    harvest: HarvestRecord | None = None,
 ) -> ImportOutcome:
     try:
         store.record_duplicate(
@@ -277,13 +282,21 @@ def _record_duplicate(
             store.attach_origin(existing.asset_id, origin)
         if derivation is not None:
             store.attach_derivation(existing.asset_id, derivation)
+        if harvest is not None:
+            store.attach_harvest(existing.asset_id, harvest)
     except (LibraryError, OSError) as exc:
         return _failed(source, f"Already in the library, but the alias could not be saved: {exc}")
+    reason = f"Same bytes as '{existing.display_name}'; the extra path and tags were kept on it."
+    dropped = sorted(set(edits) - {"tags", "source_reference"})
+    if dropped:
+        # One identity per byte content: the requested details are reported, never silently lost.
+        reason += (
+            " These requested details were not applied to the existing asset (edit it to change them): "
+            + ", ".join(name.replace("_", " ") for name in dropped)
+            + "."
+        )
     return ImportOutcome(
-        path=str(source),
-        status=OUTCOME_DUPLICATE,
-        asset_id=existing.asset_id,
-        reason=f"Same bytes as '{existing.display_name}'; the extra path and tags were kept on it.",
+        path=str(source), status=OUTCOME_DUPLICATE, asset_id=existing.asset_id, reason=reason
     )
 
 

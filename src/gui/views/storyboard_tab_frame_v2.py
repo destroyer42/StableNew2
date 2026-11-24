@@ -860,6 +860,36 @@ class StoryboardTabFrameV2(ttk.Frame):
         except RuntimeError as exc:
             self._say(str(exc))
 
+    def harvest_take(self, take_id: str) -> None:
+        """Open Harvest Motion on an encoded take's stitched cut, through the same guard and main-window route as
+        Send to Movie Clips.  The stitched file is a derived cut, not a job's recorded artifact, so the handoff is
+        path-based and claims no originating job.  Nothing is queued, copied or edited."""
+
+        view = self.views.get(take_id)
+        if view is None or not view.encoded or not view.stitched_path:
+            self._say(
+                "This take is not encoded; there is no stitched video to harvest motion from."
+            )
+            return
+        from src.gui.controllers.video_workspace_handoff import route_video_to_motion_harvest
+        from src.video.motion_library.harvest_service import HarvestSourceRef
+
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            self._say("The main window is not available.")
+            return
+        try:
+            route_video_to_motion_harvest(
+                main_window=main_window,
+                source=HarvestSourceRef(
+                    path=view.stitched_path,
+                    label=f"Storyboard cut {take_id}",
+                    surface="storyboard",
+                ),
+            )
+        except RuntimeError as exc:
+            self._say(str(exc))
+
     def resume_take(self, take_id: str) -> None:
         self._sequence_action(take_id, "resume_sequence")
 
@@ -917,6 +947,7 @@ class _ExportDialog(tk.Toplevel):
         if view is not None and view.encoded:
             self._add(buttons, "Reveal stitched video", lambda: tab.reveal_stitched(take_id))
             self._add(buttons, "Send to Movie Clips", lambda: tab.send_to_movie_clips(take_id))
+            self._add(buttons, "Harvest Motion...", lambda: tab.harvest_take(take_id))
         elif view is not None and view.can_resume:
             self._add(buttons, "Resume", lambda: tab.resume_take(take_id))
         self._add(buttons, "Close", self.destroy)

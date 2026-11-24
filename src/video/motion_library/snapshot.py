@@ -28,6 +28,9 @@ class LibrarySnapshot:
     media_paths: Mapping[str, str] = field(default_factory=dict)
     #: For a converted clip: whether its original animation file is still where it was recorded (one ``stat``).
     derivation_sources: Mapping[str, bool] = field(default_factory=dict)
+    #: For a harvested clip: whether a file still exists where its original was recorded (one ``stat``; the bytes are not
+    #: re-verified, and a missing original never affects the clip, which verifies on its own).
+    harvest_sources: Mapping[str, bool] = field(default_factory=dict)
     issues: tuple[str, ...] = ()
     revision: int = 0
     #: A refusal to open the library at all (corrupt or newer manifest, unusable folder).
@@ -40,7 +43,15 @@ def build_snapshot(store: MotionLibraryStore) -> LibrarySnapshot:
     thumbnails: dict[str, str] = {}
     media_paths: dict[str, str] = {}
     derivation_sources: dict[str, bool] = {}
+    harvest_sources: dict[str, bool] = {}
     for asset in assets:
+        if asset.harvest is not None:
+            try:
+                harvest_sources[asset.asset_id] = bool(
+                    asset.harvest.original_path and os.path.isfile(asset.harvest.original_path)
+                )
+            except OSError:
+                harvest_sources[asset.asset_id] = False
         if asset.derivation is not None:
             try:
                 derivation_sources[asset.asset_id] = bool(
@@ -71,6 +82,7 @@ def build_snapshot(store: MotionLibraryStore) -> LibrarySnapshot:
         thumbnails=thumbnails,
         media_paths=media_paths,
         derivation_sources=derivation_sources,
+        harvest_sources=harvest_sources,
         issues=tuple(issues),
         revision=store.revision,
     )

@@ -34,7 +34,9 @@ from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.utils.os_shell import open_file, reveal_in_file_manager
 from src.utils.thread_registry import get_thread_registry
 from src.video.motion_library.handoff import HandoffPlan
+from src.video.motion_library.harvest_service import HarvestSourceRef
 from src.video.motion_library.models import (
+    CADENCES,
     CAMERA_MOVEMENTS,
     FRAMINGS,
     INTENSITIES,
@@ -46,6 +48,7 @@ from src.video.motion_library.models import (
     SOURCE_CATEGORY_LABELS,
     SUBJECT_KINDS,
     VIEWPOINTS,
+    VISUAL_QUALITIES,
     MotionAsset,
 )
 from src.video.motion_library.search import SearchQuery
@@ -74,10 +77,14 @@ _FILTER_CHOICES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("motion_intensity", "Intensity", INTENSITIES),
     ("loop", "Loop", ("loopable", "one_shot")),
     ("review", "Review", REVIEW_STATUSES),
+    ("visual_quality", "Visual quality", VISUAL_QUALITIES),
+    ("cadence", "Harvest cadence", CADENCES),
 )
+_TRISTATE = ("Not judged", "Yes", "No")
 # (field, label, kind, choices) for the annotation editor; kind: entry | combo | text | check.
 _EDIT_FIELDS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("display_name", "Name", "entry", ()),
+    ("motion_label", "Motion label", "entry", ()),
     ("tags", "Motion tags", "entry", ()),
     ("source_category", "Source", "combo", SOURCE_CATEGORIES),
     ("source_reference", "Source reference", "entry", ()),
@@ -93,11 +100,20 @@ _EDIT_FIELDS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("end_pose", "End pose", "entry", ()),
     ("loop_suitability", "Loop", "combo", LOOP_SUITABILITIES),
     ("review_status", "Review", "combo", REVIEW_STATUSES),
-    ("good_for_motion", "Good for motion driving", "check", ()),
+    # Three separate opinions.  None of them is evidence that the motion transfers to another subject.
+    ("visual_quality", "Visual quality", "combo", VISUAL_QUALITIES),
+    ("motion_achieved", "Requested motion achieved", "tristate", _TRISTATE),
+    ("good_for_motion", "Good for motion driving (my opinion)", "check", ()),
+    ("known_defects", "Known defects", "text", ()),
+    ("reuse_conditions", "Reuse conditions", "text", ()),
     ("quality_notes", "Quality notes", "text", ()),
     ("provenance_notes", "Provenance notes", "text", ()),
     ("usage_terms", "Usage terms", "text", ()),
 )
+
+# The detail fields, shared with the Harvest Motion workspace so both describe a clip the same way.
+EDIT_FIELDS = _EDIT_FIELDS
+TRISTATE = _TRISTATE
 
 
 def _label_for(value: str) -> str:
@@ -116,6 +132,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         on_convert: Callable[[], None] | None = None,
         on_batch_convert: Callable[[], None] | None = None,
         on_preview_conditioning: Callable[[Any], None] | None = None,
+        on_harvest: Callable[[HarvestSourceRef], None] | None = None,
         decode: Any = None,
         runner: BackgroundWorkRunner | None = None,
         **kwargs: Any,
@@ -127,6 +144,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         self._on_convert = on_convert
         self._on_batch_convert = on_batch_convert
         self._on_preview_conditioning = on_preview_conditioning
+        self._on_harvest = on_harvest
         self._runner = runner
         self._media_decode = decode
         self._photos: list[tk.PhotoImage] = []
@@ -149,6 +167,8 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         self.min_seconds_var = tk.StringVar(self)
         self.max_seconds_var = tk.StringVar(self)
         self.reviewed_only_var = tk.BooleanVar(self, value=False)
+        self.harvested_only_var = tk.BooleanVar(self, value=False)
+        self.achieved_only_var = tk.BooleanVar(self, value=False)
         self.edit_vars: dict[str, tk.StringVar | tk.BooleanVar] = {}
         self.edit_texts: dict[str, tk.Text] = {}
         self.columnconfigure(0, weight=1)
@@ -275,6 +295,13 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         ttk.Checkbutton(
             body, text="Marked good for motion driving only", variable=self.reviewed_only_var, style="Dark.TCheckbutton"
         ).grid(row=2, column=0, sticky="w")  # fmt: skip
+        ttk.Checkbutton(
+            body, text="Harvested clips only", variable=self.harvested_only_var, style="Dark.TCheckbutton"
+        ).grid(row=3, column=0, sticky="w")  # fmt: skip
+        ttk.Checkbutton(
+            body, text="Marked as achieving the requested motion only", variable=self.achieved_only_var,
+            style="Dark.TCheckbutton",
+        ).grid(row=4, column=0, sticky="w")  # fmt: skip
         watched = [
             self.search_var,
             self.min_frames_var,
@@ -282,6 +309,8 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             self.min_seconds_var,
             self.max_seconds_var,
             self.reviewed_only_var,
+            self.harvested_only_var,
+            self.achieved_only_var,
         ]
         for variable in (*watched, *self.filter_vars.values()):
             variable.trace_add("write", lambda *_a: self._schedule_filter())
@@ -349,6 +378,13 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             command=self._on_preview_condition,
             state="disabled",
         )
+        self.harvest_button = ttk.Button(
+            actions,
+            text="Harvest Motion...",
+            style="Dark.TButton",
+            command=self._on_harvest_motion,
+            state="disabled",
+        )
         self.open_button = ttk.Button(
             actions, text="Open", style="Dark.TButton", command=self._on_open, state="disabled"
         )
@@ -357,6 +393,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         )
         for button in (
             self.use_button,
+            self.harvest_button,
             self.condition_button,
             self.relink_button,
             self.open_button,
@@ -381,7 +418,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
                 ttk.Checkbutton(body, variable=var, style="Dark.TCheckbutton").grid(
                     row=row, column=1, sticky="w"
                 )
-            elif kind == "combo":
+            elif kind in {"combo", "tristate"}:
                 var = tk.StringVar(self)
                 ttk.Combobox(
                     body, state="readonly", textvariable=var, values=list(choices), width=22
@@ -479,6 +516,8 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             min_frames=self._number(self.min_frames_var.get(), int),
             max_frames=self._number(self.max_frames_var.get(), int),
             good_for_motion_only=bool(self.reviewed_only_var.get()),
+            harvested_only=bool(self.harvested_only_var.get()),
+            motion_achieved_only=bool(self.achieved_only_var.get()),
             **picks,
         )
 
@@ -571,6 +610,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             self.detail_text.configure(state="disabled")
             for button in (
                 self.use_button,
+                self.harvest_button,
                 self.condition_button,
                 self.relink_button,
                 self.open_button,
@@ -614,6 +654,9 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             state="normal" if detail.can_use and self._on_preview_conditioning else "disabled"
         )
         self.relink_button.configure(state="normal" if detail.can_relink else "disabled")
+        self.harvest_button.configure(
+            state="normal" if detail.can_harvest and self._on_harvest else "disabled"
+        )
         playable = "normal" if detail.media_path else "disabled"
         self.open_button.configure(state=playable)
         self.reveal_button.configure(state=playable)
@@ -630,6 +673,14 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             value = data.get(key)
             if isinstance(var, tk.BooleanVar):
                 var.set(bool(value))
+            elif key == "motion_achieved":
+                var.set(
+                    _TRISTATE[1]
+                    if value is True
+                    else _TRISTATE[2]
+                    if value is False
+                    else _TRISTATE[0]
+                )
             elif key == "tags":
                 var.set(", ".join(asset.tags))
             else:
@@ -645,6 +696,8 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
                 changes[key] = self.edit_texts[key].get("1.0", "end").strip()
             elif isinstance(var, tk.BooleanVar):
                 changes[key] = bool(var.get())
+            elif key == "motion_achieved":
+                changes[key] = {"Yes": True, "No": False}.get(str(var.get()))
             elif key == "subject_count":
                 text = str(var.get()).strip()
                 changes[key] = int(text) if text.isdigit() else None
@@ -730,6 +783,22 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         detail = self.session.view().detail
         if detail is not None and detail.can_use and self._on_preview_conditioning is not None:
             self._on_preview_conditioning(detail)
+
+    def _on_harvest_motion(self) -> None:
+        """Open the Harvest Motion workspace on the verified, selected clip; nothing is queued or changed."""
+
+        detail = self.session.view().detail
+        if detail is None or not detail.can_harvest or self._on_harvest is None:
+            return
+        self._on_harvest(
+            HarvestSourceRef(
+                path=detail.media_path,
+                label=detail.title,
+                asset_id=detail.asset.asset_id,
+                surface="motion_library",
+                subject=visibility_subject(detail.asset),
+            )
+        )
 
     def _on_relink(self) -> None:
         detail = self.session.view().detail

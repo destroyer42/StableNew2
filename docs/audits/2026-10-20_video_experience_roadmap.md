@@ -349,3 +349,5 @@ RIFE resolves, finished-clip smoothing for Comfy), LOOP-303 (SVD ping-pong and e
 
 `VIDEO_PIPELINE.md` (§§1.1, 3.2, 4.2, 5, 7, 9, 12) changes with each PR. `STATUS.md` changes for supported capabilities,
 open decisions D1/D2/D6/D7 and the backend sentence. `AGENTS.md` §2 changes only with D2.
+
+Controlled motion (harvesting an action window from an existing video, then classifying and applying it) continues in `docs/Subsystems/Video/CONTROLLED_MOTION_ROADMAP.md`; Phase 1 (PR-VID-MOTION-400) is recorded in `docs/Subsystems/Video/MOTION_LIBRARY.md` section 7.

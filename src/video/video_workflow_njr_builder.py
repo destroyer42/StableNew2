@@ -237,7 +237,7 @@ class FrozenVideoInputs:
     # actually uses.  Evidence only: re-hashed by ``verify_unchanged``, never stored in the NJR.
     shared_files: tuple[tuple[str, str, str], ...] = ()
     motion_source_preparation: Mapping[str, Any] | None = None
-    library_asset: Mapping[str, str] | None = None
+    library_asset: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -247,7 +247,7 @@ class SharedFrozenInputs:
     driving_video: Mapping[str, str] | None  # {"path", "sha256"}; the prepared clip when prepared
     files: tuple[tuple[str, str, str], ...]  # (label, path, sha256)
     motion_source_preparation: Mapping[str, Any] | None = None
-    library_asset: Mapping[str, str] | None = None
+    library_asset: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -455,7 +455,7 @@ class VideoWorkflowNjrBuilder:
     @staticmethod
     def _frozen_library_asset(
         binding: Any, driving: Mapping[str, str] | None, preparation: Mapping[str, Any] | None
-    ) -> dict[str, str] | None:
+    ) -> dict[str, Any] | None:
         """The Motion Library identity of the *original* clip, or a refusal when it is not that clip."""
 
         if not binding:
@@ -472,7 +472,27 @@ class VideoWorkflowNjrBuilder:
                 "The driving video no longer matches the Motion Library clip it was chosen from. "
                 "Choose the clip from the library again."
             )
-        return {"asset_id": asset_id, "sha256": original_sha}
+        frozen: dict[str, Any] = {"asset_id": asset_id, "sha256": original_sha}
+        derived = binding.get("derived_from") if isinstance(binding, Mapping) else None
+        if isinstance(derived, Mapping):
+            # PR-VID-MOTION-400: a harvested asset names the original it was cut from.  Provenance only, a fixed
+            # set of plain values; it is never read back as an input to generation.
+            original = str(derived.get("original_sha256") or "")
+            start, end = derived.get("start_frame"), derived.get("end_frame")
+            if (
+                len(original) == 64
+                and isinstance(start, int)
+                and isinstance(end, int)
+                and not isinstance(start, bool)
+                and not isinstance(end, bool)
+            ):
+                frozen["derived_from"] = {
+                    "original_sha256": original,
+                    "start_frame": start,
+                    "end_frame": end,
+                    "cadence": str(derived.get("cadence") or "")[:20],
+                }
+        return frozen
 
     def freeze_inputs(
         self,
