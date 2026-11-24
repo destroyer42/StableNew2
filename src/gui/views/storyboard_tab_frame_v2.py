@@ -553,7 +553,7 @@ class StoryboardTabFrameV2(ttk.Frame):
     def _apply_frame(self, image: Image.Image) -> None:
         if not self.media.viewer:
             return  # the viewer was hidden while this frame was loading
-        self.viewer.show_image(ImageTk.PhotoImage(image, master=self))
+        self.viewer.show_image(image)
 
     # ------------------------------------------------------------------ media visibility
 
