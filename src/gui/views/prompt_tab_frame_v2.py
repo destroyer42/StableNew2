@@ -2174,6 +2174,32 @@ class PromptTabFrame(ttk.Frame):
             on_select=on_select,
         )
 
+    def insert_slot_marker(self, offset: int, text: str) -> bool:
+        """Insert ``text`` (a ``[[slot]]`` marker) into the positive editor at character ``offset``, through the same
+        editor insert and modified handler the slot picker uses (AI-213). Refuses when ``offset`` is outside the text."""
+        if not 0 <= offset <= len(self.editor.get("1.0", "end-1c")):
+            return False
+        self.editor.insert(f"1.0 + {offset} chars", text)
+        self._on_editor_modified(None)
+        return True
+
+    def restore_inserted_text(self, original: str) -> bool:
+        """Undo an insert into the positive editor (rolls back a failed atomic addition): delete the one contiguous span
+        that was added to ``original``. Refuses, changing nothing, when the text is not ``original`` plus one such span."""
+        current = self.editor.get("1.0", "end-1c")
+        extra = len(current) - len(original)
+        if extra < 0:
+            return False
+        start = 0
+        while start < len(original) and current[start] == original[start]:
+            start += 1
+        if current[:start] + current[start + extra :] != original:
+            return False
+        if extra:
+            self.editor.delete(f"1.0 + {start} chars", f"1.0 + {start + extra} chars")
+            self._on_editor_modified(None)
+        return True
+
     def _on_matrix_changed(self) -> None:
         """Called when matrix config changes in Matrix tab."""
         self.workspace_state.mark_dirty()

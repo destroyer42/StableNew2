@@ -16,6 +16,16 @@ from src.ai_assist.contracts import (
 from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
 from src.gui_v2.ai_plan_advice import PLAN_ADVICE_NOTICE, PlanReview, review_text
+from src.gui_v2.ai_slot_proposal import (
+    PROPOSAL_LABEL,
+    PROPOSAL_NOTICE,
+    PROPOSAL_REVERT_TEXT,
+    ProposalReview,
+    proposal_text,
+)
+from src.gui_v2.ai_slot_proposal import (
+    offered_label as proposal_label,
+)
 from src.gui_v2.ai_slot_variety import (
     FOCUS_LABELS,
     VARIETY_LABEL,
@@ -51,6 +61,9 @@ class AiSuggestionDialog(tk.Toplevel):
         variety_problem: str = "",
         variety_slots: str = "",
         variety_slot_options: Sequence[tuple[str, bool, str]] = (),
+        on_propose: Callable[[str], None] | None = None,
+        on_add_proposal: Callable[[int], None] | None = None,
+        proposal_problem: str = "",
     ) -> None:
         super().__init__(master)
         self.title("AI suggestion review")
@@ -135,6 +148,46 @@ class AiSuggestionDialog(tk.Toplevel):
                 offered, text="Add selected value", command=self._add_value, state="disabled"
             )
             self.add_value_button.pack(side="left", padx=4, anchor="n")
+        # New-slot proposals (AI-213): a goal, one request button, and per-proposal explicit additions of offered ones only.
+        self._on_propose = on_propose
+        self._on_add_proposal = on_add_proposal
+        self._proposal_problem = proposal_problem
+        self.proposal_goal_var = tk.StringVar(value="")
+        self.proposal_button: ttk.Button | None = None
+        self.proposal_list: tk.Listbox | None = None
+        self.add_proposal_button: ttk.Button | None = None
+        self._offered_proposals: list[int] = []
+        if on_propose is not None:
+            proposal = ttk.LabelFrame(self, text=PROPOSAL_LABEL)
+            proposal.pack(fill="x", padx=8, pady=(0, 4))
+            ttk.Label(proposal, text=PROPOSAL_NOTICE, wraplength=740, justify="left").pack(
+                fill="x", padx=4, pady=2
+            )
+            ttk.Label(proposal, text=PROPOSAL_REVERT_TEXT, wraplength=740, justify="left").pack(
+                fill="x", padx=4, pady=2
+            )
+            prow = ttk.Frame(proposal)
+            prow.pack(fill="x", padx=4, pady=2)
+            ttk.Label(prow, text="Goal:").pack(side="left")
+            self.proposal_goal_entry = ttk.Entry(
+                prow, textvariable=self.proposal_goal_var, width=70
+            )
+            self.proposal_goal_entry.pack(side="left", fill="x", expand=True, padx=4)
+            self.proposal_button = ttk.Button(prow, text="Suggest new slot", command=self._propose)
+            self.proposal_button.pack(side="left", padx=4)
+            listing = ttk.Frame(proposal)
+            listing.pack(fill="x", padx=4, pady=2)
+            self.proposal_list = tk.Listbox(
+                listing, height=4, selectmode="browse", exportselection=False
+            )
+            self.proposal_list.pack(side="left", fill="x", expand=True)
+            self.add_proposal_button = ttk.Button(
+                listing,
+                text="Add slot and place marker",
+                command=self._add_proposal,
+                state="disabled",
+            )
+            self.add_proposal_button.pack(side="left", padx=4, anchor="n")
         self.status_var = tk.StringVar(
             value="Choose the assistance to request. Acceptance changes only the editing buffer."
         )
@@ -179,6 +232,8 @@ class AiSuggestionDialog(tk.Toplevel):
             unavailable.append(f"Advise plan: {advise_problem}")
         if variety_problem and on_variety is not None:
             unavailable.append(f"Suggest variety: {variety_problem}")
+        if proposal_problem and on_propose is not None:
+            unavailable.append(f"Suggest new slot: {proposal_problem}")
         self._text("\n".join(unavailable))
 
     def _advise(self) -> None:
@@ -194,6 +249,10 @@ class AiSuggestionDialog(tk.Toplevel):
         if self.variety_button is not None:
             self.variety_button.state(
                 ["disabled"] if running or self._variety_problem else ["!disabled"]
+            )
+        if self.proposal_button is not None:
+            self.proposal_button.state(
+                ["disabled"] if running or self._proposal_problem else ["!disabled"]
             )
 
     def _build_variety_scope(
@@ -295,7 +354,57 @@ class AiSuggestionDialog(tk.Toplevel):
         if len(chosen) == 1:
             self._on_add_value(self._offered_rows[chosen[0]])
 
+    def _propose(self) -> None:
+        if self._on_propose is not None:
+            self._on_propose(self.proposal_goal_var.get())
+
+    def _add_proposal(self) -> None:
+        if self._on_add_proposal is None or self.proposal_list is None:
+            return
+        listbox = self.proposal_list
+        chosen = [i for i in range(len(self._offered_proposals)) if listbox.selection_includes(i)]
+        if len(chosen) == 1:
+            self._on_add_proposal(self._offered_proposals[chosen[0]])
+
+    def _clear_proposals(self) -> None:
+        self._offered_proposals = []
+        if self.proposal_list is not None:
+            self.proposal_list.delete(0, "end")
+        if self.add_proposal_button is not None:
+            self.add_proposal_button.state(["disabled"])
+
+    def show_proposal(self, review: ProposalReview) -> None:
+        """Judged new-slot proposals. Only offered ones enter the list; rejected ones appear in the text only."""
+
+        self._clear_copy_buttons()
+        self._clear_variety()
+        self.status(review.status)
+        self._set_requests(False)
+        self._set_advise(False)
+        self.cancel_button.state(["disabled"])
+        self.accept_button.state(["disabled"])
+        self._text(proposal_text(review))
+        if self.proposal_list is None:
+            return
+        for row in review.offered_rows:
+            self.proposal_list.insert("end", proposal_label(row))
+            self._offered_proposals.append(row.index)
+        if self._offered_proposals and self.add_proposal_button is not None:
+            self.add_proposal_button.state(["!disabled"])
+
+    def running_proposal(self) -> None:
+        self._clear_copy_buttons()
+        self._clear_variety()
+        self.clear_runtime_detail()
+        self.status("Suggest new slot: request running…")
+        self._text("")
+        self._set_requests(True)
+        self._set_advise(True)
+        self.accept_button.state(["disabled"])
+        self.cancel_button.state(["!disabled"])
+
     def _clear_variety(self) -> None:
+        self._clear_proposals()
         self._offered_rows = []
         if self.variety_list is not None:
             self.variety_list.delete(0, "end")
@@ -490,6 +599,7 @@ class AiSuggestionDialog(tk.Toplevel):
         self.clear_runtime_detail()
         self.goal_var.set("")
         self.variety_goal_var.set("")
+        self.proposal_goal_var.set("")
         self.variety_coverage_var.set("")
         if self.variety_slot_vars:
             self.clear_variety_slots()

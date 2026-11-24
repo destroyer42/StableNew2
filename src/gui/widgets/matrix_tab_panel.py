@@ -474,6 +474,34 @@ class MatrixTabPanel(ttk.Frame):
         self._on_slot_changed(index)
         return True
 
+    def append_slot(self, name: str, values: list[str]) -> bool:
+        """Add a new slot row exactly as the starter-dimension button does (AI-213): the row, the stored slot and the same
+        refreshes. Refuses (returns ``False``, changes nothing) when a row's entries differ from the stored slots, i.e. a
+        manual edit is pending, or when the row count and slot count disagree."""
+        matrix_config = self.workspace_state.get_matrix_config()
+        if len(self.slot_widgets) != len(matrix_config.slots):
+            return False
+        for (name_entry, values_entry, _), slot in zip(
+            self.slot_widgets, matrix_config.slots, strict=True
+        ):
+            if (
+                name_entry.get().strip() != slot.name.strip()
+                or values_entry.get().strip() != matrix_values_text(slot.values).strip()
+            ):
+                return False
+        matrix_config.slots.append(MatrixSlot(name=name, values=list(values)))
+        self._add_slot_row(len(self.slot_widgets) + 1, name, matrix_values_text(list(values)))
+        self.on_matrix_changed()
+        self._schedule_preview_update(immediate=True)
+        return True
+
+    def remove_last_slot(self) -> bool:
+        """Delete the last slot row through the panel's own delete path (used to roll back a failed atomic addition)."""
+        if not self.slot_widgets:
+            return False
+        self._on_slot_deleted(len(self.slot_widgets) - 1)
+        return True
+
     def _cancel_pending_preview(self) -> None:
         if self._preview_refresh_after_id is not None:
             try:

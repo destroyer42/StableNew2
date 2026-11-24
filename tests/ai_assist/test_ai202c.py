@@ -80,7 +80,15 @@ VARIETY = AssistRequest(
     goal_text="more variety in the lighting",
     matrix_slots=(("lighting", ("soft light",)), ("location", ())),
 )
-REQUESTS = {r.kind: r for r in (REWRITE, TARGET, WORKFLOW, PLAN, VARIETY)}
+PROPOSAL = AssistRequest(
+    request_id="s6",
+    kind=SuggestionKind.SLOT_PROPOSAL,
+    goal_text="better lighting",
+    positive_text="a knight in a forest, wearing armor",
+    existing_slot_names=("location",),
+    insertion_points=("a knight in a forest|HERE|, wearing armor", "…wearing armor|HERE|"),
+)
+REQUESTS = {r.kind: r for r in (REWRITE, TARGET, WORKFLOW, PLAN, VARIETY, PROPOSAL)}
 
 #: One document the validator accepts for each kind (``changes`` omitted: it is the only optional field).
 ACCEPTED: dict[SuggestionKind, dict[str, Any]] = {
@@ -136,6 +144,19 @@ ACCEPTED: dict[SuggestionKind, dict[str, Any]] = {
             }
         ],
     },
+    SuggestionKind.SLOT_PROPOSAL: {
+        "schema": SUGGESTION_SCHEMA_ID,
+        "status": "ok",
+        "kind": "slot_proposal",
+        "proposals": [
+            {
+                "slot_name": "lighting",
+                "values": ["golden hour", "neon glow", "soft window light"],
+                "insertion_point": 1,
+                "rationale": "Light changes the mood.",
+            }
+        ],
+    },
 }
 REFUSED = {"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "cannot help"}
 #: Fields the schema requires although the validator would tolerate their absence (the schema is the stricter of the two).
@@ -145,6 +166,7 @@ SCHEMA_STRICTER_THAN_VALIDATOR = {
     SuggestionKind.WORKFLOW_CHOICE: set(),
     SuggestionKind.PLAN_PROPOSAL: set(),
     SuggestionKind.SLOT_VARIETY: set(),
+    SuggestionKind.SLOT_PROPOSAL: set(),
 }
 
 
@@ -283,6 +305,18 @@ def test_the_payload_requirements_are_per_kind() -> None:
     assert required[SuggestionKind.WORKFLOW_CHOICE][3:] == ["workflow"]
     assert required[SuggestionKind.PLAN_PROPOSAL][3:] == ["steps"]
     assert required[SuggestionKind.SLOT_VARIETY][3:] == ["slots"]
+    assert required[SuggestionKind.SLOT_PROPOSAL][3:] == ["proposals"]
+    proposals = framing.build_json_schema(PROPOSAL)["oneOf"][0]["properties"]["proposals"]
+    assert (
+        proposals["minItems"] == 1 and proposals["items"]["properties"]["values"]["minItems"] == 3
+    )
+    assert proposals["items"]["properties"]["insertion_point"] == {"enum": [0, 1]}
+    assert proposals["items"]["required"] == [
+        "slot_name",
+        "values",
+        "insertion_point",
+        "rationale",
+    ]
     slots = framing.build_json_schema(VARIETY)["oneOf"][0]["properties"]["slots"]
     assert slots["minItems"] == 1 and slots["items"]["properties"]["values"]["minItems"] == 1
     assert slots["items"]["required"] == ["slot", "values", "rationale"]
@@ -307,6 +341,12 @@ def test_choices_stay_pinned_to_the_closed_lists() -> None:
     assert not conforms(variety, framing.build_json_schema(VARIETY))
     variety["slots"] = []
     assert not conforms(variety, framing.build_json_schema(VARIETY))
+    proposal = json.loads(json.dumps(ACCEPTED[SuggestionKind.SLOT_PROPOSAL]))
+    proposal["proposals"][0]["insertion_point"] = 7
+    assert not conforms(proposal, framing.build_json_schema(PROPOSAL))
+    proposal["proposals"][0]["insertion_point"] = 0
+    proposal["proposals"][0]["values"] = ["only", "two"]
+    assert not conforms(proposal, framing.build_json_schema(PROPOSAL))
 
 
 def test_the_runtime_writes_the_schema_in_declared_order(installation: Install, tmp_path) -> None:
