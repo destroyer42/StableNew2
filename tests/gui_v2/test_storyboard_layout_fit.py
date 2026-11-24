@@ -178,6 +178,30 @@ def test_see_a_card_in_a_far_column(tk_root):
     assert _inside_viewport(widget, "d6")
 
 
+@pytest.mark.parametrize("width", [260, 271, 283, 297, 301, 314, 329, 337])
+def test_see_leaves_the_card_whole_whatever_the_window_width(tk_root, width):
+    """The canvas snaps to 30px scroll units; rounding to the nearest one used to leave a card edge cut off (seen on Linux CI)."""
+
+    widget = _columns(tk_root, _tree(), width=width)
+    for take_id in ("d6", "c6"):
+        widget.see(take_id)
+        _settle(tk_root)
+        assert _inside_viewport(widget, take_id), (width, take_id)
+    widget.see("root")
+    _settle(tk_root)
+    assert _inside_viewport(widget, "root"), width
+
+
+def test_scrollbar_arrow_steps_scroll_a_real_distance_not_one_pixel(tk_root):
+    widget = _columns(tk_root, _tree(), width=300)
+    before = widget._canvas.canvasy(0)
+    widget._vscroll.cget("command")  # the scrollbar is wired to the stepping helper
+    widget._step_view(widget._canvas.yview, "scroll", "1", "units")
+    assert widget._canvas.canvasy(0) - before == 30
+    widget._step_view(widget._canvas.yview, "moveto", "0")
+    assert widget._canvas.canvasy(0) == 0
+
+
 def test_see_unknown_take_is_a_noop(tk_root):
     widget = _columns(tk_root, _tree())
     before = (widget._canvas.xview(), widget._canvas.yview())

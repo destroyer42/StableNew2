@@ -22,7 +22,10 @@ from src.gui.view_contracts.storyboard_tree_contract import Card, Column
 from src.video.sequence_plan import ROOT_PARENT
 
 CARD_WIDTH = 168
-SCROLL_STEP_PX = 30  # one scroll "unit"; a wheel notch moves two
+SCROLL_STEP_PX = 30  # pixels per scroll step; a wheel notch moves two
+# The canvas rounds every offset to a multiple of its scroll increment. One pixel keeps ``see`` exact (a coarser
+# increment could leave a card edge cut off); wheel and scrollbar steps are converted to pixels instead.
+SCROLL_UNIT_PX = 1
 SEE_MARGIN = 4
 
 
@@ -58,11 +61,15 @@ class StoryboardColumnsV2(ttk.Frame):
             self,
             height=210,
             highlightthickness=0,
-            xscrollincrement=SCROLL_STEP_PX,
-            yscrollincrement=SCROLL_STEP_PX,
+            xscrollincrement=SCROLL_UNIT_PX,
+            yscrollincrement=SCROLL_UNIT_PX,
         )
-        self._scroll = ttk.Scrollbar(self, orient="horizontal", command=self._canvas.xview)
-        self._vscroll = ttk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
+        self._scroll = ttk.Scrollbar(
+            self, orient="horizontal", command=partial(self._step_view, self._canvas.xview)
+        )
+        self._vscroll = ttk.Scrollbar(
+            self, orient="vertical", command=partial(self._step_view, self._canvas.yview)
+        )
         self._canvas.configure(xscrollcommand=self._scroll.set, yscrollcommand=self._vscroll.set)
         self._canvas.grid(row=0, column=0, sticky="nsew")
         self._vscroll.grid(row=0, column=1, sticky="ns")
@@ -134,9 +141,17 @@ class StoryboardColumnsV2(ttk.Frame):
         if (direction < 0 and first <= 0.0) or (direction > 0 and last >= 1.0):
             return None
         (self._canvas.xview_scroll if sideways else self._canvas.yview_scroll)(
-            direction * 2, "units"
+            direction * 2 * SCROLL_STEP_PX, "units"
         )
         return "break"
+
+    @staticmethod
+    def _step_view(view: Callable[..., Any], *args: Any) -> None:
+        """Scrollbar command: its arrow clicks scroll in units, which are single pixels here, so use a real step."""
+
+        if len(args) == 3 and args[0] == "scroll" and args[2] == "units":
+            args = ("scroll", int(args[1]) * SCROLL_STEP_PX, "units")
+        view(*args)
 
     def see(self, take_id: str) -> None:
         """Scroll just enough that the card is fully inside the strip, in both directions. Unknown id: nothing."""
