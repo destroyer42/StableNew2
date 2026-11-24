@@ -51,6 +51,8 @@ class HandoffPlan:
     corrective_action: str = ""
     advisories: tuple[str, ...] = ()
     preparation_offered: bool = False
+    #: For a harvested asset: the original it was cut from (identity and window).  Provenance only.
+    derived_from: Mapping[str, Any] | None = None
 
     @property
     def form_fields(self) -> dict[str, Any]:
@@ -59,8 +61,13 @@ class HandoffPlan:
         return {FIELD_DRIVING_VIDEO: self.path} if self.ok else {}
 
     @property
-    def binding(self) -> dict[str, str]:
-        return {"asset_id": self.asset_id, "sha256": self.sha256} if self.ok else {}
+    def binding(self) -> dict[str, Any]:
+        if not self.ok:
+            return {}
+        binding: dict[str, Any] = {"asset_id": self.asset_id, "sha256": self.sha256}
+        if self.derived_from:
+            binding["derived_from"] = dict(self.derived_from)
+        return binding
 
 
 def _refuse(asset: MotionAsset, reason: str, action: str, meta: Mapping[str, Any]) -> HandoffPlan:
@@ -124,13 +131,37 @@ def _advisories(asset: MotionAsset, meta: Mapping[str, Any], preparation: bool) 
         notes.append("You marked this clip rejected.")
     elif asset.review_status == REVIEW_UNREVIEWED:
         notes.append("This clip has not been reviewed.")
-    if asset.origin is not None and asset.origin.motion_achieved is False:
-        notes.append("You recorded that this generated clip did not achieve the requested motion.")
+    if asset.effective_motion_achieved is False:
+        notes.append("You recorded that this clip did not achieve the requested motion.")
+    if asset.harvest is not None:
+        notes.append(
+            f"This is a harvested window ({asset.harvest.window_frames} frames cut from "
+            f"'{asset.harvest.original_name or 'an original video'}'). It is independent of any workflow: "
+            + (
+                "Prepare Motion Source can fit it to this workflow's length without changing the asset."
+                if preparation
+                else "it is used as it is."
+            )
+        )
     notes.append(
         "Library clips are model-neutral: being usable here does not mean every motion workflow "
         "accepts it. The selected workflow's own checks decide."
     )
     return tuple(notes)
+
+
+def derived_from_binding(asset: MotionAsset) -> dict[str, Any] | None:
+    """The harvest lineage a job records beside the asset identity (never an input to generation)."""
+
+    harvest = asset.harvest
+    if harvest is None:
+        return None
+    return {
+        "original_sha256": harvest.original_sha256,
+        "start_frame": harvest.start_frame,
+        "end_frame": harvest.end_frame,
+        "cadence": harvest.cadence,
+    }
 
 
 def plan_driving_handoff(
@@ -193,12 +224,13 @@ def plan_driving_handoff(
         workflow_version=str(meta.get("workflow_version") or ""),
         advisories=_advisories(asset, meta, preparation),
         preparation_offered=preparation,
+        derived_from=derived_from_binding(asset),
     )
 
 
 def binding_for_submission(
     binding: Mapping[str, Any] | None, *, current_path: str, bound_path: str
-) -> dict[str, str] | None:
+) -> dict[str, Any] | None:
     """The library identity to freeze with a job -- only while the form still names the handed-off file."""
 
     if not binding or not bound_path or not current_path:
@@ -207,7 +239,13 @@ def binding_for_submission(
         return None
     asset_id = str(binding.get("asset_id") or "")
     sha = str(binding.get("sha256") or "")
-    return {"asset_id": asset_id, "sha256": sha} if asset_id and sha else None
+    if not (asset_id and sha):
+        return None
+    result: dict[str, Any] = {"asset_id": asset_id, "sha256": sha}
+    derived = binding.get("derived_from")
+    if isinstance(derived, Mapping):
+        result["derived_from"] = dict(derived)
+    return result
 
 
 __all__ = [
@@ -215,5 +253,6 @@ __all__ = [
     "FIELD_LIBRARY_BINDING",
     "HandoffPlan",
     "binding_for_submission",
+    "derived_from_binding",
     "plan_driving_handoff",
 ]

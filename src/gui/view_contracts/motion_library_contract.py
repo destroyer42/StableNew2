@@ -27,6 +27,7 @@ from src.gui.view_contracts.video_motion_readiness_contract import FrameThumb
 from src.video.driving_video_inspection import DrivingVideoInspection
 from src.video.motion_library.derivation import derivation_lines
 from src.video.motion_library.handoff import HandoffPlan
+from src.video.motion_library.harvest import describe_harvest
 from src.video.motion_library.importer import FolderImportReport, ImportOutcome
 from src.video.motion_library.models import (
     SOURCE_CATEGORY_LABELS,
@@ -98,6 +99,8 @@ class LibraryDetail:
     media_path: str
     can_use: bool
     can_relink: bool
+    #: The same verified file Use as Driving Video would use may be cut into a harvested window.
+    can_harvest: bool = False
 
 
 @dataclass(frozen=True)
@@ -476,7 +479,20 @@ class MotionLibrarySession:
             f"Review: {asset.review_status}"
             + (", marked good for motion driving" if asset.good_for_motion else ""),
             f"Loop: {asset.loop_suitability.replace('_', ' ')}",
+            # Three separate opinions; none is evidence that the motion transfers to another subject.
+            f"Visual quality: {asset.visual_quality.replace('_', ' ')}",
+            "Requested motion achieved: "
+            + {True: "yes", False: "no", None: "not judged"}[asset.effective_motion_achieved],
+            "Good as a driving reference (your opinion): "
+            + {True: "yes", False: "no", None: "not judged"}[asset.good_for_motion]
+            + ". Transfer to another subject is not established by this record.",
         ]
+        if asset.effective_motion_label:
+            facts.append(f"Motion: {asset.effective_motion_label}")
+        if asset.effective_known_defects:
+            facts.append(f"Known defects: {asset.effective_known_defects}")
+        if asset.effective_reuse_conditions:
+            facts.append(f"Reuse conditions: {asset.effective_reuse_conditions}")
         provenance = [
             f"Source: {SOURCE_CATEGORY_LABELS.get(asset.source_category, asset.source_category)}",
             f"Source reference: {asset.source_reference or '-'}",
@@ -517,6 +533,12 @@ class MotionLibrarySession:
                 origin_lines.append(f"Known artifacts: {o.known_artifacts}")
             if o.reuse_conditions:
                 origin_lines.append(f"Reuse conditions: {o.reuse_conditions}")
+        if asset.harvest is not None:
+            origin_lines.extend(
+                describe_harvest(
+                    asset.harvest, original_present=snapshot.harvest_sources.get(asset.asset_id)
+                )
+            )
         frames: tuple[FrameThumb, ...] = ()
         issues: tuple[str, ...] = ()
         if self._inspection is not None and self._inspection_for == asset.asset_id:
@@ -544,6 +566,7 @@ class MotionLibrarySession:
             media_path=snapshot.media_paths.get(asset.asset_id, "") if usable_path else "",
             can_use=usable_path and not self.busy,
             can_relink=state in {FILE_MISSING, FILE_CHANGED, FILE_UNREADABLE},
+            can_harvest=usable_path and not self.busy,
         )
 
 

@@ -24,6 +24,20 @@ from src.video.motion_library.config import (
     suggested_library_root,
 )
 from src.video.motion_library.handoff import HandoffPlan, plan_driving_handoff
+from src.video.motion_library.harvest import (
+    STATUS_REFUSED,
+    HarvestOutcome,
+    HarvestRequest,
+    harvest_motion,
+)
+from src.video.motion_library.harvest_service import (
+    FramePreview,
+    HarvestSourceInfo,
+    HarvestSourceRef,
+    open_harvest_source,
+    preview_frames,
+)
+from src.video.motion_library.harvest_workflow_preview import workflow_timing_lines
 from src.video.motion_library.importer import (
     FolderImportReport,
     ImportOutcome,
@@ -221,6 +235,68 @@ class VideoMotionLibraryControllerMixin:
                 meta = spec
                 break
         return plan_driving_handoff(self.motion_library(), asset_id, meta, cancel=cancel)
+
+    # ------------------------------------------------------------------ Harvest Motion (PR-VID-MOTION-400)
+
+    def motion_library_ready(self) -> bool:
+        """True when a Motion Library folder is configured (a harvest needs somewhere to keep the clip)."""
+
+        return bool(load_library_root())
+
+    def _history_reader(self) -> Any:
+        repository: Any = getattr(self._job_service(), "history_store", None)  # type: ignore[attr-defined]
+        reader = getattr(repository, "get_job", None)
+        return (lambda job_id: reader(str(job_id))) if callable(reader) else None
+
+    def open_harvest_source(
+        self, ref: HarvestSourceRef, cancel: threading.Event | None = None
+    ) -> HarvestSourceInfo:
+        """Hash and probe the exact file and establish its lineage from History/the library.  Read-only; nothing is
+        queued, copied or written.  The library need not be configured to look at a video."""
+
+        try:
+            store: MotionLibraryStore | None = self.motion_library()
+        except (LibraryError, OSError):
+            store = None
+        return open_harvest_source(ref, store=store, history=self._history_reader(), cancel=cancel)
+
+    def preview_harvest_frames(
+        self,
+        path: str,
+        frames: Any,
+        rate: Any,
+        cancel: threading.Event | None = None,
+        label: str = "Frame",
+    ) -> tuple[tuple[FramePreview, ...], tuple[str, ...]]:
+        return preview_frames(path, frames, rate, cancel=cancel, label=label)
+
+    def harvest_workflow_timing(
+        self, form: Any, window_frames: int, rate: Any, convert: bool
+    ) -> tuple[str, ...]:
+        """Advisory: what Prepare Motion Source would consume of this window for the form's selected workflow."""
+
+        try:
+            spec = self._njr_builder.spec_for(form)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - an unknown workflow only means no preview
+            spec = None
+        return workflow_timing_lines(
+            spec,
+            (form or {}).get("frame_count") if hasattr(form or {}, "get") else None,
+            window_frames=window_frames,
+            rate=rate,
+            convert_to_workflow_rate=convert,
+        )
+
+    def harvest_motion_window(
+        self, request: HarvestRequest, cancel: threading.Event | None = None
+    ) -> HarvestOutcome:
+        """Cut one action window into the Motion Library (offline asset operation; no job, no runtime)."""
+
+        try:
+            store = self.motion_library()
+        except (LibraryError, OSError) as exc:
+            return HarvestOutcome(STATUS_REFUSED, str(exc), "library_unavailable")
+        return harvest_motion(store, request, cancel=cancel)
 
 
 __all__ = ["VideoMotionLibraryControllerMixin"]

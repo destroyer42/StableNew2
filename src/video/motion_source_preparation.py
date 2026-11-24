@@ -277,6 +277,8 @@ def build_encode_command(
     pixel_format: str,
     destination: str | Path,
     resize: tuple[int, int] | None = None,
+    *,
+    compact_timestamps: bool = False,
 ) -> list[str]:
     """Write exactly the plan's frames, losslessly, with no metadata and a hard size cap."""
 
@@ -287,7 +289,7 @@ def build_encode_command(
         "-map_chapters",
         "-1",
         "-vf",
-        ffmpeg_filter_chain(plan)
+        ffmpeg_filter_chain(plan, compact_timestamps=compact_timestamps)
         + (f",scale={resize[0]}:{resize[1]}:flags={FUN_CONTROL_RESIZE_FILTER}" if resize else ""),
         "-frames:v",
         str(plan.output_frames),
@@ -494,6 +496,7 @@ def prepare_motion_source(
     ffprobe: str | Path | None = None,
     inspect: Callable[..., DrivingVideoInspection] = inspect_driving_video,
     clock: Callable[[], float] = time.monotonic,
+    compact_timestamps: bool = False,
 ) -> PreparationOutcome:
     """Prepare ``request`` into ``output_root``.  Never raises for a bad clip; publishes only on success."""
 
@@ -614,7 +617,15 @@ def prepare_motion_source(
         _remove_stale_temporaries(directory, time.time())
         temporary = directory / f"{_TEMP_PREFIX}{uuid.uuid4().hex}{PREPARED_SUFFIX}"
         run.run(
-            build_encode_command(executable, clip, plan, pixel_format, temporary, resize),
+            build_encode_command(
+                executable,
+                clip,
+                plan,
+                pixel_format,
+                temporary,
+                resize,
+                compact_timestamps=compact_timestamps,
+            ),
             max_stdout=MAX_VERSION_STDOUT_BYTES,
             what="while writing the prepared clip",
         )

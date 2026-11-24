@@ -41,6 +41,7 @@ from src.video.motion_library.models import (
     AssetLocator,
     DerivationRecord,
     GeneratedOrigin,
+    HarvestRecord,
     MotionAsset,
     clean_note,
     clean_text,
@@ -435,6 +436,40 @@ class MotionLibraryStore:
             if asset.derivation is not None:
                 return asset
             updated = asset.with_changes(derivation=derivation)
+            self._commit({**self._state.assets, asset_id: updated})
+            return updated
+
+    def find_harvest(self, harvest: HarvestRecord) -> MotionAsset | None:
+        """The asset already holding this exact cut of this original (same window and cadence), if any."""
+
+        with self._lock:
+            return next(
+                (
+                    a
+                    for a in self._state.assets.values()
+                    if a.harvest is not None and a.harvest.same_window(harvest)
+                ),
+                None,
+            )
+
+    def harvests_of(self, original_sha256: str) -> tuple[MotionAsset, ...]:
+        """Every harvested asset cut from the original with this SHA-256 (the original need not exist any more)."""
+
+        with self._lock:
+            return tuple(
+                a
+                for a in self.assets()
+                if a.harvest is not None and a.harvest.original_sha256 == original_sha256
+            )
+
+    def attach_harvest(self, asset_id: str, harvest: HarvestRecord) -> MotionAsset:
+        """The same bytes were produced by a harvest: keep the first recorded harvest, never overwrite it."""
+
+        with self._lock:
+            asset = self.require(asset_id)
+            if asset.harvest is not None:
+                return asset
+            updated = asset.with_changes(harvest=harvest)
             self._commit({**self._state.assets, asset_id: updated})
             return updated
 

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-975 of 975 modules have a docstring.
+983 of 983 modules have a docstring.
 
 ## src/
 
@@ -396,6 +396,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `media_inspector_contract.py`: Ephemeral media inspection state; host workspaces retain artifact/selection authority
 - `motion_batch_contract.py`: Toolkit-neutral state of the "Batch Convert Motion" dialog (PR-VID-MOTION-356)
 - `motion_conversion_contract.py`: Toolkit-neutral state of the "Convert Motion" dialog (PR-VID-MOTION-354)
+- `motion_harvest_contract.py`: Toolkit-neutral state of the Harvest Motion workspace (PR-VID-MOTION-400)
 - `motion_library_contract.py`: Toolkit-neutral state of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `movie_clips_contract.py`: Movie Clips tab UI normalization helpers
 - `photo_baseline_save_contract.py`: Toolkit-neutral save coordination for the Photo Optimize active-photo baseline (PR-GUI-UX-580)
@@ -452,6 +453,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `model_evidence_window.py`: Explicit operator catalog journey
 - `motion_batch_dialog.py`: Tk dialog for Batch Convert Motion (PR-VID-MOTION-356)
 - `motion_conversion_dialog.py`: Tk dialog for Convert Motion (PR-VID-MOTION-354)
+- `motion_harvest_dialog.py`: Tk workspace for Harvest Motion (PR-VID-MOTION-400)
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
 - `next_test_dialog.py`: Compact "What Should I Test Next?" dialog
 - `photo_optimize_editors.py`: Scoped Photo Optimize editing and review widgets; no store writes or queue authority
@@ -482,6 +484,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
 - `video_workflow_evaluate_view_v2.py`: Evaluate view container for the Video Workflow tab (VID-UX-384)
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
+- `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
 - `video_workflow_layout_v2.py`: Layout scaffolding for the Video Workflow tab (VID-UX-384)
 - `video_workflow_media_pane_v2.py`: Right-pane media and status column of the Video Workflow tab (VID-UX-384)
 - `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
@@ -1122,6 +1125,11 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `config.py`: Where the operator's Motion Library lives (PR-VID-MOTION-LIB-353)
 - `derivation.py`: Operator-facing text for a converted clip's derivation (PR-VID-MOTION-354)
 - `handoff.py`: Hand a library clip to the Video Workflow as its driving video (PR-VID-MOTION-LIB-353)
+- `harvest.py`: Harvest Motion: cut a reusable, workflow-independent motion asset out of an existing video (PR-VID-MOTION-400)
+- `harvest_lineage.py`: How strongly a harvest source's originating job/artifact is established (PR-VID-MOTION-400)
+- `harvest_service.py`: Source opening and bounded frame previews for the Harvest Motion workspace (PR-VID-MOTION-400)
+- `harvest_window.py`: Exact action-window arithmetic for Harvest Motion (PR-VID-MOTION-400)
+- `harvest_workflow_preview.py`: Advisory timing preview of a harvested window against the *currently selected* workflow (PR-VID-MOTION-400)
 - `hashing.py`: Bounded, cancellable file hashing for the Motion Library
 - `importer.py`: Import local videos and completed StableNew clips into the Motion Library (PR-VID-MOTION-LIB-353)
 - `models.py`: Motion Library asset records (PR-VID-MOTION-LIB-353)

@@ -25,4 +25,9 @@ Protected actions (push to `main`, merge, publish, deploy, secrets, material arc
 approval as defined in `AGENTS.md` section 5; ordinary scoped implementation, tests, refactors needed for correctness,
 feature-branch commits and PR preparation do not need repeated approval when the user's end state already authorizes them.
 
+The owner's local settings pre-allow `git push`, `gh pr create` and `gh pr merge` so they run without a prompt. That is
+capability only: act on it when the owner has explicitly told you in chat to push, publish or merge the named branch or
+PR, and then do not ask again. Never force-push, push to `main`, or use `--admin`, `--auto` or `[skip ci]`; a docs-only PR
+still runs the cheap required checks, which must pass before merge (`AGENTS.md` section 5).
+
 Completion reports follow `AGENTS.md` section 8.

@@ -215,6 +215,20 @@ def route_bundle_to_movie_clips(
     setter(dict(bundle), status_message=status_message)
 
 
+def route_video_to_motion_harvest(*, main_window: Any, source: Any) -> None:
+    """Open the Harvest Motion workspace on one exact video (intent only; nothing is queued, copied or selected).
+
+    The workspace is a non-modal window owned by the Video Workflow tab, so the current tab is not switched."""
+
+    workflow_tab = getattr(main_window, "video_workflow_tab", None)
+    if workflow_tab is None:
+        raise RuntimeError("Video Workflow tab is not available")
+    opener = getattr(workflow_tab, "open_motion_harvest", None)
+    if not callable(opener):
+        raise RuntimeError("Video Workflow tab does not support Harvest Motion")
+    opener(source)
+
+
 def route_job_to_storyboard(
     *,
     main_window: Any,
@@ -243,5 +257,6 @@ __all__ = [
     "route_images_to_review",
     "route_images_to_video_workflow",
     "route_job_to_storyboard",
+    "route_video_to_motion_harvest",
     "show_queue_view",
 ]

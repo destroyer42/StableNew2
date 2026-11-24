@@ -24,6 +24,7 @@ from src.gui.controllers.history_compare_service import (
     resolve_history_repository,
 )
 from src.gui.controllers.history_iterate_service import HistoryIterateRefused, HistoryIterateService
+from src.gui.controllers.video_workspace_handoff import route_video_to_motion_harvest
 from src.gui.history_compare_dialog import HistoryCompareDialog
 from src.gui.history_iterate_dialog import CHOICE_REVIEW, HistoryIterateDialog
 from src.gui.view_contracts.history_artifact_contract import resolve_recorded_artifact
@@ -42,6 +43,7 @@ from src.queue.job_history_store import (
     JobHistoryEntry,
 )
 from src.utils.os_shell import open_file, reveal_in_file_manager
+from src.video.motion_library.harvest_service import HarvestSourceRef
 from src.video.sequence_history import SequenceHistoryInfo, sequence_history_info
 from src.video.video_artifact_helpers import extract_source_image_for_handoff
 from src.video.video_review_group import snapshot_is_experiment_arm
@@ -79,6 +81,7 @@ class HistoryActionState:
     sequence_replay: bool = False
     iterate: bool = False
     compare: bool = False
+    harvest: bool = False
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -167,6 +170,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         action_bar.add(self.movie_clips_btn)
+        self.harvest_btn = ttk.Button(
+            action_bar,
+            text="Harvest Motion",
+            command=self._on_harvest_motion,
+            state=tk.DISABLED,
+        )
+        action_bar.add(self.harvest_btn)
         self.explain_btn = ttk.Button(
             action_bar,
             text="Explain Job",
@@ -337,6 +347,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self._history_menu.add_command(
             label="Send to Movie Clips", command=self._on_send_to_movie_clips
         )
+        self._history_menu.add_command(label="Harvest Motion...", command=self._on_harvest_motion)
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self._history_menu.add_command(
             label="Review Video Experiment", command=self._on_review_video_experiment
@@ -701,6 +712,55 @@ class JobHistoryPanelV2(ttk.Frame):
         if entry and self._history_action_state(entry).video_workflow:
             self._run_handoff("send_history_job_image_to_video_workflow", "Make Video")
 
+    def _recorded_video_path(self, entry: JobHistoryEntry) -> str | None:
+        """The one video file History recorded for a completed job (never an image stand-in); ``None`` otherwise."""
+
+        if str(getattr(entry.status, "value", entry.status)) != "completed":
+            return None
+        projection = resolve_recorded_artifact(entry.result)
+        return projection.path if projection.kind == "video" and projection.path else None
+
+    def _on_harvest_motion(self) -> None:
+        """Open Harvest Motion on the selected job's recorded video.  The job id is a claim the workspace verifies
+        against History and the file's SHA-256; nothing is queued, copied or replayed."""
+
+        entry = self._selected_entry()
+        if not entry:
+            return
+        path = self._recorded_video_path(entry)
+        if path is None:
+            self.replay_status_var.set(
+                "Harvest Motion needs a completed job with a recorded video file."
+            )
+            return
+        subject, visible = self._entry_visibility(entry)
+        if not visible:
+            self.replay_status_var.set(
+                "Harvest Motion is not available while this video is hidden by the content filter."
+            )
+            return
+        main_window = getattr(self.controller, "main_window", None)
+        if main_window is None:
+            self.replay_status_var.set(
+                "Harvest Motion is not available: the main window is missing."
+            )
+            return
+        try:
+            route_video_to_motion_harvest(
+                main_window=main_window,
+                source=HarvestSourceRef(
+                    path=path,
+                    label=Path(path).name,
+                    job_id=entry.job_id,
+                    surface="job_history",
+                    subject=subject,
+                ),
+            )
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.replay_status_var.set(f"Harvest Motion failed: {exc}")
+            return
+        self.replay_status_var.set("")
+
     def _on_send_to_movie_clips(self) -> None:
         entry = self._selected_entry()
         if entry and self._history_action_state(entry).movie_clips:
@@ -739,6 +799,10 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.NORMAL if actions.video_workflow else tk.DISABLED
         )
         self.movie_clips_btn.configure(state=tk.NORMAL if actions.movie_clips else tk.DISABLED)
+        self.harvest_btn.configure(state=tk.NORMAL if actions.harvest else tk.DISABLED)
+        self._history_menu.entryconfigure(
+            "Harvest Motion...", state=tk.NORMAL if actions.harvest else tk.DISABLED
+        )
         self.explain_btn.configure(state=tk.NORMAL if actions.explain else tk.DISABLED)
         self.review_btn.configure(state=tk.NORMAL if actions.video_review else tk.DISABLED)
         self._update_sequence_controls(entry, actions)
@@ -860,23 +924,8 @@ class JobHistoryPanelV2(ttk.Frame):
         entry = entry if isinstance(entry, JobHistoryEntry) else self._selected_entry()
         visible = bool(entry and self.show_artifact_var.get())
         if visible and entry is not None:
-            state = self.app_state or getattr(self.controller, "app_state", None)
-            mode = getattr(state, "content_visibility_mode", "nsfw")
-            njr = None
-            if mode == "sfw":
-                try:
-                    njr = HistoryHandoffService().hydrate_njr_from_snapshot(entry.snapshot)
-                except (TypeError, ValueError, KeyError, AttributeError):
-                    njr = None
-            subject = {
-                "name": entry.payload_summary,
-                "positive_prompt": njr.positive_prompt if njr else "",
-                "negative_prompt": njr.negative_prompt if njr else "",
-            }
+            subject, visible = self._entry_visibility(entry)
             self._media_visibility_subject = subject
-            visible = (mode != "sfw" or njr is not None) and ContentVisibilityResolver(
-                mode
-            ).is_visible(subject)
 
         projection = resolve_recorded_artifact(entry.result) if visible and entry else None
         kind = projection.kind if projection else "none"
@@ -920,6 +969,27 @@ class JobHistoryPanelV2(ttk.Frame):
             self.artifact_video_preview.set_visibility(visible)
         self._shown_artifact_kind = kind if visible else "none"
         self._shown_artifact_path = path if visible else None
+
+    def _entry_visibility(self, entry: JobHistoryEntry) -> tuple[dict[str, Any], bool]:
+        """What the content filter classifies for this job, and whether its media may be shown right now."""
+
+        state = self.app_state or getattr(self.controller, "app_state", None)
+        mode = getattr(state, "content_visibility_mode", "nsfw")
+        njr = None
+        if mode == "sfw":
+            try:
+                njr = HistoryHandoffService().hydrate_njr_from_snapshot(entry.snapshot)
+            except (TypeError, ValueError, KeyError, AttributeError):
+                njr = None
+        subject = {
+            "name": entry.payload_summary,
+            "positive_prompt": njr.positive_prompt if njr else "",
+            "negative_prompt": njr.negative_prompt if njr else "",
+        }
+        visible = (mode != "sfw" or njr is not None) and ContentVisibilityResolver(mode).is_visible(
+            subject
+        )
+        return subject, bool(visible)
 
     def _current_visibility_subject(self) -> Any:
         return getattr(self, "_media_visibility_subject", {})
@@ -1041,6 +1111,7 @@ class JobHistoryPanelV2(ttk.Frame):
             sequence_replay=bool(sequence_ready and sequence is not None and sequence.can_replay),
             iterate=self._iterate_offered(entry),
             compare=self._compare_offered(entry),
+            harvest=self._recorded_video_path(entry) is not None,
         )
 
     def _iterate_offered(self, entry: JobHistoryEntry) -> bool:
