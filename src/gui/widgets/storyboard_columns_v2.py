@@ -102,8 +102,8 @@ class StoryboardColumnsV2(ttk.Frame):
                 )
                 button.pack(fill="x", pady=(4, 0))
                 self.compare_buttons[column.title] = button
-        for holder in self._inner.winfo_children():
-            self._bind_wheel(holder)
+        for child in self._inner.winfo_children():
+            self._bind_wheel(child)
 
     # ------------------------------------------------------------------ scrolling
 

@@ -96,7 +96,7 @@ class ContinueRowFields:
         self.seed_entry.configure(state="normal" if fixed else "disabled")
         self.seed_box.tooltip.text = SEED_TIPS[self.seed_mode]  # type: ignore[attr-defined]
 
-    def widgets(self) -> tuple[ttk.Widget, ...]:
+    def widgets(self) -> tuple[tk.Widget, ...]:
         return (
             self.number_label,
             self.prompt_entry,
