@@ -12,11 +12,15 @@ from typing import Any
 from src.ai_assist.contracts import (
     CHANGE_CODES,
     MAX_PLAN_STEPS,
+    MAX_PROPOSAL_SLOT_NAME_CHARS,
+    MAX_PROPOSAL_VALUES,
+    MAX_PROPOSALS,
     MAX_RATIONALE_CHARS,
     MAX_REFUSAL_REASON_CHARS,
     MAX_STEP_COUNT,
     MAX_VARIETY_RATIONALE_CHARS,
     MAX_VARIETY_VALUE_CHARS,
+    MIN_PROPOSAL_VALUES,
     SUGGESTION_SCHEMA_ID,
     VARIETY_FOCUS_EXPLORE,
     VIDEO_STAGE,
@@ -39,6 +43,10 @@ VARIETY_RESERVED_MARKERS = (
     _SLOT_MARKER,
     _VALUE_MARKER,
 )
+_EXISTING_SLOT_MARKER = "EXISTING_SLOT:"
+_POINT_MARKER = "SENTENCE_POINT:"
+#: Every marker the new-slot proposal data block uses (AI-213). Authored text containing any of them is refused.
+PROPOSAL_RESERVED_MARKERS = (*VARIETY_RESERVED_MARKERS, _EXISTING_SLOT_MARKER, _POINT_MARKER)
 FRAME_VERSION = "ai_assist.frame/1"
 
 
@@ -96,6 +104,24 @@ def _variety_instruction(request: AssistRequest) -> str:
     )
 
 
+def _proposal_instruction(request: AssistRequest) -> str:
+    """Deterministic frame for a new-slot proposal request (AI-213)."""
+
+    last = len(request.insertion_points) - 1
+    return (
+        "Propose new matrix slots for the operator's prompt sentence that serve the operator's goal. A slot is a short "
+        "category name (for example lighting) with several values that can replace a [[slot_name]] marker in the "
+        f"sentence. Give 1 to {MAX_PROPOSALS} proposals. For each proposal give a new slot_name of at most "
+        f"{MAX_PROPOSAL_SLOT_NAME_CHARS} characters that is not listed after {_EXISTING_SLOT_MARKER} and differs from your "
+        f"other proposals, {MIN_PROPOSAL_VALUES} to {MAX_PROPOSAL_VALUES} distinct values, each a short phrase of at most "
+        f"{MAX_VARIETY_VALUE_CHARS} characters with no commas, no square or angle brackets and no line breaks, "
+        f"insertion_point as the whole number (0 to {last}) of one position listed after {_POINT_MARKER} where the marker "
+        f"reads naturally in the sentence, and a short rationale (at most {MAX_VARIETY_RATIONALE_CHARS} characters). Never "
+        "rewrite the sentence. Do not claim that you have verified the quality of your own suggestions. These are "
+        "suggestions a person reviews one by one."
+    )
+
+
 #: Added to a plan request's prompt only when the operator has a usable model selected (AI-211, decision D21).
 PLAN_SELECTED_MODEL_RULE = (
     "Plan with the currently selected model unless the goal explicitly names a different allowed model. "
@@ -129,7 +155,36 @@ def _variety_block(request: AssistRequest) -> list[str]:
     return [*lines, END_MARKER, ""]
 
 
+def _check_proposal_text(label: str, text: str, *, single_line: bool) -> None:
+    for marker in PROPOSAL_RESERVED_MARKERS:
+        if marker in text:
+            raise FramingError(f"{label} contains a reserved marker")
+    if single_line and ("\n" in text or "\r" in text):
+        raise FramingError(f"{label} contains a line break")
+
+
+def _proposal_block(request: AssistRequest) -> list[str]:
+    _check_proposal_text("goal_text", request.goal_text, single_line=False)
+    _check_proposal_text("positive_text", request.positive_text, single_line=False)
+    lines = [
+        BEGIN_MARKER,
+        _GOAL_MARKER,
+        request.goal_text,
+        "POSITIVE_PROMPT:",
+        request.positive_text,
+    ]
+    for name in request.existing_slot_names:
+        _check_proposal_text("slot name", name, single_line=True)
+        lines.append(f"{_EXISTING_SLOT_MARKER} {name}")
+    for number, point in enumerate(request.insertion_points):
+        _check_proposal_text("insertion point", point, single_line=True)
+        lines.append(f"{_POINT_MARKER} {number} | {point}")
+    return [*lines, END_MARKER, ""]
+
+
 def _authored_block(request: AssistRequest) -> list[str]:
+    if request.kind is SuggestionKind.SLOT_PROPOSAL:
+        return _proposal_block(request)
     if request.kind is SuggestionKind.SLOT_VARIETY:
         return _variety_block(request)
     if request.kind is SuggestionKind.PLAN_PROPOSAL:
@@ -172,6 +227,8 @@ def render_prompt(request: AssistRequest, *, response_instructions: str = "") ->
         "",
         _variety_instruction(request)
         if request.kind is SuggestionKind.SLOT_VARIETY
+        else _proposal_instruction(request)
+        if request.kind is SuggestionKind.SLOT_PROPOSAL
         else _INSTRUCTIONS[request.kind],
         f"Target policy: {request.target_policy_id or 'unspecified'}.",
         f"Schema id: {SUGGESTION_SCHEMA_ID}; kind: {request.kind.value}.",
@@ -258,6 +315,30 @@ def _ok_branch(request: AssistRequest) -> dict[str, Any]:
             },
         }
         required.append("slots")
+    elif request.kind is SuggestionKind.SLOT_PROPOSAL:
+        # Every field is required and the list needs an item, so the grammar cannot close an empty answer (AI-202c).
+        properties["proposals"] = {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": MAX_PROPOSALS,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "slot_name": {"type": "string", "maxLength": MAX_PROPOSAL_SLOT_NAME_CHARS},
+                    "values": {
+                        "type": "array",
+                        "minItems": MIN_PROPOSAL_VALUES,
+                        "maxItems": MAX_PROPOSAL_VALUES,
+                        "items": {"type": "string", "maxLength": MAX_VARIETY_VALUE_CHARS},
+                    },
+                    "insertion_point": {"enum": list(range(len(request.insertion_points)))},
+                    "rationale": {"type": "string", "maxLength": MAX_VARIETY_RATIONALE_CHARS},
+                },
+                "required": ["slot_name", "values", "insertion_point", "rationale"],
+                "additionalProperties": False,
+            },
+        }
+        required.append("proposals")
     else:
         properties["workflow"] = {"enum": list(request.allowed_workflows)}
         required.append("workflow")
@@ -306,6 +387,7 @@ __all__ = [
     "END_MARKER",
     "FRAME_VERSION",
     "PLAN_SELECTED_MODEL_RULE",
+    "PROPOSAL_RESERVED_MARKERS",
     "VARIETY_FOCUS_RULES",
     "VARIETY_RESERVED_MARKERS",
     "FramingError",

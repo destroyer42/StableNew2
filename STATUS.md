@@ -78,6 +78,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
 - External A1111/Comfy processes are never adopted, restarted or killed; ambiguous dispatched generation POSTs are never
   replayed. Cancel and Return requeues a job only on positive dispatch evidence; otherwise it is cancelled and flagged
   action-required (`docs/Subsystems/Runtime/QUEUE_AND_RUNTIME.md`).
+- AI Assist (Preview, advisory; `docs/Subsystems/AiAssist/AI_ASSIST.md`): typed, judged suggestions accepted one by one, nothing saved or queued. Slot variety adds values to existing slots; a new slot proposal (AI-213) may, on an explicit press, add one slot and one `[[slot]]` marker to the positive prompt sentence, all-or-nothing, refused past the matrix limit, with no single undo. Model quality is unverified.
 
 ## Active and next
 

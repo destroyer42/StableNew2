@@ -57,6 +57,10 @@ _SUCCESS_PAYLOAD = {
         "Put the ordered advice in steps. Copy identifiers exactly, including capitalization and punctuation. "
         "For an image step, set target and use null for workflow. For a video step, set workflow and use null for target."
     ),
+    SuggestionKind.SLOT_PROPOSAL: (
+        "Put the proposals in proposals. Each needs a new slot_name, its values, the insertion_point number copied from "
+        "the numbered positions listed in the data, and a rationale."
+    ),
     SuggestionKind.SLOT_VARIETY: (
         "Put the proposals in slots. Copy each slot name exactly into slot and put the new phrases in values. "
         "Follow the requested category for each value."
