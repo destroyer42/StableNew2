@@ -313,3 +313,136 @@ def test_refresh_and_reselecting_keep_a_chosen_continue_frame(tab, fake_service)
     assert tab.target == chosen
     tab.select_take("t1")  # the same take again is not a new clip to extend
     assert tab.target == chosen
+
+
+# ---------------------------------------------------------------- Task 5: roomy prompt fields, scrolling Continue panel
+
+import tkinter as tk  # noqa: E402
+
+from src.gui.widgets.mirrored_text_v2 import (  # noqa: E402
+    FOCUS_LINES,
+    FOCUS_SHRINK_MS,
+    REST_LINES,
+    MirroredText,
+)
+
+
+def _field(root, value: str = "") -> tuple[MirroredText, tk.StringVar]:
+    root.deiconify()
+    variable = tk.StringVar(master=root, value=value)
+    field = MirroredText(root, variable)
+    field.pack()
+    _settle(root, 0.05)
+    return field, variable
+
+
+def _contents(field: tk.Text) -> str:
+    return field.get("1.0", "end-1c")
+
+
+def test_mirrored_text_follows_the_variable(tk_root):
+    field, variable = _field(tk_root, "start")
+    assert _contents(field) == "start"
+    variable.set("changed")
+    assert _contents(field) == "changed"
+    variable.set("")
+    assert _contents(field) == ""
+
+
+def test_typing_updates_the_variable(tk_root):
+    field, variable = _field(tk_root)
+    field.insert("end", "hello")
+    _settle(tk_root, 0.05)
+    assert variable.get() == "hello"
+    field.delete("1.0", "end")
+    _settle(tk_root, 0.05)
+    assert variable.get() == ""
+
+
+def test_enter_is_swallowed(tk_root):
+    field, variable = _field(tk_root, "one line")
+    field.focus_force()
+    field.mark_set("insert", "end")
+    field.event_generate("<Return>")
+    _settle(tk_root, 0.05)
+    assert _contents(field) == "one line" and variable.get() == "one line"
+
+
+def test_pasted_newlines_become_spaces(tk_root):
+    field, variable = _field(tk_root)
+    field.insert("1.0", "a\nb\r\nc")
+    _settle(tk_root, 0.05)
+    assert variable.get() == "a b c" and _contents(field) == "a b c"
+
+
+def test_tab_moves_focus_and_inserts_nothing(tk_root):
+    first, _ = _field(tk_root, "x")
+    second, _ = _field(tk_root, "y")
+    first.focus_force()
+    _settle(tk_root, 0.05)
+    first.event_generate("<Tab>")
+    _settle(tk_root, 0.05)
+    assert _contents(first) == "x"
+    assert tk_root.focus_get() is second
+
+
+def test_field_grows_on_focus_and_shrinks_after_blur(tk_root):
+    field, _ = _field(tk_root)
+    assert int(field.cget("height")) == REST_LINES
+    field.event_generate("<FocusIn>")
+    assert int(field.cget("height")) == FOCUS_LINES
+    field.event_generate("<FocusOut>")
+    assert int(field.cget("height")) == FOCUS_LINES  # not at once: a click on the next row must not move
+    _settle(tk_root, (FOCUS_SHRINK_MS + 150) / 1000)
+    assert int(field.cget("height")) == REST_LINES
+
+
+def test_refocusing_inside_the_delay_cancels_the_shrink(tk_root):
+    field, _ = _field(tk_root)
+    field.event_generate("<FocusIn>")
+    field.event_generate("<FocusOut>")
+    field.event_generate("<FocusIn>")
+    _settle(tk_root, (FOCUS_SHRINK_MS + 150) / 1000)
+    assert int(field.cget("height")) == FOCUS_LINES
+
+
+def test_destroying_a_field_leaves_no_pending_shrink(tk_root):
+    field, variable = _field(tk_root)
+    field.event_generate("<FocusIn>")
+    field.event_generate("<FocusOut>")
+    field.destroy()
+    variable.set("after destroy")  # the trace must be gone
+    _settle(tk_root, (FOCUS_SHRINK_MS + 100) / 1000)
+
+
+def _open_tab(tab, fake_service, width: int = 900, height: int = 520) -> None:
+    tab.winfo_toplevel().geometry(f"{width}x{height}")
+    tab.winfo_toplevel().deiconify()
+    tab.open_storyboard(fake_service.diner_id)
+    _settle(tab.winfo_toplevel(), 0.2)
+
+
+def test_rows_use_prompt_fields_and_set_rows_shows_them(tab, fake_service):
+    _open_tab(tab, fake_service)
+    tab.set_rows(["one", "two"])
+    assert all(isinstance(row.prompt_entry, MirroredText) for row in tab._row_widgets)
+    assert [_contents(row.prompt_entry) for row in tab._row_widgets] == ["one", "two"]
+    tab._row_widgets[0].negative_entry.insert("1.0", "blurry")
+    _settle(tab.winfo_toplevel(), 0.05)
+    rows, problems = tab._continue_rows()
+    assert (rows[0].prompt, rows[0].negative_prompt, rows[1].prompt) == ("one", "blurry", "two")
+    assert problems == []
+
+
+def test_six_rows_scroll_instead_of_clipping_and_queue_stays_reachable(tab, fake_service):
+    _open_tab(tab, fake_service, height=480)
+    while not tab.rows_widget.full:
+        tab.add_row("a prompt")
+    for row in tab._row_widgets:
+        row.prompt_entry.event_generate("<FocusIn>")  # every field grown
+    _settle(tab.winfo_toplevel(), 0.2)
+    assert tab.continue_scroll.has_scroll_overflow()
+    host = tab.continue_host
+    for button in (tab.queue_button, tab.preview_button):
+        assert button.winfo_ismapped()
+        assert button.winfo_rooty() + button.winfo_height() <= host.winfo_rooty() + host.winfo_height()

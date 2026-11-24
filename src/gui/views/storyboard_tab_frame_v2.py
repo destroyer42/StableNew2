@@ -37,6 +37,7 @@ from src.gui.view_contracts.storyboard_tree_contract import (
     StoryboardTreeContract,
 )
 from src.gui.views.storyboard_compare_window_v2 import StoryboardCompareWindowV2
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.storyboard_columns_v2 import StoryboardColumnsV2
 from src.gui.widgets.storyboard_continue_rows_v2 import ContinueRowFields, ContinueRowsV2
 from src.gui.widgets.storyboard_viewer_v2 import StoryboardViewerV2
@@ -748,23 +749,29 @@ class StoryboardTabFrameV2(ttk.Frame):
         ttk.Label(host, textvariable=self.ai_reason_var, style="Dark.TLabel").grid(
             row=2, column=0, sticky="e"
         )
-        self.rows_widget = ContinueRowsV2(host, on_change=self._rows_changed)
+        # The title, mode bar and Queue/Preview stay put; the rows (up to 6 roomy prompt fields) scroll between them.
+        host.rowconfigure(3, weight=1)
+        self.continue_scroll = ScrollableFrame(host)
+        self.continue_scroll.grid(row=3, column=0, sticky="nsew")
+        scrolled = self.continue_scroll.inner
+        scrolled.columnconfigure(0, weight=1)
+        self.rows_widget = ContinueRowsV2(scrolled, on_change=self._rows_changed)
         self.rows_frame = self.rows_widget
-        self.rows_widget.grid(row=3, column=0, sticky="ew")
+        self.rows_widget.grid(row=0, column=0, sticky="ew")
         self.add_row_button = ttk.Button(
-            host, text="+ Add row (up to 6)", style="Dark.TButton", command=self.add_row
+            scrolled, text="+ Add row (up to 6)", style="Dark.TButton", command=self.add_row
         )
-        self.add_row_button.grid(row=4, column=0, sticky="w", pady=2)
-        ttk.Label(host, textvariable=self.engine_var, style="Dark.TLabel", wraplength=480).grid(
-            row=5, column=0, sticky="w"
+        self.add_row_button.grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Label(scrolled, textvariable=self.engine_var, style="Dark.TLabel", wraplength=480).grid(
+            row=2, column=0, sticky="w"
         )
         self.experimental_check = ttk.Checkbutton(
-            host,
+            scrolled,
             text="This workflow is experimental: allow it for this Continue only",
             variable=self.experimental_var,
         )
         actions = ttk.Frame(host, style="Panel.TFrame")
-        actions.grid(row=7, column=0, sticky="e", pady=4)
+        actions.grid(row=4, column=0, sticky="e", pady=4)
         self.preview_button = ttk.Button(
             actions, text="Preview", style="Dark.TButton", command=self.preview
         )
@@ -897,7 +904,7 @@ class StoryboardTabFrameV2(ttk.Frame):
             getattr(self._service(), "needs_experimental_opt_in", lambda _tree: False)(tree)
         )
         if needs:
-            self.experimental_check.grid(row=6, column=0, sticky="w")
+            self.experimental_check.grid(row=3, column=0, sticky="w")
         else:
             self.experimental_check.grid_remove()
             self.experimental_var.set(False)

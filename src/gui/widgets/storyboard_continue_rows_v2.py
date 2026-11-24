@@ -14,6 +14,7 @@ from collections.abc import Callable
 from tkinter import ttk
 
 from src.gui.tooltip import attach_tooltip
+from src.gui.widgets.mirrored_text_v2 import MirroredText
 from src.gui.view_contracts.storyboard_tree_contract import (
     ROW_HEADERS,
     ROW_TIPS,
@@ -50,8 +51,9 @@ class ContinueRowFields:
         #: The Fixed seed's text; it is only sent when the mode is Fixed.
         self.seed_var = tk.StringVar(value=seed)
         self.number_label = ttk.Label(parent, text=str(number), width=2, anchor="e")
-        self.prompt_entry = ttk.Entry(parent, textvariable=self.prompt_var)
-        self.negative_entry = ttk.Entry(parent, textvariable=self.negative_var)
+        #: Word-wrapped multi-line fields that mirror the variables above (a long prompt never scrolls sideways).
+        self.prompt_entry = MirroredText(parent, self.prompt_var)
+        self.negative_entry = MirroredText(parent, self.negative_var)
         self.seed_frame = ttk.Frame(parent, style="Panel.TFrame")
         self.seed_box = ttk.Combobox(
             self.seed_frame,
@@ -97,7 +99,7 @@ class ContinueRowFields:
 
     def place(self, grid_row: int, number: int) -> None:
         self.number_label.configure(text=str(number))
-        sticky = ("e", "ew", "ew", "w", "")
+        sticky = ("ne", "new", "new", "nw", "n")  # a row's cells hang from its top when a prompt field grows
         for column, (widget, edge) in enumerate(zip(self.widgets(), sticky, strict=True)):
             widget.grid(row=grid_row, column=column, sticky=edge, padx=2, pady=1)
 
