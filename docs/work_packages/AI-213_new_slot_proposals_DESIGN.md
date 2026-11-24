@@ -1,8 +1,31 @@
 # AI-213 (design for review): propose a new matrix slot and where to put it
 
-Status: **design for owner review. Not authorized. No code is written until the owner approves it and answers the decisions
-below.** Dated 2026-11-22. Builds on AI-212 (`AI-212_slot_variety.md`); truth after any merge lives in
-`docs/Subsystems/AiAssist/AI_ASSIST.md`.
+Status: **approved by the owner and implemented** (resolutions below). Designed 2026-11-22; approved and built 2026-11-24.
+Builds on AI-212 (`AI-212_slot_variety.md`); truth after any merge lives in `docs/Subsystems/AiAssist/AI_ASSIST.md`.
+
+## Owner resolutions (2026-11-24)
+
+The six open decisions further down were resolved as this design's own recommendations:
+
+1. **Yes.** The accept action may insert exactly one `[[slot_name]]` marker into the positive prompt sentence and never reword
+   anything else. The inserted text is the marker plus at most one separating space on each side, only where the marker would
+   otherwise touch a word.
+2. **One proposal per press**, button **Add slot and place marker**.
+3. **Matrix growth is shown** ("matrix goes from A to B combinations", from the pipeline's own planner) before the press, and a
+   proposal that would take the matrix past its combination limit is refused (shown rejected, never offered).
+4. **Undo (verified during implementation): there is no single undo step.** The prompt editor is a plain Tk `Text` created
+   without an undo stack, and the Matrix tab keeps none; slot plus marker are two edits in two widgets. The dialog therefore says
+   how to revert: delete the slot's row in the Matrix tab and delete the marker (and a separating space, if one was added) from the
+   sentence. The addition itself is all-or-nothing: if the marker cannot be placed or the result is not exactly the expected
+   state, the slot row and any inserted text are taken back and the review is cleared.
+5. **Separate button, "Suggest new slot".** The AI-212 `SLOT_VARIETY` contract, request framing and tests are unchanged.
+6. **No quality claim.** The Preview label stays; the existing contract-acceptance harness (`tests/ai_assist/test_ai202c.py`) gained
+   unit-level `SLOT_PROPOSAL` cases only. No model or GPU was run; how well Qwen3.5-4B or LFM3 do this task is unverified.
+
+Implementation: `src/ai_assist` (kind, request fields `existing_slot_names` and `insertion_points`, framing, schema, validator),
+`src/gui_v2/ai_slot_proposal.py` (insertion points, judge, review model), `MatrixTabPanel.append_slot`,
+`PromptTabFrame.insert_slot_marker`, and the dialog section and accept path in `src/gui/ai_suggestion_dialog.py` and
+`src/gui/prompt_ai_suggestions.py`.
 
 ## Problem
 

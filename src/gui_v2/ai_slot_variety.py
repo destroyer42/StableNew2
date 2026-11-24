@@ -350,6 +350,10 @@ def _format_problem(value: str) -> str:
     return ""
 
 
+#: Public name for the per-value format rules, shared with the new-slot proposal judge (AI-213).
+value_problem = _format_problem
+
+
 @dataclass(frozen=True, slots=True)
 class VarietyRow:
     """One proposed value and its verdict. ``reason`` is empty exactly when the value may be offered for acceptance."""
@@ -538,6 +542,7 @@ __all__ = [
     "offered_label",
     "unavailable_variety_review",
     "value_key",
+    "value_problem",
     "variety_review",
     "variety_text",
 ]

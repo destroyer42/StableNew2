@@ -35,15 +35,48 @@ The **Storyboard** tab (Motion group, after Video Workflow) grows a scene from f
 the linear **Storyboard** drafts above (the Multi-shot sequence form under Video Workflow > Advanced): those start from a
 still image and stay exactly as they are; the shared word is a known wording overlap until the tab covers the same ground.
 
-- **Start:** **New from clip or image…** takes a completed StableNew Comfy video job id or a still image plus the workflow.
-  A smoothed (RIFE) clip enters as its real generated frames at the workflow's own fps, with a one-line note. Root
-  refusals appear in the status line, never as dialogs.
+- **Start (PR-VID-STORY-IMPORT):** **New from clip or image…** opens a non-modal picker with **Browse for video clip…** and
+  **Browse for still image…** (no job id is typed). The clip browser is the operating system's file dialog; it opens in the
+  output root's `movie_clips` folder (the output root itself, or the home folder, when that is missing), filters `*.mp4` and
+  `*.MP4`, and can go to any folder or drive. Cancel changes nothing. The chosen file's full path is in the read-only box
+  (hover shows it all); the filename suggests the title until you type your own. Picking only reads and inspects the file
+  (on a worker); nothing is created, queued or changed until **Create**.
+  - *A clip StableNew made.* The file is matched to its job only by repository evidence: its resolved path is recorded as
+    the output of exactly one completed job. A file name or partial path is never used, and two jobs recording the same
+    path is reported as ambiguous. That job's verified root preparation is used unchanged: native generated frames (a
+    smoothed/RIFE clip enters as its real frames at the workflow's fps, with the one-line note), workflow id/version,
+    integrity checks and governance. If it refuses (for example the native frames are gone), the refusal is shown in the
+    dialog and **Import the encoded MP4 as media** appears as a separate, explicit choice; it never bypasses the refusal
+    on its own.
+  - *Any other MP4* (another application's, or one moved out of the output folder). The picker shows filename, resolution,
+    frame rate, duration, frame count and that it has no StableNew provenance, and offers only workflows whose declared
+    frame rate and size can take it: a blocker (for example too few frames) disables Create with the reason. A needed
+    conversion (a centred cover resize to the workflow's size, keeping every Nth frame, relabelling a rate within 0.2 percent)
+    is described first and must be ticked before Create; nothing is cropped, stretched or interpolated silently. The root
+    is `storyboards/<id>/root/`: the decoded frames (basis `decoded`, never claimed native), `root_cut.json` and
+    `import_record.json` (source path and SHA-256, probe facts, conversion parameters, decoder), published atomically from a
+    staging folder with every file hash-pinned. The whole clip is the root cut and can be continued from any frame. The tree
+    file marks the root `origin: external` with `source_path`, `source_sha256`, and the hashes of the record and manifest;
+    there is no job id. Older Storyboard files carry none of these fields and open unchanged. The original MP4 is only
+    read. If the file changed between picking and Create, Create is refused. Limits: the existing decoder's 400 frames.
+  - Refusals appear inline in the picker, and nothing is partially published. A still image keeps the existing route.
 - **Shot columns:** one column per depth; cards show a thumbnail, label, prompt excerpt and the status read back from the
   repository, with Keep and Drop marks (a dropped take is hidden until **Show dropped (N)**; no file is moved or deleted).
+- **Thumbnails / Viewer switches:** two independent check boxes (default on), saved as presentation preferences in the
+  application's UI state file (`storyboard_media`), not in any Storyboard or job. Thumbnails off: cards are text only, no
+  image is loaded, and a load that was in flight cannot bring one back. Viewer off: playback stops, no frame is rendered or
+  requested, the Continue panel takes the space, and the slider, frame stepping, the readout (which keeps naming the
+  continuation target) and **Continue from this frame** still work. Showing either again keeps the selection, frame, marks and
+  target. Neither switch affects integrity checks, Resume/Replay or queued work.
 - **Viewer:** plays the selected take's whole stitched cut from its frame PNGs, with a slider that has a tick at every
   join, frame stepping, and a readout such as `frame 226 / 234 · A1b frame 78 of 81`. **Continue from this frame**
   can start from any frame; a frame inside an earlier shot branches from the take that owns it.
-- **Continue panel:** 1-6 rows (positive, negative, seed). **Parallel** queues one single-clip job per row; **Sequential**
+- **Continue panel:** 1-6 rows under persistent headers (row number, Positive Prompt, Negative Prompt, Seed, Remove) on one
+  grid, so columns stay aligned as rows are added, removed or the window is resized; the two prompt columns take the width.
+  A blank negative prompt uses the storyboard's own negative prompt when it has one, else the workflow's default (the hint
+  under the rows says which). Seed is **Random** (a seed is drawn when the row is queued; this is the default) or **Fixed**
+  (a whole number 0-2147483647, the existing seed contract; anything else is refused inline before anything is submitted).
+  Hovering the headers, the seed controls and Parallel/Sequential explains them. **Parallel** queues one single-clip job per row; **Sequential**
   queues one chained job. The engine line is inherited and read-only. **Preview** submits nothing. A take whose frames are
   missing or changed cannot be continued (its existing stitched MP4 still plays). **Write with AI…** is present and disabled
   with its reason.

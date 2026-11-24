@@ -57,6 +57,17 @@ def variety_answer_tokens(slot_count: int, per_slot: int) -> int:
     )
 
 
+#: New-slot proposal bounds (AI-213). The sentence is capped lower than a rewrite's so the frame, the closed list of
+#: insertion points and the answer budget fit the runtime's context.
+MAX_PROPOSALS = 3
+MIN_PROPOSAL_VALUES = 3
+MAX_PROPOSAL_VALUES = 6
+MAX_PROPOSAL_SLOT_NAME_CHARS = 64
+MAX_PROPOSAL_SENTENCE_CHARS = 2000
+MAX_PROPOSAL_POINTS = 8
+MAX_PROPOSAL_POINT_CHARS = 120
+MAX_PROPOSAL_EXISTING_SLOTS = 64
+
 VARIETY_FOCUS_DIRECT = "direct"
 VARIETY_FOCUS_EXPLORE = "explore"
 VARIETY_FOCUS_MODES: frozenset[str] = frozenset({VARIETY_FOCUS_DIRECT, VARIETY_FOCUS_EXPLORE})
@@ -73,6 +84,9 @@ class SuggestionKind(str, Enum):
     PLAN_PROPOSAL = "plan_proposal"
     #: More values for the pack's existing matrix slots (AI-212). Each value is added only by an explicit operator action.
     SLOT_VARIETY = "slot_variety"
+    #: A brand-new matrix slot and where to put its ``[[marker]]`` in the sentence (AI-213). Added only by an explicit
+    #: per-proposal operator action, never by this layer.
+    SLOT_PROPOSAL = "slot_proposal"
 
 
 class OutcomeCode(str, Enum):
@@ -160,6 +174,11 @@ class AssistRequest:
     #: whether proposals should directly support the goal or explore related variations. Instruction data only.
     variety_per_slot: int = DEFAULT_VARIETY_PER_SLOT
     variety_focus: str = VARIETY_FOCUS_DIRECT
+    #: ``SLOT_PROPOSAL`` only (AI-213): the pack's existing slot names (so the model avoids them) and the closed list of
+    #: insertion points, each a short code-made snippet of the sentence with the position marked. The model names a point
+    #: by its index in this tuple; it can never name a position that is not in it.
+    existing_slot_names: tuple[str, ...] = ()
+    insertion_points: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request_id, str) or not _REQUEST_ID.match(self.request_id):
@@ -195,6 +214,8 @@ class AssistRequest:
                 )
         elif self.kind is SuggestionKind.SLOT_VARIETY:
             self._check_variety()
+        elif self.kind is SuggestionKind.SLOT_PROPOSAL:
+            self._check_proposal()
         elif self.goal_text or self.allowed_stages:
             raise ValueError("goal_text and allowed_stages belong to plan requests only")
         self._check_current_target()
@@ -207,6 +228,12 @@ class AssistRequest:
             )
         if self.matrix_slots and self.kind is not SuggestionKind.SLOT_VARIETY:
             raise ValueError("matrix_slots belong to slot-variety requests only")
+        if (
+            self.existing_slot_names or self.insertion_points
+        ) and self.kind is not SuggestionKind.SLOT_PROPOSAL:
+            raise ValueError(
+                "existing_slot_names and insertion_points belong to slot proposals only"
+            )
         if self.kind is SuggestionKind.PROMPT_REWRITE and not self.positive_text.strip():
             raise ValueError("a rewrite request needs a positive prompt")
         if self.kind is SuggestionKind.TARGET_FIT_ADVICE and not self.allowed_targets:
@@ -297,6 +324,48 @@ class AssistRequest:
                 f"matrix slot names and values must total at most {MAX_VARIETY_INPUT_CHARS} characters"
             )
 
+    def _check_proposal(self) -> None:
+        if not self.goal_text.strip():
+            raise ValueError("a slot proposal request needs a goal")
+        if not self.positive_text.strip() or len(self.positive_text) > MAX_PROPOSAL_SENTENCE_CHARS:
+            raise ValueError(
+                f"a slot proposal request needs a positive prompt of at most {MAX_PROPOSAL_SENTENCE_CHARS} characters"
+            )
+        if (
+            self.negative_text
+            or self.target_policy_id
+            or self.allowed_targets
+            or self.allowed_workflows
+            or self.allowed_stages
+            or self.matrix_slots
+        ):
+            raise ValueError(
+                "a slot proposal request carries only a goal, the sentence, the slot names and the insertion points"
+            )
+        names, points = self.existing_slot_names, self.insertion_points
+        if not isinstance(names, tuple) or len(names) > MAX_PROPOSAL_EXISTING_SLOTS:
+            raise ValueError(
+                f"a slot proposal request lists at most {MAX_PROPOSAL_EXISTING_SLOTS} existing slot names"
+            )
+        for name in names:
+            if (
+                not isinstance(name, str)
+                or not name.strip()
+                or len(name) > MAX_PROPOSAL_SLOT_NAME_CHARS
+            ):
+                raise ValueError("an existing slot name must be 1-64 characters of text")
+        if not isinstance(points, tuple) or not 1 <= len(points) <= MAX_PROPOSAL_POINTS:
+            raise ValueError(
+                f"a slot proposal request needs 1 to {MAX_PROPOSAL_POINTS} insertion points"
+            )
+        for point in points:
+            if (
+                not isinstance(point, str)
+                or not point.strip()
+                or len(point) > MAX_PROPOSAL_POINT_CHARS
+            ):
+                raise ValueError("an insertion point must be short text")
+
     def matrix_chars(self) -> int:
         return sum(
             len(name) + sum(len(value) for value in values) for name, values in self.matrix_slots
@@ -308,6 +377,8 @@ class AssistRequest:
             + len(self.negative_text)
             + len(self.goal_text)
             + self.matrix_chars()
+            + sum(len(name) for name in self.existing_slot_names)
+            + sum(len(point) for point in self.insertion_points)
         )
 
     def digest(self) -> str:
@@ -342,6 +413,10 @@ class AssistRequest:
             )
             # AI-214: the requested quantity and goal focus are part of the request identity.
             payload += f"\x1fvariety:{self.variety_per_slot}:{self.variety_focus}"
+        if self.kind is SuggestionKind.SLOT_PROPOSAL:
+            # Appended only for this kind, so every other kind keeps its digest.
+            payload += "proposal:" + "".join(self.existing_slot_names)
+            payload += "" + "".join(self.insertion_points)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
@@ -373,6 +448,19 @@ class SlotValues:
 
 
 @dataclass(frozen=True, slots=True)
+class SlotProposal:
+    """One proposed new matrix slot (AI-213): ``insertion_point`` indexes the request's closed list.
+
+    A proposal only. The deterministic judge checks it and the slot plus its single marker are added solely by an explicit
+    operator action through the Matrix tab's and prompt editor's own edit paths. ``rationale`` is display text."""
+
+    slot_name: str
+    values: tuple[str, ...]
+    insertion_point: int
+    rationale: str
+
+
+@dataclass(frozen=True, slots=True)
 class AssistSuggestion:
     """A validated suggestion. Text fields are proposals for an editing buffer, not payloads."""
 
@@ -388,6 +476,8 @@ class AssistSuggestion:
     steps: tuple[PlanStep, ...] = ()
     #: ``SLOT_VARIETY`` only.
     slot_values: tuple[SlotValues, ...] = ()
+    #: ``SLOT_PROPOSAL`` only.
+    slot_proposals: tuple[SlotProposal, ...] = ()
 
     def to_diagnostics(self) -> dict[str, Any]:
         """Content-free view (kind, counts, codes) safe for logs and the event record."""
@@ -403,6 +493,7 @@ class AssistSuggestion:
             "step_count": len(self.steps),
             "slot_count": len(self.slot_values),
             "value_count": sum(len(entry.values) for entry in self.slot_values),
+            "proposal_count": len(self.slot_proposals),
         }
 
 
@@ -472,6 +563,15 @@ __all__ = [
     "MAX_REFUSAL_REASON_CHARS",
     "MAX_STEP_COUNT",
     "MAX_TEXT_CHARS",
+    "MAX_PROPOSALS",
+    "MIN_PROPOSAL_VALUES",
+    "MAX_PROPOSAL_VALUES",
+    "MAX_PROPOSAL_SLOT_NAME_CHARS",
+    "MAX_PROPOSAL_SENTENCE_CHARS",
+    "MAX_PROPOSAL_POINTS",
+    "MAX_PROPOSAL_POINT_CHARS",
+    "MAX_PROPOSAL_EXISTING_SLOTS",
+    "SlotProposal",
     "MAX_VARIETY_EXISTING_VALUES",
     "MAX_VARIETY_INPUT_CHARS",
     "MAX_VARIETY_NEW_VALUES",

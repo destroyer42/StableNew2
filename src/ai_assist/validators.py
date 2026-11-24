@@ -20,18 +20,23 @@ from src.ai_assist.contracts import (
     CHANGE_CODES,
     MAX_PLAN_STEPS,
     MAX_PLAN_TOTAL_COUNT,
+    MAX_PROPOSAL_SLOT_NAME_CHARS,
+    MAX_PROPOSAL_VALUES,
+    MAX_PROPOSALS,
     MAX_RATIONALE_CHARS,
     MAX_REFUSAL_REASON_CHARS,
     MAX_STEP_COUNT,
     MAX_TEXT_CHARS,
     MAX_VARIETY_RATIONALE_CHARS,
     MAX_VARIETY_VALUE_CHARS,
+    MIN_PROPOSAL_VALUES,
     SUGGESTION_SCHEMA_ID,
     VIDEO_STAGE,
     AssistRequest,
     AssistSuggestion,
     OutcomeCode,
     PlanStep,
+    SlotProposal,
     SlotValues,
     SuggestionKind,
 )
@@ -50,8 +55,10 @@ _ALLOWED_KEYS = frozenset(
         "refusal_reason",
         "steps",
         "slots",
+        "proposals",
     }
 )
+_PROPOSAL_KEYS = frozenset({"slot_name", "values", "insertion_point", "rationale"})
 _STEP_KEYS = frozenset({"stage", "target", "workflow", "count", "rationale"})
 _SLOT_ENTRY_KEYS = frozenset({"slot", "values", "rationale"})
 #: A rewrite may not grow without bound relative to what the operator wrote.
@@ -193,6 +200,45 @@ def _validate_slot_values(value: Any, request: AssistRequest) -> tuple[tuple[Slo
     return tuple(entries), ""
 
 
+def _validate_proposals(value: Any, request: AssistRequest) -> tuple[tuple[SlotProposal, ...], str]:
+    """Structure and bounds of a new-slot proposal answer (AI-213). Per-proposal judgement (slot name, value rules,
+    collisions, the sentence) is the GUI-side judge's job; this guarantees a bounded, typed, closed-list shape."""
+
+    if not isinstance(value, list) or not value:
+        return (), "proposals_missing"
+    if len(value) > MAX_PROPOSALS:
+        return (), "too_many_proposals"
+    entries: list[SlotProposal] = []
+    for item in value:
+        if not isinstance(item, dict) or set(item) != _PROPOSAL_KEYS:
+            return (), "proposal_fields_invalid"
+        name, values, point = item["slot_name"], item["values"], item["insertion_point"]
+        text, problem = _text_field(name, "slot_name", limit=MAX_PROPOSAL_SLOT_NAME_CHARS)
+        if problem or text is None or not text.strip():
+            return (), problem or "slot_name_missing"
+        if isinstance(point, bool) or not isinstance(point, int):
+            return (), "insertion_point_not_integer"
+        if not 0 <= point < len(request.insertion_points):
+            return (), "insertion_point_not_in_closed_list"
+        if not isinstance(values, list) or not values:
+            return (), "values_missing"
+        if len(values) < MIN_PROPOSAL_VALUES:
+            return (), "too_few_values"
+        if len(values) > MAX_PROPOSAL_VALUES:
+            return (), "too_many_values"
+        for proposal in values:
+            _text, problem = _text_field(proposal, "value", limit=MAX_VARIETY_VALUE_CHARS)
+            if problem or proposal is None:
+                return (), problem or "value_not_text"
+        rationale, problem = _text_field(
+            item["rationale"], "rationale", limit=MAX_VARIETY_RATIONALE_CHARS
+        )
+        if problem or rationale is None or not rationale.strip():
+            return (), problem or "rationale_missing"
+        entries.append(SlotProposal(text, tuple(values), point, rationale))
+    return tuple(entries), ""
+
+
 def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResult:
     """Classify the model's complete stdout for ``request``."""
 
@@ -251,7 +297,21 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
         return _malformed("unexpected_steps_field")
     if "slots" in document and request.kind is not SuggestionKind.SLOT_VARIETY:
         return _malformed("unexpected_slots_field")
-    if request.kind is SuggestionKind.SLOT_VARIETY:
+    if "proposals" in document and request.kind is not SuggestionKind.SLOT_PROPOSAL:
+        return _malformed("unexpected_proposals_field")
+    slot_proposals: tuple[SlotProposal, ...] = ()
+    if request.kind is SuggestionKind.SLOT_PROPOSAL:
+        if (
+            positive is not None
+            or negative is not None
+            or target is not None
+            or workflow is not None
+        ):
+            return _malformed("unexpected_text_field")
+        slot_proposals, problem = _validate_proposals(document.get("proposals"), request)
+        if problem:
+            return _malformed(problem)
+    elif request.kind is SuggestionKind.SLOT_VARIETY:
         if (
             positive is not None
             or negative is not None
@@ -310,6 +370,7 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
         changes=tuple(changes),
         steps=steps,
         slot_values=slot_values,
+        slot_proposals=slot_proposals,
     )
     return ValidationResult(OutcomeCode.SUGGESTION, "", suggestion)
 

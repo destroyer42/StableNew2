@@ -32,6 +32,25 @@ from src.gui_v2.ai_plan_advice import (
     planning_for_text,
     unavailable_plan_review,
 )
+from src.gui_v2.ai_slot_proposal import (
+    STALE_TEXT as PROPOSAL_STALE_TEXT,
+)
+from src.gui_v2.ai_slot_proposal import (
+    UNREADABLE_TEXT as PROPOSAL_UNREADABLE_TEXT,
+)
+from src.gui_v2.ai_slot_proposal import (
+    ProposalContext,
+    ProposalReview,
+    build_proposal_request,
+    judge_proposals,
+    marker_insertion,
+    proposal_blocker,
+    proposal_review,
+    unavailable_proposal_review,
+)
+from src.gui_v2.ai_slot_proposal import (
+    detail_text as proposal_detail_text,
+)
 from src.gui_v2.ai_slot_variety import (
     HIDDEN_TEXT,
     NO_SELECTION_TEXT,
@@ -85,6 +104,12 @@ class PromptAiSuggestions:
         self._variety_request: AssistRequest | None = None
         self._variety_suggestion: Any = None
         self._variety_added: set[int] = set()
+        # New-slot proposals (AI-213): same lifetime rules; the request, the context (sentence, matrix and marker offsets it
+        # was built from, plus proposals added since) and the validated suggestion. Memory only.
+        self._proposal: ProposalContext | None = None
+        self._proposal_request: AssistRequest | None = None
+        self._proposal_suggestion: Any = None
+        self._proposal_added: set[int] = set()
         self.outcome: AssistOutcome | None = None
         self._active_id: str | None = None
         self._closed = False
@@ -287,6 +312,9 @@ class PromptAiSuggestions:
             variety_problem=self._variety_problem(),
             variety_slots=self._variety_slots_text(),
             variety_slot_options=self._variety_slot_options(),
+            on_propose=self.suggest_slot,
+            on_add_proposal=self.add_slot_proposal,
+            proposal_problem=self._proposal_problem(),
         )
         return self.dialog
 
@@ -540,6 +568,8 @@ class PromptAiSuggestions:
     def _drop_variety(self) -> None:
         self._variety = self._variety_request = self._variety_suggestion = None
         self._variety_added = set()
+        self._proposal = self._proposal_request = self._proposal_suggestion = None
+        self._proposal_added = set()
 
     def suggest_variety(
         self,
@@ -751,6 +781,253 @@ class PromptAiSuggestions:
         dialog.show_variety(self._variety_review(after, trust))
         dialog.status(
             f"Added to slot {row.slot}. The pack is modified and unsaved; save it through the ordinary workflow."
+        )
+
+    # -- new-slot proposals (AI-213): a new matrix slot and one [[marker]], added only by an explicit per-proposal press -----
+    # The mutations are ``MatrixTabPanel.append_slot`` and ``PromptTabFrame.insert_slot_marker``, the Matrix tab's and the
+    # editor's own edit paths, done all-or-nothing after a full stale check. Nothing here saves, previews, compiles or
+    # queues, edits an existing slot or value, or rewords the sentence.
+
+    def _capture_proposal(self, offsets: tuple[int, ...] = ()) -> ProposalContext:
+        tab = self.tab
+        if self._closed or self.owner is None or self.owner.closed:
+            raise ContextUnavailable("AI Assist is unavailable during shutdown.")
+        pack = tab.workspace_state.current_pack
+        slot = tab.workspace_state.get_current_slot()
+        if pack is None or slot is None:
+            raise ContextUnavailable("Select a PromptPack slot first.")
+        if slot.template_id or slot.template_variables:
+            raise ContextUnavailable(
+                "New slots are unavailable for structured templates; their authored fields cannot take a marker safely."
+            )
+        sentence = slot.text
+        if tab.editor.get("1.0", "end-1c") != sentence:
+            raise ContextUnavailable(
+                "The editor has pending changes. Finish editing, then request again."
+            )
+        if sentence != sentence.rstrip("\n"):
+            raise ContextUnavailable(
+                "The positive prompt ends with a line break. Remove it first, then request again."
+            )
+        matrix = tab.workspace_state.get_matrix_config()
+        return ProposalContext(
+            id(pack),
+            id(matrix),
+            tab.workspace_state.get_current_slot_index(),
+            sentence,
+            matrix_state(matrix.slots),
+            offsets,
+            self._mode(),
+        )
+
+    def _current_proposal(self, offsets: tuple[int, ...]) -> ProposalContext | None:
+        try:
+            return self._capture_proposal(offsets)
+        except Exception:  # noqa: BLE001 - an unreadable source invalidates acceptance
+            return None
+
+    def _proposal_problem(self) -> str:
+        try:
+            context = self._capture_proposal()
+            resolver = ContentVisibilityResolver(self._mode())
+            if not resolver.is_visible(self.tab._current_slot_visibility_subject()):
+                return "This authored content is hidden by the current visibility mode."
+            return proposal_blocker(context.sentence, context.slots)
+        except ContextUnavailable as exc:
+            return str(exc)
+        except Exception:  # noqa: BLE001 - fixed copy only
+            return PROPOSAL_UNREADABLE_TEXT
+
+    def suggest_slot(self, goal: str) -> None:
+        dialog = self.dialog
+        if dialog is None or self._active_id is not None or self.owner is None:
+            return
+        code, explanation = self.owner.availability()
+        if code is not None:
+            dialog.show_proposal(
+                unavailable_proposal_review(explanation, trust_label=self._trust_label())
+            )
+            return
+        text = goal.strip()
+        if not text:
+            dialog.show_proposal(
+                unavailable_proposal_review("Type a goal in your own words first.")
+            )
+            return
+        try:
+            problem = self._proposal_problem()
+            if problem:
+                raise ContextUnavailable(problem)
+            context = self._capture_proposal()
+            resolver = ContentVisibilityResolver(self._mode())
+            subject = {
+                **self.tab._current_slot_visibility_subject(),
+                "positive_prompt": "\n".join([text, context.sentence]),
+            }
+            if not resolver.is_visible(subject):
+                raise ContextUnavailable(
+                    "This authored content is hidden by the current visibility mode."
+                )
+            request, points = build_proposal_request(
+                uuid4().hex,
+                text,
+                context.sentence,
+                context.slots,
+                content_class="sensitive"
+                if resolver.classify_item(subject).rating == "nsfw"
+                else "standard",
+            )
+            context = replace(context, offsets=tuple(p.offset for p in points))
+        except ContextUnavailable as exc:
+            dialog.show_proposal(unavailable_proposal_review(str(exc)))
+            return
+        except ValueError as exc:
+            known = ("Enter an authored", "The positive prompt", "The pack has")
+            dialog.show_proposal(
+                unavailable_proposal_review(
+                    str(exc)
+                    if str(exc).startswith(known)
+                    else "The goal or the prompt do not meet the request limits."
+                )
+            )
+            return
+        except Exception:  # noqa: BLE001 - no raw context in UI errors
+            dialog.show_proposal(unavailable_proposal_review(PROPOSAL_UNREADABLE_TEXT))
+            return
+        self._drop_variety()
+        self._proposal, self._proposal_request = context, request
+        self.snapshot = self.outcome = None
+        self._review_cancelled = False
+        self._active_id = request.request_id
+        dialog.running_proposal()
+        self.refresh()
+        result = self.owner.submit(request, self._proposal_completed)
+        if not result.accepted:
+            self._proposal_completed(
+                result.outcome or AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id)
+            )
+
+    def _proposal_review(self, context: ProposalContext, trust: str) -> ProposalReview:
+        request = self._proposal_request
+        if request is None:
+            return unavailable_proposal_review(PROPOSAL_STALE_TEXT, trust_label=trust)
+        rows = judge_proposals(
+            self._proposal_suggestion,
+            request,
+            context,
+            matrix_mapping=self.tab.workspace_state.get_matrix_config().to_mapping(),
+            is_visible=self._variety_visible(),
+        )
+        return proposal_review(rows, trust_label=trust, added=frozenset(self._proposal_added))
+
+    def _proposal_completed(self, outcome: AssistOutcome) -> None:
+        context, request, dialog = self._proposal, self._proposal_request, self.dialog
+        if (
+            self._closed
+            or self.owner is None
+            or self.owner.closed
+            or context is None
+            or request is None
+            or dialog is None
+            or self._active_id != outcome.request_id
+            or request.request_id != outcome.request_id
+        ):
+            return
+        self._active_id = None
+        trust = result_provider_label(outcome) or self._trust_label()
+        if trust:
+            dialog.set_trust_label(trust)
+        if self._review_cancelled:
+            self._drop_variety()
+            dialog.show_proposal(
+                unavailable_proposal_review(
+                    "Request cancelled. Nothing was added.", trust_label=trust
+                )
+            )
+            self.refresh()
+            return
+        suggestion = checked_suggestion(outcome, request) if outcome.ok else None
+        if suggestion is None:
+            self._drop_variety()
+            code = outcome.code if not outcome.ok else OutcomeCode.MALFORMED
+            text = provider_outcome_text(outcome) if code is outcome.code else OUTCOME_TEXT[code]
+            dialog.show_proposal(unavailable_proposal_review(text, trust_label=trust))
+            dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
+            self.refresh()
+            return
+        if self._current_proposal(context.offsets) != context:
+            # The pack, matrix or sentence changed while the model ran: never offer proposals judged against another state.
+            self._drop_variety()
+            dialog.clear_sensitive()
+            self.refresh()
+            return
+        self._proposal_suggestion = suggestion
+        dialog.show_proposal(self._proposal_review(context, trust))
+        dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
+        self.refresh()
+
+    def _roll_back_proposal(self, sentence: str) -> None:
+        self.tab.restore_inserted_text(sentence)
+        self.tab.matrix_tab_panel.remove_last_slot()
+
+    def add_slot_proposal(self, row_index: int) -> None:
+        """Add one offered proposal: the slot and its single marker, all-or-nothing, after a full stale check."""
+
+        context, suggestion, dialog = self._proposal, self._proposal_suggestion, self.dialog
+        if (
+            context is None
+            or suggestion is None
+            or dialog is None
+            or self._active_id is not None
+            or row_index in self._proposal_added
+        ):
+            return
+        current = self._current_proposal(context.offsets)
+        if current is None or current != context:
+            self._drop_variety()
+            dialog.clear_sensitive()
+            dialog.status(PROPOSAL_STALE_TEXT)
+            return
+        trust = self._variety_trust()
+        review = self._proposal_review(current, trust)
+        row = next((r for r in review.rows if r.index == row_index), None)
+        if row is None or not row.offered:
+            dialog.show_proposal(review)
+            if row is not None:
+                dialog.status(f"That proposal cannot be added. {proposal_detail_text(row)}")
+            return
+        offset = context.offsets[row.point]
+        inserted = marker_insertion(context.sentence, offset, row.slot_name)
+        expected = context.with_proposal_added(row.point, row.slot_name, row.values)
+        if not self.tab.matrix_tab_panel.append_slot(row.slot_name, list(row.values)):
+            dialog.status(
+                "The Matrix tab has an unfinished edit. Finish it, then add the proposal again."
+            )
+            return
+        placed = False
+        try:
+            placed = bool(self.tab.insert_slot_marker(offset, inserted))
+        except Exception:  # noqa: BLE001 - fall through to the rollback below
+            placed = False
+        after = self._current_proposal(expected.offsets)
+        if not placed or after is None or after != expected:
+            # All or nothing: take back whatever was done, then check the original state is restored.
+            self._roll_back_proposal(context.sentence)
+            restored = self._current_proposal(context.offsets) == context
+            self._drop_variety()
+            dialog.clear_sensitive()
+            dialog.status(
+                "The pack did not change as expected, so the addition was taken back. Request again."
+                if restored
+                else "The pack did not change as expected. Check the Matrix tab and the prompt, then request again."
+            )
+            return
+        self._proposal = after
+        self._proposal_added.add(row_index)
+        dialog.show_proposal(self._proposal_review(after, trust))
+        dialog.status(
+            f"Added slot {row.slot_name} and its marker. The pack is modified and unsaved; save it through the ordinary "
+            "workflow."
         )
 
     def _current(self, snapshot: SuggestionSnapshot) -> bool:

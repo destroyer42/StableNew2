@@ -96,6 +96,9 @@ class FakeService:
         self.saved_copies: list[str] = []
         self.files_touched: list[str] = []
         self.last_submit: ContinueRequest | None = None
+        self.plan: Any = None
+        self.inspect_error: Exception | None = None
+        self.create_error: Exception | None = None
         self.store = FakeStore(self)
         self.states: dict[str, str] = {}
         self.cuts: dict[str, CutManifest] = {}
@@ -203,6 +206,20 @@ class FakeService:
 
     def output_root(self) -> str:
         return str(self._folder)
+
+    def inspect_clip(self, path: str, settings: Any) -> Any:
+        self.calls.append(("inspect_clip", path))
+        if self.inspect_error is not None:
+            raise self.inspect_error
+        return self.plan
+
+    def create_from_clip_file(
+        self, path: str, title: str, settings: Any, **choices: Any
+    ) -> StoryboardTree:
+        self.calls.append(("create_from_clip_file", path, title, choices))
+        if self.create_error is not None:
+            raise self.create_error
+        return self.tree
 
     def create_from_clip(self, job_id: str, title: str) -> StoryboardTree:
         self.calls.append(("create_from_clip", job_id, title))

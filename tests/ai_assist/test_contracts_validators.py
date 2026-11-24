@@ -93,7 +93,12 @@ def test_suggestion_has_no_executable_field_and_diagnostics_hold_no_text() -> No
         "changes",
         "steps",
         "slot_values",
+        "slot_proposals",
     }
+    # AI-213: a proposal names a new slot, its values and a closed-list index; display text only.
+    from src.ai_assist.contracts import SlotProposal
+
+    assert set(SlotProposal.__slots__) == {"slot_name", "values", "insertion_point", "rationale"}
     # AI-212: a slot-variety entry names an existing slot and carries display text only.
     assert set(SlotValues.__slots__) == {"slot", "values", "rationale"}
     suggestion = AssistSuggestion(

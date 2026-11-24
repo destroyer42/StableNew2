@@ -105,6 +105,14 @@ FAKE_CHILD = textwrap.dedent(
     elif mode == "variety_invented_slot":
         print(json.dumps({"schema": schema, "status": "ok", "kind": "slot_variety", "slots": [
             {"slot": "weather", "values": ["rain"], "rationale": "new slot"}]}))
+    elif mode == "proposal_ok":
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "slot_proposal", "proposals": [
+            {"slot_name": "weather", "values": ["fog", "rain", "snow"], "insertion_point": 0,
+             "rationale": "weather sets the mood"}]}))
+    elif mode == "proposal_bad_point":
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "slot_proposal", "proposals": [
+            {"slot_name": "weather", "values": ["fog", "rain", "snow"], "insertion_point": 99,
+             "rationale": "weather sets the mood"}]}))
     elif mode == "end_marker":
         sys.stdout.write(json.dumps({"schema": schema, "status": "ok", "kind": "prompt_rewrite", "positive": positive,
                                      "negative": "", "changes": []}) + " [end of text]\\n")
