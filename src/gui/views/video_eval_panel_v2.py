@@ -24,6 +24,7 @@ from src.gui.theme_v2 import (
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui.views.video_eval_editor_dialog import VideoEvalEditorDialog
+from src.gui.views.video_eval_motion_review_window import open_motion_review
 from src.state.eval_plans_paths import initialize_eval_plans
 from src.state.workspace_paths import workspace_paths
 from src.utils.os_shell import open_file
@@ -62,6 +63,7 @@ class VideoEvalPanel(ttk.LabelFrame):
         self._confirm_import = confirm_import
         self._open_report = open_report
         self._editor: VideoEvalEditorDialog | None = None
+        self._motion_review: Any = None
         self._busy = False
         self._closed = False
         self._plans: list[PlanEntry] = []
@@ -120,7 +122,15 @@ class VideoEvalPanel(ttk.LabelFrame):
         self.run_folder_button = ttk.Button(
             run_actions, text="Open folder", command=self._open_run_folder
         )
-        for button in (self.report_button, self.open_report_button, self.run_folder_button):
+        self.motion_review_button = ttk.Button(
+            run_actions, text="Review Motion…", command=self._open_motion_review
+        )
+        for button in (
+            self.report_button,
+            self.open_report_button,
+            self.motion_review_button,
+            self.run_folder_button,
+        ):
             button.pack(side="left", padx=(0, 4))
         ttk.Label(self, textvariable=self.status_var, wraplength=460, style=MUTED_LABEL_STYLE).grid(
             row=5, column=0, columnspan=2, sticky="w", pady=(4, 0)
@@ -434,6 +444,23 @@ class VideoEvalPanel(ttk.LabelFrame):
         self._show_report(report.report_path, report.summary())
         self.refresh(status=self.status_var.get())
 
+    def _open_motion_review(self) -> None:
+        """Open the bounded Motion Review of the selected driving-motion run (it needs a built report)."""
+
+        run = self._selected_run()
+        if run is None or not (run.motion and run.built):
+            self.status_var.set(
+                "Build the report of a driving-motion run first, then review its motion."
+            )
+            return
+        sfw = not self._show_prompts()
+        self._motion_review = open_motion_review(
+            self.winfo_toplevel(),
+            run.path,
+            visibility_mode_provider=lambda: "sfw" if sfw else "nsfw",
+            runner=self._runner,
+        )
+
     def _open_selected_report(self) -> None:
         run = self._selected_run()
         if run and run.report_path is not None:
@@ -490,6 +517,7 @@ class VideoEvalPanel(ttk.LabelFrame):
             (self.report_button, run is not None),
             (self.open_report_button, run is not None and run.report_path is not None),
             (self.run_folder_button, run is not None),
+            (self.motion_review_button, run is not None and run.motion and run.built),
             (self.plan_folder_button, True),
             (self.refresh_button, True),
             (self.other_file_button, True),

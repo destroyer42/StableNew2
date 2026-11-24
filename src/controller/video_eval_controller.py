@@ -10,12 +10,20 @@ stays small. It coordinates only: the NJRs come from the existing builders (``Vi
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 from typing import Any
 
+from src.video.motion_source_preparation import prepare_for_form
 from src.video.svd_config import SVDConfig
 from src.video.svd_preprocess import read_svd_source_size
 from src.video.svd_target import select_svd_target_size
+from src.video.video_eval_motion import (
+    PREP_WORKFLOW,
+    MotionPreparationCache,
+    driving_support_error,
+    motion_form,
+)
 from src.video.video_eval_report import EvalReport, build_eval_report
 from src.video.video_eval_run import BuiltEvalJob, EvalAdmission, EvalRunPlan, VideoEvalRunService
 from src.video.video_eval_suite import (
@@ -43,18 +51,26 @@ class VideoEvalControllerMixin:
     def list_workflow_specs(self) -> list[dict[str, Any]]:  # provided by the controller
         raise NotImplementedError
 
-    def _eval_service(self) -> VideoEvalRunService:
+    def _eval_service(self, prepared: MotionPreparationCache | None = None) -> VideoEvalRunService:
+        workflow = (
+            partial(self._build_workflow_eval_job, prepared=prepared)
+            if prepared is not None
+            else self._build_workflow_eval_job
+        )
         return VideoEvalRunService(
             builders={
-                ARM_BACKEND_WORKFLOW: self._build_workflow_eval_job,
+                ARM_BACKEND_WORKFLOW: workflow,
                 ARM_BACKEND_SVD: self._build_svd_eval_job,
             }
         )
 
     def preview_eval_run(self, suite_path: str | Path) -> EvalRunPlan:
-        """Load a suite and build every (case, arm) NJR; queues nothing."""
+        """Load a suite and build every (case, arm) NJR; queues nothing.
 
-        return self._eval_service().plan(load_eval_suite(suite_path))
+        Driving-motion cases share one verified prepared derivative per identical workflow/version/length contract
+        within this preview (``MotionPreparationCache``)."""
+
+        return self._eval_service(MotionPreparationCache()).plan(load_eval_suite(suite_path))
 
     def submit_eval_run(self, plan: EvalRunPlan) -> EvalAdmission:
         """Admit a previewed eval run through ONE ``JobService.submit_njrs`` call."""
@@ -72,7 +88,13 @@ class VideoEvalControllerMixin:
             raise RuntimeError("The job history is not available to build an eval report.")
         return build_eval_report(run_dir, repository, cancel=cancel, show_prompts=show_prompts)
 
-    def _build_workflow_eval_job(self, case: EvalCase, arm: EvalArm, seed: int) -> BuiltEvalJob:
+    def _build_workflow_eval_job(
+        self,
+        case: EvalCase,
+        arm: EvalArm,
+        seed: int,
+        prepared: MotionPreparationCache | None = None,
+    ) -> BuiltEvalJob:
         form = self.build_default_form_state()
         overrides = dict(arm.overrides)
         named = str(overrides.get("workflow_id") or "")
@@ -91,6 +113,24 @@ class VideoEvalControllerMixin:
         form.update(prompt=case.prompt, negative_prompt=case.negative_prompt, seed=str(seed))
         if getattr(case, "is_sequence", False):  # a duck-typed single-clip case has no segments
             return self._build_workflow_eval_sequence(case, arm, form, seed)
+        binding = getattr(
+            case, "motion", None
+        )  # a duck-typed ordinary case has no driving reference
+        if binding is not None:
+            spec = self._njr_builder.spec_for(form)
+            problem = driving_support_error(spec)
+            if problem:  # the driving reference is never removed to make the arm queueable
+                raise ValueError(problem)
+            record = None
+            if binding.preparation_mode == PREP_WORKFLOW:
+                record = (prepared or MotionPreparationCache()).prepare(
+                    binding,
+                    spec,
+                    form,
+                    self._njr_builder.output_dir(),
+                    getattr(self, "_motion_preparer", prepare_for_form),
+                )
+            form = motion_form(binding, form, prepared_record=record)
         frozen = self._njr_builder.freeze_inputs(case.image_path, form)
         built = self._njr_builder.build_job(form, frozen)
         return BuiltEvalJob(njr=built.njr, seed=built.seed, frame_count=built.frame_count)

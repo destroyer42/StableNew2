@@ -25,15 +25,18 @@ class PlanEntry:
     jobs: int = 0
     experimental: bool = False
     error: str = ""
+    #: PR-VID-MOTION-410: at least one case binds a driving-motion reference.
+    motion: bool = False
 
     @property
     def label(self) -> str:
         if self.error:
             return f"Unavailable · {self.path.name}"
         experimental = " · experimental" if self.experimental else ""
+        motion = " · driving motion" if self.motion else ""
         return (
             f"{self.suite_id} — {self.cases} cases × {self.arms} arms "
-            f"({self.jobs} jobs){experimental} · {self.path.name}"
+            f"({self.jobs} jobs){experimental}{motion} · {self.path.name}"
         )
 
 
@@ -46,6 +49,8 @@ class RunEntry:
     built: bool
     report_path: Path | None
     rated: int | None
+    #: PR-VID-MOTION-410: at least one case of the run binds a driving-motion reference.
+    motion: bool = False
 
     @property
     def label(self) -> str:
@@ -53,8 +58,9 @@ class RunEntry:
         rated = (
             f"rated {self.rated}/{self.jobs}" if self.rated is not None else "ratings unreadable"
         )
+        motion = " · driving motion" if self.motion else ""
         return (
-            f"{self.created_at} · {self.suite_id} · {self.jobs} jobs · {status} · {rated}"
+            f"{self.created_at} · {self.suite_id} · {self.jobs} jobs{motion} · {status} · {rated}"
             f" · {self.path.name[-8:]}"
         )
 
@@ -80,6 +86,7 @@ def list_plans(folder: Path) -> list[PlanEntry]:
                 len(suite.arms),
                 suite.job_count,
                 any(arm.requests_experimental for arm in suite.arms),
+                motion=suite.has_motion,
             )
         )
     return sorted(entries, key=lambda entry: (-entry.mtime, entry.path.name.casefold()))
@@ -165,6 +172,10 @@ def list_runs(output_root: Path, *, include_unbuilt: bool = True) -> list[RunEnt
                 built,
                 report_path,
                 rated,
+                motion=any(
+                    isinstance(case, dict) and isinstance(case.get("motion"), dict)
+                    for case in manifest.get("cases", [])
+                ),
             )
         )
     return entries

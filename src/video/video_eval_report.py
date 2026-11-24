@@ -31,6 +31,7 @@ from typing import Any
 
 from src.utils.atomic_io import atomic_write_bytes
 from src.video import video_eval_assessment_html as assess_html
+from src.video import video_eval_motion_html as motion_html
 from src.video.video_eval_assessment import (
     Assessment,
     CellInput,
@@ -49,6 +50,20 @@ from src.video.video_eval_identity import (
     verify_source,
 )
 from src.video.video_eval_metrics import ClipMeasurement, measure_clip
+from src.video.video_eval_motion import MOTION_BLOCK
+from src.video.video_eval_motion_evidence import (
+    MotionCellContext,
+    build_motion_context,
+    merge_motion_identity,
+)
+from src.video.video_eval_motion_metrics import (
+    LIMITATIONS as DIAGNOSTIC_LIMITATIONS,
+)
+from src.video.video_eval_motion_metrics import (
+    PreviewCache,
+    diagnose_paths,
+    unavailable,
+)
 from src.video.video_eval_ratings_store import (
     RATING_COLUMNS,
     LoadedRatings,
@@ -60,8 +75,9 @@ from src.video.video_eval_ratings_store import (
     row_key,
     write_ratings,
 )
-from src.video.video_eval_rubric import ACTION_KEYS
+from src.video.video_eval_rubric import ACTION_KEYS, MOTION_RUBRIC_VERSION
 from src.video.video_eval_run import RUN_MANIFEST_NAME, RUN_SCHEMA
+from src.video.video_eval_transfer import TransferSummary, summarize_transfer
 from src.video.video_review_group import ArmState, classify_entry
 
 REPORT_SCHEMA = "stablenew.video-eval-report.v1"
@@ -133,6 +149,8 @@ class EvalCell:
     artifact_bytes: int | None = None
     hash_problem: str = ""
     facts: JobFacts | None = field(default=None, repr=False, compare=False)
+    #: PR-VID-MOTION-410: the global image-motion diagnostic against the effective driving reference (motion cells).
+    diagnostics: Mapping[str, Any] | None = field(default=None, compare=False)
 
     @property
     def metrics(self) -> Mapping[str, Any] | None:
@@ -153,6 +171,9 @@ class EvalReport:
     #: Where the pre-351 ratings.csv was copied if this build converted its layout.
     recovery_copy: Path | None = None
     ratings_revision: str = ""
+    #: Controlled-motion contexts by ``(case_id, arm_id)`` and the run's transferability summary (motion runs only).
+    motion_contexts: Mapping[tuple[str, str], MotionCellContext] = field(default_factory=dict)
+    transfer: TransferSummary | None = None
 
     @property
     def report_path(self) -> Path:
@@ -263,7 +284,10 @@ def baseline_flags(
 
 
 def _cell_inputs(
-    manifest: Mapping[str, Any], cells: list[EvalCell], sources: Mapping[str, SourceReference]
+    manifest: Mapping[str, Any],
+    cells: list[EvalCell],
+    sources: Mapping[str, SourceReference],
+    contexts: Mapping[tuple[str, str], MotionCellContext] | None = None,
 ) -> list[CellInput]:
     cases = {str(c.get("case_id")): c for c in manifest.get("cases", []) if isinstance(c, Mapping)}
     arms = {str(a.get("arm_id")): a for a in manifest.get("arms", []) if isinstance(a, Mapping)}
@@ -274,6 +298,7 @@ def _cell_inputs(
         source = sources.get(cell.case_id)
         metrics = cell.metrics
         duration = metrics.get("duration_seconds") if metrics else None
+        context = (contexts or {}).get((cell.case_id, cell.arm_id))
         inputs.append(
             CellInput(
                 case_id=cell.case_id,
@@ -284,19 +309,103 @@ def _cell_inputs(
                 measured=metrics is not None,
                 duration_seconds=float(duration) if isinstance(duration, (int, float)) else None,
                 current_sha256=cell.artifact_sha256,
-                identity=verify_cell_identity(
-                    facts=cell.facts,
-                    job=jobs.get(cell.job_id, {}),
-                    case=cases.get(cell.case_id, {}),
-                    arm=arms.get(cell.arm_id, {}),
-                    suite_seed=suite_seed,
-                    source=source,
+                identity=merge_motion_identity(
+                    verify_cell_identity(
+                        facts=cell.facts,
+                        job=jobs.get(cell.job_id, {}),
+                        case=cases.get(cell.case_id, {}),
+                        arm=arms.get(cell.arm_id, {}),
+                        suite_seed=suite_seed,
+                        source=source,
+                    ),
+                    context,
                 ),
                 flags=cell.flags,
                 source_available=source is not None and source.status is not SourceStatus.MISSING,
+                motion=context,
             )
         )
     return inputs
+
+
+def _motion_contexts(
+    manifest: Mapping[str, Any],
+    cells: list[EvalCell],
+    sources: Mapping[str, SourceReference],
+    cancel: threading.Event | None,
+    scope: EvalReportScope | None,
+) -> dict[tuple[str, str], MotionCellContext]:
+    """Verify every motion cell's inputs against the files on disk now (each file is hashed once per report)."""
+
+    cases = {str(c.get("case_id")): c for c in manifest.get("cases", []) if isinstance(c, Mapping)}
+    jobs = {str(j.get("job_id")): j for j in manifest["jobs"] if isinstance(j, Mapping)}
+    digests: dict[str, str | None] = {}
+
+    def hasher(path: str) -> str | None:
+        if scope is not None and not scope.permits_media(path):
+            return None
+        if path not in digests:
+            try:
+                digests[path] = hash_artifact(path, cancel=cancel)[0]
+            except ArtifactUnhashable:
+                digests[path] = None
+        return digests[path]
+
+    contexts: dict[tuple[str, str], MotionCellContext] = {}
+    for cell in cells:
+        case = cases.get(cell.case_id, {})
+        if not isinstance(case.get(MOTION_BLOCK), Mapping):
+            continue
+        source = sources.get(cell.case_id)
+        contexts[(cell.case_id, cell.arm_id)] = build_motion_context(
+            case,
+            jobs.get(cell.job_id, {}),
+            cell.facts.motion if cell.facts is not None else None,
+            source_sha256=source.current_sha256
+            if source is not None and source.displayable
+            else "",
+            hasher=hasher,
+        )
+    return contexts
+
+
+def _diagnose_cells(
+    cells: list[EvalCell],
+    contexts: Mapping[tuple[str, str], MotionCellContext],
+    diagnose: Callable[..., dict[str, Any]],
+    cancel: threading.Event | None,
+) -> list[EvalCell]:
+    """Attach the global image-motion diagnostic to each motion cell that has a clip and an unchanged driver."""
+
+    previews = PreviewCache()
+    out: list[EvalCell] = []
+    for cell in cells:
+        context = contexts.get((cell.case_id, cell.arm_id))
+        if context is None:
+            out.append(cell)
+            continue
+        if cancel is not None and cancel.is_set():
+            raise EvalCancelled("the report was cancelled")
+        if cell.path is None or cell.metrics is None:
+            result = unavailable(f"no generated clip to measure (job {cell.state})")
+        elif (
+            context.changed_inputs
+            or context.missing_inputs
+            or context.effective_driver_path is None
+        ):
+            result = unavailable(
+                "the effective driving reference is not the file that was admitted: "
+                + (
+                    ", ".join((*context.changed_inputs, *context.missing_inputs))
+                    or "no driver recorded"
+                )
+            )
+        else:
+            result = diagnose(
+                context.effective_driver_path, cell.path, cache=previews, cancel=cancel
+            )
+        out.append(EvalCell(**{**cell.__dict__, "diagnostics": result}))
+    return out
 
 
 def _publish(path: Path, text: str, *, parse_json: bool = False) -> None:
@@ -324,6 +433,7 @@ def build_eval_report(
     cancel: threading.Event | None = None,
     show_prompts: bool = True,
     scope: EvalReportScope | None = None,
+    diagnose: Callable[..., dict[str, Any]] = diagnose_paths,
 ) -> EvalReport:
     """Measure every finished clip of the run and write metrics, ratings and the contact sheet.
 
@@ -386,12 +496,31 @@ def build_eval_report(
         )
         for cell in cells
     ]
+    contexts: dict[tuple[str, str], MotionCellContext] = {}
+    try:
+        contexts = _motion_contexts(manifest, cells, sources, cancel, scope)
+        if contexts:
+            cells = _diagnose_cells(cells, contexts, diagnose, cancel)
+    except EvalCancelled as exc:
+        raise cancelled from exc
+    motion_run = bool(contexts)
     merged = merge_rows(
-        loaded, [((c.case_id, c.arm_id, c.job_id), c.artifact_sha256) for c in cells]
+        loaded,
+        [((c.case_id, c.arm_id, c.job_id), c.artifact_sha256) for c in cells],
+        contexts={
+            (c.case_id, c.arm_id, c.job_id): contexts[(c.case_id, c.arm_id)].context_sha256
+            for c in cells
+            if (c.case_id, c.arm_id) in contexts
+        }
+        if motion_run
+        else None,
     )
     ratings = {row_key(row): row for row in merged if row.get("job_id")}
-    assessment = project_assessment(manifest, _cell_inputs(manifest, cells, sources), ratings)
-    header = output_header(loaded)
+    assessment = project_assessment(
+        manifest, _cell_inputs(manifest, cells, sources, contexts), ratings
+    )
+    transfer = summarize_transfer(manifest, assessment) if motion_run else None
+    header = output_header(loaded, motion=motion_run)
     raw = (
         loaded.raw
         if header == loaded.header and tuple(merged) == (*loaded.rows, *loaded.keyless)
@@ -405,6 +534,8 @@ def build_eval_report(
         assessment=assessment,
         ratings=ratings,
         ratings_revision=hashlib.sha256(raw or b"").hexdigest(),
+        motion_contexts=contexts,
+        transfer=transfer,
     )
     metrics_text = json.dumps(report_payload(report), indent=2, sort_keys=True)
     page = render_html(report, show_prompts=show_prompts)
@@ -421,6 +552,16 @@ def build_eval_report(
     _publish(folder / REPORT_FILE, page)
     _publish(folder / METRICS_FILE, metrics_text, parse_json=True)
     return EvalReport(**{**report.__dict__, "recovery_copy": recovery})
+
+
+def _motion_identity(motion: Mapping[str, Any]) -> dict[str, Any]:
+    """A case's driving identity and structure for ``metrics.json``: no action, prompt or outcome text."""
+
+    return {
+        key: motion[key]
+        for key in ("driving", "category", "window", "preparation", "source")
+        if key in motion
+    }
 
 
 def report_payload(report: EvalReport) -> dict[str, Any]:
@@ -451,11 +592,23 @@ def report_payload(report: EvalReport) -> dict[str, Any]:
                 "artifact_sha256": cell.artifact_sha256,
                 "artifact_bytes": cell.artifact_bytes,
                 "assessment_state": state_of(cell),
+                **({"motion_diagnostic": cell.diagnostics} if cell.diagnostics is not None else {}),
             }
             for cell in report.cells
         ],
         "arm_means": arm_means(report),
     }
+    if report.motion_contexts:
+        payload["motion_evaluation"] = {
+            "rubric_version": MOTION_RUBRIC_VERSION,
+            "cases": {
+                str(case.get("case_id")): _motion_identity(case[MOTION_BLOCK])
+                for case in report.manifest.get("cases", [])
+                if isinstance(case, Mapping) and isinstance(case.get(MOTION_BLOCK), Mapping)
+            },
+            "diagnostic_limitations": list(DIAGNOSTIC_LIMITATIONS),
+            "transfer": report.transfer.to_payload() if report.transfer is not None else None,
+        }
     if report.assessment is not None:
         payload["identity_assessment"] = {
             **assessment_payload(report.assessment),
@@ -528,6 +681,14 @@ def _cell_html(cell: EvalCell | None, report: EvalReport, *, show_text: bool) ->
                 show_text=show_text,
             )
         )
+        parts.append(
+            motion_html.cell_html(
+                report.assessment.cell(cell.case_id, cell.arm_id),
+                cell.diagnostics,
+                show_text=show_text,
+            )
+        )
+        parts.append(motion_html.pair_html(report.assessment.comparison(cell.case_id, cell.arm_id)))
     if cell.artifact_sha256:
         parts.append(f"<div class='job'>sha256 {esc(cell.artifact_sha256[:16])}...</div>")
     parts.append(f"<div class='job'>job {esc(cell.job_id)}</div></td>")
@@ -561,7 +722,7 @@ def render_html(report: EvalReport, *, show_prompts: bool = True) -> str:
     out = [
         "<!doctype html><html><head><meta charset='utf-8'>",
         f"<title>Video eval {esc(str(manifest.get('run_id', '')))}</title>"
-        f"<style>{_STYLE}{assess_html.STYLE}</style></head><body>",
+        f"<style>{_STYLE}{assess_html.STYLE}{motion_html.STYLE}</style></head><body>",
         f"<h1>Video eval: {esc(str(suite.get('suite_id', '')))}</h1>",
         f"<p>Run {esc(str(manifest.get('run_id', '')))}, seed {esc(_fmt(suite.get('seed')))}, "
         f"baseline arm <b>{esc(baseline)}</b>. {esc(report.summary())}</p>",
@@ -575,6 +736,11 @@ def render_html(report: EvalReport, *, show_prompts: bool = True) -> str:
         out.append(assess_html.summary_html(report.assessment))
         out.append(assess_html.rubric_html())
         out.append(assess_html.caveats_html(show_text=show_prompts))
+    if report.motion_contexts:
+        out.append(motion_html.rubric_html())
+        out.append(motion_html.caveats_html())
+        out.append(motion_html.cross_subject_html(report.assessment))
+        out.append(motion_html.transfer_html(report.transfer))
     out.append("<table class='grid'><thead><tr><th>case</th>")
     for arm in arms:
         marker = " (baseline)" if arm.get("arm_id") == baseline else ""
@@ -592,6 +758,16 @@ def render_html(report: EvalReport, *, show_prompts: bool = True) -> str:
                 assess_html.source_html(report.sources.get(case_id), show_media=show_prompts)
             )
         out.append(f"<small>{prompt}</small>")
+        if report.motion_contexts:
+            effective = next(
+                (
+                    ctx.job_motion
+                    for (case_key, _arm), ctx in report.motion_contexts.items()
+                    if case_key == case_id and ctx.job_motion is not None
+                ),
+                None,
+            )
+            out.append(motion_html.case_html(case, show_media=show_prompts, effective=effective))
         segments = case.get("segments")
         if isinstance(segments, list) and segments:
             # One job per arm runs every segment; the clip beside it is the assembled sequence (VID-A14B-SVI-375).
