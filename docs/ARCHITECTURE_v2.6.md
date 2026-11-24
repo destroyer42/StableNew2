@@ -616,6 +616,14 @@ fresh lease after expiry or process replacement. Windows stores the host and Sit
 credentials and approved folder identity in current-user DPAPI. Connector and hosted
 relay use existing native output readers and rating writers. Opt-in phone queue
 operations use the frozen native Preview, JobService and native receipt path.
+
+The phone connector checks the authenticated Worker version and capabilities before enrollment,
+restored presence, and credential replacement. Its versioned mutation URLs are rejected by v25.
+The v2 Worker also verifies the route and version header, and v2 browser authorization can bind
+only to v2 connector presence. A temporary refusal preserves saved enrollment and fences native
+calls. In the browser, desktop, hosted viewer and phone events update only their owning connection
+and selection generation. A pending receipt can be reconciled only under the owning authorization;
+the native queue and repository still resolve admission. See the
 [Operator Site runbook](runbooks/stablenew_operator_site.md)
 
 The queue stack is constructed in one place: `src/app/runtime_stack.py` builds the

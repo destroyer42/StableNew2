@@ -35,6 +35,9 @@ CONTRACT_GATE_TARGETS = (
     # canonical production path (NJR -> JobService -> SQLite -> run_njr) and queue-first submission: the smoke list above
     # (core_run_path, TestQueuedModeExecution) plus test_fake_backend_traverses_job_service_sqlite_and_canonical_result in the
     # image-backend contract file listed first in this group.
+    # The cross-repository phone connector refuses unsupported authorization mutations.
+    "tests/controller/test_site_phone_connector.py::test_enrollment_rechecks_compatibility_and_refusal_does_not_strand_pending_grant",
+    "tests/controller/test_site_phone_connector.py::test_http_uses_v2_routes_and_distinguishes_legacy_refusal_from_unavailability",
     # replay: new identity, parent lineage
     "tests/controller/test_pipeline_replay_job_v2.py",
     "tests/pipeline/test_replay_vs_fresh_v2.py",

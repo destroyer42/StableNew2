@@ -44,7 +44,10 @@ from src.app.site_phone_queue import PHONE_QUEUE_PATH, PhoneQueueView
 from src.app.site_queue_bridge import SITE_ORIGIN
 from src.utils.thread_registry import get_thread_registry
 
-_ENDPOINT = "/api/stablenew/connector/"
+_CONNECTION_VERSION = 2
+_ENDPOINT = f"/api/stablenew/connector/v{_CONNECTION_VERSION}/"
+_REQUIRED_CAPABILITIES = frozenset({"enrollment", "presence", "browser_lease"})
+_VERSION_MESSAGE = "Update the Site and StableNew to matching connection versions."
 _HOST = urlsplit(SITE_ORIGIN).netloc
 _LIBRARY_READS = frozenset({"search", "thumbnails", "inspect", "albums", "album", "review_results"})
 _RUN = re.compile(r"/v1/output/runs/(\d{8}_\d{6}_[A-Za-z0-9_-]{1,150})")
@@ -66,6 +69,10 @@ class PhoneUnauthenticated(PhoneConnectorError):
 
 class PhoneGrantExpired(PhoneUnauthenticated):
     """The authenticated Worker no longer has this grant."""
+
+
+class PhoneGrantRevoked(PhoneUnauthenticated):
+    """The authenticated Worker has revoked this grant."""
 
 
 class PhoneVersionMismatch(PhoneConnectorError):
@@ -91,6 +98,13 @@ def _json_reply(status: int, payload: dict[str, Any]) -> _Reply:
     return _Reply(status, "application/json", json.dumps(payload, ensure_ascii=True).encode())
 
 
+def _response_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    payload = dict(pairs)
+    if len(payload) != len(pairs):
+        raise ValueError("Duplicate response fields.")
+    return payload
+
+
 class PhoneHttp:
     """Send credentials only to the fixed TLS origin. Follow no redirects."""
 
@@ -105,7 +119,7 @@ class PhoneHttp:
         body: dict[str, Any] | _Reply | None = None,
     ) -> dict[str, Any]:
         headers = {
-            "X-StableNew-Connection": "2",
+            "X-StableNew-Connection": str(_CONNECTION_VERSION),
             "OAI-Sites-Authorization": f"Bearer {site_secret}",
             "Authorization": f"Bearer {credential}",
         }
@@ -127,26 +141,36 @@ class PhoneHttp:
             connection.request("POST", _ENDPOINT + action, body=data, headers=headers)
             response = connection.getresponse()
             raw = response.read(131073)
-            if response.status == 409 and raw == b'{"error":"connection_version_required"}':
-                raise PhoneVersionMismatch(
-                    "Update the Site and StableNew to matching connection versions."
-                )
-            if response.status == 410 and raw == b'{"error":"phone_pairing_expired"}':
-                raise PhoneGrantExpired("The phone pairing expired or was revoked.")
+            if response.status == 204 and action != "compatibility":
+                return {}
+            payload = None
+            if len(raw) <= 131072:
+                try:
+                    payload = json.loads(raw, object_pairs_hook=_response_object)
+                except (ValueError, RecursionError):
+                    pass
+            reason = payload.get("error") if isinstance(payload, dict) else None
+            if response.status == 404 or (
+                response.status == 409 and reason == "connection_version_required"
+            ):
+                raise PhoneVersionMismatch(_VERSION_MESSAGE)
+            if response.status == 410:
+                if reason == "phone_pairing_expired":
+                    raise PhoneGrantExpired("The phone pairing expired.")
+                if reason == "phone_pairing_revoked":
+                    raise PhoneGrantRevoked("The phone pairing was revoked.")
             if response.status in {401, 403, 410}:
                 raise PhoneUnauthenticated(
                     "The private Site refused the phone pairing or service credential."
                 )
-            if response.status == 204:
-                return {}
-            if response.status != 200 or len(raw) > 131072:
+            if action == "compatibility" and (
+                response.status == 204 or response.status == 200 and not isinstance(payload, dict)
+            ):
+                raise PhoneVersionMismatch(_VERSION_MESSAGE)
+            if response.status != 200:
                 raise PhoneConnectorError(
                     "The private Site could not complete the phone connection."
                 )
-            try:
-                payload = json.loads(raw)
-            except (ValueError, RecursionError) as error:
-                raise PhoneConnectorError("Invalid response from the private Site.") from error
             if not isinstance(payload, dict):
                 raise PhoneConnectorError("Invalid response from the private Site.")
             return payload
@@ -279,6 +303,7 @@ class SitePhoneConnector:
         self._grant: PhoneGrant | None = None
         self._catalog: SiteOutputCatalog | None = None
         self._presence: tuple[str, float] | None = None
+        self._needs_compatibility = True
         self._claim: _Claim | None = None
         self.status = "Phone review is off."
 
@@ -303,6 +328,19 @@ class SitePhoneConnector:
                 remove_listener()
                 self.status = "Phone review is unavailable during shutdown."
 
+    def _check_compatibility(self, site_secret: str, credential: str) -> None:
+        reply = self._http.request("compatibility", site_secret, credential)
+        version, capabilities = reply.get("version"), reply.get("capabilities")
+        if (
+            type(version) is not int
+            or version != _CONNECTION_VERSION
+            or not isinstance(capabilities, list)
+            or any(type(capability) is not str for capability in capabilities)
+            or len(capabilities) != len(set(capabilities))
+            or not _REQUIRED_CAPABILITIES.issubset(capabilities)
+        ):
+            raise PhoneVersionMismatch(_VERSION_MESSAGE)
+
     def inspect(self, site_secret: str, challenge: str) -> Future[PhoneEnrollment]:
         future: Future[PhoneEnrollment] = Future()
 
@@ -314,6 +352,7 @@ class SitePhoneConnector:
                     raise PhoneConnectorError(
                         "Enter the Site service credential and the phone pairing code."
                     )
+                self._check_compatibility(site_secret, challenge)
                 result = self._http.request("inspect", site_secret, challenge)
                 grant_id, name = result.get("id"), result.get("name")
                 if (
@@ -355,9 +394,24 @@ class SitePhoneConnector:
                     native_review=native_review,
                     queue_submit=queue_submit,
                 )
+                self._check_compatibility(grant.site_secret, grant.pending)
+                if self._revoke_requested.is_set() or self._stopping.is_set():
+                    raise PhoneConnectorError("Phone pairing was canceled.")
                 self._store.save(grant)
                 self._grant = grant
                 self.status = "Confirming phone pairing with the private Site…"
+                try:
+                    self._confirm_enrollment(grant)
+                except (PhoneVersionMismatch, PhoneGrantExpired):
+                    # This new attempt was refused before the Worker could enroll it.
+                    self._store.clear()
+                    self._grant = None
+                    self.status = "Phone review is off."
+                    raise
+                except PhoneConnectorError:
+                    # A lost reply can follow server-side enrollment. Keep the approved
+                    # recovery record and retry with the same challenge, host and scopes.
+                    pass
                 future.set_result(None)
             except PhoneConnectorError as error:
                 future.set_exception(error)
@@ -382,15 +436,18 @@ class SitePhoneConnector:
                     PhoneConnectorError("A saved pairing and a valid Site credential are required.")
                 )
                 return
-            self._drop_presence()
             grant = replace(self._grant, site_secret=credential)
             try:
+                self._check_compatibility(credential, grant.pending or grant.host_secret)
                 self._store.save(grant)
+            except PhoneConnectorError as error:
+                future.set_exception(error)
             except OSError:
                 future.set_exception(
                     PhoneConnectorError("Windows could not save the updated Site credential.")
                 )
             else:
+                self._drop_presence()
                 self._grant = grant
                 future.set_result(None)
 
@@ -476,34 +533,22 @@ class SitePhoneConnector:
                 self._drop_presence()
                 self.status = "The approved Output folder changed. Revoke and pair the phone again."
                 return
+            if self._presence is not None and self._presence[1] <= time.monotonic():
+                self._drop_presence()
+            if self._needs_compatibility:
+                self._check_compatibility(grant.site_secret, grant.pending or grant.host_secret)
             if grant.pending:
-                approved = self._http.request(
-                    "enroll",
-                    grant.site_secret,
-                    grant.pending,
-                    instance=self._instance,
-                    body={
-                        "host": hashlib.sha256(grant.host_secret.encode()).hexdigest(),
-                        "rating": grant.rating,
-                        **({"native_review": True} if grant.native_review else {}),
-                        **({"queue_submit": True} if grant.queue_submit else {}),
-                    },
-                )
-                if approved.get("id") != grant.id:
-                    raise PhoneConnectorError("The approved phone pairing changed.")
-                grant = replace(grant, pending="")
-                self._store.save(grant)
-                self._grant = grant
+                grant = self._confirm_enrollment(grant)
             self._poll(grant)
         except PhoneVersionMismatch as error:
             self._drop_presence()
             self.status = str(error)
-        except PhoneGrantExpired:
+        except (PhoneGrantExpired, PhoneGrantRevoked) as error:
             self._drop_presence()
             try:
                 self._store.clear()
                 self._grant = None
-                self.status = "Phone pairing expired or was revoked. Pair again from your phone."
+                self.status = f"{error} Pair again from your phone."
             except OSError:
                 self.status = "Windows could not remove the expired phone pairing."
         except PhoneUnauthenticated:
@@ -512,9 +557,32 @@ class SitePhoneConnector:
                 "The Site refused phone review. Check the credential or revoke and pair again."
             )
         except (PhoneConnectorError, ValueError, OSError):
-            if self._presence and self._presence[1] <= time.monotonic():
-                self._drop_presence()
+            # Fence new work while unavailable. The same live presence can recover
+            # its catalog and opaque media scope after compatibility is verified.
+            self._needs_compatibility = True
             self.status = "Phone review is offline. StableNew will reconnect."
+
+    def _confirm_enrollment(self, grant: PhoneGrant) -> PhoneGrant:
+        if self._revoke_requested.is_set() or self._stopping.is_set():
+            raise PhoneConnectorError("Phone pairing was canceled.")
+        approved = self._http.request(
+            "enroll",
+            grant.site_secret,
+            grant.pending,
+            instance=self._instance,
+            body={
+                "host": hashlib.sha256(grant.host_secret.encode()).hexdigest(),
+                "rating": grant.rating,
+                **({"native_review": True} if grant.native_review else {}),
+                **({"queue_submit": True} if grant.queue_submit else {}),
+            },
+        )
+        if approved.get("id") != grant.id:
+            raise PhoneConnectorError("The approved phone pairing changed.")
+        confirmed = replace(grant, pending="")
+        self._store.save(confirmed)
+        self._grant = confirmed
+        return confirmed
 
     def _live(self, session: str, folder: PhoneFolder) -> bool:
         current = self._presence
@@ -523,6 +591,7 @@ class SitePhoneConnector:
         return (
             not self._stopping.is_set()
             and not self._revoke_requested.is_set()
+            and not self._needs_compatibility
             and current is not None
             and current[0] == session
             and current[1] > now
@@ -531,6 +600,7 @@ class SitePhoneConnector:
         )
 
     def _drop_presence(self) -> None:
+        self._needs_compatibility = True
         self._presence = None
         if self._catalog is not None:
             self._catalog.revoke()
@@ -539,10 +609,8 @@ class SitePhoneConnector:
     def _poll(self, grant: PhoneGrant) -> None:
         started = time.monotonic()
         reply = self._request(grant, "poll", body={"claim": self._claim is None})
-        if reply.get("version") != 2:
-            raise PhoneVersionMismatch(
-                "Update the Site and StableNew to matching connection versions."
-            )
+        if type(reply.get("version")) is not int or reply["version"] != _CONNECTION_VERSION:
+            raise PhoneVersionMismatch(_VERSION_MESSAGE)
         session, ttl = reply.get("session"), reply.get("ttl")
         if (
             not isinstance(session, str)
@@ -559,6 +627,7 @@ class SitePhoneConnector:
                 review_records=self._review_records if grant.native_review else None,
             )
         self._presence = session, started + ttl / 1000
+        self._needs_compatibility = False
         if not self._live(session, grant.folder):
             self._drop_presence()
             return
