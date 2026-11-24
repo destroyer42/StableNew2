@@ -14,7 +14,6 @@ from collections.abc import Callable
 from tkinter import ttk
 
 from src.gui.tooltip import attach_tooltip
-from src.gui.widgets.mirrored_text_v2 import MirroredText
 from src.gui.view_contracts.storyboard_tree_contract import (
     ROW_HEADERS,
     ROW_TIPS,
@@ -22,6 +21,7 @@ from src.gui.view_contracts.storyboard_tree_contract import (
     SEED_RANDOM,
     SEED_TIPS,
 )
+from src.gui.widgets.mirrored_text_v2 import MirroredText
 from src.video.storyboard_tree import MAX_ROWS
 
 PROMPT_MINSIZE = 140
@@ -99,7 +99,8 @@ class ContinueRowFields:
 
     def place(self, grid_row: int, number: int) -> None:
         self.number_label.configure(text=str(number))
-        sticky = ("ne", "new", "new", "nw", "n")  # a row's cells hang from its top when a prompt field grows
+        # A row's cells hang from its top, so they stay put when a prompt field grows.
+        sticky = ("ne", "new", "new", "nw", "n")
         for column, (widget, edge) in enumerate(zip(self.widgets(), sticky, strict=True)):
             widget.grid(row=grid_row, column=column, sticky=edge, padx=2, pady=1)
 

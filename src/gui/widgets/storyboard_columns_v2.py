@@ -128,7 +128,9 @@ class StoryboardColumnsV2(ttk.Frame):
         first, last = view()
         if (direction < 0 and first <= 0.0) or (direction > 0 and last >= 1.0):
             return None
-        (self._canvas.xview_scroll if sideways else self._canvas.yview_scroll)(direction * 2, "units")
+        (self._canvas.xview_scroll if sideways else self._canvas.yview_scroll)(
+            direction * 2, "units"
+        )
         return "break"
 
     def see(self, take_id: str) -> None:

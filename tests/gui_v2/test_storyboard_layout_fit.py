@@ -5,12 +5,25 @@ Design: docs/superpowers/specs/2026-11-24-storyboard-viewer-tree-layout-design.m
 
 from __future__ import annotations
 
+import time
+import tkinter as tk
 from tkinter import ttk
+from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 from src.gui import theme_v2
+from src.gui.app_state_v2 import AppStateV2
 from src.gui.design_system_v2 import SELECTED_CARD_FRAME, Colors
+from src.gui.view_contracts.storyboard_tree_contract import Card, Column
+from src.gui.views.storyboard_tab_frame_v2 import StoryboardTabFrameV2
+from src.gui.widgets.mirrored_text_v2 import FOCUS_LINES, FOCUS_SHRINK_MS, REST_LINES, MirroredText
+from src.gui.widgets.storyboard_columns_v2 import StoryboardColumnsV2
+from src.gui.widgets.storyboard_viewer_v2 import MIN_IMAGE_HEIGHT, StoryboardViewerV2, fit_size
+from src.services.ui_state_store import UIStateStore
+from src.video.sequence_plan import ROOT_PARENT
+from tests.gui_v2.storyboard_tab_helpers import FakeService, fake_controller
 
 pytestmark = pytest.mark.gui
 
@@ -27,12 +40,6 @@ def test_selected_card_style_has_a_thick_accent_border(tk_root):
 
 
 # ---------------------------------------------------------------- Task 2: the viewer fits its picture
-
-import time  # noqa: E402
-
-from PIL import Image  # noqa: E402
-
-from src.gui.widgets.storyboard_viewer_v2 import MIN_IMAGE_HEIGHT, StoryboardViewerV2, fit_size  # noqa: E402
 
 
 def _settle(root, seconds: float = 0.15) -> None:
@@ -108,11 +115,6 @@ def test_hidden_viewer_drops_a_late_frame(tk_root):
 
 # ---------------------------------------------------------------- Task 3: the take tree scrolls and shows the selection
 
-from types import SimpleNamespace  # noqa: E402
-
-from src.gui.view_contracts.storyboard_tree_contract import Card, Column  # noqa: E402
-from src.gui.widgets.storyboard_columns_v2 import StoryboardColumnsV2  # noqa: E402
-
 
 def _card(take_id: str, *, selected: bool = False, on_path: bool = False) -> Card:
     return Card(
@@ -129,7 +131,10 @@ def _card(take_id: str, *, selected: bool = False, on_path: bool = False) -> Car
 def _tree(*, selected: str = "", on_path: tuple[str, ...] = ()) -> tuple[Column, ...]:
     tall = Column(
         "Shot 2",
-        tuple(_card(f"c{n}", selected=f"c{n}" == selected, on_path=f"c{n}" in on_path) for n in range(1, 7)),
+        tuple(
+            _card(f"c{n}", selected=f"c{n}" == selected, on_path=f"c{n}" in on_path)
+            for n in range(1, 7)
+        ),
     )
     others = tuple(Column(f"Shot {n}", (_card(f"d{n}"),)) for n in range(3, 7))
     return (Column("Shot 1", (_card("root"),)), tall, *others)
@@ -149,7 +154,8 @@ def _inside_viewport(widget: StoryboardColumnsV2, take_id: str) -> bool:
     frame, canvas = widget.card_frames[take_id], widget._canvas
     return (
         frame.winfo_rooty() >= canvas.winfo_rooty()
-        and frame.winfo_rooty() + frame.winfo_height() <= canvas.winfo_rooty() + canvas.winfo_height()
+        and frame.winfo_rooty() + frame.winfo_height()
+        <= canvas.winfo_rooty() + canvas.winfo_height()
         and frame.winfo_rootx() >= canvas.winfo_rootx()
         and frame.winfo_rootx() + frame.winfo_width() <= canvas.winfo_rootx() + canvas.winfo_width()
     )
@@ -184,7 +190,11 @@ def test_selected_card_uses_the_selected_style_and_marker(tk_root):
     assert str(frames["c2"].cget("style")) == SELECTED_CARD_FRAME
     assert str(frames["c1"].cget("style")) == "Card.TFrame"
     assert str(frames["c3"].cget("style")) == "Panel.TFrame"
-    texts = [str(child.cget("text")) for child in frames["c2"].winfo_children() if isinstance(child, ttk.Label)]
+    texts = [
+        str(child.cget("text"))
+        for child in frames["c2"].winfo_children()
+        if isinstance(child, ttk.Label)
+    ]
     assert any(text.startswith("▶ ") for text in texts)
 
 
@@ -215,12 +225,6 @@ def test_render_keeps_scroll_offsets(tk_root):
 
 
 # ---------------------------------------------------------------- Task 4: the pane split and the Continue banner
-
-from src.gui.app_state_v2 import AppStateV2  # noqa: E402
-from src.gui.views.storyboard_tab_frame_v2 import StoryboardTabFrameV2  # noqa: E402
-from src.services.ui_state_store import UIStateStore  # noqa: E402
-from src.video.sequence_plan import ROOT_PARENT  # noqa: E402
-from tests.gui_v2.storyboard_tab_helpers import FakeService, fake_controller  # noqa: E402
 
 
 @pytest.fixture
@@ -317,15 +321,6 @@ def test_refresh_and_reselecting_keep_a_chosen_continue_frame(tab, fake_service)
 
 # ---------------------------------------------------------------- Task 5: roomy prompt fields, scrolling Continue panel
 
-import tkinter as tk  # noqa: E402
-
-from src.gui.widgets.mirrored_text_v2 import (  # noqa: E402
-    FOCUS_LINES,
-    FOCUS_SHRINK_MS,
-    REST_LINES,
-    MirroredText,
-)
-
 
 def _field(root, value: str = "") -> tuple[MirroredText, tk.StringVar]:
     root.deiconify()
@@ -392,7 +387,9 @@ def test_field_grows_on_focus_and_shrinks_after_blur(tk_root):
     field.event_generate("<FocusIn>")
     assert int(field.cget("height")) == FOCUS_LINES
     field.event_generate("<FocusOut>")
-    assert int(field.cget("height")) == FOCUS_LINES  # not at once: a click on the next row must not move
+    assert (
+        int(field.cget("height")) == FOCUS_LINES
+    )  # not at once: a click on the next row must not move
     _settle(tk_root, (FOCUS_SHRINK_MS + 150) / 1000)
     assert int(field.cget("height")) == REST_LINES
 
@@ -445,4 +442,6 @@ def test_six_rows_scroll_instead_of_clipping_and_queue_stays_reachable(tab, fake
     host = tab.continue_host
     for button in (tab.queue_button, tab.preview_button):
         assert button.winfo_ismapped()
-        assert button.winfo_rooty() + button.winfo_height() <= host.winfo_rooty() + host.winfo_height()
+        assert (
+            button.winfo_rooty() + button.winfo_height() <= host.winfo_rooty() + host.winfo_height()
+        )
