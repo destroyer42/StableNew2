@@ -49,10 +49,16 @@ def _built_trial(tmp_path):
 def test_trial_is_the_same_graph_with_a_policy_not_a_hard_refusal():
     published, trial = _spec("1.0.0"), _spec(TRIAL)
     assert trial.is_experimental and published.is_experimental
-    assert trial.backend_defaults["prompt_template"] == published.backend_defaults["prompt_template"]
-    assert trial.backend_defaults["asset_integrity"] == published.backend_defaults["asset_integrity"]
+    assert (
+        trial.backend_defaults["prompt_template"] == published.backend_defaults["prompt_template"]
+    )
+    assert (
+        trial.backend_defaults["asset_integrity"] == published.backend_defaults["asset_integrity"]
+    )
     # 1.0.0 is untouched and still refused.
-    assert published.backend_defaults["resource_readiness"]["qualification_status"] == "not_qualified"
+    assert (
+        published.backend_defaults["resource_readiness"]["qualification_status"] == "not_qualified"
+    )
     assert "admission_block_reason" in published.backend_defaults["operator_projection"]
     # The trial replaces the refusal with an enforced floor and carries no block reason.
     policy = trial.backend_defaults["resource_readiness"]
