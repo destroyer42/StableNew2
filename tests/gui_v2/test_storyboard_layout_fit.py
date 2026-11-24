@@ -212,3 +212,104 @@ def test_render_keeps_scroll_offsets(tk_root):
     _settle(tk_root)
     after = (widget._canvas.yview()[0], widget._canvas.xview()[0])
     assert abs(after[0] - before[0]) < 0.02 and abs(after[1] - before[1]) < 0.02
+
+
+# ---------------------------------------------------------------- Task 4: the pane split and the Continue banner
+
+from src.gui.app_state_v2 import AppStateV2  # noqa: E402
+from src.gui.views.storyboard_tab_frame_v2 import StoryboardTabFrameV2  # noqa: E402
+from src.services.ui_state_store import UIStateStore  # noqa: E402
+from src.video.sequence_plan import ROOT_PARENT  # noqa: E402
+from tests.gui_v2.storyboard_tab_helpers import FakeService, fake_controller  # noqa: E402
+
+
+@pytest.fixture
+def fake_service(tmp_path):
+    return FakeService(tmp_path)
+
+
+@pytest.fixture
+def tab(tk_root, fake_service, tmp_path):
+    created = StoryboardTabFrameV2(
+        tk_root,
+        app_controller=fake_controller(fake_service),
+        app_state=AppStateV2(),
+        ui_state_store=UIStateStore(tmp_path / "ui_state.json"),
+    )
+    created.pack(fill="both", expand=True)
+    yield created
+    created.destroy()
+
+
+def _spy_see(tab: StoryboardTabFrameV2) -> list[str]:
+    seen: list[str] = []
+    real = tab.columns.see
+    tab.columns.see = lambda take_id: (seen.append(take_id), real(take_id))[1]  # type: ignore[method-assign]
+    return seen
+
+
+def test_tree_and_body_share_a_draggable_pane(tab):
+    assert [str(pane) for pane in tab.pane.panes()] == [str(tab.columns), str(tab._body)]
+
+
+def test_banner_when_nothing_is_selected(tab):
+    assert tab.banner_var.get() == "Nothing selected to continue from"
+
+
+def test_banner_names_the_continue_target(tab, fake_service):
+    tab.open_storyboard(fake_service.diner_id)
+    tab.select_take("t1")
+    text = tab.banner_var.get()
+    assert text.startswith("Continuing from: ")
+    assert tab.contract.label("t1") in text
+    assert f"frame {tab.target[1] + 1}" in text
+
+
+def test_banner_says_the_clip_when_the_root_is_selected(tab, fake_service):
+    tab.open_storyboard(fake_service.diner_id)
+    tab.select_take(ROOT_PARENT)
+    assert tab.banner_var.get().startswith("Continuing from: ")
+    assert tab.contract.label(ROOT_PARENT) in tab.banner_var.get()
+
+
+def test_banner_follows_continue_from_this_frame(tab, fake_service):
+    tab.open_storyboard(fake_service.diner_id)
+    tab.select_take("t1")
+    tab.viewer.seek(2)
+    tab._continue_from_frame(2)
+    assert f"frame {tab.target[1] + 1}" in tab.banner_var.get()
+    assert tab.contract.label(tab.target[0]) in tab.banner_var.get()
+
+
+def test_selecting_reveals_the_selected_card(tab, fake_service):
+    tab.open_storyboard(fake_service.diner_id)
+    seen = _spy_see(tab)
+    tab.select_take("t3")
+    assert seen == ["t3"]
+
+
+def test_auto_refresh_does_not_scroll_the_tree(tab, fake_service):
+    tab.open_storyboard(fake_service.diner_id)
+    tab.select_take("t3")
+    seen = _spy_see(tab)
+    tab.refresh()
+    assert seen == []
+
+
+def test_hidden_selected_take_does_not_break_the_tree_or_banner(tab, fake_service):
+    tab.open_storyboard(fake_service.diner_id)
+    tab.select_take("t2")  # dropped, and "Show dropped" is off
+    assert "t2" not in tab.columns.card_take_ids()
+    tab.render(reveal_selected=True)
+    assert tab.banner_var.get().startswith("Continuing from: ")
+
+
+def test_refresh_and_reselecting_keep_a_chosen_continue_frame(tab, fake_service):
+    tab.open_storyboard(fake_service.diner_id)
+    tab.select_take("t1")
+    tab._continue_from_frame(2)
+    chosen = tab.target
+    tab.refresh()
+    assert tab.target == chosen
+    tab.select_take("t1")  # the same take again is not a new clip to extend
+    assert tab.target == chosen
