@@ -145,6 +145,9 @@ class PreparedRoot:
     width: int
     height: int
     smoothing: SmoothingNote | None
+    #: The ``TreeRoot`` source fields of an imported external clip (``origin`` and the source/record identities);
+    #: ``None`` for every root made from a job or a still image.
+    external: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +161,7 @@ class _ClipJob:
 
 
 #: ``(staging folder, final root folder) -> manifest``; frame paths always name the final folder.
-_Build = Callable[[Path, Path], CutManifest]
+RootBuild = Callable[[Path, Path], CutManifest]
 
 
 # ----------------------------------------------------------------------------------------- small helpers
@@ -242,7 +245,7 @@ def _root_manifest(
 # ----------------------------------------------------------------------------------------- publishing
 
 
-def _root_target(output_root: str | Path, storyboard_id: str) -> Path:
+def root_target(output_root: str | Path, storyboard_id: str) -> Path:
     if not isinstance(storyboard_id, str) or not _STORYBOARD_ID.fullmatch(storyboard_id):
         raise StoryboardRootError(
             f"the storyboard id {storyboard_id!r} must be 1-64 letters, digits, '-' or '_'"
@@ -257,7 +260,7 @@ def _root_target(output_root: str | Path, storyboard_id: str) -> Path:
     return folder
 
 
-def _publish(folder: Path, build: _Build) -> tuple[CutFrame, CutManifest]:
+def publish_root(folder: Path, build: RootBuild) -> tuple[CutFrame, CutManifest]:
     """Build in a temporary sibling folder and rename it to ``root/`` only when everything succeeded."""
 
     parent = folder.parent
@@ -630,12 +633,12 @@ def prepare_clip_root(
     case nothing is left under ``<output_root>/storyboards/<storyboard_id>``.
     """
 
-    folder = _root_target(output_root, storyboard_id)
+    folder = root_target(output_root, storyboard_id)
     output = Path(output_root).expanduser().resolve()
     job = _load_clip_job(repository, job_id, registry)
     settings = _clip_settings(job)
     smoothed_fps: int | None = None
-    build: _Build
+    build: RootBuild
     if job.stage.get(PLAN_KEY):
         root_of = _take_root if _plan(job).storyboard is not None else _sequence_root
 
@@ -686,7 +689,7 @@ def prepare_clip_root(
                 )
 
             build = build_decoded
-    pinned, manifest = _publish(folder, build)
+    pinned, manifest = publish_root(folder, build)
     return PreparedRoot(
         kind="clip",
         job_id=job_id,
@@ -705,20 +708,18 @@ def prepare_clip_root(
     )
 
 
-def prepare_image_root(
-    *, image_path: str | Path, settings: Mapping[str, Any], registry: Any
-) -> PreparedRoot:
-    """A still image root: the operator's approved prompt-directed workflow and its settings, chosen once.
+def resolve_root_workflow(
+    settings: Mapping[str, Any], registry: Any, *, subject: str
+) -> tuple[Any, dict[str, int], dict[str, Any]]:
+    """The approved prompt-directed workflow an image or imported clip root makes its takes with.
 
-    Only :data:`ROOT_SETTING_KEYS` are kept; the experimental opt-in is never honoured here (a still root runs an
-    approved workflow). The first takes have no lead-in, so nothing is written.
-    """
+    Returns ``(spec, frame-count policy, kept settings)``; only the settings a root inherits are kept and the
+    experimental opt-in is never honoured here. A missing, unknown, experimental, disabled or non-sequence workflow
+    is refused by name with the registry's own reasons."""
 
     workflow_id = str(settings.get("workflow_id") or "").strip()
     if not workflow_id:
-        raise StoryboardRootError(
-            "a storyboard from a still image needs a workflow to make its takes"
-        )
+        raise StoryboardRootError(f"{subject} needs a workflow to make its takes")
     version = str(settings.get("workflow_version") or "").strip() or None
     try:
         spec = registry.get(workflow_id, version)
@@ -733,11 +734,6 @@ def prepare_image_root(
         raise StoryboardRootError(
             f"{workflow_id} cannot make storyboard takes: {'; '.join(dict.fromkeys(problems))}"
         )
-    path = Path(image_path).expanduser().resolve()
-    try:
-        width, height = read_still_size(path, label="the storyboard's still image")
-    except SequencePlanError as exc:
-        raise StoryboardRootError(str(exc)) from exc
     kept: dict[str, Any] = {
         "workflow_id": spec.workflow_id,
         "workflow_version": spec.workflow_version,
@@ -750,6 +746,26 @@ def prepare_image_root(
             if key in settings
         }
     )
+    return spec, policy, kept
+
+
+def prepare_image_root(
+    *, image_path: str | Path, settings: Mapping[str, Any], registry: Any
+) -> PreparedRoot:
+    """A still image root: the operator's approved prompt-directed workflow and its settings, chosen once.
+
+    Only :data:`ROOT_SETTING_KEYS` are kept; the experimental opt-in is never honoured here (a still root runs an
+    approved workflow). The first takes have no lead-in, so nothing is written.
+    """
+
+    spec, policy, kept = resolve_root_workflow(
+        settings, registry, subject="a storyboard from a still image"
+    )
+    path = Path(image_path).expanduser().resolve()
+    try:
+        width, height = read_still_size(path, label="the storyboard's still image")
+    except SequencePlanError as exc:
+        raise StoryboardRootError(str(exc)) from exc
     return PreparedRoot(
         kind="image",
         job_id=None,
@@ -772,7 +788,11 @@ __all__ = [
     "STORYBOARDS_FOLDER",
     "PreparedRoot",
     "SmoothingNote",
+    "RootBuild",
     "StoryboardRootError",
     "prepare_clip_root",
     "prepare_image_root",
+    "publish_root",
+    "resolve_root_workflow",
+    "root_target",
 ]

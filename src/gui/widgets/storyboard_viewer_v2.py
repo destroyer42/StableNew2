@@ -3,6 +3,11 @@
 The viewer holds no frames: it asks its owner for frame ``index`` (``on_frame``), and the owner loads it on a worker and
 calls :meth:`show_image`. Playback advances the index at the cut's fps; a frame that arrives late is dropped by the
 owner's latest-wins runner, so scrubbing never blocks the UI.
+
+``set_media_visible(False)`` collapses the picture and the Play control and stops playback; nothing is rendered or
+requested while hidden, but the slider, frame stepping, the readout and **Continue from this frame** still work,
+so the selected frame (and the continuation target) is kept and can be changed without any image. Showing the
+media again requests the current frame.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ class StoryboardViewerV2(ttk.Frame):
         self._after: str | None = None
         self._photo: Any = None
         self._syncing = False
+        self._media_visible = True
         self.title_var = tk.StringVar(value="")
         self.readout_var = tk.StringVar(value="No cut selected")
         self.note_var = tk.StringVar(value="")
@@ -112,6 +118,26 @@ class StoryboardViewerV2(ttk.Frame):
             self._index = 0
             self.readout_var.set("No frames yet")
 
+    @property
+    def media_visible(self) -> bool:
+        return self._media_visible
+
+    def set_media_visible(self, visible: bool) -> None:
+        if visible == self._media_visible:
+            return
+        self._media_visible = visible
+        if visible:
+            self.image_label.grid()
+            self.play_button.pack(side="left", padx=2, after=self.prev_button)
+            if self._count:
+                self._on_frame(self._index)
+        else:
+            self.pause()
+            self.image_label.grid_remove()
+            self.play_button.pack_forget()
+            self.image_label.configure(image="")
+            self._photo = None
+
     def clear(self) -> None:
         self.set_cut(0, (), self._fps)
         self.image_label.configure(image="")
@@ -139,7 +165,8 @@ class StoryboardViewerV2(ttk.Frame):
         finally:
             self._syncing = False
         self.readout_var.set(self._readout(self._index))
-        self._on_frame(self._index)
+        if self._media_visible:
+            self._on_frame(self._index)
 
     def _on_slide(self, value: str) -> None:
         if self._syncing:
@@ -152,6 +179,8 @@ class StoryboardViewerV2(ttk.Frame):
         self.seek(self._index + delta)
 
     def show_image(self, photo: Any) -> None:
+        if not self._media_visible:
+            return  # a frame that arrives after the viewer was hidden is dropped
         self._photo = photo
         self.image_label.configure(image=photo)
 
@@ -162,6 +191,8 @@ class StoryboardViewerV2(ttk.Frame):
         return self._after is not None
 
     def toggle_play(self) -> None:
+        if not self._media_visible:
+            return
         if self.playing:
             self.pause()
             return

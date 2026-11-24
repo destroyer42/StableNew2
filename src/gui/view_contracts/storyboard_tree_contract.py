@@ -21,6 +21,29 @@ from src.video.storyboard_tree import MAX_ROWS, StoryboardTree, Take
 MAX_SEED: Final = 2147483647
 EXCERPT_LIMIT: Final = 40
 AI_NOT_SET_UP: Final = "AI Assist is not set up"
+SEED_RANDOM: Final = "Random"
+SEED_FIXED: Final = "Fixed"
+#: The Continue rows' persistent column headers, in column order (the last is the Remove action).
+ROW_HEADERS: Final = ("#", "Positive Prompt", "Negative Prompt", "Seed", "Remove")
+ROW_TIPS: Final = {
+    "#": "The row number. Each row becomes one clip.",
+    "Positive Prompt": "What should happen in the next clip. Required.",
+    "Negative Prompt": (
+        "What generation should avoid. Optional free text; the note under the rows says what a blank row uses."
+    ),
+    "Seed": (
+        "Random draws a new seed when the row is queued. Fixed uses the number you give, so the clip can be reproduced."
+    ),
+    "Remove": "Remove this row.",
+}
+SEED_TIPS: Final = {
+    SEED_RANDOM: "Random seed: a new seed is drawn when the row is queued (a Preview never draws one).",
+    SEED_FIXED: "Fixed seed: the whole number 0-2147483647 you enter is used as given, so the clip is reproducible.",
+}
+MODE_TIPS: Final = {
+    "parallel": "Parallel: every row is an independent alternative branching from the selected frame (one job per row).",
+    "sequential": "Sequential: the rows form a chain; each clip continues from the end of the one before it (one job).",
+}
 #: Frames a take drops at its start because they repeat the frame before them (spec 7.6).
 DEFAULT_TRIMMED: Final = 1
 
@@ -257,6 +280,35 @@ class StoryboardTreeContract:
         return errors
 
     @staticmethod
+    def seed_text(mode: str, value: str, number: int) -> tuple[str, str | None]:
+        """A row's seed control as the ``ContinueRow`` seed, and why it is unusable (``None`` when it is fine).
+
+        Random sends ``random`` (resolved at admission, never here); Fixed sends the number exactly as the existing seed
+        contract accepts it (a whole number 0-2147483647) and is refused here, before any submission, otherwise."""
+
+        if mode != SEED_FIXED:
+            return "random", None
+        text = value.strip()
+        if not text:
+            return "", (
+                f"Row {number}: a Fixed seed needs a whole number 0-{MAX_SEED}; "
+                "choose Random to draw one when queued."
+            )
+        if not (text.isascii() and text.isdigit() and int(text) <= MAX_SEED):
+            return text, f"Row {number}: a Fixed seed must be a whole number 0-{MAX_SEED}."
+        return text, None
+
+    def negative_hint(self) -> str:
+        """What a row with a blank Negative Prompt really uses (the admission rule, ``resolved_negative_prompt``)."""
+
+        inherited = " ".join(
+            str(dict(self.tree.root.settings).get("negative_prompt") or "").split()
+        )
+        if inherited:
+            return f"Blank negative prompt: uses this storyboard's own, “{_excerpt(inherited)}”."
+        return "Blank negative prompt: uses the workflow's default negative prompt."
+
+    @staticmethod
     def queue_label(mode: str, count: int) -> str:
         return f"Queue chain of {count}" if mode == "sequential" else f"Queue {count} takes"
 
@@ -292,6 +344,12 @@ class StoryboardTreeContract:
 
 __all__ = [
     "AI_NOT_SET_UP",
+    "MODE_TIPS",
+    "ROW_HEADERS",
+    "ROW_TIPS",
+    "SEED_FIXED",
+    "SEED_RANDOM",
+    "SEED_TIPS",
     "Card",
     "Column",
     "StoryboardTreeContract",

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-970 of 970 modules have a docstring.
+973 of 973 modules have a docstring.
 
 ## src/
 
@@ -410,6 +410,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `stale_pack_contract.py`: Toolkit-neutral rules for adding a PromptPack that has unsaved Prompt-tab edits (GUI-TRUTH-912)
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
 - `storyboard_contract.py`: Toolkit-neutral capture and dirty-state for the existing sequence editor; no executable state
+- `storyboard_import_contract.py`: Tk-free state of the Storyboard clip picker and of the media-visibility preferences (PR-VID-STORY-IMPORT)
 - `storyboard_tree_contract.py`: Tk-free state of the Storyboard tab (PR-VID-STORY-380, spec 7.2)
 - `task_navigation_contract.py`: Task-first navigation contract (PR-GUI-410)
 - `video_batch_contract.py`: Toolkit-neutral state for the Video Workflow multi-source batch section (PR-VID-BATCH-200)
@@ -516,6 +517,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `responsive_wrap_v2.py`: Width-following label wrapping for responsive workspaces (PR-GUI-110)
 - `scrollable_frame_v2.py`: Provide a vertically scrollable Tk frame with shared wheel routing and focus visibility
 - `storyboard_columns_v2.py`: Shot columns with take cards for the Storyboard tab (PR-VID-STORY-380)
+- `storyboard_continue_rows_v2.py`: The Continue panel's rows for the Storyboard tab (PR-VID-STORY-IMPORT)
 - `storyboard_viewer_v2.py`: Frame viewer with a whole-cut slider and join ticks for the Storyboard tab (PR-VID-STORY-380)
 - `submission_notice_v2.py`: Inline, non-modal submission feedback (PR-VID-UX-313)
 - `tab_overview_panel_v2.py`: Render workspace overviews with optional expanded help for each major tab
@@ -1022,6 +1024,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `storyboard_cuts.py`: Read storyboard cuts back from the repository and pin lead-ins (PR-VID-STORY-380, spec 7.5)
 - `storyboard_frame_cache.py`: Bounded cache of downscaled storyboard frames and thumbnails (PR-VID-STORY-380, spec 7.2)
 - `storyboard_history.py`: Create new authoring intent only from a canonical frozen sequence snapshot, never from artifacts
+- `storyboard_import.py`: Start a Storyboard from an MP4 file the operator picked (PR-VID-STORY-IMPORT)
 - `storyboard_projection.py`: Read-only projection of a storyboard's takes from the repository (PR-VID-STORY-380, spec 7.7)
 - `storyboard_readiness.py`: Read-only source identity and workflow projections for editable Storyboards; admission stays authoritative
 - `storyboard_reconcile.py`: Adopt a repository job into a storyboard tree by the storyboard link its plan carries (PR-VID-STORY-380, spec…

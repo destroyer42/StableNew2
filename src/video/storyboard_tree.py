@@ -27,6 +27,29 @@ _MAX_TEXT = 65536
 _MAX_TITLE = 200
 _MAX_JSON_DEPTH = 8
 _ROOT_KINDS = frozenset({"clip", "image"})
+#: The fields every root writes; an imported clip root adds :data:`_ROOT_EXTERNAL_FIELDS` (and only it does).
+_ROOT_REQUIRED = frozenset(
+    {
+        "kind",
+        "job_id",
+        "image_path",
+        "image_sha256",
+        "manifest_path",
+        "manifest_sha256",
+        "settings",
+        "fps",
+        "width",
+        "height",
+        "smoothing_text",
+    }
+)
+_ROOT_EXTERNAL_FIELDS = (
+    "origin",
+    "source_path",
+    "source_sha256",
+    "source_record_path",
+    "source_record_sha256",
+)
 _MODES = frozenset({"parallel", "sequential"})
 _MARKS = frozenset({"none", "kept", "dropped"})
 
@@ -121,9 +144,19 @@ class TreeRoot:
     width: int
     height: int
     smoothing_text: str
+    #: ``job``: made from a StableNew job or still image (every root before PR-VID-STORY-IMPORT); ``external``: an MP4
+    #: StableNew did not make, whose decoded frames became the root. The fields below exist in the file only for an
+    #: external root, so every earlier file still reads and re-saves byte for byte.
+    origin: Literal["job", "external"] = "job"
+    #: The selected MP4 (resolved path) and its content hash, as inspected when the root was made.
+    source_path: str = ""
+    source_sha256: str = ""
+    #: ``import_record.json`` next to the root frames: probe facts, conversion parameters and the decode record.
+    source_record_path: str = ""
+    source_record_sha256: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "kind": self.kind,
             "job_id": self.job_id,
             "image_path": self.image_path,
@@ -136,12 +169,40 @@ class TreeRoot:
             "height": self.height,
             "smoothing_text": self.smoothing_text,
         }
+        if self.origin != "job":
+            data.update({name: getattr(self, name) for name in _ROOT_EXTERNAL_FIELDS})
+        return data
 
     @classmethod
     def from_dict(cls, data: Any) -> TreeRoot:
-        raw = _fields(data, set(cls.__dataclass_fields__), "storyboard root")
+        if not isinstance(data, dict) or not (
+            _ROOT_REQUIRED <= set(data) <= _ROOT_REQUIRED | set(_ROOT_EXTERNAL_FIELDS)
+        ):
+            raise StoryboardTreeError(
+                "Malformed storyboard root: missing or unknown fields; file left untouched."
+            )
+        raw = data
+        # Only an imported root writes ``origin`` (and its source fields); a job root has none of them.
+        external = "origin" in raw
+        partial = bool(set(raw) & set(_ROOT_EXTERNAL_FIELDS)) and set(raw) != (
+            _ROOT_REQUIRED | set(_ROOT_EXTERNAL_FIELDS)
+        )
+        if partial:
+            raise StoryboardTreeError(
+                "Malformed storyboard root: an imported clip root needs all its source fields."
+            )
         if raw["kind"] not in _ROOT_KINDS:
             raise StoryboardTreeError("A storyboard root is a clip or an image.")
+        if external:
+            if raw["origin"] != "external" or raw["kind"] != "clip" or raw["job_id"]:
+                raise StoryboardTreeError(
+                    "An imported clip root is an external clip with no job id; it never claims a "
+                    "StableNew job."
+                )
+            if not raw["source_path"] or not raw["source_sha256"] or not raw["manifest_sha256"]:
+                raise StoryboardTreeError(
+                    "An imported clip root records its source file, its identity and its frames' manifest."
+                )
         settings = raw["settings"]
         if not isinstance(settings, dict) or not all(
             isinstance(key, str) and key for key in settings
@@ -159,6 +220,13 @@ class TreeRoot:
             width=_int(raw["width"], "Root width", 1),
             height=_int(raw["height"], "Root height", 1),
             smoothing_text=_text(raw["smoothing_text"], "Root smoothing text", 1024),
+            origin="external" if external else "job",
+            source_path=_text(raw.get("source_path", ""), "Root source path", 4096),
+            source_sha256=_hash(raw.get("source_sha256", ""), "Root source identity"),
+            source_record_path=_text(raw.get("source_record_path", ""), "Root import record", 4096),
+            source_record_sha256=_hash(
+                raw.get("source_record_sha256", ""), "Root import record identity"
+            ),
         )
 
 
