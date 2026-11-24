@@ -120,6 +120,18 @@ authority. Feature-branch publication rechecks the exact HEAD and aggregate diff
 the same way; an approved outcome authorizes its normal implementation file scope
 without an owner file list, and unexpected changes stop publication.
 
+**Standing tool permissions are capability, not authorization.** The owner's
+local Claude Code allow-list lets `git push`, `gh pr create` and `gh pr merge`
+run without a per-command prompt, denies force-push, direct push to `main` and
+remote branch deletion, and keeps `gh pr update-branch` on prompt. Those rules
+remove only the prompt. Once the owner has explicitly told the session in
+chat to push, publish a PR, or merge a named PR, proceed without asking again;
+without that instruction, do not use the permission. Merge with plain
+`gh pr merge <number>` after the fail-closed checks above, never with `--auto`,
+`--admin`, or a CI bypass. A docs-only PR needs no `[skip ci]`: the `required`,
+`full-suite` and `windows` checks are the branch-protection identities and a
+skipped run leaves them unreported, so wait for the cheap docs-only run.
+
 StableNew may control lifecycle only for a process its appropriate process
 manager launched and owns. An external A1111/Comfy process may use supported
 API, health/progress observation, and A1111 interrupt/cancellation, but is
