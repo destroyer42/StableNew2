@@ -53,3 +53,5 @@ Use the evaluation kit, not the preview. A case declares its alignment and two a
 ## Experimental and unverified
 
 Alignment is a preparation tool. That the aligned clip equals the declared transform of the selected frames is verified for every preparation; that aligned conditioning improves generated motion, or is better than leaving the clip alone, is **not** established. Wan-Animate-2 remains experimental and per-job opt-in, and nothing here promotes a workflow or changes a default.
+
+Two limits showed up in the first physical runs. An unaligned 4K driving clip can exceed Comfy's 100 MiB upload limit once prepared (the job fails at upload with HTTP 413); pre-scale a same-aspect copy or choose a shorter window, since the aligned path stays far smaller. And a pair is refused when the matched scale also needs a shift of more than one frame, as for a driver subject far from the centre; use a reduced-scale alignment or another window. See section 8 of `docs/Subsystems/Video/PR-VID-MOTION-420_Subject_Alignment_and_Compatibility.md` for what was run and what it does not show.

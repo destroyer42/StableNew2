@@ -1,6 +1,6 @@
 # PR-VID-MOTION-420: subject alignment and motion compatibility
 
-Status: **implemented on a feature branch** (Phase 3 of `docs/Subsystems/Video/CONTROLLED_MOTION_ROADMAP.md`). This is a per-PR record: the code and the living docs (`VIDEO_PIPELINE.md`, `MOTION_LIBRARY.md`, `docs/runbooks/motion_alignment.md`, `docs/runbooks/video_eval_kit.md`) win where they differ. **No physical generation was run, no runtime was started, nothing was queued to a GPU.** Spatial preparation is deterministic CPU work; it shows nothing about whether aligned conditioning improves *generated* motion. That is the question the unexecuted campaign in section 8 asks.
+Status: **implemented on a feature branch** (Phase 3 of `docs/Subsystems/Video/CONTROLLED_MOTION_ROADMAP.md`). This is a per-PR record: the code and the living docs (`VIDEO_PIPELINE.md`, `MOTION_LIBRARY.md`, `docs/runbooks/motion_alignment.md`, `docs/runbooks/video_eval_kit.md`) win where they differ. **The implementation itself made no physical generation; two owner-authorized physical runs were made afterward and are recorded, unrated, in section 8.** Spatial preparation is deterministic CPU work; it shows nothing about whether aligned conditioning improves *generated* motion. That is the question the campaign in section 8 asks; its first runs are unrated and establish nothing yet.
 
 Execution class: Standard, difficult bounded cross-file. **Model recommendation:** Claude Code Sonnet 5.5 XHigh; Codex GPT-6.1 Sol XHigh (`docs/AI_MODEL_SELECTION.md`).
 
@@ -9,10 +9,10 @@ Execution class: Standard, difficult bounded cross-file. **Model recommendation:
 | Fact | Evidence |
 |---|---|
 | Phase 1 (PR-VID-MOTION-400) is accepted and integrated | merged as PR #399 (`c0a837fe` on `main`) |
-| Phase 2 (PR-VID-MOTION-410) is **not** integrated | branch `feature/pr-vid-motion-410-motion-eval` has no PR, no CI run and is not an ancestor of `origin/main` |
-| This package was built **on the Phase 2 branch tip** | `e2a6520a399aaf225eff4a0991019c8816f2f706` (includes `origin/main` `7db7e0de`), by explicit owner decision on 2026-11-24, as a *provisional* dependency |
+| Phase 2 (PR-VID-MOTION-410) is integrated | merged as PR #405 (`e421db70` on `main`); the branch tip `e2a6520a` is an ancestor of `origin/main` |
+| This package was built on the Phase 2 branch tip and then rebased onto `main` | built on `e2a6520a399aaf225eff4a0991019c8816f2f706` by explicit owner decision on 2026-11-24; rebased onto `origin/main` `f16f1d35` on 2026-11-25 (conflicts only in `STATUS.md` and the generated code map) |
 
-Consequences, stated plainly: this branch cannot merge before PR-VID-MOTION-410 does; if 410 changes in review, the evaluation files (`video_eval_motion.py`, `video_eval_integrity.py`, `video_eval_run.py`, the review/report modules) may need a rebase. Phase 2's *physical* pilot (Stage A/B, 15 jobs on `wan_animate2_drive_i2v_v1` 1.2.0) was run on the owner's machine and informs the campaign design (sections 8 and 9); no Phase 2 evidence was invented or reinterpreted, and no alignment default was changed.
+Consequence: with 410 merged there is no ordering constraint left; this branch needs only the normal review. Phase 2's *physical* pilot (Stage A/B, 15 jobs on `wan_animate2_drive_i2v_v1` 1.2.0) was run on the owner's machine and informs the campaign design (sections 8 and 9); no Phase 2 evidence was invented or reinterpreted, and no alignment default was changed.
 
 ## 2. What it is
 
@@ -72,7 +72,15 @@ The compatibility panel (`motion_alignment_compatibility.py`) reuses the existin
 * The run service checks the compiled NJR against the arm's request (an alignment is never dropped, invented or altered to make an arm queueable); `driving_context_sha256` binds ratings to the frozen alignment (an unaligned job's digest is byte-for-byte what it was), so earlier ratings never silently apply. The review role, the report and the preview summary state the frozen parameters and say a preview is not evidence of success. `duplicate_case_for_source` drops the alignment (another subject must be aligned for itself).
 * Existing Phase 2 suites, ratings and reports are unchanged: all 172 existing 410 tests pass without modification.
 
-## 8. The unexecuted campaign
+## 8. The campaign
+
+**Executed so far (owner-authorized in chat on 2026-11-25; local operator harness over the same controller path; evidence kept outside the repository).** Every result is unrated and every alignment is an eyeballed draft, so none of this shows that alignment helps or hurts.
+
+* *Pilot, 2 jobs.* One source (subject_a) and one head-turn driver, suite SHA-256 `f4dae87c18e410a4c02a00fbbe0a04fa244a55d18860a24c078ae72cbf0a93fa`, seed 420, 81 frames. Both jobs completed (about 417 and 430 s) with comparable arms; the owner reported no visible difference between the two clips.
+* *Diagnostic v2, 8 jobs.* Suite SHA-256 `297f26926f835aeda261e30ce73ca9766ba826d6ef324120cbff7bb5392fe568`: the pilot cell repeated, a wave on subject_a, and a walk and a generated arms-raise on a full-body source. Seven jobs completed (422-470 s each, VRAM peak 11.86 GB, temperature peak 83.9 C, clean teardown). The unaligned walk job failed at upload with HTTP 413 because its prepared 4K clip (107,409,268 bytes) was over Comfy's 104,857,600-byte request limit.
+* *Walk re-run, 2 jobs.* Suite SHA-256 `a0b00ebb26e043541922e8c012cd7f2393b608a2ced09c7c232d6eb2ff99d709`: the same case with its driver pre-scaled to 2048x1080 (same aspect ratio, so the declared alignment stayed valid). Both jobs completed (about 452 and 425 s).
+* *Observations, not conclusions.* The repeated pilot cell decodes frame-identically to the pilot, so a fixed seed adds no run-to-run noise. Pose and motion transfer looked alike in all four scenarios. The aligned and unaligned walk differed visibly in subject scale and framing (mean PSNR between the arms about 11.7 dB, against 21 to 28 dB for the other three), the others hardly at all. One case per scenario, one seed, one subject per driver.
+* *Not executed.* The 16-job full stage, an identity-alignment arm, and any rating.
 
 Templates (placeholders only; operators bind their own media and replace each case's alignment with the one they accepted for that exact pair): `docs/runbooks/examples/video_eval_motion_alignment_{pilot,diagnostic,full}.suite.json` -- 2, 8 and 16 jobs; four scenarios (position, scale, locomotion, start pose), two subjects each, arms `unaligned` and `aligned`, seed 420, `wan_animate2_drive_i2v_v1` 1.2.0 at 49 frames, per-job experimental opt-in. The pilot nests in the diagnostic sample which nests in the full design.
 
@@ -81,7 +89,8 @@ Templates (placeholders only; operators bind their own media and replace each ca
 ## 9. Known limitations and unresolved decisions
 
 * **Physical motion-transfer behavior is unverified.** Geometric alignment cannot correct an anatomical pose difference, a viewpoint difference or missing body parts, and is not retargeting.
-* Phase 2 is an unmerged dependency (section 1). Decision for the owner: merge 410 first, then this branch.
+* An unaligned 4K driving clip can exceed Comfy's 100 MiB upload limit once prepared (HTTP 413, seen on an 81-frame 4096x2160 window of 102 MiB); the aligned path stays far smaller. Pre-scale a same-aspect copy or choose a shorter window. The preview does not warn about this yet.
+* The alignment bounds refuse a pair when the matched scale also needs a shift of more than one frame (a driver subject far from the centre needs a reduced-scale alignment or another window); the refusal names the limit.
 * The aligned derivative is 8-bit RGB (FFmpeg's default YUV-to-RGB conversion, stored losslessly); the decoder that feeds ComfyUI may convert slightly differently. `libx264rgb` is required in the FFmpeg build; without it preparation fails with a typed `ffmpeg_failed` and keeps nothing.
 * Limits: 9 MP per driving frame, 96 distinct source frames, 17-81 frames (the workflow's policy), 256 MB output. A window needing more is refused with a message.
 * The pinned runtime's resize identity was argued from the pinned graph and the runtime arithmetic and tested on the arithmetic's transcription, not measured on the pinned runtime (section 4).
