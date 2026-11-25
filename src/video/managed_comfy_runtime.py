@@ -424,8 +424,45 @@ def _inspect_comfy_cli(command: Sequence[str], workdir: str | None) -> tuple[str
         raise ValueError(
             f"{main} does not expose the ComfyUI CLI. Configure a direct ComfyUI launch."
         )
-    supported: set[str] = set()
-    for node in parser.body:
+    return executable, parser_path, _declared_store_true_flags(parser)
+
+
+def _is_parser_group(value: ast.expr) -> bool:
+    return (
+        isinstance(value, ast.Call)
+        and isinstance(value.func, ast.Attribute)
+        and value.func.attr in {"add_mutually_exclusive_group", "add_argument_group"}
+        and isinstance(value.func.value, ast.Name)
+        and value.func.value.id == "parser"
+    )
+
+
+def _declared_store_true_flags(tree: ast.Module) -> set[str]:
+    """Constant ``store_true`` switches registered by module-level statements, without running them.
+
+    ComfyUI registers some switches directly (``parser.add_argument``) and others on a group
+    (``attn_group = parser.add_mutually_exclusive_group()``, then ``attn_group.add_argument``).
+    A name receives flags only after a module-level ``name = parser.add_*_group()`` binds it, and
+    stops once it is rebound to anything else.
+    """
+
+    flags: set[str] = set()
+    receivers = {"parser"}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            bound = {
+                name.id
+                for target in node.targets
+                for name in ast.walk(target)
+                if isinstance(name, ast.Name)
+            }
+            if _is_parser_group(node.value) and all(
+                isinstance(target, ast.Name) for target in node.targets
+            ):
+                receivers |= bound
+            else:
+                receivers -= bound - {"parser"}
+            continue
         if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
             continue
         call = node.value
@@ -433,7 +470,7 @@ def _inspect_comfy_cli(command: Sequence[str], workdir: str | None) -> tuple[str
             isinstance(call.func, ast.Attribute)
             and call.func.attr == "add_argument"
             and isinstance(call.func.value, ast.Name)
-            and call.func.value.id == "parser"
+            and call.func.value.id in receivers
         ):
             continue
         if any(
@@ -442,12 +479,12 @@ def _inspect_comfy_cli(command: Sequence[str], workdir: str | None) -> tuple[str
             and kw.value.value == "store_true"
             for kw in call.keywords
         ):
-            supported.update(
+            flags.update(
                 arg.value
                 for arg in call.args
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
             )
-    return executable, parser_path, supported
+    return flags
 
 
 __all__ = [

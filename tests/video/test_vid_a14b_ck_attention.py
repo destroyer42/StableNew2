@@ -25,9 +25,18 @@ from src.video.comfy_process_manager import (
 )
 from src.video.managed_comfy_runtime import CK_ATTENTION_FLAG, PINNED_MEMORY_FLAG
 from src.video.video_execution_resolver import VideoExecutionResolver
-from src.video.workflow_catalog_wan_a14b import WAN_A14B_CK_LAUNCH_ID, WAN_A14B_ID, WAN_A14B_VERSION
+from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_CK_LAUNCH_ID,
+    WAN_A14B_ID,
+    WAN_A14B_VERSION,
+    build_wan_a14b_specs,
+)
 from src.video.workflow_picker import workflow_choices
-from tests.video.test_comfy_process_manager import _FakeManaged, fake_comfy_command
+from tests.video.test_comfy_process_manager import (
+    _FakeManaged,
+    fake_comfy_command,
+    fake_comfy_source,
+)
 from tests.video.test_vid_clip_370_candidate_specs import _a14b_backend, _a14b_request
 from tests.video.test_vid_warm_373_a14b_reuse import _client, _slot
 from tests.video.test_vid_warm_373_a14b_reuse import _no_encode as _no_encode
@@ -131,6 +140,38 @@ def test_warm_reuse_and_switch_in_both_directions(stack, tmp_path, first, second
         assert len(children) == 1 + index // 2
     assert len(client.queued) == 4
     assert CK_ATTENTION_FLAG in manager.config.command
+
+
+def _a14b_spec(workflow_id):
+    return next(
+        spec
+        for spec in build_wan_a14b_specs()
+        if (spec.workflow_id, spec.workflow_version) == (workflow_id, WAN_A14B_VERSION)
+    )
+
+
+@pytest.mark.parametrize("registered", [True, False])
+def test_launch_proof_finds_ck_flag_on_comfys_attention_group(stack, tmp_path, registered):
+    """ComfyUI registers --use-ck-attention on ``attn_group``, not on ``parser`` itself."""
+
+    backend, _client, _manager, children = stack
+    ck_registration = f"attn_group.add_argument({CK_ATTENTION_FLAG!r}, action='store_true')\n"
+    fake_comfy_source(
+        tmp_path / "runtime",
+        "parser.add_argument('--disable-pinned-memory', action='store_true')\n"
+        "attn_group = parser.add_mutually_exclusive_group()\n"
+        "attn_group.add_argument('--use-sage-attention', action='store_true')\n"
+        + (ck_registration if registered else ""),
+    )
+
+    backend._verify_required_launch_flags(_a14b_spec(WAN_A14B_ID))
+    if registered:
+        backend._verify_required_launch_flags(_a14b_spec(WAN_A14B_CK_LAUNCH_ID))
+    else:
+        with pytest.raises(ComfyStartupError, match="does not support --use-ck-attention"):
+            backend._verify_required_launch_flags(_a14b_spec(WAN_A14B_CK_LAUNCH_ID))
+
+    assert children == []
 
 
 @pytest.mark.parametrize(

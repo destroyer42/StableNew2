@@ -15,6 +15,7 @@ from src.video.comfy_process_manager import (
     ComfyStartupError,
     build_default_comfy_process_config,
 )
+from src.video.managed_comfy_runtime import plan_comfy_launch
 
 
 class _DummyProcess:
@@ -75,18 +76,24 @@ def _manager(config: ComfyProcessConfig) -> ComfyProcessManager:
     return ComfyProcessManager(config, process_factory=_FakeManaged)
 
 
-def fake_comfy_command(root: Path, *switches: str) -> tuple[str, ...]:
-    """Minimal on-disk parser declarations. The test process factory never executes them."""
+def fake_comfy_source(root: Path, cli_args: str) -> tuple[str, ...]:
+    """On-disk ``main.py`` and ``comfy/cli_args.py`` with the given text. Nothing executes them."""
 
     parser = root / "comfy" / "cli_args.py"
     parser.parent.mkdir(parents=True, exist_ok=True)
-    parser.write_text(
-        "".join(f"parser.add_argument({flag!r}, action='store_true')\n" for flag in switches),
-        encoding="utf-8",
-    )
+    parser.write_text(cli_args, encoding="utf-8")
     main = root / "main.py"
     main.write_text("from comfy.cli_args import args\n", encoding="utf-8")
     return (sys.executable, str(main))
+
+
+def fake_comfy_command(root: Path, *switches: str) -> tuple[str, ...]:
+    """Minimal on-disk parser declarations. The test process factory never executes them."""
+
+    return fake_comfy_source(
+        root,
+        "".join(f"parser.add_argument({flag!r}, action='store_true')\n" for flag in switches),
+    )
 
 
 def test_new_launch_adds_workflow_and_managed_contract_flags(tmp_path) -> None:
@@ -169,6 +176,76 @@ def test_legacy_configured_flag_blocks_start_even_without_a_workflow_requirement
     manager.config.command = command[:-1]
     manager.start()
     assert _FakeManaged.instances[0].command == command[:-1]
+
+
+#: ComfyUI registers its attention switches this way (0.38.0 ``comfy/cli_args.py``).
+GROUPED_CLI_ARGS = """\
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--disable-pinned-memory", action="store_true")
+attn_group = parser.add_mutually_exclusive_group()
+attn_group.add_argument("--use-ck-attention", action="store_true", help="Use Comfy Kitchen.")
+attn_group.add_argument("--use-sage-attention", action="store_true")
+tuning = parser.add_argument_group("tuning")
+tuning.add_argument("--tuned", "--tuned-alias", action="store_true")
+"""
+
+
+def test_flags_registered_on_parser_groups_are_supported(tmp_path) -> None:
+    command = fake_comfy_source(tmp_path, GROUPED_CLI_ARGS)
+    required = (
+        "--disable-pinned-memory",
+        "--use-ck-attention",
+        "--use-sage-attention",
+        "--tuned",
+        "--tuned-alias",
+    )
+
+    # The interpreter path is re-resolved; the entrypoint and the appended switches are the proof.
+    assert plan_comfy_launch(command, None, required)[1:] == (command[1], *required)
+
+
+@pytest.mark.parametrize(
+    "extra_cli_args",
+    [
+        pytest.param("", id="not-registered-anywhere"),
+        pytest.param(
+            "attn_group.add_argument('--use-missing-attention', type=int)\n", id="no-store-true"
+        ),
+        pytest.param(
+            "other = make_group()\nother.add_argument('--use-missing-attention', action='store_true')\n",
+            id="receiver-not-a-parser-group",
+        ),
+        pytest.param(
+            "attn_group = make_group()\n"
+            "attn_group.add_argument('--use-missing-attention', action='store_true')\n",
+            id="group-name-rebound",
+        ),
+        pytest.param(
+            "later.add_argument('--use-missing-attention', action='store_true')\n"
+            "later = parser.add_mutually_exclusive_group()\n",
+            id="used-before-bound",
+        ),
+        pytest.param(
+            "names = ['--use-missing-attention']\n"
+            "attn_group.add_argument(*names, action='store_true')\n",
+            id="flag-not-a-constant",
+        ),
+    ],
+)
+def test_flag_not_registered_as_store_true_on_a_parser_group_is_refused(
+    tmp_path, extra_cli_args
+) -> None:
+    command = fake_comfy_source(tmp_path, GROUPED_CLI_ARGS + extra_cli_args)
+
+    with pytest.raises(ValueError, match="does not support --use-missing-attention"):
+        plan_comfy_launch(command, None, ("--use-ck-attention", "--use-missing-attention"))
+
+    assert plan_comfy_launch(command, None, ("--use-ck-attention",))[1:] == (
+        command[1],
+        "--use-ck-attention",
+    )
 
 
 def test_comfy_process_manager_start_invokes_the_managed_process_with_config() -> None:
