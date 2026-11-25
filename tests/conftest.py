@@ -465,23 +465,3 @@ def build_v2_app_with_stubs(stubbed_job_service):
             root.destroy()
         except Exception:
             pass
-
-
-# --- TEMP-DIAG-AI230: remove before merge --------------------------------------------------------------------------
-# Hosted shard 0 fails test_storyboard_layout_fit[260/271] only after a repartition. Record every change of Tk's
-# process-wide scaling between tests so the failure message can name the test that left it changed.
-@pytest.fixture(autouse=True)
-def _diag_ai230_scaling_log(request):
-    yield
-    try:
-        log = getattr(tk, "_ai230_scaling_log", None)
-        if log is None:
-            log = tk._ai230_scaling_log = []
-        root = getattr(tk, "_default_root", None)
-        if root is None or not root.winfo_exists():
-            return
-        value = round(float(root.tk.call("tk", "scaling")), 4)
-        if not log or log[-1][1] != value:
-            log.append((request.node.nodeid, value))
-    except Exception:  # noqa: BLE001 - diagnostic only
-        pass

@@ -151,30 +151,6 @@ def _columns(root, columns: tuple[Column, ...], width: int = 600, height: int = 
     return widget
 
 
-def _diag_ai230(widget, root):  # TEMP-DIAG-AI230: remove before merge
-    import threading
-    import tkinter.font as tkfont
-
-    frame, canvas = widget.card_frames["d6"], widget._canvas
-    try:
-        theme = ttk.Style(root).theme_use()
-    except Exception as exc:  # noqa: BLE001
-        theme = repr(exc)
-    return {
-        "scaling": round(float(root.tk.call("tk", "scaling")), 4),
-        "screen_px_mm": (root.winfo_screenwidth(), root.winfo_screenmmwidth()),
-        "canvas_w": canvas.winfo_width(),
-        "card_w": frame.winfo_width(),
-        "inner_w": widget._inner.winfo_width(),
-        "xview": canvas.xview(),
-        "card_left_in_canvas": frame.winfo_rootx() - canvas.winfo_rootx(),
-        "default_font": tkfont.nametofont("TkDefaultFont").actual(),
-        "theme": theme,
-        "threads": [t.name for t in threading.enumerate()][:10],
-        "scaling_log_tail": getattr(tk, "_ai230_scaling_log", [])[-6:],
-    }
-
-
 def _inside_viewport(widget: StoryboardColumnsV2, take_id: str) -> bool:
     frame, canvas = widget.card_frames[take_id], widget._canvas
     return (
@@ -202,15 +178,33 @@ def test_see_a_card_in_a_far_column(tk_root):
     assert _inside_viewport(widget, "d6")
 
 
-@pytest.mark.parametrize("width", [260, 271, 283, 297, 301, 314, 329, 337])
-def test_see_leaves_the_card_whole_whatever_the_window_width(tk_root, width):
+def _narrowest_fitting_width(root) -> int:
+    """The narrowest window width whose strip is as wide as the widest card, measured on this host.
+
+    A card's width follows the host's fonts and Tk scaling. On X11 the scaling lives in a record shared by every Tk root in
+    the process and other tests change it, so a fixed pixel width that holds a card on one host (or after one test order)
+    cannot hold it on another: no scroll position puts a card that is wider than the strip fully inside it.
+    """
+
+    probe = _columns(root, _tree(), width=600)
+    card = max(frame.winfo_width() for frame in probe.card_frames.values())
+    chrome = 600 - probe._canvas.winfo_width()
+    probe.destroy()
+    return card + chrome
+
+
+# Pixels of strip beyond one card. They give the same spread of sub-card remainders as the fixed widths 260..337 did on a
+# 228px card, whatever the card measures on this host.
+@pytest.mark.parametrize("extra", [15, 26, 38, 52, 56, 69, 84, 92])
+def test_see_leaves_the_card_whole_whatever_the_window_width(tk_root, extra):
     """The canvas snaps to 30px scroll units; rounding to the nearest one used to leave a card edge cut off (seen on Linux CI)."""
 
+    width = _narrowest_fitting_width(tk_root) + extra
     widget = _columns(tk_root, _tree(), width=width)
     for take_id in ("d6", "c6"):
         widget.see(take_id)
         _settle(tk_root)
-        assert _inside_viewport(widget, take_id), (width, take_id, _diag_ai230(widget, tk_root))
+        assert _inside_viewport(widget, take_id), (width, take_id)
     widget.see("root")
     _settle(tk_root)
     assert _inside_viewport(widget, "root"), width
