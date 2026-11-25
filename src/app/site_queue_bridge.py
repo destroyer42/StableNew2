@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import re
@@ -17,11 +18,19 @@ from sqlite3 import Error as SQLiteError
 from threading import Event, Lock
 from typing import Any
 
+from src.app.site_desktop_approval import (
+    MAX_WITNESSES,
+    DesktopApproval,
+    DesktopApprovalStore,
+    DesktopPreference,
+    ReceiptWitness,
+)
 from src.app.site_output_catalog import SiteOutputCatalog, SiteOutputError
 from src.app.site_output_routes import output_post, output_read, parse_body
 from src.app.site_output_routes import post as post_output
 from src.app.site_output_routes import read as read_output
 from src.app.site_pack_catalog import PreparePack, SitePackCatalog
+from src.app.site_phone_credentials import PhoneFolder
 from src.pipeline.reprocess_builder import extract_reprocess_output_paths
 from src.queue.job_history_store import JobHistoryEntry
 from src.utils.thread_registry import get_thread_registry
@@ -37,6 +46,7 @@ _IDENTIFIER = re.compile(r"[a-f0-9]{32}")
 _PREVIEW = "/v1/preview"
 _SUBMIT = "/v1/submit"
 _RECEIPT = "/v1/receipt"
+_EXACT_RECEIPT = re.compile(r"/v1/receipt/([a-f0-9]{32})")
 _OUTPUT_RUNS = "/v1/output/runs"
 _OUTPUT_RUN = re.compile(r"/v1/output/runs/(\d{8}_\d{6}_[A-Za-z0-9_-]{1,150})")
 _OUTPUT_MEDIA = re.compile(r"/v1/output/media/([a-f0-9]{32})")
@@ -49,6 +59,10 @@ _OPERATOR_PAIR = re.compile(r"/v1/operator-pair/([a-f0-9]{32})")
 _DESKTOP_KEEPALIVE = "/v1/operator-keepalive"
 _CONNECTION = "/v1/connection"
 _DISCONNECT = "/v1/operator-disconnect"
+_REMEMBER = "/v1/operator-remember"
+_RESUME = "/v1/operator-resume"
+_EXTEND = "/v1/operator-extend"
+_FORGET = "/v1/operator-forget"
 
 
 @dataclass(frozen=True)
@@ -84,12 +98,23 @@ class SiteSession:
         claim_ticket: Callable[[str], bool] | None = None,
         review_outputs: Callable[[str], Sequence[str]] | None = None,
         preview_idle: Callable[[], bool] = lambda: True,
+        approval_store: DesktopApprovalStore | None = None,
     ) -> None:
         self.code = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + PAIR_SECONDS
         self._paired = False
         self._revoked = Event()
         self._lease_lock = Lock()
+        self._approval_store = approval_store
+        self._preference = DesktopPreference(enabled=approval_store is not None)
+        if approval_store is not None:
+            try:
+                self._preference = approval_store.load()
+            except (OSError, ValueError):
+                self._preference = DesktopPreference(enabled=False, output_mode="private")
+        self._incarnation = secrets.token_hex(16)
+        self._relay_epoch = self._incarnation
+        self.epoch = 1
         self._lock = Lock()
         self._preview: PreviewView | None = None
         self._reason: str = "open_an_image_preview"
@@ -117,11 +142,153 @@ class SiteSession:
             now = time.monotonic()
             if self._revoked.is_set() or now >= self.expires_at:
                 return False
+            if self._preference.approval is not None and not self._paired:
+                return False
             if initial_only and self._paired:
                 return True
+            approval = self._preference.approval
+            if approval is not None:
+                try:
+                    self._save_preference(
+                        replace(
+                            self._preference,
+                            approval=replace(
+                                approval,
+                                deadline_ms=int(time.time() * 1000) + DESKTOP_SECONDS * 1000,
+                            ),
+                        )
+                    )
+                except OSError:
+                    return False
             self._paired = True
             self.expires_at = now + DESKTOP_SECONDS
             return True
+
+    @property
+    def remember_enabled(self) -> bool:
+        with self._lease_lock:
+            return self._preference.enabled
+
+    @property
+    def listener_finished(self) -> bool:
+        with self._lease_lock:
+            return self._revoked.is_set() or (
+                self._preference.approval is None and time.monotonic() >= self.expires_at
+            )
+
+    def _save_preference(self, preference: DesktopPreference) -> None:
+        if self._approval_store is None:
+            raise OSError("Remembered connection storage is unavailable")
+        self._approval_store.save(preference)
+        self._preference = preference
+
+    def set_remember(self, enabled: bool) -> None:
+        with self._lease_lock:
+            self._save_preference(
+                replace(
+                    self._preference,
+                    enabled=enabled,
+                    approval=self._preference.approval if enabled else None,
+                )
+            )
+
+    @property
+    def output_preference(self) -> tuple[str, Path | None]:
+        with self._lease_lock:
+            folder = self._preference.output_folder
+            return self._preference.output_mode, Path(
+                folder.path
+            ) if folder and folder.matches() else None
+
+    def remember_output(self, mode: str, path: Path | None = None) -> None:
+        folder = PhoneFolder.approve(path) if path is not None else None
+        with self._lease_lock:
+            self._save_preference(replace(self._preference, output_mode=mode, output_folder=folder))
+
+    def forget(self, proof: str | None = None) -> bool:
+        with self._lease_lock:
+            approval = self._preference.approval
+            if proof is not None and (
+                approval is None
+                or not hmac.compare_digest(
+                    approval.proof_digest, hashlib.sha256(proof.encode()).hexdigest()
+                )
+            ):
+                return False
+            if approval is not None:
+                self._save_preference(replace(self._preference, approval=None))
+            return True
+
+    def bind_desktop(self, proof: str) -> bool:
+        digest = hashlib.sha256(proof.encode()).hexdigest()
+        with self._lease_lock:
+            if not self._preference.enabled or not self._paired or self._revoked.is_set():
+                return False
+            current = self._preference.approval
+            if current is not None:
+                return hmac.compare_digest(current.proof_digest, digest)
+            remaining = self.expires_at - time.monotonic()
+            if remaining <= 0:
+                return False
+            self._save_preference(
+                replace(
+                    self._preference,
+                    approval=DesktopApproval(
+                        secrets.token_hex(16), digest, int((time.time() + remaining) * 1000)
+                    ),
+                )
+            )
+            return True
+
+    def resume_desktop(self, proof: str | None, *, extend: bool) -> dict[str, Any] | None:
+        digest = hashlib.sha256(proof.encode()).hexdigest() if proof else None
+        # Preview and lease state change together when an expired process resumes.
+        with self._lock, self._lease_lock:
+            approval = self._preference.approval
+            if (
+                self._revoked.is_set()
+                or approval is None
+                or (digest is not None and not hmac.compare_digest(approval.proof_digest, digest))
+            ):
+                return None
+            now = time.monotonic()
+            wall_ms = int(time.time() * 1000)
+            deadline_ms = approval.deadline_ms
+            remaining = min(DESKTOP_SECONDS, (deadline_ms - wall_ms) / 1000)
+            if self._paired:
+                remaining = min(remaining, self.expires_at - now)
+            if extend:
+                deadline_ms = wall_ms + DESKTOP_SECONDS * 1000
+                self._save_preference(
+                    replace(
+                        self._preference,
+                        approval=replace(approval, deadline_ms=deadline_ms),
+                    )
+                )
+                if remaining <= 0 and self._paired:
+                    self.epoch += 1
+                    self.code = secrets.token_urlsafe(32)
+                    self._relay_epoch = secrets.token_hex(16)
+                    self._preview = None
+                    self._prepare = None
+                    self._prepare_state = "idle"
+                    if self._receipt is not None and self._receipt.state == "awaiting_confirmation":
+                        self._receipt = replace(self._receipt, state="connection_closed")
+                remaining = DESKTOP_SECONDS
+            self._paired = True
+            self.expires_at = now + max(0, remaining)
+            return {
+                "state": "connected" if remaining > 0 else "expired",
+                "type": "desktop",
+                "version": CONNECTION_VERSION,
+                "remaining_ms": max(0, int(remaining * 1000)),
+                "approval": approval.id,
+                "incarnation": self._incarnation,
+                "relay_epoch": self._relay_epoch,
+                "epoch": self.epoch,
+                "deadline_ms": deadline_ms,
+                **({"code": self.code} if remaining > 0 else {}),
+            }
 
     def invalidate(self) -> None:
         """Immediately fence admission without waiting for catalog or listener cleanup."""
@@ -132,11 +299,13 @@ class SiteSession:
         self.set_output_folder(None)
 
     def authorization_error(self, value: str) -> str | None:
-        if not hmac.compare_digest(value.encode("utf-8"), f"Bearer {self.code}".encode()):
-            return "pairing_required"
         with self._lease_lock:
+            if not hmac.compare_digest(value.encode("utf-8"), f"Bearer {self.code}".encode()):
+                return "pairing_required"
             if self._revoked.is_set():
                 return "pairing_revoked"
+            if self._preference.approval is not None and not self._paired:
+                return "remembered_approval_required"
             if time.monotonic() >= self.expires_at:
                 return "authorization_expired"
             return None
@@ -165,6 +334,20 @@ class SiteSession:
                 "state": state,
                 "remaining_ms": remaining,
                 "lease_ms": DESKTOP_SECONDS * 1000,
+                **(
+                    {
+                        "remember_supported": True,
+                        "remember_enabled": self._preference.enabled,
+                        "approval": self._preference.approval.id
+                        if self._preference.approval
+                        else None,
+                        "incarnation": self._incarnation,
+                        "relay_epoch": self._relay_epoch,
+                        "epoch": self.epoch,
+                    }
+                    if self._approval_store is not None
+                    else {}
+                ),
             }
 
     def set_output_folder(self, folder: Path | None) -> None:
@@ -298,7 +481,9 @@ class SiteSession:
                 ],
             }
 
-    def request(self, preview_id: str) -> tuple[HTTPStatus, dict[str, Any]]:
+    def request(
+        self, preview_id: str, receipt_id: str | None = None
+    ) -> tuple[HTTPStatus, dict[str, Any]]:
         with self._lock:
             if self._prepare_state in {"requested", "preparing"}:
                 return HTTPStatus.CONFLICT, {"error": "preparing_promptpack"}
@@ -307,10 +492,17 @@ class SiteSession:
                     return HTTPStatus.ACCEPTED, receipt_payload(self._receipt)
                 if self._receipt.state in {"awaiting_confirmation", "submitting"}:
                     return HTTPStatus.CONFLICT, {"error": "submission_in_progress"}
+            if receipt_id is not None:
+                with self._lease_lock:
+                    approval = self._preference.approval
+                    if approval is not None and any(
+                        row.receipt_id == receipt_id for row in approval.witnesses
+                    ):
+                        return HTTPStatus.CONFLICT, {"error": "check_native_queue"}
             if self._preview is None or self._preview.preview_id != preview_id:
                 return HTTPStatus.CONFLICT, {"error": "preview_changed"}
             self._receipt = SubmissionReceipt(
-                secrets.token_hex(16), preview_id, "awaiting_confirmation"
+                receipt_id or secrets.token_hex(16), preview_id, "awaiting_confirmation"
             )
             self._claimed = False
             return HTTPStatus.ACCEPTED, receipt_payload(self._receipt)
@@ -341,6 +533,48 @@ class SiteSession:
                 receipt_payload(self._receipt) if self._receipt is not None else {"state": "idle"}
             )
 
+    def record_witness(self, receipt: SubmissionReceipt, job_ids: tuple[str, ...]) -> None:
+        """Save only the exact admission lookup, before handing work to JobService."""
+        with self._lease_lock:
+            approval = self._preference.approval
+            if approval is None:
+                return
+            witness = ReceiptWitness(receipt.receipt_id, receipt.preview_id, job_ids)
+            rows = (witness, *approval.witnesses)[:MAX_WITNESSES]
+            self._save_preference(
+                replace(self._preference, approval=replace(approval, witnesses=rows))
+            )
+
+    def exact_receipt(self, identifier: str) -> dict[str, Any] | None:
+        with self._lock:
+            if self._receipt is not None and self._receipt.receipt_id == identifier:
+                return receipt_payload(self._receipt)
+        with self._lease_lock:
+            approval = self._preference.approval
+            witness = (
+                next((row for row in approval.witnesses if row.receipt_id == identifier), None)
+                if approval is not None
+                else None
+            )
+        if witness is None:
+            return None
+        queued = self._get_job is not None and all(
+            self._get_job(job) is not None for job in witness.job_ids
+        )
+        if queued:
+            with self._lock:
+                if len(self._admitted) + len(witness.job_ids) > 1000:
+                    self._admitted.clear()
+                self._admitted.update(witness.job_ids)
+        return receipt_payload(
+            SubmissionReceipt(
+                identifier,
+                witness.preview_id,
+                "queued" if queued else "check_native_queue",
+                witness.job_ids if queued else (),
+            )
+        )
+
 
 def receipt_payload(receipt: SubmissionReceipt) -> dict[str, Any]:
     return {
@@ -351,11 +585,15 @@ def receipt_payload(receipt: SubmissionReceipt) -> dict[str, Any]:
     }
 
 
-def parse_submission(raw: bytes) -> str:
-    """Accept the single closed request shape, refusing duplicates and arbitrary NJRs."""
+def parse_submission(raw: bytes) -> tuple[str, str | None]:
+    """Accept the legacy Preview reference and its optional exact receipt identity."""
 
     def fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        if len(pairs) != 1 or pairs[0][0] != "preview_id":
+        names = [key for key, _ in pairs]
+        if len(names) != len(set(names)) or set(names) not in (
+            {"preview_id"},
+            {"preview_id", "receipt_id"},
+        ):
             raise ValueError("invalid_submission")
         return dict(pairs)
 
@@ -365,7 +603,12 @@ def parse_submission(raw: bytes) -> str:
     preview_id = payload["preview_id"]
     if not isinstance(preview_id, str) or _IDENTIFIER.fullmatch(preview_id) is None:
         raise ValueError("invalid_submission")
-    return preview_id
+    receipt_id = payload.get("receipt_id")
+    if "receipt_id" in payload and (
+        not isinstance(receipt_id, str) or not _IDENTIFIER.fullmatch(receipt_id)
+    ):
+        raise ValueError("invalid_submission")
+    return preview_id, receipt_id
 
 
 def parse_preparation(raw: bytes) -> tuple[str, str, tuple[int, ...], dict[str, Any]]:
@@ -457,6 +700,10 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 ("POST", _DESKTOP_KEEPALIVE),
                 ("GET", _CONNECTION),
                 ("POST", _DISCONNECT),
+                ("POST", _REMEMBER),
+                ("POST", _RESUME),
+                ("POST", _EXTEND),
+                ("POST", _FORGET),
             }
             legacy_output_read = method == "GET" and (
                 self.path == _OUTPUT_RUNS
@@ -464,6 +711,7 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 or _OUTPUT_MEDIA.fullmatch(self.path)
                 or _PACK.fullmatch(self.path)
                 or _RESULT.fullmatch(self.path)
+                or _EXACT_RECEIPT.fullmatch(self.path)
             )
             media_route = (
                 method == "GET"
@@ -493,6 +741,16 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 self._reply(HTTPStatus.OK, session.preview())
             elif self.path == _RECEIPT:
                 self._reply(HTTPStatus.OK, session.receipt())
+            elif exact := _EXACT_RECEIPT.fullmatch(self.path):
+                try:
+                    receipt = session.exact_receipt(exact[1])
+                except (OSError, SQLiteError):
+                    self._reply(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "check_native_queue"})
+                else:
+                    self._reply(
+                        HTTPStatus.OK if receipt else HTTPStatus.NOT_FOUND,
+                        receipt or {"error": "check_native_queue"},
+                    )
             elif self.path == _CONNECTION:
                 self._reply(HTTPStatus.OK, session.connection_status())
             elif self.path == _OUTPUT_RUNS or self.path.startswith(_OUTPUT_RUNS + "/"):
@@ -586,6 +844,9 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
             if ticket := _OPERATOR_PAIR.fullmatch(self.path):
                 self._claim_operator_ticket(ticket[1])
                 return
+            if self.path in {_REMEMBER, _RESUME, _EXTEND, _FORGET}:
+                self._remembered_pairing()
+                return
             if not self._authorized():
                 return
             media_route = output_post(self.path)
@@ -616,8 +877,16 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                     if raw != b"{}":
                         self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
                     elif self.path == _DISCONNECT:
-                        session.revoke()
-                        self._reply(HTTPStatus.NO_CONTENT)
+                        try:
+                            session.forget()
+                        except OSError:
+                            self._reply(
+                                HTTPStatus.SERVICE_UNAVAILABLE,
+                                {"error": "remember_storage_unavailable"},
+                            )
+                        else:
+                            session.revoke()
+                            self._reply(HTTPStatus.NO_CONTENT)
                     elif session.renew_desktop_lease():
                         self._reply(HTTPStatus.OK, session.connection_status())
                     else:
@@ -631,12 +900,51 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
                 if self.path == _PREPARE:
                     self._prepare_promptpack(raw)
                     return
-                preview_id = parse_submission(raw)
+                preview_id, receipt_id = parse_submission(raw)
             except (ValueError, TimeoutError, RecursionError):
                 self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_submission"})
                 return
-            status, data = session.request(preview_id)
+            status, data = session.request(preview_id, receipt_id)
             self._reply(status, data)
+
+        def _remembered_pairing(self) -> None:
+            if not self._same_site():
+                self._reply(HTTPStatus.FORBIDDEN, {"error": "site_origin_refused"})
+                return
+            if self.path == _REMEMBER and not self._authorized():
+                return
+            length = 76  # JSON.stringify({proof: <64 hexadecimal characters>})
+            if (
+                self.headers.get_all("Content-Length") != [str(length)]
+                or self.headers.get_all("Content-Type") != ["application/json"]
+                or self.headers.get("Transfer-Encoding") is not None
+            ):
+                self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
+                return
+            try:
+                raw = self.rfile.read(length)
+                match = re.fullmatch(rb'\{"proof":"([a-f0-9]{64})"\}', raw)
+                if not match:
+                    self._reply(HTTPStatus.BAD_REQUEST, {"error": "invalid_body"})
+                    return
+                proof = match[1].decode()
+                if self.path == _REMEMBER:
+                    result = session.connection_status() if session.bind_desktop(proof) else None
+                elif self.path == _FORGET:
+                    result = {"revoked": True} if session.forget(proof) else None
+                    if result:
+                        session.revoke()
+                else:
+                    result = session.resume_desktop(proof, extend=self.path == _EXTEND)
+            except (OSError, TimeoutError):
+                self._reply(
+                    HTTPStatus.SERVICE_UNAVAILABLE, {"error": "remember_storage_unavailable"}
+                )
+                return
+            if result is None:
+                self._reply(HTTPStatus.UNAUTHORIZED, {"error": "remembered_approval_required"})
+            else:
+                self._reply(HTTPStatus.OK, result)
 
         def _claim_operator_ticket(self, nonce: str) -> None:
             if not self._same_site():
@@ -712,7 +1020,7 @@ class SiteListener:
 
     def _serve(self, session: SiteSession, remove_listener: Callable[[], None]) -> None:
         try:
-            while not self._stop.is_set() and not session.expired:
+            while not self._stop.is_set() and not session.listener_finished:
                 self._server.handle_request()
         finally:
             try:

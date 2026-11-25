@@ -6,8 +6,16 @@ from unittest.mock import Mock
 
 import pytest
 
+from src.app import site_desktop_approval, site_queue_bridge
+from src.app.site_desktop_approval import DesktopApprovalStore
 from src.app.site_pairing_protocol import SCHEME, TICKET_SECONDS, PairingTickets, handle_protocol
-from src.app.site_queue_bridge import DESKTOP_SECONDS, PAIR_SECONDS, SiteSession
+from src.app.site_queue_bridge import (
+    DESKTOP_SECONDS,
+    PAIR_SECONDS,
+    PreviewJob,
+    PreviewView,
+    SiteSession,
+)
 from src.gui import site_connection_dialog
 from tests.controller.test_site_queue_bridge import request
 
@@ -27,6 +35,98 @@ def test_protocol_does_not_pass_uri_to_the_launcher_or_open_a_second_instance(tm
     with pytest.raises(ValueError):
         handle_protocol(f"{SCHEME}://connect/{first}?run=anything", tickets, lambda: False, launch)
     launch.assert_called_once()
+
+
+@pytest.fixture
+def desktop_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(site_desktop_approval, "_dpapi", lambda data, **_: data)
+    return DesktopApprovalStore(tmp_path / "desktop.dpapi")
+
+
+def test_desktop_cold_resume_keeps_deadline_and_restores_only_the_exact_receipt(
+    desktop_store, tmp_path, monkeypatch
+):
+    now = 1_800_000_000.0
+    monkeypatch.setattr(site_queue_bridge, "time", Mock(time=lambda: now, monotonic=lambda: now))
+    committed = set()
+    first_output, second_output = tmp_path / "first", tmp_path / "second"
+    first_output.mkdir()
+    second_output.mkdir()
+    original = SiteSession(approval_store=desktop_store)
+    original.set_output_folder(first_output)
+    first_catalog = original.output_catalog
+    assert first_catalog is not None
+    assert original.remember_enabled
+    proof = b'{"proof":"' + b"a" * 64 + b'"}'
+    assert request(original, "POST", "/v1/operator-resume", body=proof)[0] == 401
+    assert request(original, "GET", "/v1/preview", token=original.code)[0] == 200
+    status, _, enrolled = request(
+        original, "POST", "/v1/operator-remember", token=original.code, body=proof
+    )
+    assert status == 200
+    preview, receipt, job = "a" * 32, "b" * 32, "c" * 32
+    original.publish(PreviewView(preview, (PreviewJob(job, ("txt2img",)),)))
+    assert original.request(preview, receipt)[0] == 202
+    original.record_witness(original.take_request(), (job,))
+    committed.add(job)
+    original.revoke()  # Process shutdown only.
+    now += 3600
+    cold = SiteSession(
+        lambda job_id: object() if job_id in committed else None, approval_store=desktop_store
+    )
+    cold.set_output_folder(second_output)
+    assert request(cold, "GET", "/v1/preview", token=cold.code)[0] == 401
+    assert (
+        request(
+            cold, "POST", "/v1/operator-resume", body=proof, origin="https://different.invalid"
+        )[0]
+        == 403
+    )
+    assert request(cold, "POST", "/v1/operator-resume", body=proof.replace(b"a", b"f"))[0] == 401
+    status, _, resumed = request(cold, "POST", "/v1/operator-resume", body=proof)
+    assert status == 200
+    assert resumed["approval"] == enrolled["approval"]
+    assert resumed["incarnation"] != enrolled["incarnation"]
+    assert resumed["code"] != original.code
+    assert resumed["remaining_ms"] == 7 * 3600 * 1000
+    assert cold.output_catalog is not None and cold.output_catalog.scope != first_catalog.scope
+    assert request(cold, "GET", "/v1/receipt/" + receipt, token=original.code)[0] == 401
+    assert request(cold, "GET", "/v1/receipt/" + receipt, token=cold.code)[2]["job_ids"] == [job]
+    assert request(cold, "GET", "/v1/receipt/" + "d" * 32, token=cold.code)[0] == 404
+    assert cold.request(preview)[0] == 409
+
+
+def test_expired_desktop_approval_is_explicitly_renewable_disableable_and_revocable(
+    desktop_store, monkeypatch
+):
+    now = 1_800_000_000.0
+    monkeypatch.setattr(site_queue_bridge, "time", Mock(time=lambda: now, monotonic=lambda: now))
+    first = SiteSession(approval_store=desktop_store)
+    proof = "a" * 64
+    body = b'{"proof":"' + proof.encode() + b'"}'
+    assert first.renew_desktop_lease() and first.bind_desktop(proof)
+    now += DESKTOP_SECONDS + 1
+    cold = SiteSession(approval_store=desktop_store)
+    _, _, expired = request(cold, "POST", "/v1/operator-resume", body=body)
+    assert expired["state"] == "expired" and "code" not in expired
+    assert not cold.listener_finished
+    _, _, extended = request(cold, "POST", "/v1/operator-extend", body=body)
+    assert extended["remaining_ms"] == DESKTOP_SECONDS * 1000
+    assert extended["epoch"] > expired["epoch"]
+    assert extended["approval"] == expired["approval"]
+    cold.set_remember(False)
+    assert cold.authorizes("Bearer " + cold.code)
+    assert not SiteSession(approval_store=desktop_store).remember_enabled
+    assert request(cold, "POST", "/v1/operator-resume", body=body)[0] == 401
+    cold.set_remember(True)
+    assert cold.bind_desktop(proof)
+    assert request(cold, "POST", "/v1/operator-forget", body=body)[0] == 200
+    assert (
+        request(
+            SiteSession(approval_store=desktop_store), "POST", "/v1/operator-resume", body=body
+        )[0]
+        == 401
+    )
 
 
 def test_site_claim_requires_origin_and_one_matching_fresh_ticket(tmp_path):
@@ -167,6 +267,7 @@ def test_unclaimed_pairing_stays_short_and_cannot_enter_an_eight_hour_lease(monk
 def test_startup_shares_configured_output_and_visible_packs_without_opening_a_dialog(
     tmp_path, monkeypatch
 ):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     output = tmp_path / "output"
     output.mkdir()
     packs = tmp_path / "packs"
@@ -183,9 +284,10 @@ def test_startup_shares_configured_output_and_visible_packs_without_opening_a_di
     monkeypatch.setattr(site_connection_dialog, "register_protocol", registry)
     monkeypatch.setattr(dialog, "_tick", Mock())
     dialog.start_default()
-    phone.start.assert_called_once_with()
+    phone.start.assert_called_once_with(remember=True)
     assert dialog.dialog is None
     session = listener.call_args.args[0]
+    assert session.remember_enabled
     assert session.output_catalog is not None
     assert session.pack_catalog is not None
     dialog._timer = "pending"
