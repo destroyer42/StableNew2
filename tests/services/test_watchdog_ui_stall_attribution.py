@@ -1,0 +1,197 @@
+"""PR-GUI-STALL-ATTRIBUTION: a stalled Tk thread is attributed to the call site that is blocking it.
+
+``SystemWatchdogV2`` already notices a heartbeat that stops, but the only evidence it kept was a diagnostics ZIP at
+``UI_STALL_S`` behind a cooldown, so stalls shorter than that (or inside the cooldown) left nothing to act on. Every
+stall episode is now reduced to one structured log record that names the Tk-thread call sites sampled while it lasted.
+
+Nothing here waits on real time: the heartbeat age is injected and the "Tk thread" is a helper thread parked in a
+known function.
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+import time
+from types import SimpleNamespace
+
+import pytest
+
+from src.services.watchdog_system_v2 import SystemWatchdogV2
+
+
+def _app(*, ui_age_s: float) -> SimpleNamespace:
+    return SimpleNamespace(
+        last_ui_heartbeat_ts=time.monotonic() - ui_age_s,
+        last_queue_activity_ts=time.monotonic(),
+        last_runner_activity_ts=time.monotonic(),
+        current_operation_label="Refreshing preview from state",
+        last_ui_action="_refresh_preview_from_state_async()",
+        get_queue_state=lambda: {"queued": 0, "running": 0},
+        has_running_jobs=lambda: False,
+        _is_shutting_down=False,
+    )
+
+
+class _ParkedThread:
+    """A thread blocked inside a recognisable function, standing in for a Tk thread stuck in a callback."""
+
+    def __init__(self) -> None:
+        self._release = threading.Event()
+        self._parked = threading.Event()
+        self.thread = threading.Thread(target=self._outer_callback, name="fake-tk-thread")
+        self.thread.start()
+        assert self._parked.wait(5.0)
+
+    def _outer_callback(self) -> None:
+        self._count_everything_on_disk()
+
+    def _count_everything_on_disk(self) -> None:
+        self._parked.set()
+        self._release.wait(10.0)
+
+    @property
+    def ident(self) -> int:
+        assert self.thread.ident is not None
+        return self.thread.ident
+
+    def release(self) -> None:
+        self._release.set()
+        self.thread.join(5.0)
+
+
+@pytest.fixture
+def parked():
+    thread = _ParkedThread()
+    try:
+        yield thread
+    finally:
+        thread.release()
+
+
+@pytest.fixture
+def stall_records(caplog: pytest.LogCaptureFixture):
+    """Callable returning the stall records logged so far (``caplog.records`` is replaced per test phase)."""
+
+    caplog.set_level(logging.WARNING, logger="src.services.watchdog_system_v2")
+    return lambda: [r for r in caplog.records if "UI thread stalled" in r.getMessage()]
+
+
+def test_stalled_thread_is_attributed_to_the_function_it_is_blocked_in(
+    parked, stall_records
+) -> None:
+    app = _app(ui_age_s=3.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+
+    watchdog._check()
+    app.last_ui_heartbeat_ts = time.monotonic()  # the Tk loop is serviced again
+    watchdog._check()
+
+    records = stall_records()
+    assert len(records) == 1
+    payload = records[0].json_payload
+    assert payload["stage"] == "ui_stall"
+    assert payload["stall_s"] >= 3.0
+    assert payload["operation"] == "Refreshing preview from state"
+    hot = payload["stacks"][0]
+    assert any("_count_everything_on_disk" in frame for frame in hot["stack"])
+    assert any("_outer_callback" in frame for frame in hot["stack"])
+    assert hot["innermost"] == hot["stack"][0]
+    assert hot["samples"] == 1
+
+
+def test_repeated_samples_of_one_call_site_are_counted_not_repeated(parked, stall_records) -> None:
+    app = _app(ui_age_s=2.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+
+    for age in (2.0, 2.5, 3.0, 3.5):
+        app.last_ui_heartbeat_ts = time.monotonic() - age
+        watchdog._check()
+    app.last_ui_heartbeat_ts = time.monotonic()
+    watchdog._check()
+
+    (record,) = stall_records()
+    stacks = record.json_payload["stacks"]
+    assert len(stacks) == 1
+    assert stacks[0]["samples"] == 4
+    assert record.json_payload["stall_s"] >= 3.5
+
+
+def test_a_short_gap_is_not_reported(parked, stall_records) -> None:
+    app = _app(ui_age_s=0.3)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+
+    watchdog._check()
+    app.last_ui_heartbeat_ts = time.monotonic()
+    watchdog._check()
+
+    assert stall_records() == []
+
+
+def test_each_stall_episode_is_reported_once_when_it_ends(parked, stall_records) -> None:
+    app = _app(ui_age_s=2.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+
+    watchdog._check()
+    assert stall_records() == []  # still stalled: nothing yet
+    app.last_ui_heartbeat_ts = time.monotonic()
+    watchdog._check()
+    app.last_ui_heartbeat_ts = time.monotonic() - 2.0
+    watchdog._check()
+    app.last_ui_heartbeat_ts = time.monotonic()
+    watchdog._check()
+
+    assert len(stall_records()) == 2
+
+
+def test_the_diagnostics_bundle_context_carries_the_blocked_stack(parked) -> None:
+    calls: list[dict] = []
+
+    class _Diagnostics:
+        def build_async(self, *, reason: str, context: dict, on_done=None, **_kw) -> None:
+            calls.append({"reason": reason, "context": context})
+            if on_done is not None:
+                on_done()
+
+    app = _app(ui_age_s=SystemWatchdogV2.UI_STALL_S + 5.0)
+    watchdog = SystemWatchdogV2(app, _Diagnostics(), ui_thread_ident=parked.ident)
+
+    watchdog._check()
+
+    (call,) = [c for c in calls if c["reason"] == "ui_heartbeat_stall"]
+    assert "_count_everything_on_disk" in call["context"]["main_thread_stack"]
+
+
+def test_a_missing_ui_thread_does_not_break_the_watchdog(stall_records) -> None:
+    app = _app(ui_age_s=4.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=2**31 - 1)
+
+    watchdog._check()
+    app.last_ui_heartbeat_ts = time.monotonic()
+    watchdog._check()
+
+    (record,) = stall_records()
+    assert record.json_payload["stacks"] == []
+
+
+def test_a_starved_watchdog_thread_is_reported_with_every_threads_current_site(
+    parked, caplog
+) -> None:
+    """A GIL-holding call (or a suspended process) delays the watchdog thread as well as Tk: say so."""
+
+    caplog.set_level(logging.WARNING, logger="src.services.watchdog_system_v2")
+    app = _app(ui_age_s=0.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+
+    assert watchdog._note_loop_gap(0.5) is False  # on time: nothing to say
+    assert watchdog._note_loop_gap(0.5 + 0.2) is False  # small jitter
+    assert watchdog._note_loop_gap(0.5 + 6.0) is True
+
+    (record,) = [r for r in caplog.records if "Watchdog thread starved" in r.getMessage()]
+    payload = record.json_payload
+    assert payload["stage"] == "watchdog_starved"
+    assert payload["late_by_s"] >= 6.0
+    sites = payload["thread_sites"]
+    assert sites[parked.thread.name].count("in ") >= 1
+    assert "ui_heartbeat_age_s" in payload
+    assert isinstance(payload["system"], dict)

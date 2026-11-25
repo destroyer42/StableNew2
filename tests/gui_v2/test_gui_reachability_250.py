@@ -105,6 +105,7 @@ def test_readiness_recovery_is_reachable_with_long_guidance(tk_root, tmp_path):
         service=service,
         on_confirm_gpu_recovery=release,
         ui_state_store=UIStateStore(tmp_path / "ui.json"),
+        collect_in_background=False,
     )
     panel.pack(fill="both", expand=True)
     try:

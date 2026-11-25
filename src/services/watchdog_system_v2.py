@@ -1,10 +1,43 @@
 """Observe runtime progress and queue activity for stalls and report diagnosed violations."""
 
+import importlib
+import logging
+import sys
 import threading
 import time
 from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+
+from src.utils.logger import LogContext, log_with_ctx
+from src.utils.stack_sites import describe_stack
+
+logger = logging.getLogger(__name__)
 
 _NEVER_TRIGGERED = float("-inf")
+
+#: Frames kept per sampled stack (innermost first), and distinct stacks reported per stall episode.
+_STACK_DEPTH = 16
+_STACKS_PER_EPISODE = 4
+
+
+@dataclass
+class _StackSample:
+    frames: tuple[str, ...]
+    samples: int = 0
+    first_age_s: float = 0.0
+    last_age_s: float = 0.0
+
+
+@dataclass
+class _UiStallEpisode:
+    """The Tk-thread call sites sampled while one heartbeat gap lasted."""
+
+    operation: str | None
+    last_ui_action: str | None
+    peak_age_s: float = 0.0
+    sample_count: int = 0
+    stacks: dict[tuple[str, ...], _StackSample] = field(default_factory=dict)
 
 
 class SystemWatchdogV2:
@@ -23,7 +56,14 @@ class SystemWatchdogV2:
         "postprocess": 120.0,
         "encoding": 120.0,
     }
-    LOOP_PERIOD_S = 1.0
+    LOOP_PERIOD_S = 0.5
+    # A heartbeat gap this long starts attributing the Tk thread's call site (UI_STALL_S only decides when a
+    # diagnostics ZIP is worth writing). Ordinary gaps below this are Tk doing its work.
+    UI_SAMPLE_AFTER_S = 1.0
+    # The watchdog thread itself waking this much later than its period means the process, not one Tk callback, was
+    # held up: a call that keeps the GIL, or a suspended process. The heartbeat check cannot see that (the Tk thread
+    # may well beat first when the GIL comes back), so it is reported on its own.
+    LOOP_STARVED_AFTER_S = 1.5
 
     # Cooldowns prevent spam while a condition remains true
     COOLDOWN_S = {
@@ -34,10 +74,21 @@ class SystemWatchdogV2:
     _ACTIVE_THREAD: threading.Thread | None = None
 
     def __init__(
-        self, app_controller, diagnostics_service, *, check_interval_s: float | None = None
+        self,
+        app_controller,
+        diagnostics_service,
+        *,
+        check_interval_s: float | None = None,
+        ui_thread_ident: int | None = None,
     ):
         self.app = app_controller
         self.diagnostics = diagnostics_service
+        # The thread that owns Tk. Captured at construction (the controller attaches the watchdog from the Tk
+        # thread); tests inject a stand-in.
+        self._ui_thread_ident = (
+            ui_thread_ident if ui_thread_ident is not None else threading.main_thread().ident
+        )
+        self._ui_episode: _UiStallEpisode | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -96,8 +147,11 @@ class SystemWatchdogV2:
 
         PR-WATCHDOG-001: Added shutdown check to prevent diagnostics during shutdown.
         """
+        woke_at = time.monotonic()
         while not self._stop.is_set():
             try:
+                self._note_loop_gap(time.monotonic() - woke_at)
+                woke_at = time.monotonic()
                 # PR-WATCHDOG-001: Skip checks if shutdown requested
                 if hasattr(self.app, "_is_shutting_down") and self.app._is_shutting_down:
                     break
@@ -114,6 +168,7 @@ class SystemWatchdogV2:
         heartbeat_ts = getattr(self.app, "last_ui_heartbeat_ts", None)
         if heartbeat_ts:
             ui_age = now - float(heartbeat_ts)
+            self._observe_ui_stall(ui_age)
             if ui_age > self.UI_STALL_S:
                 self._trigger("ui_heartbeat_stall", now)
 
@@ -125,6 +180,140 @@ class SystemWatchdogV2:
             if self._runner_stall_episode_active:
                 self._last_trigger_ts["queue_runner_stall"] = _NEVER_TRIGGERED
             self._runner_stall_episode_active = False
+
+    def _note_loop_gap(self, gap_s: float) -> bool:
+        """Report one watchdog iteration that started much later than ``_loop_period`` allows."""
+
+        late_by = gap_s - self._loop_period
+        if late_by < self.LOOP_STARVED_AFTER_S:
+            return False
+        heartbeat_ts = getattr(self.app, "last_ui_heartbeat_ts", None)
+        try:
+            frames = sys._current_frames()  # one consistent snapshot of every thread
+            thread_sites = {
+                thread.name: (
+                    describe_stack(
+                        frames.get(thread.ident) if thread.ident is not None else None, depth=3
+                    )
+                    or ("<no frame>",)
+                )
+                for thread in threading.enumerate()
+            }
+        except Exception:  # noqa: BLE001 - diagnostics must never break the watchdog
+            thread_sites = {}
+        log_with_ctx(
+            logger,
+            logging.WARNING,
+            "Watchdog thread starved",
+            ctx=LogContext(subsystem="watchdog", stage="watchdog_starved"),
+            extra_fields={
+                "late_by_s": round(late_by, 2),
+                "ended_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "ui_heartbeat_age_s": (
+                    round(time.monotonic() - float(heartbeat_ts), 2) if heartbeat_ts else None
+                ),
+                "thread_sites": {
+                    name: " <- ".join(frames) for name, frames in thread_sites.items()
+                },
+                "system": self._system_context(),
+            },
+        )
+        return True
+
+    @staticmethod
+    def _system_context() -> dict[str, object]:
+        """Machine-level context that tells a GIL stall from a whole-machine one (CPU, memory, disk since boot)."""
+
+        try:
+            # Imported by name: the optional dependency has no stubs in every environment.
+            psutil = importlib.import_module("psutil")
+
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_io_counters()
+            process = psutil.Process()
+            return {
+                # A 0.1 s sample (this runs only on a starvation event, on the watchdog thread).
+                "cpu_percent": psutil.cpu_percent(interval=0.1),
+                "available_memory_mb": int(memory.available / (1024 * 1024)),
+                "process_cpu_seconds": round(sum(process.cpu_times()[:2]), 1),
+                "process_threads": process.num_threads(),
+                "disk_read_mb": int(disk.read_bytes / (1024 * 1024)) if disk else None,
+                "disk_write_mb": int(disk.write_bytes / (1024 * 1024)) if disk else None,
+            }
+        except Exception:  # noqa: BLE001 - diagnostics must never break the watchdog
+            return {}
+
+    def _capture_ui_stack(self) -> tuple[str, ...]:
+        """The Tk thread's current stack, innermost first; empty when the thread is gone."""
+
+        ident = self._ui_thread_ident
+        if ident is None:
+            return ()
+        try:
+            frame = sys._current_frames().get(ident)
+        except Exception:  # noqa: BLE001 - diagnostics must never break the watchdog
+            return ()
+        return describe_stack(frame, depth=_STACK_DEPTH)
+
+    def _observe_ui_stall(self, ui_age: float) -> None:
+        """Attribute a stalled heartbeat to the Tk-thread call site, one episode at a time.
+
+        While the heartbeat is older than ``UI_SAMPLE_AFTER_S`` every check samples the Tk thread's stack (cheap and
+        read-only). When the heartbeat resumes, the episode is reported as ONE structured record naming the distinct
+        call sites sampled, most frequent first. Nothing is written for a gap that never reached the threshold.
+        """
+
+        if ui_age >= self.UI_SAMPLE_AFTER_S:
+            episode = self._ui_episode
+            if episode is None:
+                episode = self._ui_episode = _UiStallEpisode(
+                    operation=getattr(self.app, "current_operation_label", None),
+                    last_ui_action=getattr(self.app, "last_ui_action", None),
+                )
+            episode.peak_age_s = max(episode.peak_age_s, ui_age)
+            episode.sample_count += 1
+            frames = self._capture_ui_stack()
+            if frames:
+                sample = episode.stacks.get(frames)
+                if sample is None:
+                    sample = episode.stacks[frames] = _StackSample(frames, first_age_s=ui_age)
+                sample.samples += 1
+                sample.last_age_s = ui_age
+            return
+        episode, self._ui_episode = self._ui_episode, None
+        if episode is not None:
+            self._report_ui_stall(episode)
+
+    @staticmethod
+    def _report_ui_stall(episode: _UiStallEpisode) -> None:
+        ranked = sorted(episode.stacks.values(), key=lambda item: item.samples, reverse=True)
+        stacks = [
+            {
+                "samples": item.samples,
+                "first_age_s": round(item.first_age_s, 2),
+                "last_age_s": round(item.last_age_s, 2),
+                # The innermost frame is usually stdlib (a lock wait, ``realpath``, ``fetchall``); ``site`` is the
+                # innermost frame inside StableNew, i.e. the call site to fix.
+                "site": next((f for f in item.frames if f.startswith("src/")), item.frames[0]),
+                "innermost": item.frames[0],
+                "stack": list(item.frames),
+            }
+            for item in ranked[:_STACKS_PER_EPISODE]
+        ]
+        log_with_ctx(
+            logger,
+            logging.WARNING,
+            "UI thread stalled",
+            ctx=LogContext(subsystem="watchdog", stage="ui_stall"),
+            extra_fields={
+                "stall_s": round(episode.peak_age_s, 2),
+                "ended_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "samples": episode.sample_count,
+                "operation": episode.operation,
+                "last_ui_action": episode.last_ui_action,
+                "stacks": stacks,
+            },
+        )
 
     def _queue_running_but_stalled(self, now: float) -> bool:
         runner_ts = getattr(self.app, "last_runner_activity_ts", None)
@@ -251,6 +440,8 @@ class SystemWatchdogV2:
             "watchdog_now_ts": now,
             "shutdown_in_progress": bool(getattr(self.app, "_is_shutting_down", False)),
             "main_thread_alive": bool(threading.main_thread().is_alive()),
+            # Where the Tk thread is blocked right now (innermost frame first).
+            "main_thread_stack": "\n".join(self._capture_ui_stack()),
         }
         context.update(self._runner_activity_context())
 

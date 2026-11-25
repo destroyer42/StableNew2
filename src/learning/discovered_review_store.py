@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -166,8 +167,8 @@ class DiscoveredReviewStore:
         if include_legacy:
             removable_origins.add("legacy_unknown")
         removed_groups: set[str] = set()
-        for handle in self.list_handles():
-            exp = self.load_group(handle.group_id)
+        for group_id in sorted(self.list_group_ids()):
+            exp = self.load_group(group_id)
             if exp is None or exp.origin not in removable_origins:
                 continue
             counts["groups_examined"] += 1
@@ -216,8 +217,8 @@ class DiscoveredReviewStore:
         if include_legacy:
             origins.add("legacy_unknown")
         removed = 0
-        for handle in self.list_handles():
-            exp = self.load_group(handle.group_id)
+        for group_id in sorted(self.list_group_ids()):
+            exp = self.load_group(group_id)
             if (
                 exp is not None
                 and exp.origin in origins
@@ -341,6 +342,22 @@ class DiscoveredReviewStore:
     # Handle listing
     # ------------------------------------------------------------------
 
+    def list_group_ids(self) -> set[str]:
+        """Ids of every stored group, from each group's ``meta.json`` alone.
+
+        For callers that only need to know which groups exist (deduplicating a scan, walking groups to load them
+        one by one). ``list_handles`` also counts every item's file, which is far more filesystem work.
+        """
+        ids: set[str] = set()
+        for group_dir in sorted(self._groups_root.iterdir()):
+            meta_path = group_dir / "meta.json"
+            if not group_dir.is_dir() or not meta_path.exists():
+                continue
+            # Same rule as ``list_handles``: an unreadable meta still names its group by folder.
+            meta = self._read_json(meta_path) or {}
+            ids.add(str(meta.get("group_id") or group_dir.name))
+        return ids
+
     def list_handles(
         self,
         status: str | None = None,
@@ -348,6 +365,10 @@ class DiscoveredReviewStore:
         """Return lightweight handles, optionally filtered by *status*.
 
         Results are sorted by ``created_at`` ascending (oldest first).
+
+        Each ``items.json`` is parsed once, and a stored path that is still a file is confirmed with one stat. Only
+        a path that no longer exists takes the (slow) output-route repair. This runs on the Tk thread, so its
+        cost is per item, not per group.
         """
         handles: list[DiscoveredReviewHandle] = []
         for group_dir in sorted(self._groups_root.iterdir()):
@@ -359,10 +380,9 @@ class DiscoveredReviewStore:
             meta = self._read_json(meta_path) or {}
             try:
                 raw_items = self._read_json(group_dir / "items.json") or []
+                item_count = len(raw_items) if isinstance(raw_items, list) else 0
                 available_count = sum(
-                    Path(
-                        self._repair_output_path(str(item.get("artifact_path") or ""))
-                    ).is_file()
+                    self._artifact_is_available(str(item.get("artifact_path") or ""))
                     for item in raw_items
                     if isinstance(item, dict)
                 )
@@ -371,12 +391,12 @@ class DiscoveredReviewStore:
                     display_name=str(meta.get("display_name") or ""),
                     stage=str(meta.get("stage") or ""),
                     status=str(meta.get("status") or STATUS_WAITING_REVIEW),
-                    item_count=self._count_items(group_dir),
+                    item_count=item_count,
                     varying_fields=tuple(meta.get("varying_fields") or []),
                     created_at=str(meta.get("created_at") or ""),
                     updated_at=str(meta.get("updated_at") or ""),
                     available_item_count=available_count,
-                    missing_item_count=max(0, self._count_items(group_dir) - available_count),
+                    missing_item_count=max(0, item_count - available_count),
                     origin=str(meta.get("origin") or "legacy_unknown"),
                 )
             except Exception as exc:
@@ -385,6 +405,13 @@ class DiscoveredReviewStore:
             if status is None or handle.status == status:
                 handles.append(handle)
         return handles
+
+    @classmethod
+    def _artifact_is_available(cls, raw_path: str) -> bool:
+        """Whether an item's artifact is on disk, at its stored path or where a route rebalance moved it."""
+        if raw_path and os.path.isfile(raw_path):
+            return True
+        return Path(cls._repair_output_path(raw_path)).is_file()
 
     def list_handles_by_status(self, statuses: list[str]) -> list[DiscoveredReviewHandle]:
         """Return handles whose status is in *statuses*."""

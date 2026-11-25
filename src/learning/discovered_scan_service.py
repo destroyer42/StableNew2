@@ -53,7 +53,7 @@ def apply_scan(
             else:
                 observational.append(record)
 
-        existing_ids = {h.group_id for h in store.list_handles()}
+        existing_ids = store.list_group_ids()
         for assignment in engine.plan(observational, existing_group_ids=existing_ids):
             if assignment.candidate is None:
                 continue  # existing group: duplicate suppressed by id, index left untouched

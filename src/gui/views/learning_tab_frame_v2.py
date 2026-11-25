@@ -1114,8 +1114,17 @@ class LearningTabFrame(ttk.Frame):
                 self._goto_step(STEP_DESIGN)
 
     def _schedule_summary_refresh(self) -> None:
+        """Build the summary now and arm the 1 s timer that keeps it current while the tab is on screen."""
         self._refresh_summary()
-        self._summary_refresh_after_id = self.after(1000, self._schedule_summary_refresh)
+        self._summary_refresh_after_id = self.after(1000, self._summary_tick)
+
+    def _summary_tick(self) -> None:
+        # The summary reads the job queue's diagnostics (queue-lock acquisitions) while a generation holds that lock
+        # across every progress commit, so a tab nobody is looking at must not keep the Tk thread queued behind it.
+        # The timer stays armed; the first tick after the tab is shown refreshes it.
+        if self.winfo_ismapped():
+            self._refresh_summary()
+        self._summary_refresh_after_id = self.after(1000, self._summary_tick)
 
     def _on_learning_destroy(self, event: tk.Event[Any]) -> None:
         if event.widget is self:

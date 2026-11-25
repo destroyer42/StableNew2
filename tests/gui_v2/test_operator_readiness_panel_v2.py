@@ -189,6 +189,7 @@ def test_panel_renders_all_readiness_states_and_refresh_is_read_only(
         service=fake_service,
         source_image_path_provider=lambda: "C:/source.png",
         ui_state_store=store,
+        collect_in_background=False,
     )
     panel.pack()
     tk_root.update_idletasks()
@@ -242,7 +243,10 @@ def test_panel_states_that_it_is_a_snapshot_and_refresh_shows_the_current_state(
         OperatorReadinessSnapshot(support_surfaces=product_support_surfaces(), records=(held,))
     )
     panel = OperatorReadinessPanelV2(
-        tk_root, service=service, ui_state_store=UIStateStore(tmp_path / "ui_state.json")
+        tk_root,
+        service=service,
+        ui_state_store=UIStateStore(tmp_path / "ui_state.json"),
+        collect_in_background=False,
     )
     panel.pack()
     tk_root.update_idletasks()
