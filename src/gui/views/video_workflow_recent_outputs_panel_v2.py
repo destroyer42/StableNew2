@@ -1,7 +1,7 @@
 """Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314). Presentation only.
 
 Lists the newest finished clips from the canonical repository, previews the selected one in a bounded
-looping widget, and offers Open, Reveal and Send to Movie Clips.  Everything that reads the repository or
+looping widget, and offers Open, Reveal, Send to Movie Clips and Continue in Storyboard.  Everything that reads the repository or
 the file system runs on a worker owned by the existing ``ThreadRegistry``; results return to the Tk thread
 through ``TkUiDispatcher`` and are dropped when stale or after the panel is destroyed.  The panel builds no
 job, calls no backend and never writes.
@@ -40,6 +40,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         add_to_library: Callable[[RecentVideoOutput, Mapping[str, Any]], Any] | None = None,
         on_library_changed: Callable[[], None] | None = None,
         harvest_motion: Callable[[RecentVideoOutput], None] | None = None,
+        continue_in_storyboard: Callable[[RecentVideoOutput], None] | None = None,
         ask_library_details: Callable[[RecentVideoOutput], Mapping[str, Any] | None] | None = None,
         decode: Any = None,
         shown_var: tk.BooleanVar | None = None,
@@ -50,6 +51,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         )
         self._closed = False
         self._harvest_motion = harvest_motion
+        self._continue_in_storyboard = continue_in_storyboard
         self._runner: BackgroundWorkRunner | None = None
         self._previewed: str = ""
         self.status_var = tk.StringVar(value="")
@@ -87,6 +89,13 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             command=self._on_harvest,
             state="disabled",
         )
+        self.storyboard_button = ttk.Button(
+            actions,
+            text="Continue in Storyboard",
+            style="Dark.TButton",
+            command=self._on_continue_in_storyboard,
+            state="disabled",
+        )
         for button in (
             self.refresh_button,
             self.open_button,
@@ -94,6 +103,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             self.movie_button,
             self.library_button,
             self.harvest_button,
+            self.storyboard_button,
         ):
             button.pack(side="left", padx=(0, 6))
 
@@ -198,6 +208,11 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
                 if selected is not None and self._harvest_motion is not None
                 else "disabled"
             )
+            self.storyboard_button.configure(
+                state="normal"
+                if selected is not None and self._continue_in_storyboard is not None
+                else "disabled"
+            )
             self.refresh_button.configure(state="disabled" if self.session.busy else "normal")
             self.status_var.set(
                 "Reading recent outputs..." if self.session.busy else self.session.status
@@ -256,6 +271,17 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         output = self.session.selected
         if output is not None and self._harvest_motion is not None:
             self._harvest_motion(output)
+
+    def _on_continue_in_storyboard(self) -> None:
+        """Open the selected clip's job in the Storyboard tab (intent only; the tab reports any refusal)."""
+
+        output = self.session.selected
+        if output is None or self._continue_in_storyboard is None:
+            return
+        try:
+            self._continue_in_storyboard(output)
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.status_var.set(f"Continue in Storyboard failed: {exc}")
 
     def _on_add_to_library(self) -> None:
         output = self.session.selected

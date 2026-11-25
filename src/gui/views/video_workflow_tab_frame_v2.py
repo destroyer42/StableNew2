@@ -642,6 +642,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 "add_to_library": self._add_output_to_library,
                 "on_library_changed": self._refresh_motion_library,
                 "harvest_motion": self._harvest_recent_output,
+                "continue_in_storyboard": self._continue_output_in_storyboard,
             },
         )
         self.show_media_check = self._media_pane.check
@@ -2025,6 +2026,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             bundle=dict(output.bundle),
             status_message=f"Loaded {output.file_name} into Movie Clips.",
         )
+
+    def _continue_output_in_storyboard(self, output: Any) -> None:
+        """Open a recent clip's job in the Storyboard tab as a new root (intent only; nothing is queued)."""
+
+        from src.gui.controllers.video_workspace_handoff import route_job_to_storyboard
+
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            raise RuntimeError("The main window is not available.")
+        route_job_to_storyboard(main_window=main_window, job_id=output.job_id)
 
     def _read_runtime_readiness_selection(self) -> tuple[str, str]:
         """The selected workflow for the runtime strip; empty (strip hidden) when there is no controller."""

@@ -60,6 +60,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
+- `site_desktop_approval.py`: Current-user persistence for the loopback browser's remembered approval
 - `site_library_index.py`: Rebuildable, root-local SQLite projection for Operator Site browsing
 - `site_library_query.py`: Validated query values shared by the Site library and its SQLite projection
 - `site_library_reconcile.py`: Incremental discovery for one approved Output root
