@@ -60,6 +60,10 @@ from src.gui.views.video_workflow_media_pane_v2 import (
 )
 from src.gui.views.video_workflow_motion_library_panel_v2 import WorkflowMotionLibraryPanel
 from src.gui.views.video_workflow_motion_prep_panel_v2 import WorkflowMotionPreparationPanel
+from src.gui.views.video_workflow_rate_review_v2 import (
+    OPEN_OPERATOR_SITE_EVENT,
+    RateReviewSection,
+)
 from src.gui.views.video_workflow_runtime_strip_v2 import WorkflowRuntimeReadinessStrip
 from src.gui.views.video_workflow_sections_v2 import (
     build_details_section,
@@ -499,7 +503,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             style="Dark.TButton",
             command=self._on_readiness_chip,
         )
-        self.readiness_chip.pack(side="right", padx=(8, 0))
+        # Packed before the expanding status label so a narrow window shortens the status text, never the chip.
+        self.readiness_chip.pack(side="right", padx=(8, 0), before=self.status_label)
         self.readiness_chip_tooltip = attach_tooltip(
             self.readiness_chip,
             "Source and motion readiness at a glance. Click to open the details beside the form.",
@@ -804,8 +809,18 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw") != "sfw"
             ),
             on_queued=self._on_batch_queued_refresh_only,
+            on_run_changed=lambda run: self.rate_review.set_run(run),
         )
         self.eval_panel.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self.rate_review = RateReviewSection(
+            view.rate_host,
+            open_report=self.eval_panel.open_selected_report,
+            open_motion_review=self.eval_panel.open_selected_motion_review,
+            open_site=lambda: self.winfo_toplevel().event_generate(
+                OPEN_OPERATOR_SITE_EVENT, when="tail"
+            ),
+        )
+        self.rate_review.grid(row=0, column=0, sticky="ew")
 
     def _configured_eval_plans_dir(self) -> str:
         manager = getattr(self.app_controller, "_config_manager", None)

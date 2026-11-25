@@ -41,6 +41,7 @@ def readiness_chip_text(view: Any, *, has_source: bool) -> str:
     if readiness_has_warning(view):
         return "Source ready - see notes"
     detail = next((line for line in view.source_lines if line), "")
+    detail = detail.removeprefix("Source:").strip()
     return f"Source ready · {detail}"[:72] if detail else "Source ready"
 
 

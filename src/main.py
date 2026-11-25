@@ -707,6 +707,8 @@ def main() -> None:
         from src.gui.site_connection_dialog import install_site_connection_control
 
         site_connection = install_site_connection_control(root, app_controller, window.header_zone)
+        # Video Workflow > Evaluate > Rate & review raises this; the GUI only expresses the intent.
+        root.bind("<<OpenOperatorSite>>", lambda _event: site_connection.open(), add="+")
 
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(

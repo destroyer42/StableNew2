@@ -25,6 +25,7 @@ from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui.views.video_eval_editor_dialog import VideoEvalEditorDialog
 from src.gui.views.video_eval_motion_review_window import open_motion_review
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.state.eval_plans_paths import initialize_eval_plans
 from src.state.workspace_paths import workspace_paths
 from src.utils.os_shell import open_file
@@ -50,6 +51,7 @@ class VideoEvalPanel(ttk.LabelFrame):
         confirm: Callable[[str, str], bool] | None = None,
         open_report: Callable[[str], Any] = webbrowser.open,
         confirm_import: Callable[[str, str], bool] = messagebox.askyesno,
+        on_run_changed: Callable[[RunEntry | None], None] | None = None,
     ) -> None:
         super().__init__(parent, text="Eval suite", padding=6)
         self._get_controller = get_controller
@@ -62,6 +64,7 @@ class VideoEvalPanel(ttk.LabelFrame):
         self._confirm = confirm
         self._confirm_import = confirm_import
         self._open_report = open_report
+        self._on_run_changed = on_run_changed
         self._editor: VideoEvalEditorDialog | None = None
         self._motion_review: Any = None
         self._busy = False
@@ -101,9 +104,9 @@ class VideoEvalPanel(ttk.LabelFrame):
             self.other_file_button,
         ):
             button.pack(side="left", padx=(0, 4))
-        ttk.Label(
-            self, textvariable=self.plan_status_var, wraplength=460, style=MUTED_LABEL_STYLE
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        plan_status = ttk.Label(self, textvariable=self.plan_status_var, style=MUTED_LABEL_STYLE)
+        plan_status.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        bind_wraplength(plan_status)
 
         ttk.Label(self, text="Run", style=MUTED_LABEL_STYLE).grid(
             row=3, column=0, sticky="w", padx=(0, 6)
@@ -132,9 +135,9 @@ class VideoEvalPanel(ttk.LabelFrame):
             self.run_folder_button,
         ):
             button.pack(side="left", padx=(0, 4))
-        ttk.Label(self, textvariable=self.status_var, wraplength=460, style=MUTED_LABEL_STYLE).grid(
-            row=5, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
+        run_status = ttk.Label(self, textvariable=self.status_var, style=MUTED_LABEL_STYLE)
+        run_status.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        bind_wraplength(run_status)
         self._update_controls()
         self.bind("<Map>", lambda _event: self.refresh(), add="+")
         self.bind("<Destroy>", self._on_destroy, add="+")
@@ -154,6 +157,16 @@ class VideoEvalPanel(ttk.LabelFrame):
     def _selected_run(self) -> RunEntry | None:
         index = self.run_combo.current()
         return self._runs[index] if index >= 0 else None
+
+    # Public, read-only seams for the Evaluate view's Rate & review section (VID-UX-384 follow-up).
+    def selected_run(self) -> RunEntry | None:
+        return self._selected_run()
+
+    def open_selected_report(self) -> None:
+        self._open_selected_report()
+
+    def open_selected_motion_review(self) -> None:
+        self._open_motion_review()
 
     def refresh(
         self,
@@ -232,6 +245,8 @@ class VideoEvalPanel(ttk.LabelFrame):
         else:
             self.plan_status_var.set(plan.error)
         self._update_controls()
+        if self._on_run_changed is not None:
+            self._on_run_changed(self._selected_run())
 
     def _open_editor(self) -> None:
         if self._busy or self._closed:
