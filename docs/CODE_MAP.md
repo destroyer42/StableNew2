@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-987 of 987 modules have a docstring.
+998 of 998 modules have a docstring.
 
 ## src/
 
@@ -419,6 +419,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `storyboard_tree_contract.py`: Tk-free state of the Storyboard tab (PR-VID-STORY-380, spec 7.2)
 - `task_navigation_contract.py`: Task-first navigation contract (PR-GUI-410)
 - `video_batch_contract.py`: Toolkit-neutral state for the Video Workflow multi-source batch section (PR-VID-BATCH-200)
+- `video_eval_motion_contract.py`: Toolkit-neutral helpers for authoring a case's driving-motion reference in the eval editor (PR-VID-MOTION-410)
+- `video_eval_motion_review_contract.py`: Toolkit-neutral state of the Motion Review window for a controlled-motion eval run (PR-VID-MOTION-410)
 - `video_experiment_contract.py`: Toolkit-neutral state for the Video Workflow "Compare one control" section (PR-VID-194)
 - `video_motion_prep_contract.py`: Toolkit-neutral state for the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_motion_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Motion source readiness" panel (PR-VID-196)
@@ -482,6 +484,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `storyboard_tab_frame_v2.py`: The Storyboard tab: a tree of takes as shot columns, a cut viewer and a Continue panel (PR-VID-STORY-380)
 - `svd_tab_frame_v2.py`: Present Native SVD settings, source and folder selection, and queued submission controls
 - `video_eval_editor_dialog.py`: Graphical authoring of video evaluation suite intent
+- `video_eval_editor_motion.py`: The "Driving motion" section of the eval suite editor (PR-VID-MOTION-410)
+- `video_eval_motion_review_window.py`: Tk window for reviewing a controlled-motion eval run (PR-VID-MOTION-410)
 - `video_eval_panel_v2.py`: Video Workflow tab: queue an eval suite and build its contact sheet (PR-VID-EVAL-320)
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
@@ -1065,12 +1069,19 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_eval_catalog.py`: Read-only discovery of video evaluation plans and runs
 - `video_eval_identity.py`: Source-image, clip and job identity for eval reports (PR-VID-QUALITY-351)
 - `video_eval_import.py`: Copy a video suite into Evaluation Plans while keeping its source references usable
+- `video_eval_integrity.py`: Comparison-integrity vocabulary for controlled-motion eval runs (PR-VID-MOTION-410)
 - `video_eval_metrics.py`: Deterministic clip measurements for the video eval kit (PR-VID-EVAL-320)
+- `video_eval_motion.py`: Case-level driving-motion binding for video eval suites (PR-VID-MOTION-410)
+- `video_eval_motion_evidence.py`: Evidence context of one controlled-motion eval cell (PR-VID-MOTION-410)
+- `video_eval_motion_html.py`: HTML fragments for controlled-motion evidence in the eval contact sheet (PR-VID-MOTION-410)
+- `video_eval_motion_metrics.py`: Global image-motion diagnostics: driving reference versus generated result (PR-VID-MOTION-410)
+- `video_eval_motion_review.py`: Read-only data for reviewing a controlled-motion eval run (PR-VID-MOTION-410)
 - `video_eval_ratings_store.py`: Safe, lossless persistence for an eval run's ``ratings.csv`` (PR-VID-QUALITY-351)
 - `video_eval_report.py`: Measure an admitted eval run and write its contact sheet (PR-VID-EVAL-320)
 - `video_eval_rubric.py`: Identity and continuity rubric for eval-suite ratings (PR-VID-QUALITY-351)
 - `video_eval_run.py`: Plan and admit one video eval run on the canonical path (PR-VID-EVAL-320)
 - `video_eval_suite.py`: Video eval suite: a fixed set of source images and prompts run against named arms (PR-VID-EVAL-320)
+- `video_eval_transfer.py`: Transferability evidence summaries for a controlled-motion eval run (PR-VID-MOTION-410)
 - `video_execution_resolver.py`: Single canonical resolver for video execution: explicit backend, task and controls
 - `video_export.py`: Export helpers for native video generation outputs and assembled-video flows
 - `video_interpolation.py`: Backend-neutral RIFE smoothing of a finished video file (PR-VID-SMOOTH-302)

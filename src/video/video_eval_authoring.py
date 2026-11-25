@@ -25,11 +25,23 @@ from src.video.svd_models import resolve_svd_model_spec
 from src.video.svd_postprocess import validate_svd_postprocess_config
 from src.video.svd_preprocess import SVD_SUPPORTED_IMAGE_SUFFIXES
 from src.video.video_eval_import import is_private_suite
+from src.video.video_eval_motion import (
+    DRIVING_SUFFIXES,
+    MOTION_BLOCK,
+    PREP_WORKFLOW,
+    check_arm_form,
+    driving_support_error,
+    file_sha256,
+    motion_form,
+    parse_motion,
+)
 from src.video.video_eval_suite import (
     ARM_BACKEND_SVD,
     ARM_BACKEND_WORKFLOW,
     MAX_EVAL_JOBS,
     SUITE_SCHEMA,
+    SUITE_SCHEMA_V2,
+    SUITE_SCHEMAS,
     EvalArm,
     EvalSegment,
     EvalSuiteError,
@@ -127,6 +139,71 @@ def bind_source(path: Path) -> dict[str, str]:
     return {"image": str(source), "image_sha256": digest}
 
 
+def bind_driving_video(path: Path) -> dict[str, Any]:
+    """Bind a local driving video and record the bytes selected.
+
+    The result is a local video with *no* library or job provenance: it is never described as anything else unless
+    ``bind_library_asset`` supplies a verified Motion Library binding for these exact bytes."""
+
+    local = _local_path(_local_path(path).resolve())
+    if local.suffix.lower() not in DRIVING_SUFFIXES:
+        raise EvalSuiteError(
+            f"Choose a video file ({', '.join(sorted(DRIVING_SUFFIXES))}): {local.name}"
+        )
+    if not local.is_file():
+        raise EvalSuiteError(f"Driving video not found or not a regular file: {local}")
+    try:
+        digest = file_sha256(local)
+    except OSError as exc:
+        raise EvalSuiteError(f"Cannot read driving video {local.name}: {exc}") from exc
+    return {"driving": {"path": str(local), "sha256": digest}}
+
+
+def bind_library_asset(store: Any, asset_id: str, cancel: Any = None) -> dict[str, Any]:
+    """Bind a verified Motion Library clip: its bytes are hashed now and must equal the catalogued SHA-256.
+
+    Returns the ``motion`` fields the library can supply (the driving file, its library binding, a harvested asset's
+    original and window, and the asset's own framing, viewpoint and direction notes) for the operator to review. Nothing
+    is queued and the library is not modified."""
+
+    from src.video.motion_library.verification import FILE_OK, verify_content
+
+    asset = store.get(asset_id)
+    if asset is None:
+        raise EvalSuiteError(f"No Motion Library asset {asset_id!r}.")
+    path = store.asset_path(asset)
+    check = verify_content(asset, path, cancel)
+    if check.state != FILE_OK:
+        raise EvalSuiteError(f"{asset.display_name}: {check.message}")
+    binding: dict[str, Any] = {"asset_id": asset.asset_id, "sha256": asset.sha256}
+    harvest = getattr(asset, "harvest", None)
+    if harvest is not None:
+        binding["derived_from"] = {
+            "original_sha256": harvest.original_sha256,
+            "start_frame": harvest.start_frame,
+            "end_frame": harvest.end_frame,
+            "cadence": harvest.cadence,
+        }
+    notes = {
+        key: value
+        for key, value in (
+            ("framing", getattr(asset, "framing", "")),
+            ("viewpoint", getattr(asset, "viewpoint", "")),
+        )
+        if value and value != "unknown"
+    }
+    suggested: dict[str, Any] = {
+        "driving": {"path": str(path), "sha256": asset.sha256, "library_asset": binding},
+        "annotations": notes,
+    }
+    if getattr(asset, "motion_direction", ""):
+        suggested["direction"] = asset.motion_direction
+    label = asset.effective_motion_label
+    if label:
+        suggested["action"] = label
+    return suggested
+
+
 @dataclass
 class EvalSuiteDraft:
     data: dict[str, Any]
@@ -155,8 +232,10 @@ class EvalSuiteDraft:
         data = json.loads(
             raw.decode("utf-8"), object_pairs_hook=_unique_object, parse_constant=_invalid_number
         )
-        if not isinstance(data, dict) or data.get("schema") != SUITE_SCHEMA:
-            raise EvalSuiteError(f"Expected an eval suite with schema {SUITE_SCHEMA}.")
+        if not isinstance(data, dict) or data.get("schema") not in SUITE_SCHEMAS:
+            raise EvalSuiteError(
+                f"Expected an eval suite with schema {' or '.join(SUITE_SCHEMAS)}."
+            )
         for key in ("cases", "arms"):
             items = data.setdefault(key, [])
             if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
@@ -185,6 +264,34 @@ class EvalSuiteDraft:
         arm["arm_id"] = _next_id(self.arms, "arm")
         self.arms.append(arm)
         return arm
+
+    def add_motion_case(self, motion: dict[str, Any] | None = None) -> dict[str, Any]:
+        """A new case that carries a driving-motion block (an empty one is completed by the editor)."""
+
+        case = self.add_case()
+        case[MOTION_BLOCK] = deepcopy(motion) if motion is not None else {}
+        return case
+
+    def duplicate_case_for_source(
+        self, index: int, image: dict[str, str] | None = None
+    ) -> dict[str, Any]:
+        """Copy case ``index`` for another source image: the driving reference and every expectation are kept.
+
+        The copy gets a fresh id and its own image binding (or none yet, which validation refuses until it is bound),
+        and never inherits the original's image digest. No arm is added: arms stay shared across all cases."""
+
+        copy = deepcopy(self.cases[index])
+        copy["case_id"] = _next_id(self.cases, "case")
+        copy.pop("image_sha256", None)
+        copy["image"] = ""
+        if image:
+            copy.update(image)
+        self.cases.append(copy)
+        return copy
+
+    @property
+    def has_motion(self) -> bool:
+        return any(MOTION_BLOCK in case for case in self.cases)
 
 
 def _next_id(items: list[dict[str, Any]], kind: str) -> str:
@@ -255,6 +362,28 @@ def _validate_case(
             raise EvalSuiteError("Enter a motion prompt.")
     except _INPUT_ERRORS as exc:
         _problem(errors, label, exc)
+    if MOTION_BLOCK in case:
+        try:
+            if segments:
+                raise EvalSuiteError(
+                    f"{label}: a driving-motion case is a single clip; ordered segments are not supported with it."
+                )
+            raw_driver = (
+                (case[MOTION_BLOCK].get("driving") or {})
+                if isinstance(case[MOTION_BLOCK], dict)
+                else {}
+            )
+            if isinstance(raw_driver, dict) and str(raw_driver.get("path") or "").strip():
+                _local_path(Path(str(raw_driver["path"]).strip()))
+            binding = parse_motion(
+                case[MOTION_BLOCK], str(case.get("case_id") or "(unnamed)"), source_dir
+            )
+            if (
+                inspect_source
+            ):  # the verified absolute path and bytes, exactly as the suite will pin them
+                case[MOTION_BLOCK] = binding.to_record()
+        except _INPUT_ERRORS as exc:
+            _problem(errors, "", exc)
     if case.get("tags") is not None and not isinstance(case["tags"], list):
         errors.append(f"{label}: tags must be a list.")
     return segments
@@ -274,6 +403,17 @@ def _validate_workflow(
         seed=str(seed),
     )
     spec = builder.spec_for(form)
+    prepared_by_case = False
+    if case.get(MOTION_BLOCK) is not None:
+        # The case's driving reference is applied exactly as the production preview applies it; a workflow that takes
+        # no driving video refuses the case instead of silently running without it.
+        binding = parse_motion(case[MOTION_BLOCK], str(case.get("case_id") or ""), None)
+        problem = driving_support_error(spec, binding)
+        if problem:
+            return [problem]
+        check_arm_form(arm.arm_id, arm.overrides)
+        form = motion_form(binding, form)
+        prepared_by_case = binding.preparation_mode == PREP_WORKFLOW
     for key in ("camera_intent", "controlnet", "depth_input", "interpolation", "operator_controls"):
         if form.get(key) is not None and not isinstance(form[key], dict):
             raise EvalSuiteError(f"{key} must be an object.")
@@ -284,9 +424,14 @@ def _validate_workflow(
     ):
         raise EvalSuiteError(f"'{spec.display_name}' does not accept a frame count.")
     errors = capability_errors(spec, form, prompt_per_segment=bool(segments))
-    if requires_exact_motion(spec) and not form.get(PREPARED_MOTION_SOURCE_FIELD):
+    if (
+        requires_exact_motion(spec)
+        and not form.get(PREPARED_MOTION_SOURCE_FIELD)
+        and not prepared_by_case
+    ):
         errors.append(
-            "This workflow requires an accepted Prepare Motion Source record in the suite."
+            "This workflow requires an accepted Prepare Motion Source record in the suite "
+            "(or a motion case whose preparation mode is workflow_prepared)."
         )
     if segments and segments[0].frame_count is not None:
         form["frame_count"] = segments[0].frame_count
@@ -352,6 +497,12 @@ def _validate_backend(
     if arm.backend == ARM_BACKEND_SVD:
         if any(segments):
             errors.append(f"{label}: native SVD cannot run sequence cases.")
+        for case in cases:
+            if case.get(MOTION_BLOCK) is not None:
+                errors.append(
+                    f"{label} × {case.get('case_id') or '(unnamed)'}: native SVD takes no driving video, so it "
+                    "cannot run a driving-motion case (the reference is not dropped to make the arm queueable)."
+                )
         for case in cases:
             image = str(case.get("image") or "").strip()
             if image and Path(image).suffix.lower() not in SVD_SUPPORTED_IMAGE_SUFFIXES:
@@ -426,6 +577,10 @@ def validate_draft(draft: EvalSuiteDraft, catalog: EvalWorkflowCatalog) -> EvalD
     base = draft.source.parent if draft.source is not None else Path.cwd()
     cases = record["cases"]
     segments = [_validate_case(case, base, errors, inspect_source=not over_limit) for case in cases]
+    if any(MOTION_BLOCK in case for case in cases):
+        # A motion case needs the v2 schema; v1 readers then refuse the file instead of ignoring the driver. The saved
+        # draft is a new version file: no existing plan is rewritten.
+        record["schema"] = SUITE_SCHEMA_V2
     builder = VideoWorkflowNjrBuilder(workflow_registry=catalog, output_dir_provider=lambda: None)
     for item in record["arms"]:
         try:

@@ -38,10 +38,13 @@ from src.video.video_eval_rubric import (
     BREAK_COLUMN,
     CATEGORIES_COLUMN,
     FIRST_FAILURE_COLUMN,
+    MOTION_COLUMNS,
+    MOTION_RUBRIC_VERSION,
     NOTES_COLUMN,
     OVERALL_COLUMN,
     SCORE_COLUMNS,
     row_has_content,
+    row_has_motion_content,
 )
 
 KEY_COLUMNS = ("case_id", "arm_id", "job_id")
@@ -57,6 +60,13 @@ RATING_COLUMNS = (
     CATEGORIES_COLUMN,
     FIRST_FAILURE_COLUMN,
 )
+#: PR-VID-MOTION-410. Added to a run's header only when the run (or the file) carries controlled-motion evidence, so
+#: every existing non-motion ``ratings.csv`` keeps its exact layout and is never rewritten for these columns.
+#: ``driving_context_sha256`` binds the motion judgments to the effective driving context they were made against, the
+#: way ``artifact_sha256`` binds the visual judgments to the clip; ``rubric_version`` names the vocabulary in force.
+CONTEXT_COLUMN = "driving_context_sha256"
+RUBRIC_COLUMN = "rubric_version"
+MOTION_RATING_COLUMNS = (CONTEXT_COLUMN, RUBRIC_COLUMN, *MOTION_COLUMNS)
 MAX_RATINGS_BYTES = 5 * 1024 * 1024
 
 RowKey = tuple[str, str, str]
@@ -155,11 +165,16 @@ def _read_file(path: Path) -> bytes | None:
         return None
 
 
-def output_header(loaded: LoadedRatings) -> tuple[str, ...]:
-    """The known columns, then any column this version does not know, in the order the file had them."""
+def output_header(loaded: LoadedRatings, *, motion: bool = False) -> tuple[str, ...]:
+    """The known columns, then any column this version does not know, in the order the file had them.
 
-    unknown = tuple(name for name in loaded.header if name not in RATING_COLUMNS)
-    return (*RATING_COLUMNS, *unknown)
+    The motion columns are known columns only for a motion run or a file that already holds one of them; otherwise
+    they are not added, so a pre-410 run is never reformatted."""
+
+    with_motion = motion or any(name in MOTION_RATING_COLUMNS for name in loaded.header)
+    known = (*RATING_COLUMNS, *MOTION_RATING_COLUMNS) if with_motion else RATING_COLUMNS
+    unknown = tuple(name for name in loaded.header if name not in known)
+    return (*known, *unknown)
 
 
 def bind_artifact(row: dict[str, str], current_sha256: str | None) -> dict[str, str]:
@@ -173,14 +188,36 @@ def bind_artifact(row: dict[str, str], current_sha256: str | None) -> dict[str, 
     return row
 
 
+def bind_context(row: dict[str, str], current_context: str | None) -> dict[str, str]:
+    """Stamp the effective driving context a motion review is about (same rule as ``bind_artifact``).
+
+    A blank row with no motion judgment, or an explicit ``rebind``, takes the current context and the rubric version.
+    A row that already holds a context or a motion judgment is never re-stamped automatically: a judgment typed
+    without a context stays *unverified*, and one bound to another context stays *inapplicable*."""
+
+    bound = row.get(CONTEXT_COLUMN, "").strip()
+    if current_context and (
+        bound.lower() == REBIND_TOKEN or (not bound and not row_has_motion_content(row))
+    ):
+        row[CONTEXT_COLUMN] = current_context
+        if not row.get(RUBRIC_COLUMN, "").strip() or bound.lower() == REBIND_TOKEN:
+            row[RUBRIC_COLUMN] = MOTION_RUBRIC_VERSION
+    return row
+
+
 def merge_rows(
     loaded: LoadedRatings,
     cells: Iterable[tuple[RowKey, str | None]],
+    *,
+    contexts: Mapping[RowKey, str | None] | None = None,
 ) -> list[dict[str, str]]:
-    """One row per manifest cell (existing values kept, digest stamped as above), then every other row."""
+    """One row per manifest cell (existing values kept, digests stamped as above), then every other row.
+
+    ``contexts`` is given only for a controlled-motion run: it maps a motion cell's key to its current driving context
+    digest (``None`` when it cannot be established, which stamps nothing)."""
 
     existing = loaded.keyed()
-    header = output_header(loaded)
+    header = output_header(loaded, motion=contexts is not None)
     merged: list[dict[str, str]] = []
     used: set[RowKey] = set()
     for key, current_sha256 in cells:
@@ -188,6 +225,8 @@ def merge_rows(
         row.update(existing.get(key, {}))
         row.update(zip(KEY_COLUMNS, key, strict=True))
         merged.append(bind_artifact(row, current_sha256))
+        if contexts is not None and key in contexts:
+            bind_context(row, contexts[key])
         used.add(key)
     for key, row in existing.items():
         if key not in used:
@@ -313,15 +352,19 @@ def _write_ratings(
 
 __all__ = [
     "ARTIFACT_COLUMN",
+    "CONTEXT_COLUMN",
     "KEY_COLUMNS",
     "LEGACY_COLUMNS",
     "MAX_RATINGS_BYTES",
+    "MOTION_RATING_COLUMNS",
     "RATING_COLUMNS",
     "REBIND_TOKEN",
+    "RUBRIC_COLUMN",
     "LoadedRatings",
     "RatingsFileError",
     "RowKey",
     "bind_artifact",
+    "bind_context",
     "load_ratings",
     "merge_rows",
     "output_header",

@@ -11,12 +11,23 @@ are counted as points on the 1-5 anchors, not as probabilities. READY FOR OWNER 
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
 from typing import Any
 
 from src.video.video_eval_identity import CellIdentity, Comparability
+from src.video.video_eval_integrity import (
+    ComparisonKind,
+    GroupIntegrity,
+    IntegrityClass,
+    PairIntegrity,
+    classify_group,
+    classify_pair,
+)
+from src.video.video_eval_motion import record_identity
+from src.video.video_eval_motion_evidence import MotionCellContext
 from src.video.video_eval_rubric import (
     ACTION_KEYS,
     CONCERN_SCORE,
@@ -25,6 +36,8 @@ from src.video.video_eval_rubric import (
     RatingEvidence,
     parse_rating_row,
 )
+
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 #: A candidate that rates this many points (or more) below the baseline on an identity dimension is a material regression.
 MATERIAL_DROP = 2
@@ -39,6 +52,20 @@ class AssessmentState(str, Enum):
     STALE_ARTIFACT = "stale_artifact"
     UNAVAILABLE = "unavailable"
     INCOMPARABLE = "incomparable"
+
+
+class MotionState(str, Enum):
+    """Applicability of a cell's controlled-motion judgments to its *current* driving context."""
+
+    NOT_APPLICABLE = "not_applicable"  # an ordinary (non-motion) cell
+    UNREVIEWED = "unreviewed"
+    PARTIAL = "partial"
+    REVIEWED = "reviewed"
+    LEGACY_UNVERIFIED = "legacy_unverified"  # judged without a recorded driving context
+    INAPPLICABLE = (
+        "inapplicable"  # judged against another context, or the inputs changed since admission
+    )
+    UNAVAILABLE = "unavailable"  # the context cannot be established now
 
 
 class Provenance(str, Enum):
@@ -79,6 +106,8 @@ class CellInput:
     identity: CellIdentity
     flags: tuple[str, ...] = ()
     source_available: bool = True
+    #: PR-VID-MOTION-410: the verified driving context of a controlled-motion cell (``None`` for an ordinary cell).
+    motion: MotionCellContext | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +124,13 @@ class CellAssessment:
     flags: tuple[str, ...]
     current_sha256: str | None = None
     bound_sha256: str | None = None
+    #: Controlled-motion fields; ``motion is None`` for an ordinary cell, whose assessment is unchanged.
+    motion: MotionCellContext | None = None
+    motion_state: MotionState = MotionState.NOT_APPLICABLE
+    motion_reasons: tuple[str, ...] = ()
+    bound_context: str | None = None
+    integrity: IntegrityClass | None = None
+    integrity_reasons: tuple[str, ...] = ()
 
     @property
     def counts(self) -> bool:
@@ -107,8 +143,29 @@ class CellAssessment:
         )
 
     @property
+    def motion_counts(self) -> bool:
+        """Its motion judgments are bound to the current clip *and* the current driving context."""
+
+        return self.counts and self.motion_state in (MotionState.REVIEWED, MotionState.PARTIAL)
+
+    @property
     def complete(self) -> bool:
-        return self.counts and self.evidence.complete
+        return (
+            self.counts
+            and self.evidence.complete
+            and self.motion_state in (MotionState.NOT_APPLICABLE, MotionState.REVIEWED)
+        )
+
+    def motion_value(self, name: str) -> Any:
+        """A counted motion judgment (``requested_action``, ``subject_attachment``, ``motion_fidelity``) or ``None``."""
+
+        if not self.motion_counts:
+            return None
+        return {
+            "requested_action": self.evidence.requested_action,
+            "subject_attachment": self.evidence.subject_attachment,
+            "motion_fidelity": self.evidence.motion_fidelity,
+        }[name]
 
     def score(self, column: str) -> int | None:
         return self.evidence.scores.get(column) if self.counts else None
@@ -119,8 +176,111 @@ class CellAssessment:
 
 
 def assess_cell(cell: CellInput, row: Mapping[str, str] | None) -> CellAssessment:
-    """One cell's state from its recorded facts and its ``ratings.csv`` row (already digest-stamped)."""
+    """One cell's state from its recorded facts and its ``ratings.csv`` row (already digest-stamped).
 
+    An ordinary cell is assessed exactly as before. A controlled-motion cell additionally gets its motion applicability
+    and integrity class (``_motion_fields``); its visual and identity judgments keep their own artifact binding."""
+
+    core = _assess_core(cell, row)
+    if cell.motion is None:
+        return core
+    state, reasons, bound = _motion_state(cell, core, row or {})
+    integrity, why = _cell_integrity(cell, core)
+    return replace(
+        core,
+        motion=cell.motion,
+        motion_state=state,
+        motion_reasons=reasons,
+        bound_context=bound,
+        integrity=integrity,
+        integrity_reasons=why,
+    )
+
+
+def _motion_state(
+    cell: CellInput, core: CellAssessment, row: Mapping[str, str]
+) -> tuple[MotionState, tuple[str, ...], str | None]:
+    ctx = cell.motion
+    assert ctx is not None
+    evidence = core.evidence
+    bound_raw = (row.get("driving_context_sha256") or "").strip().lower()
+    bound = bound_raw if _SHA256.match(bound_raw) else None
+    if core.state is AssessmentState.STALE_ARTIFACT:
+        return (
+            MotionState.INAPPLICABLE,
+            ("the clip changed after the review, so its motion judgments no longer describe it",),
+            bound,
+        )
+    if not cell.clip_available or cell.current_sha256 is None:
+        return MotionState.UNAVAILABLE, (f"no reviewable clip (job {cell.job_state})",), bound
+    if ctx.changed_inputs:
+        return (
+            MotionState.INAPPLICABLE,
+            (
+                f"the {' and '.join(ctx.changed_inputs)} changed after admission; this clip was not "
+                "generated from the file on disk now",
+            ),
+            bound,
+        )
+    if ctx.context_sha256 is None:
+        why = ctx.missing_inputs or ctx.unverified or ("the driving context cannot be established",)
+        return MotionState.UNAVAILABLE, (f"driving context unavailable: {', '.join(why)}",), bound
+    if evidence.has_motion_content and bound is None:
+        return (
+            MotionState.LEGACY_UNVERIFIED,
+            (
+                "motion judged without a recorded driving context; not counted (type 'rebind' in "
+                "driving_context_sha256 after re-reviewing against the current driver)",
+            ),
+            None,
+        )
+    if bound is not None and bound != ctx.context_sha256:
+        return (
+            MotionState.INAPPLICABLE,
+            (
+                "judged against a different driving context (driver, prepared derivative, source or "
+                "workflow changed); kept for the record, not counted. Type 'rebind' in "
+                "driving_context_sha256 to review it against the current context",
+            ),
+            bound,
+        )
+    if not evidence.has_motion_content:
+        return MotionState.UNREVIEWED, ("motion not reviewed yet",), bound
+    if evidence.motion_complete:
+        return MotionState.REVIEWED, (), bound
+    return (
+        MotionState.PARTIAL,
+        tuple(f"motion missing: {gap}" for gap in evidence.motion_missing()),
+        bound,
+    )
+
+
+def _cell_integrity(
+    cell: CellInput, core: CellAssessment
+) -> tuple[IntegrityClass, tuple[str, ...]]:
+    ctx = cell.motion
+    assert ctx is not None
+    if not cell.clip_available or cell.current_sha256 is None:
+        return IntegrityClass.FAILED_OR_INCOMPLETE, (f"job {cell.job_state}: no reviewable clip",)
+    findings = cell.identity.findings
+    source_changed = any("the source image changed" in item for item in findings)
+    if ctx.changed_inputs or source_changed:
+        changed = [*ctx.changed_inputs, *(("source image",) if source_changed else ())]
+        return IntegrityClass.CHANGED_INPUT, (f"changed since admission: {', '.join(changed)}",)
+    if ctx.missing_inputs:
+        return IntegrityClass.MISSING_EVIDENCE, tuple(
+            f"{label} is unavailable" for label in ctx.missing_inputs
+        )
+    if ctx.contradictions or cell.identity.status is Comparability.INCOMPARABLE:
+        return IntegrityClass.INCOMPARABLE, (*ctx.contradictions, *findings)
+    if core.state is AssessmentState.STALE_ARTIFACT:
+        return IntegrityClass.CHANGED_OUTPUT, ("the clip changed after it was reviewed",)
+    if ctx.unverified or cell.identity.status is Comparability.NOT_FULLY_VERIFIED:
+        return IntegrityClass.MISSING_EVIDENCE, (*ctx.unverified, *findings)
+    return IntegrityClass.VERIFIED_COMPARABLE, ()
+
+
+def _assess_core(cell: CellInput, row: Mapping[str, str] | None) -> CellAssessment:
     row = row or {}
     evidence = parse_rating_row(row, duration_seconds=cell.duration_seconds)
     bound = (row.get("artifact_sha256") or "").strip().lower()
@@ -192,6 +352,35 @@ class PairComparison:
     numeric_flags: tuple[str, ...]
     material: bool
     reasons: tuple[str, ...] = ()
+    #: Controlled-motion pairs only: the kind of comparison and its integrity class, from the frozen settings.
+    integrity: PairIntegrity | None = None
+    #: Baseline-relative motion judgments (``(baseline, candidate)`` values and the fidelity delta), counted only.
+    motion: Mapping[str, Any] = field(default_factory=dict)
+
+
+def _motion_pair(
+    base: CellAssessment, cand: CellAssessment
+) -> tuple[PairIntegrity, dict[str, Any]]:
+    assert base.motion is not None and cand.motion is not None
+    problems = [
+        c.integrity for c in (base, cand) if c.integrity is not None and not c.integrity.comparable
+    ]
+    reasons = [
+        r
+        for c in (base, cand)
+        for r in c.integrity_reasons
+        if c.integrity and not c.integrity.comparable
+    ]
+    integrity = classify_pair(
+        base.motion.settings, cand.motion.settings, cell_problems=problems, problem_reasons=reasons
+    )
+    values: dict[str, Any] = {
+        name: (base.motion_value(name), cand.motion_value(name))
+        for name in ("requested_action", "subject_attachment", "motion_fidelity")
+    }
+    low, high = values["motion_fidelity"]
+    values["motion_fidelity_delta"] = None if low is None or high is None else high - low
+    return integrity, values
 
 
 def _pair_comparability(
@@ -227,6 +416,16 @@ def compare_pair(
     cand_job: Mapping[str, Any],
 ) -> PairComparison:
     comparability, findings = _pair_comparability(base, cand, base_job, cand_job)
+    pair_integrity: PairIntegrity | None = None
+    motion_values: dict[str, Any] = {}
+    if base.motion is not None and cand.motion is not None:
+        pair_integrity, motion_values = _motion_pair(base, cand)
+        if (
+            pair_integrity.integrity is IntegrityClass.INCOMPARABLE
+            and comparability is not Comparability.INCOMPARABLE
+        ):
+            comparability = Comparability.INCOMPARABLE
+            findings = (*findings, *pair_integrity.reasons)
     differences: dict[str, int | None] = {}
     for column in SCORE_COLUMNS:
         a, b = base.score(column), cand.score(column)
@@ -244,6 +443,8 @@ def compare_pair(
         "requested_action": action,
         "critical_break": breaks,
         "numeric_flags": cand.flags,
+        "integrity": pair_integrity,
+        "motion": motion_values,
     }
     if comparability is Comparability.INCOMPARABLE:
         return PairComparison(
@@ -309,6 +510,17 @@ class ArmSummary:
 
 
 @dataclass(frozen=True)
+class CrossSubjectGroup:
+    """One motion evaluated across several source subjects under one arm (the source is the only intended change)."""
+
+    motion_identity: str
+    arm_id: str
+    case_ids: tuple[str, ...]
+    integrity: GroupIntegrity
+    kind: ComparisonKind = ComparisonKind.CROSS_SUBJECT
+
+
+@dataclass(frozen=True)
 class Assessment:
     cells: tuple[CellAssessment, ...] = ()
     comparisons: tuple[PairComparison, ...] = ()
@@ -316,6 +528,7 @@ class Assessment:
     readiness: Readiness = Readiness.INSUFFICIENT
     readiness_reasons: tuple[str, ...] = ()
     baseline_arm: str = ""
+    cross_subject: tuple[CrossSubjectGroup, ...] = ()
 
     def cell(self, case_id: str, arm_id: str) -> CellAssessment | None:
         return next((c for c in self.cells if (c.case_id, c.arm_id) == (case_id, arm_id)), None)
@@ -324,6 +537,39 @@ class Assessment:
         return next(
             (c for c in self.comparisons if (c.case_id, c.candidate_arm) == (case_id, arm_id)), None
         )
+
+
+def _cross_subject_groups(
+    manifest: Mapping[str, Any], assessed: Sequence[CellAssessment]
+) -> tuple[CrossSubjectGroup, ...]:
+    """Group motion cells by (arm, motion identity). A group of one subject is repeated generation, not transfer."""
+
+    cases = {str(c.get("case_id")): c for c in manifest.get("cases", []) if isinstance(c, Mapping)}
+    grouped: dict[tuple[str, str], list[CellAssessment]] = {}
+    for cell in assessed:
+        record = cases.get(cell.case_id, {}).get("motion")
+        if cell.motion is None or not isinstance(record, Mapping):
+            continue
+        grouped.setdefault((record_identity(record), cell.arm_id), []).append(cell)
+    groups: list[CrossSubjectGroup] = []
+    for (identity, arm_id), members in grouped.items():
+        problems = [m.integrity for m in members if m.integrity and not m.integrity.comparable]
+        reasons = [
+            r
+            for m in members
+            for r in m.integrity_reasons
+            if m.integrity and not m.integrity.comparable
+        ]
+        integrity = classify_group(
+            {m.case_id: m.motion.settings for m in members if m.motion is not None},
+            {m.case_id: m.motion.source_sha256 for m in members if m.motion is not None},
+            cell_problems=[p for p in problems if p is not None],
+            problem_reasons=reasons,
+        )
+        groups.append(
+            CrossSubjectGroup(identity, arm_id, tuple(m.case_id for m in members), integrity)
+        )
+    return tuple(groups)
 
 
 def _histogram(values: Sequence[int]) -> dict[int, int]:
@@ -476,6 +722,7 @@ def project_assessment(
         readiness=overall,
         readiness_reasons=reasons,
         baseline_arm=baseline_arm,
+        cross_subject=_cross_subject_groups(manifest, assessed),
     )
 
 
@@ -495,38 +742,71 @@ def assessment_payload(assessment: Assessment) -> dict[str, Any]:
     cells = []
     for cell in assessment.cells:
         evidence = cell.evidence
-        cells.append(
-            {
-                "case_id": cell.case_id,
-                "arm_id": cell.arm_id,
-                "job_id": cell.job_id,
-                "state": cell.state.value,
-                "provenance": cell.provenance.value,
-                "reasons": list(cell.reasons),
-                "comparability": cell.identity.status.value,
-                "comparability_findings": list(cell.identity.findings),
-                "artifact_sha256": cell.current_sha256,
-                "review_bound_sha256": cell.bound_sha256,
-                "ratings": {
-                    "overall": evidence.overall,
-                    "requested_action": evidence.requested_action,
-                    "scores": dict(evidence.scores),
-                    "critical_identity_break": evidence.critical_identity_break,
-                    "failure_categories": list(evidence.failure_categories),
-                    "first_failure_seconds": evidence.first_failure_seconds,
-                    "issues": list(evidence.issues),
-                }
-                if evidence.has_content
-                else None,
+        entry: dict[str, Any] = {
+            "case_id": cell.case_id,
+            "arm_id": cell.arm_id,
+            "job_id": cell.job_id,
+            "state": cell.state.value,
+            "provenance": cell.provenance.value,
+            "reasons": list(cell.reasons),
+            "comparability": cell.identity.status.value,
+            "comparability_findings": list(cell.identity.findings),
+            "artifact_sha256": cell.current_sha256,
+            "review_bound_sha256": cell.bound_sha256,
+            "ratings": {
+                "overall": evidence.overall,
+                "requested_action": evidence.requested_action,
+                "scores": dict(evidence.scores),
+                "critical_identity_break": evidence.critical_identity_break,
+                "failure_categories": list(evidence.failure_categories),
+                "first_failure_seconds": evidence.first_failure_seconds,
+                "issues": list(evidence.issues),
             }
-        )
-    return {
+            if evidence.has_content
+            else None,
+        }
+        if cell.motion is not None:
+            entry["motion"] = _motion_payload(cell)
+        cells.append(entry)
+    payload: dict[str, Any] = {
         "baseline_arm": assessment.baseline_arm,
         "readiness": assessment.readiness.value,
         "readiness_reasons": list(assessment.readiness_reasons),
         "cells": cells,
         "comparisons": [_plain(asdict(p)) for p in assessment.comparisons],
         "arms": [_plain(asdict(a)) for a in assessment.arms],
+    }
+    if assessment.cross_subject:
+        payload["cross_subject_groups"] = [_plain(asdict(g)) for g in assessment.cross_subject]
+    return payload
+
+
+def _motion_payload(cell: CellAssessment) -> dict[str, Any]:
+    """A motion cell's evidence block. Operator comments are deliberately left out (they stay in ``ratings.csv``)."""
+
+    evidence = cell.evidence
+    ctx = cell.motion
+    assert ctx is not None
+    return {
+        "state": cell.motion_state.value,
+        "reasons": list(cell.motion_reasons),
+        "integrity": cell.integrity.value if cell.integrity else None,
+        "integrity_reasons": list(cell.integrity_reasons),
+        "driving_context_sha256": ctx.context_sha256,
+        "review_bound_context_sha256": cell.bound_context,
+        "driver_original_sha256": ctx.driver_original_current,
+        "driver_effective_sha256": ctx.driver_effective_current,
+        "changed_inputs": list(ctx.changed_inputs),
+        "missing_inputs": list(ctx.missing_inputs),
+        "counted": cell.motion_counts,
+        "ratings": {
+            "requested_action": evidence.requested_action,
+            "subject_attachment": evidence.subject_attachment,
+            "motion_fidelity": evidence.motion_fidelity,
+            "observations": dict(evidence.observations),
+        }
+        if evidence.has_motion_content or evidence.requested_action
+        else None,
     }
 
 
@@ -538,6 +818,8 @@ __all__ = [
     "AssessmentState",
     "CellAssessment",
     "CellInput",
+    "CrossSubjectGroup",
+    "MotionState",
     "PairComparison",
     "Provenance",
     "Readiness",

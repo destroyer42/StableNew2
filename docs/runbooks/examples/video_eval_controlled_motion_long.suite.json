@@ -1,0 +1,308 @@
+{
+  "schema": "stablenew.video-eval-suite.v2",
+  "suite_id": "controlled-motion-long",
+  "description": "Controlled-motion baseline (PR-VID-MOTION-410). Unexecuted template: bind your own images and driving videos, and a physical run needs the owner's separate authorization. Full 81-frame group: sit down, turn around and walk forward, two subjects each, three arms (18 jobs).",
+  "seed": 410,
+  "baseline_arm": "baseline",
+  "cases": [
+    {
+      "case_id": "sit_down_a",
+      "image": "images/sit_down_a.png",
+      "prompt": "a person standing in a plain, evenly lit studio, full body, seen from the front, photorealistic",
+      "tags": [
+        "sit_down",
+        "controlled-motion",
+        "subject-a"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/sit_down.mp4"
+        },
+        "action": "Lowers from standing to seated on a chair.",
+        "motion_prompt": "the person lowers themselves from standing and sits down on a chair",
+        "category": "sit_down",
+        "expected_outcome": "The intended subject's hips lower and they finish seated, still in frame; it is the subject who sits, not a second figure, and the background does not move in their place.",
+        "direction": "downward",
+        "phases": [
+          "standing",
+          "bend knees and lower",
+          "seated"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "compatibility": [
+            "single subject",
+            "static camera"
+          ],
+          "source_compatibility": "full_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "sit_down_b",
+      "image": "images/sit_down_b.png",
+      "prompt": "a person standing in a plain, evenly lit studio, full body, seen from the front, photorealistic",
+      "tags": [
+        "sit_down",
+        "controlled-motion",
+        "subject-b"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/sit_down.mp4"
+        },
+        "action": "Lowers from standing to seated on a chair.",
+        "motion_prompt": "the person lowers themselves from standing and sits down on a chair",
+        "category": "sit_down",
+        "expected_outcome": "The intended subject's hips lower and they finish seated, still in frame; it is the subject who sits, not a second figure, and the background does not move in their place.",
+        "direction": "downward",
+        "phases": [
+          "standing",
+          "bend knees and lower",
+          "seated"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "compatibility": [
+            "single subject",
+            "static camera"
+          ],
+          "source_compatibility": "full_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "turn_around_a",
+      "image": "images/turn_around_a.png",
+      "prompt": "a person standing in a plain, evenly lit studio, full body, seen from the front, photorealistic",
+      "tags": [
+        "turn_around",
+        "controlled-motion",
+        "subject-a"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/turn_around.mp4"
+        },
+        "action": "Turns in place through about 180 degrees to face away from the camera.",
+        "motion_prompt": "the person turns around on the spot until their back is to the camera",
+        "category": "turn_around",
+        "expected_outcome": "The intended subject rotates about 180 degrees in place and finishes with their back to the camera; the body does not travel across the scene and no second figure turns instead.",
+        "direction": "clockwise seen from above",
+        "phases": [
+          "facing the camera",
+          "turn",
+          "back to the camera"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "compatibility": [
+            "single subject",
+            "static camera"
+          ],
+          "source_compatibility": "full_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "turn_around_b",
+      "image": "images/turn_around_b.png",
+      "prompt": "a person standing in a plain, evenly lit studio, full body, seen from the front, photorealistic",
+      "tags": [
+        "turn_around",
+        "controlled-motion",
+        "subject-b"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/turn_around.mp4"
+        },
+        "action": "Turns in place through about 180 degrees to face away from the camera.",
+        "motion_prompt": "the person turns around on the spot until their back is to the camera",
+        "category": "turn_around",
+        "expected_outcome": "The intended subject rotates about 180 degrees in place and finishes with their back to the camera; the body does not travel across the scene and no second figure turns instead.",
+        "direction": "clockwise seen from above",
+        "phases": [
+          "facing the camera",
+          "turn",
+          "back to the camera"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "compatibility": [
+            "single subject",
+            "static camera"
+          ],
+          "source_compatibility": "full_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "walk_forward_a",
+      "image": "images/walk_forward_a.png",
+      "prompt": "a person standing in a plain, evenly lit studio, full body, seen from the front, photorealistic",
+      "tags": [
+        "walk_forward",
+        "controlled-motion",
+        "subject-a"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/walk_forward.mp4"
+        },
+        "action": "Walks forward toward the camera for several steps.",
+        "motion_prompt": "the person walks forward toward the camera taking several steps",
+        "category": "walk_forward",
+        "expected_outcome": "The intended subject takes at least three visible steps toward the camera and grows larger or closer in frame; background motion or a second walking figure does not count as success.",
+        "direction": "toward the camera",
+        "phases": [
+          "standing",
+          "walk toward the camera",
+          "closer to the camera"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "compatibility": [
+            "single subject",
+            "static camera"
+          ],
+          "source_compatibility": "full_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "walk_forward_b",
+      "image": "images/walk_forward_b.png",
+      "prompt": "a person standing in a plain, evenly lit studio, full body, seen from the front, photorealistic",
+      "tags": [
+        "walk_forward",
+        "controlled-motion",
+        "subject-b"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/walk_forward.mp4"
+        },
+        "action": "Walks forward toward the camera for several steps.",
+        "motion_prompt": "the person walks forward toward the camera taking several steps",
+        "category": "walk_forward",
+        "expected_outcome": "The intended subject takes at least three visible steps toward the camera and grows larger or closer in frame; background motion or a second walking figure does not count as success.",
+        "direction": "toward the camera",
+        "phases": [
+          "standing",
+          "walk toward the camera",
+          "closer to the camera"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "compatibility": [
+            "single subject",
+            "static camera"
+          ],
+          "source_compatibility": "full_body_front"
+        }
+      }
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "baseline",
+      "label": "Baseline (pose 1.0, reference 1.0)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan_animate2_drive_i2v_v1",
+        "workflow_version": "1.2.0",
+        "frame_count": 81,
+        "experimental_opt_in": true,
+        "operator_controls": {
+          "pose_strength": 1.0,
+          "reference_image_strength": 1.0
+        }
+      }
+    },
+    {
+      "arm_id": "motion_emphasis",
+      "label": "Motion emphasis (pose 1.2)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan_animate2_drive_i2v_v1",
+        "workflow_version": "1.2.0",
+        "frame_count": 81,
+        "experimental_opt_in": true,
+        "operator_controls": {
+          "pose_strength": 1.2,
+          "reference_image_strength": 1.0
+        }
+      }
+    },
+    {
+      "arm_id": "reference_emphasis",
+      "label": "Reference emphasis (reference 1.3)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan_animate2_drive_i2v_v1",
+        "workflow_version": "1.2.0",
+        "frame_count": 81,
+        "experimental_opt_in": true,
+        "operator_controls": {
+          "pose_strength": 1.0,
+          "reference_image_strength": 1.3
+        }
+      }
+    }
+  ]
+}

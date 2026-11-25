@@ -1,8 +1,8 @@
 # Controlled Motion Generation roadmap
 
-Status: **official development direction** for the controlled-motion part of StableNew's video capability. Phase 1
-(PR-VID-MOTION-400) is implemented; every later phase is a planning identifier only and needs its own work package,
-contract check and, where it says so, an owner decision.
+Status: **official development direction** for the controlled-motion part of StableNew's video capability. Phases 1
+(PR-VID-MOTION-400) and 2 (PR-VID-MOTION-410) are implemented; every later phase is a planning identifier only and needs
+its own work package, contract check and, where it says so, an owner decision.
 
 This document supplements `docs/audits/2026-10-20_video_experience_roadmap.md`. It does not replace broader video
 priorities, the qualification authorities (`tools/qualification/system840/ledger.v1.json`,
@@ -67,14 +67,18 @@ publication, metadata editing and integration with the existing driving-video pr
 Exit criterion: a successful existing video can be harvested into multiple reusable motion assets and applied to a
 compatible driving-video form without modifying the original or launching generation.
 
-### Phase 2 - PR-VID-MOTION-410: Motion Fidelity and Evaluation
+### Phase 2 - PR-VID-MOTION-410: Motion Fidelity and Evaluation (implemented)
 
-Extend the existing evaluation system to compare source images, driving motion and generated outputs. Capture action
-achievement, subject attachment, motion fidelity, identity, anatomy and continuity. Support repeatable cross-subject
-evaluations and bounded campaign authoring.
+Extends the existing evaluation system to compare source images, driving motion and generated outputs. Captures action
+achievement, subject attachment, motion fidelity, identity, anatomy and continuity, supports repeatable cross-subject
+evaluations and authors a bounded, **unexecuted** 36-job campaign (staged 3 / 12 / remainder). Record:
+`docs/Subsystems/Video/PR-VID-MOTION-410_Motion_Fidelity_and_Transfer_Evaluation.md`; operator guide:
+`docs/runbooks/video_eval_kit.md` section 9.
 
 Exit criterion: motion-transfer experiments can be authored, admitted, compared and rated with verified
-case/arm/input/output identity; physical evaluation remains separately authorized.
+case/arm/input/output identity; physical evaluation remains separately authorized. Met by deterministic tests only: no
+physical pilot, diagnostic sample or full campaign has been run, and no motion quality, transferability or workflow
+qualification is claimed. Phases 3 and 4 now depend on the owner authorizing and accepting the Stage A pilot.
 
 ### Phase 3 - PR-VID-MOTION-420: Subject Alignment and Compatibility
 
@@ -163,6 +167,6 @@ representative Phase 2 baseline evidence exists.
 Readiness tooling, deterministic tests and source-level verification do not independently establish physical
 qualification. Each physical run still needs the fresh, exact owner authorization `STATUS.md` requires.
 
-Related: `docs/Subsystems/Video/MOTION_LIBRARY.md`, `docs/Subsystems/Video/VIDEO_PIPELINE.md`,
+Related: `docs/Subsystems/Video/PR-VID-MOTION-410_Motion_Fidelity_and_Transfer_Evaluation.md`, `docs/Subsystems/Video/MOTION_LIBRARY.md`, `docs/Subsystems/Video/VIDEO_PIPELINE.md`,
 `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`,
 `docs/Subsystems/Video/PR-VID-MOTION-212_Conditioning_Semantics_and_Fidelity.md`.

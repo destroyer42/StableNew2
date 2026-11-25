@@ -73,7 +73,16 @@ ACTION_VALUES: tuple[tuple[str, str], ...] = (
     ("achieved", "Achieved"),
     ("partially_achieved", "Partially achieved"),
     ("not_achieved", "Not achieved"),
+    # PR-VID-MOTION-410: a lively clip that does a different or contradictory action is not "no motion".
+    ("incorrect_or_contradictory", "Incorrect or contradictory action"),
     ("cannot_assess", "Cannot assess"),
+)
+#: ``cannot_assess`` (or a blank cell) is the not-assessed state; every other value is an observed outcome.
+ACTION_OBSERVED_KEYS = (
+    "achieved",
+    "partially_achieved",
+    "not_achieved",
+    "incorrect_or_contradictory",
 )
 ACTION_KEYS = tuple(value for value, _label in ACTION_VALUES)
 ACTION_LABELS = dict(ACTION_VALUES)
@@ -94,9 +103,24 @@ FAILURE_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("subject_disappearance", "Subject disappearance"),
     ("scene_background_drift", "Scene or background drift"),
     ("temporal_flicker", "Temporal flicker"),
-    ("motion_freeze", "Motion freeze"),
+    ("motion_freeze", "Frozen or insufficient motion"),
     # VID-A14B-SVI-375: a visible jump (pose, colour, identity) where one segment of a sequence hands over to the next.
     ("segment_seam", "Seam between sequence segments"),
+    # PR-VID-MOTION-410: controlled-motion failure taxonomy (identity drift, anatomy and continuity reuse the
+    # categories above wherever they already name the same failure).
+    ("wrong_action", "Wrong action"),
+    ("wrong_direction", "Wrong direction"),
+    ("incomplete_action", "Incomplete action"),
+    ("unwanted_action_repetition", "Unwanted action repetition"),
+    ("incorrect_timing", "Incorrect timing"),
+    ("subject_not_performing_motion", "Intended subject not performing the motion"),
+    ("duplicate_or_ghost_subject", "Duplicate or ghost subject"),
+    ("unintended_appearance_transfer", "Unintended appearance transfer from the driver"),
+    ("anatomy_distortion", "Anatomy distortion"),
+    ("background_motion_or_contamination", "Background motion or contamination"),
+    ("temporal_discontinuity", "Temporal discontinuity"),
+    ("excessive_jitter", "Excessive jitter"),
+    ("start_end_pose_mismatch", "Start or end pose mismatch"),
     ("other", "Other (explain in notes)"),
 )
 CATEGORY_KEYS = tuple(value for value, _label in FAILURE_CATEGORIES)
@@ -104,6 +128,97 @@ CATEGORY_LABELS = dict(FAILURE_CATEGORIES)
 
 #: Judgments a review must contain before it counts as complete; everything else is optional.
 REQUIRED_SCORE_COLUMNS = IDENTITY_COLUMNS
+
+# --------------------------------------------------------------------------------- controlled motion (PR-VID-MOTION-410)
+#
+# Whether the requested action happened, whether the intended subject performed it, and how closely it followed the
+# driving reference are three judgments, each separate from the visual-quality and identity scores above. Blank (or the
+# explicit ``not_assessed`` / ``cannot_assess`` token) means not assessed; it is never zero, a failure or a pass.
+
+#: Version stamped beside motion ratings so a later change to this vocabulary stays identifiable.
+MOTION_RUBRIC_VERSION = "stablenew.video-eval-motion-rubric.v1"
+ATTACHMENT_COLUMN = "subject_attachment"
+FIDELITY_COLUMN = "motion_fidelity_1_to_5"
+MOTION_COMMENTS_COLUMN = "motion_comments"
+
+ATTACHMENT_VALUES: tuple[tuple[str, str], ...] = (
+    ("correct_subject", "Correct subject"),
+    ("partially_attached", "Partially attached or ambiguous"),
+    ("incorrect_subject", "Incorrect subject"),
+    ("duplicate_or_ghost", "Duplicate or ghost subject performs the movement"),
+    ("cannot_assess", "Cannot assess"),
+)
+ATTACHMENT_KEYS = tuple(value for value, _label in ATTACHMENT_VALUES)
+ATTACHMENT_LABELS = dict(ATTACHMENT_VALUES)
+#: Values that are an observed judgment (everything but the not-assessed state).
+ATTACHMENT_OBSERVED_KEYS = tuple(key for key in ATTACHMENT_KEYS if key != "cannot_assess")
+
+#: Motion fidelity is rated against the *effective driving reference*, not motion magnitude or aesthetics.
+FIDELITY_ANCHORS: tuple[tuple[int, str], ...] = (
+    (5, "Highly faithful reproduction of the intended movement."),
+    (4, "Close reproduction with minor differences."),
+    (3, "Recognizable movement with significant inaccuracies."),
+    (2, "Some resemblance, but major action or timing differences."),
+    (1, "No meaningful resemblance to the intended movement."),
+)
+
+NOT_APPLICABLE = "not_applicable"
+#: ``(column, label, question, ((value, label), ...))``. Every field also accepts explicit ``not_applicable`` and
+#: ``cannot_assess`` answers: a head turn is not marked down for failing to travel through the scene.
+OBSERVATION_FIELDS: tuple[tuple[str, str, str, tuple[tuple[str, str], ...]], ...] = (
+    (
+        "action_direction",
+        "Action direction",
+        "Does the movement go the way the driving reference goes?",
+        (("correct", "Correct"), ("reversed", "Reversed"), ("incorrect", "Incorrect")),
+    ),
+    (
+        "action_timing",
+        "Action timing",
+        "Do the phases happen at the driving reference's pace and moment?",
+        (
+            ("matches", "Matches"),
+            ("minor_difference", "Minor difference"),
+            ("major_difference", "Major difference"),
+        ),
+    ),
+    (
+        "action_completion",
+        "Completion of the intended movement",
+        "Does the movement run to completion?",
+        (("complete", "Complete"), ("partial", "Partial"), ("not_completed", "Not completed")),
+    ),
+    (
+        "root_displacement",
+        "Root displacement or locomotion",
+        "Does the subject travel through the scene as the driver does? (not applicable for in-place actions)",
+        (("matches", "Matches"), ("partial", "Partial"), ("absent", "Absent")),
+    ),
+    (
+        "start_end_pose",
+        "Starting and ending pose",
+        "Do the first and last poses match the driving reference?",
+        (
+            ("matches", "Both match"),
+            ("start_mismatch", "Start differs"),
+            ("end_mismatch", "End differs"),
+            ("both_mismatch", "Both differ"),
+        ),
+    ),
+    (
+        "driver_contamination",
+        "Driver contamination",
+        "Is the driving video's person, clothing or background visible in the result?",
+        (("none_observed", "None observed"), ("observed", "Observed")),
+    ),
+)
+OBSERVATION_COLUMNS = tuple(column for column, _l, _q, _v in OBSERVATION_FIELDS)
+OBSERVATION_LABELS = {column: label for column, label, _q, _v in OBSERVATION_FIELDS}
+OBSERVATION_VALUE_LABELS: dict[str, dict[str, str]] = {
+    column: {**dict(values), NOT_APPLICABLE: "Not applicable", "cannot_assess": "Cannot assess"}
+    for column, _label, _question, values in OBSERVATION_FIELDS
+}
+MOTION_COLUMNS = (ATTACHMENT_COLUMN, FIDELITY_COLUMN, *OBSERVATION_COLUMNS, MOTION_COMMENTS_COLUMN)
 
 _WHOLE_NUMBER = re.compile(r"[0-9]+")
 _CATEGORY_SPLIT = re.compile(r"[;,|]")
@@ -128,6 +243,33 @@ class RatingEvidence:
     notes: str = ""
     issues: tuple[str, ...] = ()
     has_content: bool = False
+    #: PR-VID-MOTION-410: subject attachment, fidelity (1-5) and per-field observations; ``None`` is not assessed.
+    subject_attachment: str | None = None
+    motion_fidelity: int | None = None
+    observations: Mapping[str, str | None] = field(default_factory=dict)
+    motion_comments: str = ""
+    has_motion_content: bool = False
+
+    @property
+    def motion_complete(self) -> bool:
+        """The three motion judgments are each an observed answer (``cannot_assess`` is not evidence)."""
+
+        return (
+            not self.issues
+            and self.requested_action in ACTION_OBSERVED_KEYS
+            and self.subject_attachment in ATTACHMENT_OBSERVED_KEYS
+            and self.motion_fidelity is not None
+        )
+
+    def motion_missing(self) -> tuple[str, ...]:
+        gaps: list[str] = []
+        if self.requested_action not in ACTION_OBSERVED_KEYS:
+            gaps.append("Requested action (an observed outcome)")
+        if self.subject_attachment not in ATTACHMENT_OBSERVED_KEYS:
+            gaps.append("Subject attachment")
+        if self.motion_fidelity is None:
+            gaps.append("Motion fidelity")
+        return tuple(gaps)
 
     @property
     def complete(self) -> bool:
@@ -163,11 +305,39 @@ def _score(raw: str, column: str, issues: list[str]) -> int | None:
     return None
 
 
+def _choice(
+    row: Mapping[str, str], column: str, allowed: tuple[str, ...], issues: list[str]
+) -> str | None:
+    """A controlled value, or ``None`` for blank and the explicit not-assessed token. Invalid values become issues."""
+
+    raw = (row.get(column) or "").strip()
+    if not raw:
+        return None
+    key = _token(raw)
+    if key == "not_assessed":
+        return None
+    if key not in allowed:
+        issues.append(f"{column}: {raw!r} is not one of {' | '.join(allowed)}")
+        return None
+    return key
+
+
+def row_has_motion_content(row: Mapping[str, str]) -> bool:
+    """True when the operator typed any controlled-motion judgment (comments alone are not a rating)."""
+
+    return any(
+        (row.get(column) or "").strip()
+        for column in (ATTACHMENT_COLUMN, FIDELITY_COLUMN, *OBSERVATION_COLUMNS)
+    )
+
+
 def row_has_content(row: Mapping[str, str]) -> bool:
     """True when the operator typed any judgment (notes alone are not a rating)."""
 
     columns = (OVERALL_COLUMN, ACTION_COLUMN, BREAK_COLUMN, CATEGORIES_COLUMN, FIRST_FAILURE_COLUMN)
-    return any((row.get(column) or "").strip() for column in (*SCORE_COLUMNS, *columns))
+    return any(
+        (row.get(column) or "").strip() for column in (*SCORE_COLUMNS, *columns)
+    ) or row_has_motion_content(row)
 
 
 def parse_rating_row(
@@ -218,6 +388,13 @@ def parse_rating_row(
             )
             seconds = None
 
+    attachment = _choice(row, ATTACHMENT_COLUMN, ATTACHMENT_KEYS, issues)
+    fidelity = _score(row.get(FIDELITY_COLUMN) or "", FIDELITY_COLUMN, issues)
+    observations: dict[str, str | None] = {}
+    for column, _label, _question, values in OBSERVATION_FIELDS:
+        allowed = (*(value for value, _ in values), NOT_APPLICABLE, "cannot_assess")
+        observations[column] = _choice(row, column, allowed, issues)
+
     return RatingEvidence(
         overall=overall,
         requested_action=action,
@@ -228,10 +405,32 @@ def parse_rating_row(
         notes=row.get(NOTES_COLUMN) or "",
         issues=tuple(issues),
         has_content=row_has_content(row),
+        subject_attachment=attachment,
+        motion_fidelity=fidelity,
+        observations=observations,
+        motion_comments=row.get(MOTION_COMMENTS_COLUMN) or "",
+        has_motion_content=row_has_motion_content(row),
     )
 
 
 __all__ = [
+    "ACTION_OBSERVED_KEYS",
+    "ATTACHMENT_COLUMN",
+    "ATTACHMENT_KEYS",
+    "ATTACHMENT_LABELS",
+    "ATTACHMENT_OBSERVED_KEYS",
+    "ATTACHMENT_VALUES",
+    "FIDELITY_ANCHORS",
+    "FIDELITY_COLUMN",
+    "MOTION_COLUMNS",
+    "MOTION_COMMENTS_COLUMN",
+    "MOTION_RUBRIC_VERSION",
+    "NOT_APPLICABLE",
+    "OBSERVATION_COLUMNS",
+    "OBSERVATION_FIELDS",
+    "OBSERVATION_LABELS",
+    "OBSERVATION_VALUE_LABELS",
+    "row_has_motion_content",
     "ACTION_KEYS",
     "ACTION_LABELS",
     "ACTION_VALUES",

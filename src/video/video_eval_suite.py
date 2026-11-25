@@ -25,7 +25,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.video.video_eval_motion import (
+    MOTION_BLOCK,
+    MotionBinding,
+    MotionBindingError,
+    check_arm_form,
+    parse_motion,
+)
+
 SUITE_SCHEMA = "stablenew.video-eval-suite.v1"
+#: PR-VID-MOTION-410. A strict superset of v1 that additionally allows a case-level ``motion`` object (one driving-motion
+#: reference, intended action and expectations). A v1 file keeps loading exactly as before and may not carry ``motion``;
+#: a v1-only reader refuses a v2 file instead of silently ignoring its driver. Saving never rewrites a file: the editor
+#: publishes a new version and writes v2 only when a case needs it.
+SUITE_SCHEMA_V2 = "stablenew.video-eval-suite.v2"
+SUITE_SCHEMAS = (SUITE_SCHEMA, SUITE_SCHEMA_V2)
 ARM_BACKEND_SVD = "svd_native"
 ARM_BACKEND_WORKFLOW = "video_workflow"
 ARM_BACKENDS = (ARM_BACKEND_SVD, ARM_BACKEND_WORKFLOW)
@@ -61,10 +75,16 @@ class EvalCase:
     tags: tuple[str, ...] = ()
     #: Empty for a single-clip case; 2-12 segments for a sequence case.
     segments: tuple[EvalSegment, ...] = ()
+    #: PR-VID-MOTION-410: the driving-motion reference this case is evaluated against, or ``None`` (an ordinary case).
+    motion: MotionBinding | None = None
 
     @property
     def is_sequence(self) -> bool:
         return bool(self.segments)
+
+    @property
+    def is_motion(self) -> bool:
+        return self.motion is not None
 
     def segment_seeds(self, suite_seed: int) -> tuple[int, ...]:
         """Segment ``i`` uses ``suite_seed + i``: fixed, and identical under every arm."""
@@ -100,10 +120,15 @@ class EvalSuite:
     arms: tuple[EvalArm, ...]
     seed: int
     baseline_arm_id: str
+    schema: str = SUITE_SCHEMA
 
     @property
     def job_count(self) -> int:
         return len(self.cases) * len(self.arms)
+
+    @property
+    def has_motion(self) -> bool:
+        return any(case.motion is not None for case in self.cases)
 
     def arm(self, arm_id: str) -> EvalArm:
         for arm in self.arms:
@@ -141,7 +166,27 @@ def _unique(ids: list[str], what: str) -> None:
         seen.add(value)
 
 
-def _load_case(raw: Any, suite_dir: Path) -> EvalCase:
+def _load_motion(
+    raw: Mapping[str, Any], case_id: str, suite_dir: Path, schema: str
+) -> MotionBinding | None:
+    if MOTION_BLOCK not in raw:
+        return None
+    _require(
+        schema == SUITE_SCHEMA_V2,
+        f"case {case_id}: a driving-motion reference needs schema {SUITE_SCHEMA_V2}; a "
+        f"{SUITE_SCHEMA} suite cannot carry it",
+    )
+    _require(
+        not raw.get("segments"),
+        f"case {case_id}: a driving-motion case is a single clip; ordered segments are not supported with it",
+    )
+    try:
+        return parse_motion(raw[MOTION_BLOCK], case_id, suite_dir)
+    except MotionBindingError as exc:
+        raise EvalSuiteError(str(exc)) from exc
+
+
+def _load_case(raw: Any, suite_dir: Path, schema: str = SUITE_SCHEMA) -> EvalCase:
     _require(isinstance(raw, Mapping), "every case must be an object")
     case_id = _identifier(raw.get("case_id"), "case_id")
     image_text = str(raw.get("image") or "").strip()
@@ -180,6 +225,7 @@ def _load_case(raw: Any, suite_dir: Path) -> EvalCase:
         negative_prompt=str(raw.get("negative_prompt") or "").strip(),
         tags=tuple(str(tag) for tag in tags),
         segments=segments,
+        motion=_load_motion(raw, case_id, suite_dir, schema),
     )
 
 
@@ -259,9 +305,10 @@ def parse_eval_suite(suite_path: Path, raw_bytes: bytes) -> EvalSuite:
     except ValueError as exc:
         raise EvalSuiteError(f"cannot read eval suite {suite_path}: {exc}") from exc
     _require(isinstance(data, Mapping), "an eval suite must be a JSON object")
+    schema = str(data.get("schema") or "")
     _require(
-        data.get("schema") == SUITE_SCHEMA,
-        f"unsupported eval suite schema {data.get('schema')!r} (expected {SUITE_SCHEMA})",
+        schema in SUITE_SCHEMAS,
+        f"unsupported eval suite schema {data.get('schema')!r} (expected {' or '.join(SUITE_SCHEMAS)})",
     )
     suite_id = _identifier(data.get("suite_id"), "suite_id")
     raw_cases = data.get("cases")
@@ -271,10 +318,21 @@ def parse_eval_suite(suite_path: Path, raw_bytes: bytes) -> EvalSuite:
     )
     _require(isinstance(raw_arms, list) and bool(raw_arms), "an eval suite needs at least one arm")
     suite_dir = suite_path.resolve().parent
-    cases = tuple(_load_case(raw, suite_dir) for raw in raw_cases)
+    cases = tuple(_load_case(raw, suite_dir, schema) for raw in raw_cases)
     arms = tuple(_load_arm(raw) for raw in raw_arms)
     _unique([case.case_id for case in cases], "case_id")
     _unique([arm.arm_id for arm in arms], "arm_id")
+    if any(case.motion is not None for case in cases):
+        for arm in arms:
+            _require(
+                arm.backend == ARM_BACKEND_WORKFLOW,
+                f"arm {arm.arm_id}: {arm.backend} takes no driving video, so it cannot run a "
+                "driving-motion case (the reference is not dropped to make an arm queueable)",
+            )
+            try:
+                check_arm_form(arm.arm_id, arm.overrides)
+            except MotionBindingError as exc:
+                raise EvalSuiteError(str(exc)) from exc
     if any(case.is_sequence for case in cases):
         svd_arms = [arm.arm_id for arm in arms if arm.backend != ARM_BACKEND_WORKFLOW]
         _require(
@@ -303,6 +361,7 @@ def parse_eval_suite(suite_path: Path, raw_bytes: bytes) -> EvalSuite:
         arms=arms,
         seed=seed,
         baseline_arm_id=baseline,
+        schema=schema,
     )
 
 
@@ -314,6 +373,8 @@ __all__ = [
     "MAX_SEQUENCE_SEGMENTS",
     "MIN_SEQUENCE_SEGMENTS",
     "SUITE_SCHEMA",
+    "SUITE_SCHEMAS",
+    "SUITE_SCHEMA_V2",
     "EvalArm",
     "EvalCase",
     "EvalSegment",

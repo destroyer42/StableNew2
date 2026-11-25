@@ -20,6 +20,8 @@ graph revision gets one eval run, a contact sheet and the owner's rating.
   membership is only in `<output>/video_eval/<run_id>/run.json` (`stablenew.video-eval-run.v1`), written at
   admission and removed if admission fails.
 * At most 64 jobs per run.
+* A case may bind a **driving-motion reference** (section 9): a `stablenew.video-eval-suite.v2` suite whose cases say which
+  movement the intended subject should perform and which clip drives it.
 * A case can instead be a **sequence** of 2-12 segments (section 2.1). It runs as one multi-segment job per arm and is
   rated as one clip: the assembled sequence.
 
@@ -334,3 +336,110 @@ placeholders: copy the file next to your own images and change `image`, ideally 
   across its segments.
 * This only queues and measures. Whether SVI holds identity better, and which adapter or CFG to keep, is your rating's
   call (sections 4 and 5); no physical run has been made through StableNew.
+
+## 9. Controlled-motion evaluation (PR-VID-MOTION-410)
+
+The question this answers: **did the intended source subject perform the intended movement, acceptably, with enough fidelity to
+the driving reference to make that asset useful again?** It is not "does the clip contain motion". Nothing here generates
+anything: the first physical pilot needs the owner's separate, exact authorization, and no campaign has been run.
+
+### 9.1 A motion case
+
+Use a `stablenew.video-eval-suite.v2` suite. A v1 suite loads exactly as before and cannot carry a driver; a v1-only reader
+refuses a v2 file. Saving never rewrites a plan; the editor publishes a new version.
+
+```json
+{"case_id": "head_turn_a", "image": "images/head_turn_a.png",
+ "prompt": "a person standing in a plain, evenly lit studio, head and shoulders, seen from the front",
+ "motion": {
+   "driving": {"path": "motion/head_turn.mp4", "sha256": "<pinned by the editor>"},
+   "action": "Turns the head to the subject's right, about 60 degrees, and holds.",
+   "motion_prompt": "the person slowly turns their head to their right and holds",
+   "category": "head_turn",
+   "expected_outcome": "The intended subject's head rotates about 60 degrees to their right and holds; shoulders and background stay still.",
+   "window": {"start_frame": 0, "end_frame": null},
+   "preparation": {"mode": "workflow_prepared", "fps_conversion": "workflow_rate"},
+   "annotations": {"framing": "head and shoulders", "viewpoint": "front", "source_compatibility": "head_and_shoulders_front"}}}
+```
+
+* `driving.library_asset` (`{asset_id, sha256, derived_from?}`) is accepted only for the exact clip it names. Without it the video is a
+  **local video with unverified provenance** and is reported that way. Use **Bind Motion Library Clip...** in the editor to verify
+  the bytes and take a harvested window's lineage.
+* `category`: `head_turn`, `hand_wave`, `raise_arms`, `sit_down`, `turn_around`, `walk_forward`, `other`. `expected_outcome` must
+  be specific and observable ("the subject walks toward the camera; background motion or a second figure does not count").
+* `preparation.mode` is `as_is` (the clip is used exactly as bound) or `workflow_prepared` (Prepare Motion Source runs when you
+  preview, once per workflow, version and length, and arms with the same contract share the derivative). A window or a rate
+  conversion needs `workflow_prepared`. Different arms with different contracts get different derivatives; the preview says so.
+* Arms may not set the driving clip or motion prompt; they come from each case. A workflow that takes no driving video, and native
+  SVD, refuse a motion case with an explanation. A prompt-only comparator is not implemented.
+* One driver can serve many cases (different source images): use **Duplicate Case for Another Source...**.
+
+### 9.2 Frozen inputs, admission and integrity
+
+**Queue...** compiles every case x arm with the production builder and checks that each compiled job froze the case's driver, motion
+prompt, library binding and preparation, then re-hashes the source image, prepared source, original driver and prepared derivative
+at admission; any change since the preview refuses the whole run. The report classifies cells and pairs from the frozen NJRs:
+**verified and comparable**, **verified with disclosed differences**, **incomparable**, **missing evidence**, **changed input**,
+**changed output**, **failed, cancelled or incomplete**. A baseline-versus-candidate pair that differs by one declared control
+is a *one-variable* experiment; candidates that differ in two controls, or a different workflow version or length, are
+*multi-setting* (effects not separable, disclosed); one motion across several source images is *cross-subject*.
+
+### 9.3 Reviewing and rating
+
+**Review Motion...** (Evaluate, after **Build report**) shows the source image, the **effective driving reference** (the prepared
+derivative the model consumed, with the original one click away; if none is recorded it says only the original binding is
+shown) and two results on one clock. Frames are bounded review previews. A lower-rate clip repeats frames and a shorter one is held;
+first, middle and last are the same *times* in every clip. Nothing plays until you press Play. SFW mode withholds the source
+and driver frames.
+
+Rate each result in `ratings.csv` (blank means not assessed, never zero):
+
+| Column | Values |
+|---|---|
+| `requested_action` | `achieved`, `partially_achieved`, `not_achieved`, `incorrect_or_contradictory`, `cannot_assess`. A frozen clip is `not_achieved`; a lively clip doing something else is `incorrect_or_contradictory`. |
+| `subject_attachment` | `correct_subject`, `partially_attached`, `incorrect_subject`, `duplicate_or_ghost`, `cannot_assess`. Strong movement with a stationary intended subject is not a transfer. |
+| `motion_fidelity_1_to_5` | Against the **effective driving reference**, not magnitude or looks: 5 highly faithful, 4 close with minor differences, 3 recognizable with significant inaccuracies, 2 some resemblance with major action or timing differences, 1 no meaningful resemblance. |
+| `action_direction`, `action_timing`, `action_completion`, `root_displacement`, `start_end_pose`, `driver_contamination` | Controlled values plus `not_applicable` and `cannot_assess` (a head turn is not marked down for not travelling). |
+| `failure_categories` | The existing categories plus `wrong_action`, `wrong_direction`, `incomplete_action`, `unwanted_action_repetition`, `incorrect_timing`, `subject_not_performing_motion`, `duplicate_or_ghost_subject`, `unintended_appearance_transfer`, `anatomy_distortion`, `background_motion_or_contamination`, `temporal_discontinuity`, `excessive_jitter`, `start_end_pose_mismatch`. `motion_freeze` now reads "Frozen or insufficient motion". |
+| `motion_comments`, `driving_context_sha256`, `rubric_version` | Free text, and two columns the report fills in. |
+
+Visual quality and identity keep their existing columns (section 4); do not reuse them for motion.
+
+**Applicability.** A motion judgment counts only while the clip's digest *and* the driving context (source image, original driver,
+prepared derivative, workflow and length, preparation, motion prompt) are the ones it was made against. A replaced clip is
+stale; a changed driver, derivative or source image makes the motion rating **inapplicable** (kept in the file, shown as such,
+never reassigned); a motion judgment with no recorded context is **legacy unverified**. To review again, look at the current
+clip and driver, then type `rebind` in `driving_context_sha256` (and `artifact_sha256` for a replaced clip) and rebuild.
+
+### 9.4 Diagnostics and transferability
+
+Each motion cell gets a **global image-motion diagnostic** against the effective driving clip: a motion-energy trace, activity
+window and onset/offset, repeated or frozen frames, held tails and, on a common seconds basis, trace similarity, timing
+displacement, onset/offset displacement and relative magnitude. It is a guardrail. It is not pose fidelity and does not show the
+intended subject moved (a camera move or a second figure gives the same trace). Static, flat, truncated, different-rate and
+unavailable inputs read "insufficient evidence" or "unavailable", never zero; there is no composite score and no threshold.
+
+The report summarizes transferability for this run by motion asset, category, workflow id and version, source compatibility
+category, conditioning configuration, arm and cross-subject group: attempts planned, completed and failed, verified comparable,
+rated, action and attachment outcomes, fidelity distribution, critical identity breaks, distinct source subjects and seeds, every
+percentage with its denominator. An unreviewed cell is not rated (never a failed action); a failed job stays in the attempt
+counts; replays and duplicates count once; one subject is repeated generation, not transfer. Readiness reuses `INSUFFICIENT
+EVIDENCE`, `IDENTITY CONCERNS` and `READY FOR OWNER REVIEW` (at least two distinct rated subjects). These are decision support: no
+asset ranking, no Motion Library flag change, no workflow promotion.
+
+### 9.5 The initial campaign templates (unexecuted)
+
+`docs/runbooks/examples/video_eval_controlled_motion_*.suite.json` (placeholder relative paths; no media is committed): six
+motion classes, two source images each, three arms (pose 1.0 / reference 1.0 baseline; pose 1.2; reference 1.3) on
+`wan_animate2_drive_i2v_v1` 1.2.0 (experimental; each arm carries its own opt-in), seed 410, no smoothing. Lengths are per suite
+(49 frames: head turn, wave, raise arms; 81 frames: sit down, turn around, walk forward). Stage A = `stage_a` (3 jobs); Stage B =
+`stage_b` (12 jobs, 9 new if Stage A is accepted with identical inputs); Stage C = `stage_c_short` (6) plus `long` (18). 36 jobs in
+all. Bind your own images and one driver per class, validate, preview, and ask the owner to authorize the exact stage; see
+`docs/Subsystems/Video/PR-VID-MOTION-410_Motion_Fidelity_and_Transfer_Evaluation.md` section 3 for the runtime plan, stop
+conditions and the authorization boundary. Staged runs keep separate reports; they are not merged.
+
+**After the Stage A / B pilot (2026-11-24):** the pilot (15 jobs, 49 frames, arms 1.2 / 1.3) showed no visible difference between
+arms and an unnatural opening when the driver started in a different pose from the source. The next Stage C is the revised
+`stage_c0_canary` (1 job), `stage_c1_subject_a` (12), `stage_c2_subject_b` (12) and `stage_c3_start_pose_contrast` (4, matched versus unmatched driver) at 81 frames with arms at 0.5 / 2.0 and a
+start-pose-matched head-turn driver (section 3.1 of the PR record). Keep suite images and driving videos inside the Output
+folder so a viewer limited to Output can show them and so frozen input paths never need relinking.

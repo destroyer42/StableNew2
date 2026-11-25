@@ -18,6 +18,7 @@ from src.gui.theme_v2 import (
     style_text_widget,
 )
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
+from src.gui.views.video_eval_editor_motion import MotionEditorMixin
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.state.workspace_paths import workspace_paths
@@ -28,6 +29,7 @@ from src.video.video_eval_authoring import (
     publish_validated_suite,
     validate_draft,
 )
+from src.video.video_eval_motion import CASE_OWNED_CONTROLS
 from src.video.video_eval_suite import ARM_BACKEND_SVD, ARM_BACKEND_WORKFLOW, MAX_EVAL_JOBS
 from src.video.video_workflow_intent import form_visibility
 from src.video.workflow_controls import operator_controls
@@ -51,12 +53,18 @@ def _row_label(item: dict[str, Any], kind: str, index: int) -> str:
     if kind == "case":
         image = str(item.get("image") or "")
         source = Path(image).name if image else "Choose image"
-        clip = "sequence" if item.get("segments") is not None else "clip"
+        clip = (
+            "sequence"
+            if item.get("segments") is not None
+            else "driving motion"
+            if item.get("motion") is not None
+            else "clip"
+        )
         return f"{identifier} · {source} · {clip}"
     return f"{identifier} · {item.get('label') or item.get('backend') or 'Choose backend'}"
 
 
-class VideoEvalEditorDialog(tk.Toplevel):
+class VideoEvalEditorDialog(MotionEditorMixin, tk.Toplevel):
     def __init__(
         self,
         parent: tk.Misc,
@@ -338,10 +346,18 @@ class VideoEvalEditorDialog(tk.Toplevel):
         )
         segments = record.get("segments")
         if segments is None:
-            self._prompt(frame, "Motion prompt", record, "prompt")
-            self._form_buttons(
-                frame, [("Use Ordered Segments", lambda: self._convert_case(record, True))]
+            has_motion = record.get("motion") is not None
+            self._prompt(
+                frame,
+                "Appearance and scene prompt" if has_motion else "Motion prompt",
+                record,
+                "prompt",
             )
+            self._motion_section(frame, record)
+            if not has_motion:  # a driving-motion case is a single clip
+                self._form_buttons(
+                    frame, [("Use Ordered Segments", lambda: self._convert_case(record, True))]
+                )
             return
         if record.get("prompt"):
             self._prompt(frame, "Single-clip prompt (clear for sequence)", record, "prompt")
@@ -542,7 +558,14 @@ class VideoEvalEditorDialog(tk.Toplevel):
             self._field(frame, "Motion profile", settings, "motion_profile")
         if visible["end_anchor"]:
             self._path_field(frame, "End anchor", settings, "end_anchor_path", IMAGE_FILES)
-        if visible["pose_video"]:
+        motion_suite = self.draft.has_motion
+        if visible["pose_video"] and motion_suite:
+            self._notice(
+                frame,
+                "This suite's cases bind their own driving-motion references, so no driving clip or motion "
+                "prompt is set on the arm.",
+            )
+        elif visible["pose_video"]:
             self._path_field(
                 frame,
                 "Driving clip",
@@ -550,9 +573,17 @@ class VideoEvalEditorDialog(tk.Toplevel):
                 "pose_video_path",
                 [("Video", "*.mp4 *.mov *.mkv *.webm *.avi"), ("All files", "*.*")],
             )
+        elif motion_suite:
+            self._notice(
+                frame,
+                "This workflow takes no driving video, so the suite's driving-motion cases cannot run under "
+                "it. Validation refuses the combination; the reference is never dropped.",
+            )
         overrides = settings.get("operator_controls", {})
         if isinstance(overrides, dict):
             for control in operator_controls(selected):
+                if motion_suite and control["name"] in CASE_OWNED_CONTROLS:
+                    continue
                 self._field(
                     frame,
                     control["label"],
