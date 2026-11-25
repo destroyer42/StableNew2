@@ -49,17 +49,18 @@ from src.utils.prompt_pack_utils import normalize_matrix_slot_name
 
 PROPOSAL_LABEL = "New matrix slot (suggestions)"
 PROPOSAL_NOTICE = (
-    "Suggestions only. When you press Add slot and place marker for ONE proposal, two things change in this pack: a new "
+    "Suggestions only. When you press Apply on ONE proposal, two things change in this pack: a new "
     "slot with its values is added to the Matrix tab, and the marker [[slot_name]] is inserted at the position shown in "
     "your positive prompt sentence (with at most one separating space on each side); nothing else in the sentence is "
     "reworded. The pack becomes modified and unsaved. Nothing is saved, previewed, compiled, queued or generated, no "
     "existing slot or value is edited, and no model, workflow or setting is touched."
 )
-#: Slot plus marker are two edits (a Matrix row and a prompt-editor insert) and neither editor keeps an undo stack, so
-#: there is no single undo step (AI-213 decision 4, verified at implementation). This is what the dialog says instead.
+#: Slot plus marker are two edits (a Matrix row and a prompt-editor insert) and neither editor keeps an undo stack, so the
+#: window keeps its own in-memory journal (AI-230): Undo last takes back the most recent addition while nothing else changed.
 PROPOSAL_REVERT_TEXT = (
-    "To undo an added proposal: delete the slot's row in the Matrix tab (its Delete button) and delete the [[slot_name]] "
-    "marker from the prompt sentence (and a separating space, if one was added)."
+    "To undo an added proposal: press Undo last (it works while nothing else in the pack has changed since), or delete "
+    "the slot's row in the Matrix tab (its Delete button) and the [[slot_name]] marker from the prompt sentence (and a "
+    "separating space, if one was added)."
 )
 PROPOSAL_REVIEW_ACTIONS: tuple[str, ...] = ("add_slot_and_place_marker",)
 PROPOSAL_UNVERIFIED = (
@@ -424,6 +425,8 @@ class ProposalReview:
     notice: str = PROPOSAL_NOTICE
     revert: str = PROPOSAL_REVERT_TEXT
     actions: tuple[str, ...] = ()
+    #: Change cards built by the Prompt tab owner (AI-230); empty when the caller supplies none.
+    cards: tuple[Any, ...] = field(default=(), repr=False)
 
     @property
     def offered_rows(self) -> tuple[ProposalRow, ...]:

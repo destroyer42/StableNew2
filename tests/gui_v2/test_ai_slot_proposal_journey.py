@@ -102,13 +102,12 @@ def _deliver(j, outcome):
 
 
 def _offered(dialog) -> list[str]:
-    return list(dialog.proposal_list.get(0, "end"))
+    return [card.title for card in dialog.change_cards.cards if card.offered]
 
 
 def _add(dialog, position: int = 0) -> None:
-    dialog.proposal_list.selection_clear(0, "end")
-    dialog.proposal_list.selection_set(position)
-    dialog.add_proposal_button.invoke()
+    key = dialog.change_cards.offered_keys()[position]
+    dialog.change_cards.apply_buttons[key].invoke()
 
 
 def _editor(frame) -> str:
@@ -150,7 +149,7 @@ def test_the_variety_button_and_contract_are_separate_from_the_new_slot_button(p
     dialog = j.flow.open()
     assert dialog.variety_button is not dialog.proposal_button
     assert dialog.proposal_button.cget("text") == "Suggest new slot"
-    assert dialog.add_proposal_button.cget("text") == "Add slot and place marker"
+    assert dialog.apply_selected_button.cget("text").startswith("Apply selected")
     assert not j.service.requests
 
 

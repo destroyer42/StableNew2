@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, replace
 from tkinter import ttk
 from typing import Any
@@ -23,6 +23,12 @@ from src.gui.ai_preview_dialog import AiPreviewDialog
 from src.gui.ai_suggestion_dialog import AiSuggestionDialog
 from src.gui.prompt_ai_plan_sources import PlanSnapshot
 from src.gui.tooltip import attach_tooltip
+from src.gui_v2.ai_changes import (
+    ApplyJournal,
+    ApplyRecord,
+    proposal_changes,
+    variety_changes,
+)
 from src.gui_v2.ai_plan_advice import (
     PlanJudgement,
     build_plan_request,
@@ -86,6 +92,19 @@ class ContextUnavailable(ValueError):
     """Contains only fixed operator-facing copy; never prompt content."""
 
 
+UNDO_NOTHING_TEXT = "Nothing to undo."
+UNDO_CHANGED_TEXT = (
+    "The pack changed since that change was applied, so it cannot be undone automatically. "
+    "Undo it by hand in the Matrix tab and the prompt editor."
+)
+UNDO_UNFINISHED_TEXT = (
+    "The Matrix tab has an unfinished edit in that slot. Finish it, then undo again."
+)
+UNDO_UNEXPECTED_TEXT = (
+    "The pack did not change as expected while undoing. Check the Matrix tab and the prompt."
+)
+
+
 class PromptAiSuggestions:
     def __init__(self, tab: Any, header: Any) -> None:
         self.tab = tab
@@ -110,6 +129,8 @@ class PromptAiSuggestions:
         self._proposal_request: AssistRequest | None = None
         self._proposal_suggestion: Any = None
         self._proposal_added: set[int] = set()
+        # AI-230: what this window applied and how to take it back. Memory only; cleared on close and on any pack change.
+        self._journal = ApplyJournal()
         self.outcome: AssistOutcome | None = None
         self._active_id: str | None = None
         self._closed = False
@@ -271,6 +292,8 @@ class PromptAiSuggestions:
         if self.preview_dialog is not None and self.preview_dialog.winfo_exists():
             self.preview_dialog.refresh_remote(request_pending=self._active_id is not None)
         self.preview_button.state(["!disabled"] if self.owner is not None else ["disabled"])
+        if self.dialog is not None:
+            self._sync_undo()
         self.button.state(
             ["!disabled"] if code is None and self._active_id is None else ["disabled"]
         )
@@ -315,8 +338,23 @@ class PromptAiSuggestions:
             on_propose=self.suggest_slot,
             on_add_proposal=self.add_slot_proposal,
             proposal_problem=self._proposal_problem(),
+            on_apply=self.apply_changes,
+            on_undo=self.undo_last,
+            context_text=self._context_text(),
         )
+        self._sync_undo()
         return self.dialog
+
+    def _context_text(self) -> str:
+        """The header line naming what this window points at (pack and slot number only; never authored content)."""
+
+        try:
+            state = self.tab.workspace_state
+            if state.current_pack is None:
+                return "No prompt pack is open."
+            return f"Pack: {state.get_current_pack_name()}  -  Slot {state.get_current_slot_index() + 1}"
+        except Exception:  # noqa: BLE001 - fixed copy only
+            return ""
 
     def request(self, kind: SuggestionKind) -> None:
         if self.dialog is None or self._active_id is not None:
@@ -670,7 +708,7 @@ class PromptAiSuggestions:
     def _variety_review(self, context: VarietyContext, trust: str) -> VarietyReview:
         visible = self._variety_visible()
         rows = judge_variety(self._variety_suggestion, context.slots, is_visible=visible)
-        return variety_review(
+        review = variety_review(
             rows,
             self._variety_suggestion,
             is_visible=visible,
@@ -679,6 +717,7 @@ class PromptAiSuggestions:
             excluded_count=context.excluded_count,
             request=self._variety_request,
         )
+        return replace(review, cards=variety_changes(review, context.slots, is_visible=visible))
 
     def _variety_trust(self) -> str:
         return self.dialog.trust_label if self.dialog is not None else self._trust_label()
@@ -732,8 +771,9 @@ class PromptAiSuggestions:
         dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
         self.refresh()
 
-    def add_variety_value(self, row_index: int) -> None:
-        """Add one offered value to its slot through the Matrix editor's own edit path, after a full stale check."""
+    def add_variety_value(self, row_index: int) -> bool:
+        """Add one offered value to its slot through the Matrix editor's own edit path, after a full stale check.
+        Returns whether the value was added."""
 
         context, suggestion, dialog = self._variety, self._variety_suggestion, self.dialog
         if (
@@ -743,7 +783,7 @@ class PromptAiSuggestions:
             or self._active_id is not None
             or row_index in self._variety_added
         ):
-            return
+            return False
         current = self._current_variety()
         if current is None or current != context:
             self._drop_variety()
@@ -751,7 +791,7 @@ class PromptAiSuggestions:
             dialog.status(
                 "The pack or its matrix slots changed since the request. Nothing was added; request again."
             )
-            return
+            return False
         rows = judge_variety(suggestion, current.slots, is_visible=self._variety_visible())
         row = rows[row_index] if 0 <= row_index < len(rows) else None
         trust = self._variety_trust()
@@ -759,14 +799,14 @@ class PromptAiSuggestions:
             dialog.show_variety(self._variety_review(current, trust))
             if row is not None:
                 dialog.status(f"That value cannot be added. {REASON_TEXT[row.reason]}")
-            return
+            return False
         index = next(i for i, slot in enumerate(current.slots) if slot.name == row.slot)
         expected = current.with_value_added(index, row.value)
         if not self.tab.matrix_tab_panel.append_slot_value(index, row.value):
             dialog.status(
                 "The Matrix tab has an unfinished edit in that slot. Finish it, then add the value again."
             )
-            return
+            return False
         after = self._current_variety()
         if after is None or after != expected:
             # Fail closed: the edit did not produce exactly the one appended value. Offer nothing further.
@@ -775,13 +815,45 @@ class PromptAiSuggestions:
             dialog.status(
                 "The matrix did not change as expected. Check the Matrix tab, then request again."
             )
-            return
+            return False
         self._variety = after
         self._variety_added.add(row_index)
+        self._journal.push(
+            ApplyRecord(
+                "variety_value",
+                f"value in {row.slot}",
+                after.pack_identity,
+                self.tab.workspace_state.get_current_slot_index(),
+                lambda: self._undo_variety(current, after, index, row_index),
+            )
+        )
         dialog.show_variety(self._variety_review(after, trust))
         dialog.status(
             f"Added to slot {row.slot}. The pack is modified and unsaved; save it through the ordinary workflow."
         )
+        self._sync_undo()
+        return True
+
+    def _undo_variety(
+        self, before: VarietyContext, after: VarietyContext, index: int, row_index: int
+    ) -> str:
+        """Take back one appended value if, and only if, the matrix still equals what that apply produced."""
+
+        if self._current_variety() != after:
+            return UNDO_CHANGED_TEXT
+        panel = self.tab.matrix_tab_panel
+        if not panel.replace_slot_values(
+            index, list(after.slots[index].values), list(before.slots[index].values)
+        ):
+            return UNDO_UNFINISHED_TEXT
+        if self._current_variety() != before:
+            return UNDO_UNEXPECTED_TEXT
+        if self._variety == after:
+            self._variety = before
+            self._variety_added.discard(row_index)
+            if self.dialog is not None and self._variety_suggestion is not None:
+                self.dialog.show_variety(self._variety_review(before, self._variety_trust()))
+        return ""
 
     # -- new-slot proposals (AI-213): a new matrix slot and one [[marker]], added only by an explicit per-proposal press -----
     # The mutations are ``MatrixTabPanel.append_slot`` and ``PromptTabFrame.insert_slot_marker``, the Matrix tab's and the
@@ -918,7 +990,11 @@ class PromptAiSuggestions:
             matrix_mapping=self.tab.workspace_state.get_matrix_config().to_mapping(),
             is_visible=self._variety_visible(),
         )
-        return proposal_review(rows, trust_label=trust, added=frozenset(self._proposal_added))
+        review = proposal_review(rows, trust_label=trust, added=frozenset(self._proposal_added))
+        return replace(
+            review,
+            cards=proposal_changes(review, context, is_visible=self._variety_visible()),
+        )
 
     def _proposal_completed(self, outcome: AssistOutcome) -> None:
         context, request, dialog = self._proposal, self._proposal_request, self.dialog
@@ -970,8 +1046,9 @@ class PromptAiSuggestions:
         self.tab.restore_inserted_text(sentence)
         self.tab.matrix_tab_panel.remove_last_slot()
 
-    def add_slot_proposal(self, row_index: int) -> None:
-        """Add one offered proposal: the slot and its single marker, all-or-nothing, after a full stale check."""
+    def add_slot_proposal(self, row_index: int) -> bool:
+        """Add one offered proposal: the slot and its single marker, all-or-nothing, after a full stale check. Returns
+        whether it was added."""
 
         context, suggestion, dialog = self._proposal, self._proposal_suggestion, self.dialog
         if (
@@ -981,13 +1058,13 @@ class PromptAiSuggestions:
             or self._active_id is not None
             or row_index in self._proposal_added
         ):
-            return
+            return False
         current = self._current_proposal(context.offsets)
         if current is None or current != context:
             self._drop_variety()
             dialog.clear_sensitive()
             dialog.status(PROPOSAL_STALE_TEXT)
-            return
+            return False
         trust = self._variety_trust()
         review = self._proposal_review(current, trust)
         row = next((r for r in review.rows if r.index == row_index), None)
@@ -995,7 +1072,7 @@ class PromptAiSuggestions:
             dialog.show_proposal(review)
             if row is not None:
                 dialog.status(f"That proposal cannot be added. {proposal_detail_text(row)}")
-            return
+            return False
         offset = context.offsets[row.point]
         inserted = marker_insertion(context.sentence, offset, row.slot_name)
         expected = context.with_proposal_added(row.point, row.slot_name, row.values)
@@ -1003,7 +1080,7 @@ class PromptAiSuggestions:
             dialog.status(
                 "The Matrix tab has an unfinished edit. Finish it, then add the proposal again."
             )
-            return
+            return False
         placed = False
         try:
             placed = bool(self.tab.insert_slot_marker(offset, inserted))
@@ -1021,14 +1098,42 @@ class PromptAiSuggestions:
                 if restored
                 else "The pack did not change as expected. Check the Matrix tab and the prompt, then request again."
             )
-            return
+            return False
         self._proposal = after
         self._proposal_added.add(row_index)
+        self._journal.push(
+            ApplyRecord(
+                "new_slot",
+                f"slot {row.slot_name}",
+                after.pack_identity,
+                after.slot_index,
+                lambda: self._undo_proposal(context, after, row_index),
+            )
+        )
         dialog.show_proposal(self._proposal_review(after, trust))
         dialog.status(
             f"Added slot {row.slot_name} and its marker. The pack is modified and unsaved; save it through the ordinary "
             "workflow."
         )
+        self._sync_undo()
+        return True
+
+    def _undo_proposal(
+        self, before: ProposalContext, after: ProposalContext, row_index: int
+    ) -> str:
+        """Take back one added slot and its marker if, and only if, the workspace still equals what that apply produced."""
+
+        if self._current_proposal(after.offsets) != after:
+            return UNDO_CHANGED_TEXT
+        self._roll_back_proposal(before.sentence)
+        if self._current_proposal(before.offsets) != before:
+            return UNDO_UNEXPECTED_TEXT
+        if self._proposal == after:
+            self._proposal = before
+            self._proposal_added.discard(row_index)
+            if self.dialog is not None and self._proposal_suggestion is not None:
+                self.dialog.show_proposal(self._proposal_review(before, self._variety_trust()))
+        return ""
 
     def _current(self, snapshot: SuggestionSnapshot) -> bool:
         try:
@@ -1161,19 +1266,140 @@ class PromptAiSuggestions:
         self._accepted = True
         state = self.tab.workspace_state
         index = state.get_current_slot_index()
-        state.set_slot_text(index, suggestion.positive_text)
-        state.set_slot_negative(index, suggestion.negative_text)
+        slot = state.get_current_slot()
+        before = (slot.text, slot.negative)
+        after = (suggestion.positive_text, suggestion.negative_text)
+        pack_identity = id(state.current_pack)
+        self._write_rewrite(index, *after)
+        self._journal.push(
+            ApplyRecord(
+                "rewrite",
+                "rewrite",
+                pack_identity,
+                index,
+                lambda: self._undo_rewrite(pack_identity, index, before, after),
+            )
+        )
+        dialog.clear_sensitive()
+        dialog.status(
+            "Rewrite accepted into the editing buffer. Save and Preview through the ordinary workflow."
+        )
+        self.snapshot = self.outcome = None
+        self._sync_undo()
+
+    def _write_rewrite(self, index: int, positive: str, negative: str) -> None:
+        """Write both authored texts of slot ``index`` through the workspace setters and the editor's refreshes."""
+
+        state = self.tab.workspace_state
+        state.set_slot_text(index, positive)
+        state.set_slot_negative(index, negative)
         self.tab._mark_pack_modified()
         self.tab._refresh_editor()
         self.tab._refresh_template_preview()
         self.tab._refresh_metadata(scan_style=False)
         if self.tab.app_state is not None:
             self.tab.app_state.invalidate_preview()
-        dialog.clear_sensitive()
+
+    def _undo_rewrite(
+        self, pack_identity: int, index: int, before: tuple[str, str], after: tuple[str, str]
+    ) -> str:
+        """Restore the two texts a rewrite replaced, if the slot, the editor and the pack are still exactly as it left them."""
+
+        state = self.tab.workspace_state
+        slot = state.get_current_slot()
+        if (
+            state.current_pack is None
+            or id(state.current_pack) != pack_identity
+            or state.get_current_slot_index() != index
+            or slot is None
+            or (slot.text, slot.negative) != after
+            or (
+                self.tab.editor.get("1.0", "end-1c"),
+                self.tab.negative_editor.get("1.0", "end-1c"),
+            )
+            != after
+        ):
+            return UNDO_CHANGED_TEXT
+        self._write_rewrite(index, *before)
+        return ""
+
+    # -- apply journal and Undo (AI-230) --------------------------------------------------------------------------------------
+
+    def _sync_undo(self) -> None:
+        """Keep the dialog's Undo control in step with the journal; a record for another pack or slot is dropped."""
+
+        record = self._journal.last
+        state = self.tab.workspace_state
+        if record is not None and (
+            state.current_pack is None
+            or id(state.current_pack) != record.pack_identity
+            or state.get_current_slot_index() != record.slot_index
+        ):
+            self._journal.clear()
+            record = None
+        if self.dialog is not None:
+            self.dialog.set_undo(record.label if record is not None else "", len(self._journal))
+
+    def undo_last(self) -> bool:
+        """Take back the most recent applied change, if the workspace still equals the state it produced."""
+
+        dialog = self.dialog
+        if dialog is None or self._active_id is not None:
+            return False
+        self._sync_undo()
+        record = self._journal.last
+        if record is None:
+            dialog.status(UNDO_NOTHING_TEXT)
+            return False
+        try:
+            problem = record.undo()
+        except Exception:  # noqa: BLE001 - never leave a half-undone state unreported
+            problem = UNDO_UNEXPECTED_TEXT
+        if problem:
+            if problem == UNDO_CHANGED_TEXT:
+                self._journal.clear()
+            dialog.status(problem)
+            self._sync_undo()
+            return False
+        self._journal.pop()
         dialog.status(
-            "Rewrite accepted into the editing buffer. Save and Preview through the ordinary workflow."
+            f"Undone: {record.label}. The pack is modified and unsaved; save it through the ordinary workflow."
         )
-        self.snapshot = self.outcome = None
+        self._sync_undo()
+        return True
+
+    def apply_changes(self, keys: Sequence[str]) -> int:
+        """Apply the cards named by ``keys`` in order, each through its own stale-checked path. Stops at the first card that
+        cannot be applied. Returns how many were applied."""
+
+        dialog = self.dialog
+        if dialog is None or self._active_id is not None:
+            return 0
+        applied = 0
+        for key in keys:
+            kind, _, number = key.partition(":")
+            if not number.isdigit():
+                break
+            if kind == "variety":
+                done = self.add_variety_value(int(number))
+            elif kind == "slot":
+                done = self.add_slot_proposal(int(number))
+            else:
+                done = False
+            if not done:
+                break
+            applied += 1
+        if len(keys) > 1:
+            tail = (
+                " Stopped at the first change that could not be applied."
+                if applied < len(keys)
+                else ""
+            )
+            dialog.status(
+                f"Applied {applied} of {len(keys)}. The pack is modified and unsaved; save it through the "
+                f"ordinary workflow.{tail}"
+            )
+        return applied
 
     def cancel(self) -> None:
         if self._active_id is not None and self.owner is not None:
@@ -1192,6 +1418,7 @@ class PromptAiSuggestions:
     def close(self) -> None:
         self.cancel()
         self.dialog = None
+        self._journal.clear()
         self.snapshot = self.outcome = None
         self._plan = self._plan_request = None
         self._drop_variety()
@@ -1203,6 +1430,7 @@ class PromptAiSuggestions:
         if self.dialog is not None:
             self.dialog.close()
         self._closed = True
+        self._journal.clear()
         if self._poll_id is not None:
             self.tab.after_cancel(self._poll_id)
             self._poll_id = None

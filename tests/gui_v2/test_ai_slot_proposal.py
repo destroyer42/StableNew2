@@ -440,7 +440,16 @@ def test_the_notice_states_exactly_what_may_change_and_how_to_revert() -> None:
 
 def test_the_review_model_has_no_intent_queue_or_save_field_or_action() -> None:
     fields = {f.name for f in dataclasses.fields(ai_slot_proposal.ProposalReview)}
-    assert fields == {"status", "trust_label", "rows", "added", "notice", "revert", "actions"}
+    assert fields == {
+        "status",
+        "trust_label",
+        "rows",
+        "added",
+        "notice",
+        "revert",
+        "actions",
+        "cards",
+    }
     assert not any(
         word in name for name in fields for word in ("queue", "save", "intent", "compile", "job")
     )

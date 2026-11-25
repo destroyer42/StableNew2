@@ -40,7 +40,7 @@ from src.utils.prompt_pack_utils import normalize_matrix_slot_name
 
 VARIETY_LABEL = "Matrix slot variety (suggestions)"
 VARIETY_NOTICE = (
-    "Suggestions only. A value is added to its matrix slot only when you select it and press Add selected value, and it "
+    "Suggestions only. A value is added to its matrix slot only when you press Apply on it (Apply selected and Apply all offered press it for each card in turn), and it "
     "is added exactly as if you had typed it at the end of that slot in the Matrix tab: the pack becomes modified and "
     "unsaved. No slot is created, no existing value or prompt is changed, and nothing is saved, queued or generated. "
     "Values can only be suggested for slots that already exist in this pack's Matrix tab (listed below); to use a new "
@@ -417,6 +417,8 @@ class VarietyReview:
     notice: str = VARIETY_NOTICE
     actions: tuple[str, ...] = ()
     coverage: VarietyCoverage | None = field(default=None, repr=False)
+    #: Change cards built by the Prompt tab owner (AI-230); empty when the caller supplies none.
+    cards: tuple[Any, ...] = field(default=(), repr=False)
 
     @property
     def coverage_line(self) -> str:
