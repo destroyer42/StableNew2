@@ -96,8 +96,11 @@ Full design 36 jobs = short + long. Stage A (3) is the functional pilot. Stage B
 | `video_eval_controlled_motion_stage_c0_canary.suite.json` | head turn, subject A | baseline | 81 | 1 |
 | `video_eval_controlled_motion_stage_c1_subject_a.suite.json` | head turn (start-pose matched), hand wave, subject A | 6 | 81 | 12 |
 | `video_eval_controlled_motion_stage_c2_subject_b.suite.json` | the same two cases, subject B | 6 | 81 | 12 |
+| `video_eval_controlled_motion_stage_c3_start_pose_contrast.suite.json` | head turn on each subject, start-pose matched and the pilot's unmatched profile-start driver | baseline | 81 | 4 |
 
 Arms are one-variable against the baseline (pose 1.0, reference 1.0, pose window full): `pose_low` (pose 0.5), `pose_high` (pose 2.0), `reference_low` (reference 0.5), `reference_high` (reference 2.0) and `pose_early_stop` (pose end 0.6). Values are at least a factor of two from the baseline because 1.2 / 1.3 showed nothing. All are within the declared 0-10 control bounds; the extremes may degrade identity or motion, which is the information wanted. 81 frames (3.4 s at 24 fps) is the longest legal length.
+
+**Start-pose contrast (C3).** The same source with the matched driver and with the pilot's profile-start driver, baseline arm only, so the driver's start pose is the only variable between a subject's two cases. It is the direct evidence for what a start-pose mismatch costs and whether the matched driver removes it, and so for how much PR-VID-MOTION-420 (alignment) is worth.
 
 **Start pose.** Match the driver's first frame to the source's pose instead of hoping the model reconciles them. Both sources face the camera, so the head-turn driver must start facing the camera. The pilot driver turned from profile to the camera; a derived clip that starts facing the camera is the first 3.4 s of it, reversed: `ffmpeg -i head_turn.mp4 -t 3.4 -vf reverse -an -c:v libx264 -crf 14 head_turn_front_to_profile.mp4`. That is a new local video with its own SHA-256 and unverified provenance (record its lineage in the case annotations); it is not the Pexels file. If a driver instead starts facing the other way, flip the source image (or the driver, `-vf hflip`) and bind the flipped file; say so in the case annotations. The `start_pose` annotation states what each driver starts as.
 

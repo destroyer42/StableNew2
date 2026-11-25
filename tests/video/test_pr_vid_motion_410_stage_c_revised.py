@@ -23,8 +23,9 @@ FILES = {
     "c0": "video_eval_controlled_motion_stage_c0_canary.suite.json",
     "c1": "video_eval_controlled_motion_stage_c1_subject_a.suite.json",
     "c2": "video_eval_controlled_motion_stage_c2_subject_b.suite.json",
+    "c3": "video_eval_controlled_motion_stage_c3_start_pose_contrast.suite.json",
 }
-EXPECTED_JOBS = {"c0": 1, "c1": 12, "c2": 12}
+EXPECTED_JOBS = {"c0": 1, "c1": 12, "c2": 12, "c3": 4}
 CATALOG = EvalWorkflowCatalog()
 ARM_IDS = [
     "baseline",
@@ -57,7 +58,7 @@ def materialize(name: str, tmp_path: Path) -> Path:
             make_image(image, color=(20 * index + 10, 80, 120))
         driver = folder / case["motion"]["driving"]["path"]
         if not driver.exists():
-            make_video(driver, case["motion"]["category"].encode())
+            make_video(driver, driver.stem.encode())
     target = folder / FILES[name]
     shutil.copy(EXAMPLES / FILES[name], target)
     return target
@@ -199,7 +200,7 @@ def test_every_stage_compiles_through_the_production_builders_as_one_all_or_none
         assert job.motion.workflow_version == "1.2.0"
         for key, value in expected[job.arm_id].items():
             assert job.motion.controls[key] == value
-    if name != "c0":
+    if name in ("c1", "c2"):
         stopped = {
             j.motion.controls["pose_end_percent"]
             for j in plan.jobs
@@ -217,3 +218,35 @@ def test_every_stage_compiles_through_the_production_builders_as_one_all_or_none
     )
     ctl.submit_eval_run(plan)
     assert len(service.calls) == 1 and len(service.calls[0]) == EXPECTED_JOBS[name]
+
+
+def test_the_contrast_suite_pairs_matched_and_unmatched_drivers_on_each_subject() -> None:
+    data = raw("c3")
+    assert [arm["arm_id"] for arm in data["arms"]] == ["baseline"]
+    cases = {case["case_id"]: case for case in data["cases"]}
+    assert set(cases) == {
+        "head_turn_front_to_profile_a",
+        "head_turn_profile_start_a",
+        "head_turn_front_to_profile_b",
+        "head_turn_profile_start_b",
+    }
+    for subject in ("a", "b"):
+        matched = cases[f"head_turn_front_to_profile_{subject}"]
+        unmatched = cases[f"head_turn_profile_start_{subject}"]
+        assert (
+            matched["image"] == unmatched["image"]
+        )  # the same source, so the driver's start pose is the only variable
+        assert matched["prompt"] == unmatched["prompt"]
+        assert matched["motion"]["category"] == unmatched["motion"]["category"] == "head_turn"
+        assert matched["motion"]["driving"]["path"] == "motion/head_turn_front_to_profile.mp4"
+        assert unmatched["motion"]["driving"]["path"] == "motion/head_turn_profile_start.mp4"
+        assert "NOT matched" in " ".join(unmatched["motion"]["annotations"]["compatibility"])
+        assert "NOT matched" not in " ".join(matched["motion"]["annotations"]["compatibility"])
+        assert "deliberately unmatched" in unmatched["motion"]["annotations"]["start_pose"]
+    # The matched cells are exactly the head-turn cells of the C1 / C2 sensitivity suites.
+    assert cases["head_turn_front_to_profile_a"] == next(
+        c for c in raw("c1")["cases"] if c["case_id"] == "head_turn_front_to_profile_a"
+    )
+    assert cases["head_turn_front_to_profile_b"] == next(
+        c for c in raw("c2")["cases"] if c["case_id"] == "head_turn_front_to_profile_b"
+    )
