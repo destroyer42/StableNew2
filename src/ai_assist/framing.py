@@ -88,6 +88,24 @@ VARIETY_FOCUS_RULES = {
 }
 
 
+#: One worked example per slot kind (AI-230f). Shape only: it says what a good value or slot looks like and tells the model
+#: never to reuse its words. Whether it improves a given model is unmeasured; the case runner under
+#: ``tools/qualification/ai230`` exists to measure it, and no quality claim rests on it.
+VARIETY_EXAMPLE = (
+    'Example of the shape only, never to be reused: for the goal "moody evening scenes" and a slot lighting that already '
+    'lists "candlelight", good new values are short noun phrases such as "neon haze", "moonlit mist" and "streetlamp '
+    'glow"; poor values are whole sentences, repeats of listed values, and phrases unrelated to the goal such as "good '
+    'lighting".'
+)
+PROPOSAL_EXAMPLE = (
+    'Example of the shape only, never to be reused: for the sentence "a knight in a forest, wearing armor, at dusk" and '
+    'the goal "more atmosphere", a good proposal is the slot "weather" with the values "heavy fog", "light drizzle" and '
+    '"clear sky", placed after "forest" so that it reads "a knight in a forest [[weather]], wearing armor, at dusk". A '
+    "slot name is one short lowercase noun; a poor proposal reuses a listed slot name or repeats words the sentence "
+    "already contains."
+)
+
+
 def _variety_instruction(request: AssistRequest) -> str:
     """Deterministic frame for a slot-variety request (AI-214): scope, quantity and goal focus."""
 
@@ -100,7 +118,7 @@ def _variety_instruction(request: AssistRequest) -> str:
         "characters with no commas, no square or angle brackets and no line breaks, plus a short rationale (at most "
         f"{MAX_VARIETY_RATIONALE_CHARS} characters). {VARIETY_FOCUS_RULES[request.variety_focus]} "
         "Do not repeat existing values. Do not claim that you have verified the quality of your own suggestions. "
-        "These are suggestions a person reviews one by one."
+        f"These are suggestions a person reviews one by one. {VARIETY_EXAMPLE}"
     )
 
 
@@ -118,7 +136,7 @@ def _proposal_instruction(request: AssistRequest) -> str:
         f"insertion_point as the whole number (0 to {last}) of one position listed after {_POINT_MARKER} where the marker "
         f"reads naturally in the sentence, and a short rationale (at most {MAX_VARIETY_RATIONALE_CHARS} characters). Never "
         "rewrite the sentence. Do not claim that you have verified the quality of your own suggestions. These are "
-        "suggestions a person reviews one by one."
+        f"suggestions a person reviews one by one. {PROPOSAL_EXAMPLE}"
     )
 
 
@@ -387,7 +405,9 @@ __all__ = [
     "END_MARKER",
     "FRAME_VERSION",
     "PLAN_SELECTED_MODEL_RULE",
+    "PROPOSAL_EXAMPLE",
     "PROPOSAL_RESERVED_MARKERS",
+    "VARIETY_EXAMPLE",
     "VARIETY_FOCUS_RULES",
     "VARIETY_RESERVED_MARKERS",
     "FramingError",

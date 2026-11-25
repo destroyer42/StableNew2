@@ -21,7 +21,7 @@ from src.gui_v2.ai_slot_variety import (
     SlotState,
     VarietyContext,
     matrix_state,
-    value_key,
+    near_key,
 )
 from src.utils.prompt_pack_utils import normalize_matrix_slot_name
 
@@ -51,10 +51,6 @@ class Finding:
 
 def _shown(text: str, is_visible: Callable[[str], bool]) -> str:
     return text if is_visible(text) else HIDDEN_TEXT
-
-
-def _singular(key: str) -> str:
-    return key[:-1] if len(key) > 3 and key.endswith("s") and not key.endswith("ss") else key
 
 
 def dedupe_values(values: Sequence[Any]) -> tuple[str, ...]:
@@ -179,7 +175,7 @@ def run_checks(
         seen: dict[str, str] = {}
         near: list[str] = []
         for value in deduped:
-            folded = _singular(value_key(value))
+            folded = near_key(value)
             if folded in seen and seen[folded] != value:
                 near.append(f"{seen[folded]} / {value}")
             seen.setdefault(folded, value)
