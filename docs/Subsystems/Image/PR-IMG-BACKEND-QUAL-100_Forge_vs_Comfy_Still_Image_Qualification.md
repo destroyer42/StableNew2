@@ -169,3 +169,11 @@ invocation was discontinued after its content guard spent minutes hashing retain
 agent-owned validation processes were stopped. The application, Forge and actual queue were untouched.
 Final aggregate review confirms no src/config/.github/pytest-policy changes; documentation-only evidence
 closeout reuses the accepted source checks. Physical readiness remains HOLD regardless of test results.
+
+## Comparison harness (IMG-COMFY-381 PR B)
+
+This package still has no driver. `tools/acceptance/img_comfy_381_compare.py` now freezes matched Forge/ComfyUI NJR pairs
+(S1 SDXL baseline, 6 prompts x 2 seeds; S3 SDXL + LoRA) through the normal compile, runs them through the canonical queue/runner
+path, and writes `plan.json`, `compare.json`, a blind contact sheet, a review CSV and a separate `review_key.json`. Its verdict is
+always `OWNER_REVIEW_PENDING` with no numeric threshold, and it repeats the fairness critiques above verbatim. A physical run needs
+the owner's approved plan digest (`--approved-plan-sha256`, from `plan.json`) and is not self-authorized by an agent; none has run.

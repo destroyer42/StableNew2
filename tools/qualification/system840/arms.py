@@ -77,8 +77,9 @@ _Z_IMAGE_HOLD = Hold(
 )
 _COMFY_IMAGE_HOLD = Hold(
     "HOLD-COMFY-STILL-IMAGE",
-    "Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs "
-    "resource and fault clearance and is not implemented here.",
+    "Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE). The ComfyUI SDXL backend and "
+    "the IMG-COMFY-381 comparison harness exist but no physical comparison has run: it needs an owner-authorized plan "
+    "digest and resource clearance (device-loss fault clearance is satisfied by DIAG-GPU-160); not executed here.",
     "STATUS.md",
     "an owner decision to build a Comfy image slice, with its own package",
     ("IMG-Q4.forge-vs-comfy-still",),
