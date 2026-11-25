@@ -85,6 +85,10 @@ the clip itself is unaffected and still verifies.
 Preview and Queue are unchanged and still yours to run. Harvesting never selects a workflow, turns on an experimental opt-in or
 removes a block. A changed or swapped clip fails closed at submission.
 
+## When the subject sits differently in the frame
+
+A harvested clip is reusable across source images, but its subject may be framed differently from your image. Use **Align Motion** (under the driving-motion panel) to move and scale the whole movement into your image's frame with one explicit, reproducible transform; it never changes the clip or the library, and it cannot fix a pose, viewpoint or framing difference. See `docs/runbooks/motion_alignment.md`.
+
 ## If something looks wrong
 
 | Symptom | Meaning / action |

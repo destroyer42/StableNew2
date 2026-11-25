@@ -238,6 +238,13 @@ and comparison metrics. If the CSV changed or is open in an editor, the Site kee
 the operator resolves the conflict. Without pairing, use **Open StableNew output folder** or import
 \`run.json\`, \`metrics.json\` and \`ratings.csv\` together. Download and apply the CSV explicitly in file-import mode.
 
+For controlled-motion runs, open an individual clip to rate subject attachment, motion fidelity, timing, direction,
+completion, locomotion, start and end pose, and driver contamination. The dropdowns use the accepted values from
+the motion rubric. **Driving reference** opens the recorded effective driver when the output grant includes it,
+or accepts a local file whose checksum matches. The clip stays partial until it has the required identity and motion
+judgments. If the driving context changes, a fresh motion review keeps the existing identity judgments when the clip
+is unchanged. Connected saves require a Windows build with motion-rating support.
+
 **Output Library** uses the same grant. Switch between images and videos, or search by filename, metadata tag,
 recorded positive prompt, or seed. Select two images to compare them, or save the selection as an album. Album
 references and image scores are stored under \`<Output>/.stablenew-library\`. Image scores are gallery observations.
@@ -441,5 +448,44 @@ conditions and the authorization boundary. Staged runs keep separate reports; th
 **After the Stage A / B pilot (2026-11-24):** the pilot (15 jobs, 49 frames, arms 1.2 / 1.3) showed no visible difference between
 arms and an unnatural opening when the driver started in a different pose from the source. The next Stage C is the revised
 `stage_c0_canary` (1 job), `stage_c1_subject_a` (12), `stage_c2_subject_b` (12) and `stage_c3_start_pose_contrast` (4, matched versus unmatched driver) at 81 frames with arms at 0.5 / 2.0 and a
-start-pose-matched head-turn driver (section 3.1 of the PR record). Keep suite images and driving videos inside the Output
+start-pose-matched head-turn driver (section 3.1 of the PR record). **Since run (2026-11-25):** C0, the C1 head-turn cells (6 jobs) and C3 completed at
+81 frames in about 7 min per job with the VRAM peak at 11.6 of 12.3 GB and no stop condition (section 3.2: measured figures, partial owner review, nothing
+qualified); the C1 hand-wave cells and C2 have not run. Keep suite images and driving videos inside the Output
 folder so a viewer limited to Output can show them and so frozen input paths never need relinking.
+
+## 10. Aligned versus unaligned comparison (PR-VID-MOTION-420)
+
+Spatial alignment (`docs/runbooks/motion_alignment.md`) is evaluated with this kit as one explicit variable; there is no second
+framework. A motion case may declare `motion.alignment` (`scale`, `translate_x`, `translate_y`, `mirror`, optional `note`; strict,
+out-of-range numbers are refused, and it needs `preparation.mode: "workflow_prepared"` because the aligned clip is a prepared
+derivative for one workflow, window and length). An **arm** chooses whether to apply it with `form.motion_alignment`: `"none"`
+(the default) or `"case"`. The alignment belongs to the case's one source image and driver, so it is not part of the motion's
+identity, and **Duplicate Case for Another Source** drops it: another subject must be aligned for itself.
+
+What the comparison verifies, from the frozen jobs and never from labels: the original driver, the seed, the motion prompt and
+every other setting are identical, the **temporal frame selection** (which source frame becomes each consumed frame) is identical,
+and the prepared driving clip differs, which is the point. Such a pair is classed **Spatial alignment comparison, verified and
+comparable** ("only the declared spatial alignment differs"). A different frame selection, length, workflow version, control, seed
+or driver is not accepted as part of the intervention: it is incomparable or a disclosed multi-setting comparison whose effects
+are not separable. Cross-subject groups disclose each subject's alignment and never generalize one to another. Ratings are bound
+to the frozen alignment (an unaligned job keeps exactly the context it always had), so an earlier rating never silently applies.
+The preview summary, the motion review and the report state the frozen parameters and the clip identities; a successful preview of
+an alignment is not generated-motion success and is rated separately (action, attachment, fidelity, identity, anatomy,
+continuity as in section 9.3).
+
+Run-time guards: an arm that applies an alignment on a workflow that cannot take one (for example the Fun Control Canny path), a
+case that declares none, a compiled job that dropped or altered it, or any changed input after the preview, refuses the whole run
+and queues nothing.
+
+### 10.1 The initial campaign templates (unexecuted)
+
+`docs/runbooks/examples/video_eval_motion_alignment_{pilot,diagnostic,full}.suite.json` (placeholder relative paths; no media and
+no absolute path is committed): four scenarios (subject position, subject scale, full-body locomotion, start pose), two compatible
+source subjects each, arms `unaligned` and `aligned` (identical but for `motion_alignment`), `wan_animate2_drive_i2v_v1` 1.2.0 at
+49 frames with the per-job experimental opt-in, one shared seed (420). **Pilot** = 2 jobs (one representative position case);
+**diagnostic** = 8 (one subject across the four scenarios); **full** = 16, each stage only after the previous one is accepted.
+Bind your images and one driver per scenario, open Align Motion for each pair and copy the accepted numbers into that case (the
+numbers in the templates are placeholders, different per subject on purpose), validate, preview (this builds and verifies the
+aligned clips on the CPU and queues nothing), and ask the owner to authorize the exact stage. The authorization names the suite
+and its SHA-256, every bound image and driver hash, the workflow and version, the stage and budget, the resource constraints and
+the stop conditions (`docs/Subsystems/Video/PR-VID-MOTION-420_Subject_Alignment_and_Compatibility.md` section 8).

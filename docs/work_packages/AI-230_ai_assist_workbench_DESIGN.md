@@ -1,7 +1,8 @@
 # AI-230 (design for review): AI Assist workbench - tabs, one-step apply, undo, and a robustness pass
 
-Status: **design for owner review. Not authorized. No code is written until the owner approves it and answers the decisions
-in section 7.** Dated 2026-11-25. Builds on AI-202, AI-210/211 (plan advice), AI-212 (slot variety) and AI-213 (new slot
+Status: **approved by the owner on 2026-11-25 (decisions Q1-Q6 as recommended); AI-230a to AI-230g implemented in one
+branch and one PR at the owner's direction. Open: a view of the window on a real display, and the operator model run (AI-230f).**
+Design dated 2026-11-25. Builds on AI-202, AI-210/211 (plan advice), AI-212 (slot variety) and AI-213 (new slot
 proposals, merged in PR 398). Truth after any merge lives in `docs/Subsystems/AiAssist/AI_ASSIST.md`.
 
 ## 1. Why: what the owner found by using it

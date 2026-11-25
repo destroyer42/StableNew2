@@ -7,7 +7,9 @@ freezes TWO NJRs through the normal compile (``build_cli_njr``) that differ only
     PipelineController -> PipelineRunner.run_njr -> image backend registry -> backend
 
 and reports what happened. It adds no second queue, runner, compiler or runtime owner: Forge runs under
-``WebUIProcessManager`` (``ManagedWebUIRuntime``) and ComfyUI is owned and released by ``ComfyImageBackend`` itself.
+``WebUIProcessManager`` (``ManagedWebUIRuntime``) and ComfyUI is owned by ``ComfyImageBackend`` itself. That backend
+keeps its owned ComfyUI warm between consecutive SDXL jobs (PR-IMG-COMFY-382), so the first ComfyUI job is cold and later
+ones are warm; the harness ends the hold when an arm finishes.
 
 Outputs (new evidence directory only): ``plan.json``, ``compare.json``, ``review/contact_sheet.png``, ``review/review.csv``,
 ``review/images/*`` (metadata-free copies, blind A/B) and ``review_key.json`` (the only place the A/B mapping is recorded;
@@ -35,6 +37,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from src.services.runtime_warm_hold import end_runtime_warm_hold, get_runtime_warm_hold
 from tools.acceptance.img_forge_100_acceptance import (
     _DEVICE_LOSS,
     DEFAULT_INTENT,
@@ -331,6 +334,7 @@ def _run_arm(
                     "error": error, "wall_seconds": round(time.monotonic() - started, 3),
                     "peaks": peaks.peaks.as_dict() if hasattr(peaks, "peaks") else None,
                     "result_metadata": (entry.result or {}).get("metadata"), "artifacts": artifacts,
+                    "warm_hold_after_job": get_runtime_warm_hold().snapshot(),
                     "manifest": _manifest_facts(artifacts[0].get("manifest")) if artifacts else {},
                 }
             )  # fmt: skip
@@ -350,6 +354,8 @@ def _run_arm(
         if stack is not None:
             stack.service.stop()
             stack.repository.close()
+        # A held ComfyUI would otherwise outlive its arm: end it through its registered owner before the next arm.
+        record["warm_hold_end"] = end_runtime_warm_hold("comparison arm finished")
         record["runtime_stop"] = context.runtime.stop()
     return record, code
 
@@ -450,7 +456,7 @@ def build_compare(
         "spec": SPEC_ID, "schema_version": SCHEMA_VERSION, "plan_sha256": plan["plan_sha256"], "authorization": authorization,
         "verdict": VERDICT, "perceptual_threshold": None, "shuffle_seed": shuffle_seed,
         "fairness_caveats": FAIRNESS_CAVEATS, "not_comparable": NOT_COMPARABLE,
-        "timing_note": "ComfyUI is owned and released by the backend after every job, so 'warm' means a warm file cache only.",
+        "timing_note": "ComfyUI is held warm by its backend between its own consecutive jobs (comfy_image_keep_warm_seconds); the first job of an arm is cold, later jobs reuse the running ComfyUI and its loaded model.",
         "arms": {arm: {k: v for k, v in record.items() if k != "jobs"} for arm, record in arms.items()},
         "pairs": pairs, "review": review,
     }  # fmt: skip

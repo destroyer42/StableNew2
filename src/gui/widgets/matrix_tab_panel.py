@@ -474,6 +474,27 @@ class MatrixTabPanel(ttk.Frame):
         self._on_slot_changed(index)
         return True
 
+    def replace_slot_values(self, index: int, expected: list[str], new: list[str]) -> bool:
+        """Replace the values of slot ``index`` with ``new`` exactly as retyping its Values entry does (AI-230: undo of an AI
+        addition and removal of an exact duplicate). Refuses (returns ``False``, changes nothing) when the row does not
+        exist, its entries differ from the stored slot (a manual edit is pending) or the stored values are not ``expected``."""
+        config = self.workspace_state.get_matrix_config()
+        if not 0 <= index < min(len(self.slot_widgets), len(config.slots)):
+            return False
+        name_entry, values_entry, _ = self.slot_widgets[index]
+        slot = config.slots[index]
+        current = matrix_values_text(slot.values)
+        if (
+            name_entry.get().strip() != slot.name.strip()
+            or values_entry.get().strip() != current.strip()
+            or current.strip() != matrix_values_text(list(expected)).strip()
+        ):
+            return False
+        values_entry.delete(0, "end")
+        values_entry.insert(0, matrix_values_text(list(new)))
+        self._on_slot_changed(index)
+        return True
+
     def append_slot(self, name: str, values: list[str]) -> bool:
         """Add a new slot row exactly as the starter-dimension button does (AI-213): the row, the stored slot and the same
         refreshes. Refuses (returns ``False``, changes nothing) when a row's entries differ from the stored slots, i.e. a

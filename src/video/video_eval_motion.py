@@ -21,11 +21,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from src.video.motion_alignment import MAX_SCALE, MIN_SCALE, AlignmentIntent
+from src.video.motion_alignment_preparation import ALIGNED_SCHEMA, temporal_plan_sha256
 
 MOTION_BLOCK = "motion"
 #: A suite that carries a motion case is ``stablenew.video-eval-suite.v2``; v1 readers refuse it instead of ignoring it.
@@ -51,6 +55,13 @@ SOURCE_LOCAL = "local_video"
 DRIVING_SUFFIXES = frozenset({".mp4", ".webm", ".mov", ".mkv"})
 #: Form keys a motion case owns. An arm may not set them: the driver comes from the case.
 CASE_OWNED_FORM_KEYS = ("pose_video_path", "motion_library_asset", "prepared_motion_source")
+#: PR-VID-MOTION-420: an arm may apply its case's declared spatial alignment (``case``) or not (``none``, the
+#: default).  The alignment itself belongs to the case: it is specific to one source image and one driver.
+ALIGNMENT_ARM_KEY = "motion_alignment"
+ALIGNMENT_NONE = "none"
+ALIGNMENT_CASE = "case"
+ALIGNMENT_MODES = (ALIGNMENT_NONE, ALIGNMENT_CASE)
+_ALIGNMENT_FIELDS = {"scale", "translate_x", "translate_y", "mirror", "note"}
 CASE_OWNED_CONTROLS = ("pose_prompt",)
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -129,6 +140,9 @@ class MotionBinding:
     viewpoint: str = ""
     compatibility: tuple[str, ...] = ()
     source_compatibility: str = ""
+    #: PR-VID-MOTION-420: the case's declared spatial-alignment intent (scale, translations, mirror, note), or
+    #: ``None``.  It is an intervention an *arm* may apply; it is not part of the motion's identity.
+    alignment: Mapping[str, Any] | None = None
     extra: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
     @property
@@ -175,7 +189,21 @@ class MotionBinding:
             record["direction"] = self.direction
         if self.phases:
             record["phases"] = list(self.phases)
+        if self.alignment is not None:
+            record["alignment"] = json.loads(json.dumps(dict(self.alignment)))
         return record
+
+    def alignment_intent(self) -> AlignmentIntent | None:
+        """The declared alignment as an intent (the numbers are validated again at preparation)."""
+
+        if self.alignment is None:
+            return None
+        return AlignmentIntent(
+            scale=self.alignment["scale"],
+            translate_x=self.alignment["translate_x"],
+            translate_y=self.alignment["translate_y"],
+            mirror=self.alignment["mirror"],
+        )
 
 
 def canonical_sha256(value: Any) -> str:
@@ -255,6 +283,7 @@ def parse_motion(raw: Any, case_id: str, suite_dir: Path | None) -> MotionBindin
             "preparation",
             "annotations",
             "source",
+            "alignment",
         }
     )
     _require(not unknown, f"{label}: unknown field(s) {', '.join(unknown)}")
@@ -319,6 +348,12 @@ def parse_motion(raw: Any, case_id: str, suite_dir: Path | None) -> MotionBindin
         f"{label}: a window or rate conversion needs preparation.mode {PREP_WORKFLOW!r}; "
         "an unprepared driving video is used exactly as bound",
     )
+    alignment = _parse_alignment(raw.get("alignment"), label)
+    _require(
+        alignment is None or mode == PREP_WORKFLOW,
+        f"{label}.alignment needs preparation.mode {PREP_WORKFLOW!r}: an aligned driving clip is a prepared "
+        "derivative of the bound clip for one workflow, window and length",
+    )
     notes = as_mapping(raw.get("annotations"))
     phases = raw.get("phases") or []
     _require(
@@ -360,7 +395,39 @@ def parse_motion(raw: Any, case_id: str, suite_dir: Path | None) -> MotionBindin
             f"{label}.annotations.source_compatibility",
             limit=_SHORT_LIMIT,
         ),
+        alignment=alignment,
     )
+
+
+def _parse_alignment(raw: Any, label: str) -> dict[str, Any] | None:
+    """The case's declared alignment, or ``None``.  Out-of-range numbers are refused here, never clamped."""
+
+    if raw is None:
+        return None
+    _require(isinstance(raw, Mapping), f"{label}.alignment must be an object")
+    unknown = sorted(set(raw) - _ALIGNMENT_FIELDS)
+    _require(not unknown, f"{label}.alignment: unknown field(s) {', '.join(unknown)}")
+    values: dict[str, Any] = {}
+    for name, default in (("scale", 1.0), ("translate_x", 0.0), ("translate_y", 0.0)):
+        value = raw.get(name, default)
+        _require(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value),
+            f"{label}.alignment.{name} must be a finite number",
+        )
+        values[name] = float(value)
+    _require(
+        MIN_SCALE <= values["scale"] <= MAX_SCALE,
+        f"{label}.alignment.scale must be between {MIN_SCALE:g} and {MAX_SCALE:g}",
+    )
+    mirror = raw.get("mirror", False)
+    _require(isinstance(mirror, bool), f"{label}.alignment.mirror must be true or false")
+    values["mirror"] = mirror
+    note = _text(raw.get("note"), f"{label}.alignment.note", limit=_SHORT_LIMIT)
+    if note:
+        values["note"] = note
+    return values
 
 
 # ------------------------------------------------------------------------------------------- arm compatibility
@@ -374,6 +441,10 @@ def check_arm_form(arm_id: str, form: Mapping[str, Any]) -> None:
             key not in form,
             f"arm {arm_id}: form.{key} comes from each motion case's driving reference",
         )
+    _require(
+        form.get(ALIGNMENT_ARM_KEY, ALIGNMENT_NONE) in ALIGNMENT_MODES,
+        f"arm {arm_id}: form.{ALIGNMENT_ARM_KEY} must be one of {', '.join(ALIGNMENT_MODES)}",
+    )
     controls = form.get("operator_controls")
     if isinstance(controls, Mapping):
         for key in CASE_OWNED_CONTROLS:
@@ -476,6 +547,62 @@ class MotionPreparationCache:
         self._records[key] = record
         return record
 
+    def prepare_aligned(
+        self,
+        binding: MotionBinding,
+        spec: Any,
+        form: Mapping[str, Any],
+        source_image_path: Any,
+        output_root: Any,
+        aligner: Preparer,
+    ) -> Mapping[str, Any]:
+        """The case's aligned derivative for this source image (PR-VID-MOTION-420), shared across arms only
+        when the driver, window, conversion, workflow, version, length, source bytes and transform all agree."""
+
+        intent = binding.alignment_intent()
+        if intent is None:
+            raise MotionBindingError("the case declares no spatial alignment to apply")
+        key = canonical_sha256(
+            [
+                "aligned",
+                binding.driving_sha256,
+                binding.window_start,
+                binding.window_end,
+                binding.fps_conversion,
+                str(getattr(spec, "workflow_id", "")),
+                str(getattr(spec, "workflow_version", "")),
+                str(form.get("frame_count") or ""),
+                file_sha256(Path(str(source_image_path))),
+                dict(binding.alignment or {}),
+            ]
+        )
+        cached = self._records.get(key)
+        if cached is not None:
+            return cached
+        request = {
+            "intent": intent,
+            "start": binding.window_start,
+            "end": binding.window_end,
+            "unit": "frames",
+            "fps_conversion": binding.fps_conversion,
+        }
+        outcome = aligner(
+            spec,
+            {
+                **form,
+                "pose_video_path": str(binding.driving_path),
+                "source_image_path": str(source_image_path),
+            },
+            request,
+            output_root,
+        )
+        record: Mapping[str, Any] | None = getattr(outcome, "record", None)
+        if not getattr(outcome, "prepared", False) or record is None:
+            message = getattr(outcome, "message", "") or "alignment failed"
+            raise MotionBindingError(f"Align Motion did not complete: {message}")
+        self._records[key] = record
+        return record
+
 
 # ---------------------------------------------------------------------------------------------- frozen facts
 
@@ -499,6 +626,10 @@ class MotionFacts:
     library_asset: Mapping[str, Any] | None
     controls: Mapping[str, Any]
     interpolation: bool
+    #: PR-VID-MOTION-420: the frozen spatial alignment (a plain summary) when the driving clip was aligned.
+    alignment: Mapping[str, Any] | None = None
+    #: Which source frame became each consumed frame, as one digest (aligned or not); "" when not prepared.
+    temporal_plan_sha256: str = ""
 
     @property
     def motion_prompt(self) -> str:
@@ -519,6 +650,8 @@ class MotionFacts:
             "preparation_settings": dict(self.preparation_settings or {}),
             "interpolation": self.interpolation,
             "controls": {key: self.controls[key] for key in sorted(self.controls)},
+            "alignment": (self.alignment or {}).get("transform_sha256") if self.alignment else None,
+            "temporal_plan_sha256": self.temporal_plan_sha256 or None,
         }
 
     def to_record(self) -> dict[str, Any]:
@@ -528,6 +661,7 @@ class MotionFacts:
             driver_original_path=self.driver_original_path,
             prepared=self.prepared,
             library_asset=dict(self.library_asset) if self.library_asset else None,
+            alignment_detail=dict(self.alignment) if self.alignment else None,
         )
         return record
 
@@ -554,6 +688,7 @@ def motion_facts_from_config(
     frames = workflow.get("frame_count")
     fps = workflow.get("fps")
     interpolation = workflow.get("interpolation")
+    alignment = _alignment_summary(preparation) if prepared else None
     return MotionFacts(
         workflow_id=str(workflow.get("workflow_id") or ""),
         workflow_version=str(workflow.get("workflow_version") or ""),
@@ -572,7 +707,38 @@ def motion_facts_from_config(
         library_asset=dict(library) if isinstance(library, Mapping) else None,
         controls=dict(controls) if isinstance(controls, Mapping) else {},
         interpolation=isinstance(interpolation, Mapping) and bool(interpolation.get("enabled")),
+        alignment=alignment,
+        temporal_plan_sha256=(
+            temporal_plan_sha256(preparation)
+            if prepared and isinstance(preparation, Mapping)
+            else ""
+        ),
     )
+
+
+def _alignment_summary(preparation: Any) -> dict[str, Any] | None:
+    """What an aligned record froze, as plain values; ``None`` for a plain preparation."""
+
+    if not isinstance(preparation, Mapping) or preparation.get("schema") != ALIGNED_SCHEMA:
+        return None
+    align = as_mapping(preparation.get("alignment"))
+    source = as_mapping(align.get("source_image"))
+    return {
+        "transform_sha256": align.get("transform_sha256"),
+        "scale": align.get("scale"),
+        "translate_x": align.get("translate_x"),
+        "translate_y": align.get("translate_y"),
+        "mirror": align.get("mirror"),
+        "origin": as_mapping(align.get("intent")).get("origin"),
+        "coordinate_system": align.get("coordinate_system"),
+        "transform_version": align.get("transform_version"),
+        "target": dict(as_mapping(align.get("target"))),
+        "fill": dict(as_mapping(align.get("fill"))),
+        "resampling": align.get("resampling"),
+        "temporal_plan_sha256": align.get("temporal_plan_sha256"),
+        "source_original_sha256": source.get("original_sha256"),
+        "source_prepared_sha256": source.get("prepared_sha256"),
+    }
 
 
 def motion_facts_from_njr(njr: Any) -> MotionFacts | None:
@@ -598,21 +764,28 @@ def driving_context_sha256(
     Current file digests go in, so a replaced driver, prepared derivative or source image changes it. Controls and
     seed are job-level frozen facts (the job id pins them) and are not part of it."""
 
-    return canonical_sha256(
-        {
-            "source": source_sha256,
-            "driver_original": driver_original_sha256,
-            "driver_effective": driver_effective_sha256,
-            "workflow": [facts_settings.get("workflow_id"), facts_settings.get("workflow_version")],
-            "length": [facts_settings.get("frame_count"), facts_settings.get("fps")],
-            "preparation": facts_settings.get("preparation_settings"),
-            "ordered_frames": facts_settings.get("ordered_frames_sha256"),
-            "motion_prompt": motion_prompt,
-        }
-    )
+    payload: dict[str, Any] = {
+        "source": source_sha256,
+        "driver_original": driver_original_sha256,
+        "driver_effective": driver_effective_sha256,
+        "workflow": [facts_settings.get("workflow_id"), facts_settings.get("workflow_version")],
+        "length": [facts_settings.get("frame_count"), facts_settings.get("fps")],
+        "preparation": facts_settings.get("preparation_settings"),
+        "ordered_frames": facts_settings.get("ordered_frames_sha256"),
+        "motion_prompt": motion_prompt,
+    }
+    if facts_settings.get("alignment"):
+        # An alignment judged for one subject, driver and transform never applies to another (and an unaligned
+        # job keeps exactly the digest it always had).
+        payload["alignment"] = facts_settings.get("alignment")
+    return canonical_sha256(payload)
 
 
 __all__ = [
+    "ALIGNMENT_ARM_KEY",
+    "ALIGNMENT_CASE",
+    "ALIGNMENT_MODES",
+    "ALIGNMENT_NONE",
     "CASE_OWNED_CONTROLS",
     "CASE_OWNED_FORM_KEYS",
     "DRIVING_SUFFIXES",

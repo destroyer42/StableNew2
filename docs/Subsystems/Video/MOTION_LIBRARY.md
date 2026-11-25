@@ -266,6 +266,10 @@ harvested asset adds an optional, provenance-only `derived_from` (`original_sha2
 recorded under `extra_metadata["video_workflow"]["motion_library_asset"]`. It decides nothing at admission: a swapped or changed
 file still fails closed on the asset hash.
 
+### 7.7.1 Alignment derivatives are not library assets (PR-VID-MOTION-420)
+
+A harvested or imported asset is reusable across source images. An **aligned** clip (Align Motion) is a derivative of one asset *for one source image*: it is a prepared driving input under `prepared_driving_videos/`, never a library entry, and it is not added to the library automatically. The asset keeps its identity and bytes; a job that used an alignment records the asset's `{asset_id, sha256}` against the *original* hash and the aligned clip's own hash beside it. The alignment is not stored on the asset, does not change its suitability, annotations or any recommendation, and is never offered for another subject: evidence from one aligned subject says nothing about another until it is shown. The asset's annotations (subject kind and count, framing, viewpoint, camera movement, direction, start pose) are *reported* statements and are shown, as such, in the Align Motion compatibility panel.
+
 ### 7.8 Limits
 
 - Lossless derivatives are large; the existing 256 MiB cap on a prepared file applies, so long windows at high resolution are refused.

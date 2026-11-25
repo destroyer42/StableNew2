@@ -68,6 +68,14 @@ MAX_PROPOSAL_POINTS = 8
 MAX_PROPOSAL_POINT_CHARS = 120
 MAX_PROPOSAL_EXISTING_SLOTS = 64
 
+#: Phrase-to-slot bounds (AI-230g). The operator selects one short phrase of the sentence; the model proposes a slot name and
+#: alternatives for it. The phrase itself becomes the slot's first value in code, so the model gives 2 to 5 alternatives and the
+#: slot ends up with 3 to 6 values, the same row size as a new-slot proposal.
+MAX_PHRASE_CHARS = 80
+MAX_PHRASE_SLOTS = 3
+MIN_PHRASE_VALUES = 2
+MAX_PHRASE_VALUES = 5
+
 VARIETY_FOCUS_DIRECT = "direct"
 VARIETY_FOCUS_EXPLORE = "explore"
 VARIETY_FOCUS_MODES: frozenset[str] = frozenset({VARIETY_FOCUS_DIRECT, VARIETY_FOCUS_EXPLORE})
@@ -87,6 +95,9 @@ class SuggestionKind(str, Enum):
     #: A brand-new matrix slot and where to put its ``[[marker]]`` in the sentence (AI-213). Added only by an explicit
     #: per-proposal operator action, never by this layer.
     SLOT_PROPOSAL = "slot_proposal"
+    #: A slot name and alternatives for ONE phrase the operator selected in the sentence (AI-230g). Applied only by an explicit
+    #: per-proposal operator action that replaces exactly that span with the slot's ``[[marker]]``.
+    PHRASE_SLOT = "phrase_slot"
 
 
 class OutcomeCode(str, Enum):
@@ -179,6 +190,10 @@ class AssistRequest:
     #: by its index in this tuple; it can never name a position that is not in it.
     existing_slot_names: tuple[str, ...] = ()
     insertion_points: tuple[str, ...] = ()
+    #: ``PHRASE_SLOT`` only (AI-230g): the phrase the operator selected. It is a span of ``positive_text`` (the sentence, given
+    #: as context); ``existing_slot_names`` is used as for a slot proposal. There is no list of positions: the span is the
+    #: operator's own selection and the model can never move it.
+    phrase_text: str = ""
 
     def __post_init__(self) -> None:
         if not isinstance(self.request_id, str) or not _REQUEST_ID.match(self.request_id):
@@ -216,6 +231,8 @@ class AssistRequest:
             self._check_variety()
         elif self.kind is SuggestionKind.SLOT_PROPOSAL:
             self._check_proposal()
+        elif self.kind is SuggestionKind.PHRASE_SLOT:
+            self._check_phrase()
         elif self.goal_text or self.allowed_stages:
             raise ValueError("goal_text and allowed_stages belong to plan requests only")
         self._check_current_target()
@@ -228,12 +245,15 @@ class AssistRequest:
             )
         if self.matrix_slots and self.kind is not SuggestionKind.SLOT_VARIETY:
             raise ValueError("matrix_slots belong to slot-variety requests only")
-        if (
-            self.existing_slot_names or self.insertion_points
-        ) and self.kind is not SuggestionKind.SLOT_PROPOSAL:
-            raise ValueError(
-                "existing_slot_names and insertion_points belong to slot proposals only"
-            )
+        if self.insertion_points and self.kind is not SuggestionKind.SLOT_PROPOSAL:
+            raise ValueError("insertion_points belong to slot proposals only")
+        if self.existing_slot_names and self.kind not in (
+            SuggestionKind.SLOT_PROPOSAL,
+            SuggestionKind.PHRASE_SLOT,
+        ):
+            raise ValueError("existing_slot_names belong to slot proposals and phrase slots only")
+        if self.phrase_text and self.kind is not SuggestionKind.PHRASE_SLOT:
+            raise ValueError("phrase_text belongs to phrase-slot requests only")
         if self.kind is SuggestionKind.PROMPT_REWRITE and not self.positive_text.strip():
             raise ValueError("a rewrite request needs a positive prompt")
         if self.kind is SuggestionKind.TARGET_FIT_ADVICE and not self.allowed_targets:
@@ -342,18 +362,8 @@ class AssistRequest:
             raise ValueError(
                 "a slot proposal request carries only a goal, the sentence, the slot names and the insertion points"
             )
-        names, points = self.existing_slot_names, self.insertion_points
-        if not isinstance(names, tuple) or len(names) > MAX_PROPOSAL_EXISTING_SLOTS:
-            raise ValueError(
-                f"a slot proposal request lists at most {MAX_PROPOSAL_EXISTING_SLOTS} existing slot names"
-            )
-        for name in names:
-            if (
-                not isinstance(name, str)
-                or not name.strip()
-                or len(name) > MAX_PROPOSAL_SLOT_NAME_CHARS
-            ):
-                raise ValueError("an existing slot name must be 1-64 characters of text")
+        points = self.insertion_points
+        self._check_existing_slot_names()
         if not isinstance(points, tuple) or not 1 <= len(points) <= MAX_PROPOSAL_POINTS:
             raise ValueError(
                 f"a slot proposal request needs 1 to {MAX_PROPOSAL_POINTS} insertion points"
@@ -365,6 +375,56 @@ class AssistRequest:
                 or len(point) > MAX_PROPOSAL_POINT_CHARS
             ):
                 raise ValueError("an insertion point must be short text")
+
+    def _check_existing_slot_names(self) -> None:
+        names = self.existing_slot_names
+        if not isinstance(names, tuple) or len(names) > MAX_PROPOSAL_EXISTING_SLOTS:
+            raise ValueError(
+                f"a slot request lists at most {MAX_PROPOSAL_EXISTING_SLOTS} existing slot names"
+            )
+        for name in names:
+            if (
+                not isinstance(name, str)
+                or not name.strip()
+                or len(name) > MAX_PROPOSAL_SLOT_NAME_CHARS
+            ):
+                raise ValueError("an existing slot name must be 1-64 characters of text")
+
+    def _check_phrase(self) -> None:
+        """A phrase request: the sentence (context), one selected phrase that is a span of it, the existing slot names and an
+        optional goal. Nothing else; the phrase is never the whole of anything the model could be steered by."""
+
+        sentence, phrase = self.positive_text, self.phrase_text
+        if not sentence.strip() or len(sentence) > MAX_PROPOSAL_SENTENCE_CHARS:
+            raise ValueError(
+                f"a phrase request needs a positive prompt of at most {MAX_PROPOSAL_SENTENCE_CHARS} characters"
+            )
+        if (
+            self.negative_text
+            or self.target_policy_id
+            or self.allowed_targets
+            or self.allowed_workflows
+            or self.allowed_stages
+            or self.matrix_slots
+            or self.insertion_points
+        ):
+            raise ValueError(
+                "a phrase request carries only the sentence, the phrase, the slot names and an optional goal"
+            )
+        if (
+            not isinstance(phrase, str)
+            or not phrase.strip()
+            or phrase != phrase.strip()
+            or len(phrase) > MAX_PHRASE_CHARS
+            or "\n" in phrase
+            or "\r" in phrase
+        ):
+            raise ValueError(
+                f"a phrase request needs one single-line phrase of at most {MAX_PHRASE_CHARS} characters"
+            )
+        if phrase not in sentence:
+            raise ValueError("the phrase must be part of the sentence")
+        self._check_existing_slot_names()
 
     def matrix_chars(self) -> int:
         return sum(
@@ -379,6 +439,7 @@ class AssistRequest:
             + self.matrix_chars()
             + sum(len(name) for name in self.existing_slot_names)
             + sum(len(point) for point in self.insertion_points)
+            + len(self.phrase_text)
         )
 
     def digest(self) -> str:
@@ -417,6 +478,10 @@ class AssistRequest:
             # Appended only for this kind, so every other kind keeps its digest.
             payload += "proposal:" + "".join(self.existing_slot_names)
             payload += "" + "".join(self.insertion_points)
+        if self.kind is SuggestionKind.PHRASE_SLOT:
+            # Appended only for this kind, so every other kind keeps its digest (AI-230g).
+            payload += "phrase:" + self.phrase_text
+            payload += "" + "".join(self.existing_slot_names)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
@@ -461,6 +526,19 @@ class SlotProposal:
 
 
 @dataclass(frozen=True, slots=True)
+class PhraseSlot:
+    """One proposed slot for the operator's selected phrase (AI-230g): a name and 2 to 5 alternatives. There is no position:
+    the span is the operator's selection. The phrase becomes the slot's first value in code, never by the model's word.
+
+    A proposal only. The deterministic judge checks it and the slot plus the replaced span are applied solely by an explicit
+    operator action through the Matrix tab's and prompt editor's own edit paths. ``rationale`` is display text."""
+
+    slot_name: str
+    values: tuple[str, ...]
+    rationale: str
+
+
+@dataclass(frozen=True, slots=True)
 class AssistSuggestion:
     """A validated suggestion. Text fields are proposals for an editing buffer, not payloads."""
 
@@ -478,6 +556,8 @@ class AssistSuggestion:
     slot_values: tuple[SlotValues, ...] = ()
     #: ``SLOT_PROPOSAL`` only.
     slot_proposals: tuple[SlotProposal, ...] = ()
+    #: ``PHRASE_SLOT`` only.
+    phrase_slots: tuple[PhraseSlot, ...] = ()
 
     def to_diagnostics(self) -> dict[str, Any]:
         """Content-free view (kind, counts, codes) safe for logs and the event record."""
@@ -494,6 +574,7 @@ class AssistSuggestion:
             "slot_count": len(self.slot_values),
             "value_count": sum(len(entry.values) for entry in self.slot_values),
             "proposal_count": len(self.slot_proposals),
+            "phrase_slot_count": len(self.phrase_slots),
         }
 
 
@@ -571,6 +652,11 @@ __all__ = [
     "MAX_PROPOSAL_POINTS",
     "MAX_PROPOSAL_POINT_CHARS",
     "MAX_PROPOSAL_EXISTING_SLOTS",
+    "MAX_PHRASE_CHARS",
+    "MAX_PHRASE_SLOTS",
+    "MIN_PHRASE_VALUES",
+    "MAX_PHRASE_VALUES",
+    "PhraseSlot",
     "SlotProposal",
     "MAX_VARIETY_EXISTING_VALUES",
     "MAX_VARIETY_INPUT_CHARS",

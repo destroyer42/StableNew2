@@ -49,17 +49,18 @@ from src.utils.prompt_pack_utils import normalize_matrix_slot_name
 
 PROPOSAL_LABEL = "New matrix slot (suggestions)"
 PROPOSAL_NOTICE = (
-    "Suggestions only. When you press Add slot and place marker for ONE proposal, two things change in this pack: a new "
+    "Suggestions only. When you press Apply on ONE proposal, two things change in this pack: a new "
     "slot with its values is added to the Matrix tab, and the marker [[slot_name]] is inserted at the position shown in "
     "your positive prompt sentence (with at most one separating space on each side); nothing else in the sentence is "
     "reworded. The pack becomes modified and unsaved. Nothing is saved, previewed, compiled, queued or generated, no "
     "existing slot or value is edited, and no model, workflow or setting is touched."
 )
-#: Slot plus marker are two edits (a Matrix row and a prompt-editor insert) and neither editor keeps an undo stack, so
-#: there is no single undo step (AI-213 decision 4, verified at implementation). This is what the dialog says instead.
+#: Slot plus marker are two edits (a Matrix row and a prompt-editor insert) and neither editor keeps an undo stack, so the
+#: window keeps its own in-memory journal (AI-230): Undo last takes back the most recent addition while nothing else changed.
 PROPOSAL_REVERT_TEXT = (
-    "To undo an added proposal: delete the slot's row in the Matrix tab (its Delete button) and delete the [[slot_name]] "
-    "marker from the prompt sentence (and a separating space, if one was added)."
+    "To undo an added proposal: press Undo last (it works while nothing else in the pack has changed since), or delete "
+    "the slot's row in the Matrix tab (its Delete button) and the [[slot_name]] marker from the prompt sentence (and a "
+    "separating space, if one was added)."
 )
 PROPOSAL_REVIEW_ACTIONS: tuple[str, ...] = ("add_slot_and_place_marker",)
 PROPOSAL_UNVERIFIED = (
@@ -79,7 +80,6 @@ REASON_TEXT: dict[str, str] = {
     "values_invalid": "One of the proposed values breaks the value rules.",
     "point_taken": "That position already received a marker from an earlier addition.",
     "point_protected": "That position is inside a protected token.",
-    "matrix_limit": "Adding this slot would take the matrix past its combination limit.",
     **{f"value:{key}": f"Value problem: {text}" for key, text in VALUE_REASON_TEXT.items()},
 }
 
@@ -103,6 +103,12 @@ def _protected_spans(text: str) -> list[tuple[int, int]]:
         for pattern in (NON_PROSE_PATTERN, _WILDCARD)
         for match in pattern.finditer(text)
     ]
+
+
+def protected_spans(text: str) -> list[tuple[int, int]]:
+    """``(start, end)`` of every protected token (``<lora:...>``, ``[[slot]]``, ``__wildcard__``) in ``text``."""
+
+    return _protected_spans(text)
 
 
 def inside_protected_token(text: str, offset: int) -> bool:
@@ -291,6 +297,12 @@ def _name_problem(name: str) -> str:
     return ""
 
 
+def slot_name_problem(name: str) -> str:
+    """Why ``name`` cannot be a new slot name (a key of :data:`REASON_TEXT`), or ``""``."""
+
+    return _name_problem(name)
+
+
 @dataclass(frozen=True, slots=True)
 class ProposalRow:
     """One proposal and its verdict. ``reason`` is empty exactly when it may be offered for acceptance."""
@@ -356,9 +368,10 @@ def judge_proposals(
                 ):
                     reason = "point_protected"
             if not reason:
+                # AI-230a: growth is information, never a verdict. The matrix limit only caps how many combinations
+                # compile per prompt row (``selected = min(possible, limit)``); a matrix already past it must still be
+                # able to take a new slot.
                 growth = matrix_growth(matrix_mapping, name, values)
-                if growth[1] > growth[2]:
-                    reason = "matrix_limit"
         if key and not _name_problem(name) and not (taken.get(key)):
             seen.add(key)
         rows.append(
@@ -424,6 +437,8 @@ class ProposalReview:
     notice: str = PROPOSAL_NOTICE
     revert: str = PROPOSAL_REVERT_TEXT
     actions: tuple[str, ...] = ()
+    #: Change cards built by the Prompt tab owner (AI-230); empty when the caller supplies none.
+    cards: tuple[Any, ...] = field(default=(), repr=False)
 
     @property
     def offered_rows(self) -> tuple[ProposalRow, ...]:
@@ -460,7 +475,10 @@ def growth_line(row: ProposalRow) -> str:
     if row.growth is None:
         return ""
     now, after, limit = row.growth
-    return f"Matrix goes from {now:,} to {after:,} combinations (limit {limit:,})."
+    return (
+        f"Possible combinations go from {now:,} to {after:,}; compiled per prompt row: "
+        f"{min(after, limit):,} (limit {limit:,})."
+    )
 
 
 def proposal_text(review: ProposalReview) -> str:
@@ -520,5 +538,7 @@ __all__ = [
     "proposal_blocker",
     "proposal_review",
     "proposal_text",
+    "protected_spans",
+    "slot_name_problem",
     "unavailable_proposal_review",
 ]

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-998 of 998 modules have a docstring.
+1010 of 1010 modules have a docstring.
 
 ## src/
 
@@ -60,6 +60,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
+- `site_desktop_approval.py`: Current-user persistence for the loopback browser's remembered approval
 - `site_library_index.py`: Rebuildable, root-local SQLite projection for Operator Site browsing
 - `site_library_query.py`: Validated query values shared by the Site library and its SQLite projection
 - `site_library_reconcile.py`: Incremental discovery for one approved Output root
@@ -177,6 +178,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_controller.py`: Controller surface for native SVD selected-image jobs
 - `svd_submission_service.py`: Thin form-data bridge for SVD submissions owned by AppController
 - `video_eval_controller.py`: Video eval suites on the Video Workflow controller (PR-VID-EVAL-320)
+- `video_motion_alignment_controller.py`: Spatial-alignment support on the Video Workflow controller (PR-VID-MOTION-420)
 - `video_motion_conversion_controller.py`: Motion asset conversion on the Video Workflow controller (PR-VID-MOTION-354)
 - `video_motion_library_controller.py`: Motion Library support on the Video Workflow controller (PR-VID-MOTION-LIB-353)
 - `video_preflight_controller.py`: Read-only workflow readiness on the Video Workflow controller (PR-VID-UX-311)
@@ -251,7 +253,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: GUI module
 - `ai_preview_dialog.py`: AI Assist Preview enablement dialog (owner decision D13): the one place an operator enables or revokes Preview
-- `ai_suggestion_dialog.py`: Read-only AI review dialog; only an explicit Accept callback can edit the authoring buffer
+- `ai_suggestion_dialog.py`: AI Assist workbench window: tabs for each function, one list of change cards, one Apply flow (AI-230)
 - `api_status_panel.py`: APIStatusPanel - UI component for displaying API connection status
 - `app_state_projection_sink.py`: Apply runtime projections and operator log entries through a single writer into AppStateV2
 - `app_state_v2.py`: Hold GUI configuration and runtime projections and notify subscribers of state changes
@@ -422,6 +424,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_eval_motion_contract.py`: Toolkit-neutral helpers for authoring a case's driving-motion reference in the eval editor (PR-VID-MOTION-410)
 - `video_eval_motion_review_contract.py`: Toolkit-neutral state of the Motion Review window for a controlled-motion eval run (PR-VID-MOTION-410)
 - `video_experiment_contract.py`: Toolkit-neutral state for the Video Workflow "Compare one control" section (PR-VID-194)
+- `video_motion_alignment_contract.py`: Toolkit-neutral state for the Video Workflow "Align Motion" workspace (PR-VID-MOTION-420)
 - `video_motion_prep_contract.py`: Toolkit-neutral state for the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_motion_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_preview_contract.py`: Toolkit-neutral state of the in-app looping video preview (PR-VID-UX-314)
@@ -457,6 +460,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_composition_design_frame.py`: LoRA Composition authoring inside the existing scrollable Learning Design surface
 - `model_evidence_proposals_dialog.py`: Operator selection of offline qualification drafts; no execution controls or admission
 - `model_evidence_window.py`: Explicit operator catalog journey
+- `motion_alignment_dialog.py`: Tk workspace for Align Motion (PR-VID-MOTION-420)
 - `motion_batch_dialog.py`: Tk dialog for Batch Convert Motion (PR-VID-MOTION-356)
 - `motion_conversion_dialog.py`: Tk dialog for Convert Motion (PR-VID-MOTION-354)
 - `motion_harvest_dialog.py`: Tk workspace for Harvest Motion (PR-VID-MOTION-400)
@@ -488,6 +492,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_eval_motion_review_window.py`: Tk window for reviewing a controlled-motion eval run (PR-VID-MOTION-410)
 - `video_eval_panel_v2.py`: Video Workflow tab: queue an eval suite and build its contact sheet (PR-VID-EVAL-320)
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
+- `video_workflow_alignment_host.py`: Owns the one Align Motion session, workspace window and status row of the Video Workflow tab (PR-VID-MOTION-4…
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
 - `video_workflow_evaluate_view_v2.py`: Evaluate view container for the Video Workflow tab (VID-UX-384)
@@ -508,6 +513,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui/widgets/
 
 - `action_explainer_panel_v2.py`: Render collapsible inline guidance for workflow choices and high-risk actions
+- `ai_card_list.py`: A scrollable list of AI Assist change cards (AI-230)
 - `config_sweep_widget_v2.py`: Config Sweep Widget for PR-CORE-E
 - `controlnet_units_panel.py`: Guided authoring of up to two ordered ControlNet units; resource discovery is off Tk, never a compiler
 - `disclosure_section_v2.py`: Keyboard-accessible collapsible section (PR-GUI-110)
@@ -540,7 +546,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
+- `ai_changes.py`: Toolkit-neutral proposed-change cards and the apply journal for AI Assist (AI-230)
+- `ai_matrix_check.py`: Deterministic matrix and prompt checks for the AI Assist Check tab (AI-230e)
 - `ai_plan_advice.py`: Toolkit-neutral advisory planning: closed-list facts, the deterministic judge and the read-only review model…
+- `ai_slot_phrase.py`: Toolkit-neutral phrase to slot (AI-230g): the selected span, the deterministic judge and the review model
 - `ai_slot_proposal.py`: Toolkit-neutral new-slot proposals (AI-213): insertion points, the deterministic judge and the review model
 - `ai_slot_variety.py`: Toolkit-neutral slot variety (AI-212): the matrix snapshot, the deterministic per-value judge and the review…
 - `ai_suggestion_view.py`: Toolkit-neutral AI suggestion review: immutable source identity and content-free outcome copy
@@ -1012,6 +1021,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
 - `managed_comfy_runtime.py`: Read-only production view of the StableNew-managed ComfyUI runtime contract
+- `motion_alignment.py`: Typed spatial alignment of a driving clip to a source image (PR-VID-MOTION-420)
+- `motion_alignment_compatibility.py`: Source / driving-motion compatibility advisories (PR-VID-MOTION-420)
+- `motion_alignment_preparation.py`: Prepare the driving frames a workflow will consume with one explicit spatial alignment (PR-VID-MOTION-420)
+- `motion_alignment_support.py`: Which registered workflows can honestly be offered spatial alignment (PR-VID-MOTION-420)
 - `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
 - `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories

@@ -30,6 +30,12 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_TESTING,
 )
 from src.video.continuity_models import normalize_continuity_link
+from src.video.motion_alignment_preparation import (
+    is_aligned_record,
+    validate_aligned_record,
+    verify_aligned_source_binding,
+)
+from src.video.motion_alignment_support import alignment_support
 from src.video.motion_source_plan import motion_source_contract
 from src.video.motion_source_preparation import validate_prepared_record
 from src.video.rife_runtime import default_rife_multiplier, find_rife_executable
@@ -410,12 +416,20 @@ class VideoWorkflowNjrBuilder:
                     "A prepared motion source needs a workflow that takes a driving video and "
                     "the driving video it was prepared from."
                 )
-            preparation = validate_prepared_record(
-                prepared,
-                original_path=driving_text,
-                contract=motion_source_contract(spec, form_data.get("frame_count")),
-                hash_file=sha256_file,
-            )
+            contract = motion_source_contract(spec, form_data.get("frame_count"))
+            if is_aligned_record(prepared):
+                # PR-VID-MOTION-420: only a workflow whose own resize is the verified identity at the
+                # frozen target size takes an aligned clip; the clip is also bound to one source image.
+                support = alignment_support(spec)
+                if not support.supported:
+                    raise ValueError(support.reason)
+                preparation = validate_aligned_record(
+                    prepared, original_path=driving_text, contract=contract, hash_file=sha256_file
+                )
+            else:
+                preparation = validate_prepared_record(
+                    prepared, original_path=driving_text, contract=contract, hash_file=sha256_file
+                )
             derived, original = preparation["derived"], preparation["original"]
             driving = {"path": str(derived["path"]), "sha256": str(derived["sha256"])}
             files.append(("original driving video", str(original["path"]), str(original["sha256"])))
@@ -545,14 +559,25 @@ class VideoWorkflowNjrBuilder:
             seed = parse_seed_input(form_data.get("seed"))
             if seed is None:
                 seed = secrets.randbelow(2**31)
+        source_sha256 = sha256_file(source_image_path)
+        prepared_source_sha256 = sha256_file(prepared_source_path)
+        if is_aligned_record(shared.motion_source_preparation):
+            # An aligned clip is specific to one source image: bind it to this one or refuse the job.
+            verify_aligned_source_binding(
+                shared.motion_source_preparation or {},
+                source_image_path=source_image_path,
+                prepared_source_sha256=prepared_source_sha256,
+                prepared_dimensions=(source_preparation or {}).get("prepared_dimensions") or {},
+                hash_file=lambda _path: source_sha256,
+            )
         return FrozenVideoInputs(
             source_image_path=str(Path(source_image_path).expanduser()),
-            source_sha256=sha256_file(source_image_path),
+            source_sha256=source_sha256,
             seed=seed,
             driving_video=shared.driving_video,
             source_preparation=source_preparation,
             prepared_source_path=prepared_source_path,
-            prepared_source_sha256=sha256_file(prepared_source_path),
+            prepared_source_sha256=prepared_source_sha256,
             shared_files=shared.files,
             motion_source_preparation=shared.motion_source_preparation,
             library_asset=shared.library_asset,
@@ -776,6 +801,19 @@ class VideoWorkflowNjrBuilder:
                 side: {key: preparation_record[side].get(key) for key in ("path", "sha256")}
                 for side in ("original", "derived")
             } | {"settings": dict(preparation_record["settings"])}
+            if is_aligned_record(preparation_record):
+                align = preparation_record["alignment"]
+                extra_metadata["video_workflow"]["motion_source_preparation"]["alignment"] = {
+                    key: align.get(key)
+                    for key in (
+                        "transform_sha256",
+                        "scale",
+                        "translate_x",
+                        "translate_y",
+                        "mirror",
+                        "temporal_plan_sha256",
+                    )
+                }
         if frozen_frame_count is not None and length_policy is not None:
             extra_metadata["video_workflow"].update(
                 frame_count=frozen_frame_count,
