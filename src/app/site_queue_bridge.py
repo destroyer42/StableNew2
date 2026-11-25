@@ -533,17 +533,30 @@ class SiteSession:
                 receipt_payload(self._receipt) if self._receipt is not None else {"state": "idle"}
             )
 
-    def record_witness(self, receipt: SubmissionReceipt, job_ids: tuple[str, ...]) -> None:
-        """Save only the exact admission lookup, before handing work to JobService."""
-        with self._lease_lock:
+    def begin_admission(
+        self, receipt: SubmissionReceipt, epoch: int, job_ids: tuple[str, ...]
+    ) -> bool:
+        """Fence the confirmed Preview and save its exact lookup at the admission boundary."""
+        with self._lock, self._lease_lock:
+            if (
+                self.epoch != epoch
+                or self._revoked.is_set()
+                or time.monotonic() >= self.expires_at
+                or self._receipt != receipt
+                or receipt.state != "awaiting_confirmation"
+            ):
+                return False
             approval = self._preference.approval
-            if approval is None:
-                return
-            witness = ReceiptWitness(receipt.receipt_id, receipt.preview_id, job_ids)
-            rows = (witness, *approval.witnesses)[:MAX_WITNESSES]
-            self._save_preference(
-                replace(self._preference, approval=replace(approval, witnesses=rows))
-            )
+            if approval is not None:
+                witness = ReceiptWitness(receipt.receipt_id, receipt.preview_id, job_ids)
+                rows = (witness, *approval.witnesses)[:MAX_WITNESSES]
+                self._save_preference(
+                    replace(self._preference, approval=replace(approval, witnesses=rows))
+                )
+            if self._revoked.is_set() or time.monotonic() >= self.expires_at:
+                return False
+            self._receipt = replace(receipt, state="submitting")
+            return True
 
     def exact_receipt(self, identifier: str) -> dict[str, Any] | None:
         with self._lock:

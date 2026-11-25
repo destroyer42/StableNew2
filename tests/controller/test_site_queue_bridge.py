@@ -9,6 +9,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from src.app import site_queue_bridge
+from src.app.site_desktop_approval import DesktopPreference
 from src.app.site_queue_bridge import SITE_ORIGIN, SiteSession, make_handler
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
@@ -51,7 +53,7 @@ def request(
     )
 
 
-def native_connection(confirm=lambda _count: True):
+def native_connection(confirm=lambda _count: True, *, approval_store=None):
     jobs = tuple(
         SimpleNamespace(
             job_id=f"image-{i}", workload_kind=WorkloadKind.IMAGE, stage_chain_labels=["txt2img"]
@@ -88,7 +90,7 @@ def native_connection(confirm=lambda _count: True):
     app.job_service = SimpleNamespace(
         history_store=SimpleNamespace(get_job=lambda job: job if job in committed else None)
     )
-    session = SiteSession()
+    session = SiteSession(approval_store=approval_store)
     conn = PreviewQueueConnection(app, session, confirm)
     conn.tick()
     return conn, session, native_state, jobs, calls, fallback
@@ -127,6 +129,31 @@ def test_site_receipt_is_one_existing_preview_submission():
     conn.tick()
     assert duplicate == receipt
     assert calls == [jobs]
+
+
+def test_open_confirmation_cannot_submit_after_lease_replacement(monkeypatch):
+    now = 1_800_000_000.0
+    proof = "a" * 64
+    monkeypatch.setattr(site_queue_bridge, "time", Mock(time=lambda: now, monotonic=lambda: now))
+    store = Mock()
+    store.load.return_value = DesktopPreference()
+
+    def confirm(_count):
+        nonlocal now
+        now = session.expires_at + 1
+        new_lease = session.resume_desktop(proof, extend=True)
+        assert new_lease is not None
+        assert new_lease["epoch"] == 2
+        return True
+
+    conn, session, _state, _jobs, calls, fallback = native_connection(confirm, approval_store=store)
+    _, _, preview = request(session, "GET", "/v1/preview", token=session.code)
+    assert session.bind_desktop(proof)
+    assert session.request(preview["preview_id"])[0] == HTTPStatus.ACCEPTED
+    conn.tick()
+    assert session.receipt()["state"] == "connection_closed"
+    assert calls == [] and fallback == []
+    assert session.preview()["state"] == "unavailable"
 
 
 @pytest.mark.parametrize("bad", ["origin", "host", "token"])

@@ -67,7 +67,9 @@ def test_desktop_cold_resume_keeps_deadline_and_restores_only_the_exact_receipt(
     preview, receipt, job = "a" * 32, "b" * 32, "c" * 32
     original.publish(PreviewView(preview, (PreviewJob(job, ("txt2img",)),)))
     assert original.request(preview, receipt)[0] == 202
-    original.record_witness(original.take_request(), (job,))
+    requested = original.take_request()
+    assert requested is not None
+    assert original.begin_admission(requested, original.epoch, (job,))
     committed.add(job)
     original.revoke()  # Process shutdown only.
     now += 3600

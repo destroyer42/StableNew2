@@ -230,6 +230,7 @@ class PreviewQueueConnection:
 
     def _consume(self, receipt: SubmissionReceipt) -> None:
         witness = self.witness
+        epoch = self.session.epoch
         if witness is None or receipt.preview_id != self.preview_id:
             self._finish(receipt, "preview_changed")
             return
@@ -256,7 +257,9 @@ class PreviewQueueConnection:
                 self.uncertain = witness
                 self._finish(receipt, "check_native_queue")
                 return
-            self.session.record_witness(receipt, job_ids)
+            if not self.session.begin_admission(receipt, epoch, job_ids):
+                self._finish(receipt, "connection_closed")
+                return
             if not self.app.submit_frozen_site_preview(witness):
                 self._finish(receipt, "native_queue_refused")
                 return
@@ -265,7 +268,6 @@ class PreviewQueueConnection:
             self.uncertain = witness
             self._finish(receipt, "check_native_queue")
             return
-        self.session.finish(receipt, "submitting")
         self.pending = (receipt, job_ids, time.monotonic() + _RECEIPT_SECONDS)
 
     def tick(self) -> None:
