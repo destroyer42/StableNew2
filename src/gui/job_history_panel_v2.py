@@ -24,7 +24,10 @@ from src.gui.controllers.history_compare_service import (
     resolve_history_repository,
 )
 from src.gui.controllers.history_iterate_service import HistoryIterateRefused, HistoryIterateService
-from src.gui.controllers.video_workspace_handoff import route_video_to_motion_harvest
+from src.gui.controllers.video_workspace_handoff import (
+    route_job_to_storyboard,
+    route_video_to_motion_harvest,
+)
 from src.gui.history_compare_dialog import HistoryCompareDialog
 from src.gui.history_iterate_dialog import CHOICE_REVIEW, HistoryIterateDialog
 from src.gui.view_contracts.history_artifact_contract import resolve_recorded_artifact
@@ -82,6 +85,7 @@ class HistoryActionState:
     iterate: bool = False
     compare: bool = False
     harvest: bool = False
+    storyboard: bool = False
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -177,6 +181,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         action_bar.add(self.harvest_btn)
+        self.storyboard_btn = ttk.Button(
+            action_bar,
+            text="Continue in Storyboard",
+            command=self._on_continue_in_storyboard,
+            state=tk.DISABLED,
+        )
+        action_bar.add(self.storyboard_btn)
         self.explain_btn = ttk.Button(
             action_bar,
             text="Explain Job",
@@ -348,6 +359,9 @@ class JobHistoryPanelV2(ttk.Frame):
             label="Send to Movie Clips", command=self._on_send_to_movie_clips
         )
         self._history_menu.add_command(label="Harvest Motion...", command=self._on_harvest_motion)
+        self._history_menu.add_command(
+            label="Continue in Storyboard", command=self._on_continue_in_storyboard
+        )
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self._history_menu.add_command(
             label="Review Video Experiment", command=self._on_review_video_experiment
@@ -761,6 +775,28 @@ class JobHistoryPanelV2(ttk.Frame):
             return
         self.replay_status_var.set("")
 
+    def _on_continue_in_storyboard(self) -> None:
+        """Open the selected completed video job in the Storyboard tab (intent only; the tab shows any refusal)."""
+
+        entry = self._selected_entry()
+        if not entry:
+            return
+        if not self._history_action_state(entry).storyboard:
+            self.replay_status_var.set("Continue in Storyboard needs a completed video job.")
+            return
+        main_window = getattr(self.controller, "main_window", None)
+        if main_window is None:
+            self.replay_status_var.set(
+                "Continue in Storyboard is not available: the main window is missing."
+            )
+            return
+        try:
+            route_job_to_storyboard(main_window=main_window, job_id=entry.job_id)
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.replay_status_var.set(f"Continue in Storyboard failed: {exc}")
+            return
+        self.replay_status_var.set("")
+
     def _on_send_to_movie_clips(self) -> None:
         entry = self._selected_entry()
         if entry and self._history_action_state(entry).movie_clips:
@@ -800,6 +836,10 @@ class JobHistoryPanelV2(ttk.Frame):
         )
         self.movie_clips_btn.configure(state=tk.NORMAL if actions.movie_clips else tk.DISABLED)
         self.harvest_btn.configure(state=tk.NORMAL if actions.harvest else tk.DISABLED)
+        self.storyboard_btn.configure(state=tk.NORMAL if actions.storyboard else tk.DISABLED)
+        self._history_menu.entryconfigure(
+            "Continue in Storyboard", state=tk.NORMAL if actions.storyboard else tk.DISABLED
+        )
         self._history_menu.entryconfigure(
             "Harvest Motion...", state=tk.NORMAL if actions.harvest else tk.DISABLED
         )
@@ -1112,6 +1152,7 @@ class JobHistoryPanelV2(ttk.Frame):
             iterate=self._iterate_offered(entry),
             compare=self._compare_offered(entry),
             harvest=self._recorded_video_path(entry) is not None,
+            storyboard=self._recorded_video_path(entry) is not None,
         )
 
     def _iterate_offered(self, entry: JobHistoryEntry) -> bool:

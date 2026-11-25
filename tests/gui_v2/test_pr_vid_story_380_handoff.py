@@ -1,7 +1,7 @@
 """PR-VID-STORY-380 B6 (route only): Continue in Storyboard hands a finished clip's job to the Storyboard tab.
 
-The three entry-point buttons (Job History, Recent outputs, Make Video result) are deferred until the Video Workflow
-layout work (VID-UX-384) lands; they only need to call this route.
+The entry-point buttons (Job History, Recent outputs) call this route; they are tested in
+``test_pr_vid_story_380_entry_points``.
 """
 
 from __future__ import annotations
