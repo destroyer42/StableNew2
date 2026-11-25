@@ -238,6 +238,13 @@ and comparison metrics. If the CSV changed or is open in an editor, the Site kee
 the operator resolves the conflict. Without pairing, use **Open StableNew output folder** or import
 \`run.json\`, \`metrics.json\` and \`ratings.csv\` together. Download and apply the CSV explicitly in file-import mode.
 
+For controlled-motion runs, open an individual clip to rate subject attachment, motion fidelity, timing, direction,
+completion, locomotion, start and end pose, and driver contamination. The dropdowns use the accepted values from
+the motion rubric. **Driving reference** opens the recorded effective driver when the output grant includes it,
+or accepts a local file whose checksum matches. The clip stays partial until it has the required identity and motion
+judgments. If the driving context changes, a fresh motion review keeps the existing identity judgments when the clip
+is unchanged. Connected saves require a Windows build with motion-rating support.
+
 **Output Library** uses the same grant. Switch between images and videos, or search by filename, metadata tag,
 recorded positive prompt, or seed. Select two images to compare them, or save the selection as an album. Album
 references and image scores are stored under \`<Output>/.stablenew-library\`. Image scores are gallery observations.

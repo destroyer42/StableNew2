@@ -301,3 +301,14 @@ def test_event_log_and_disk_carry_no_goal_sentence_or_slot_content(
     for path in installation.root.rglob("*"):
         if path.is_file():
             assert canary.encode() not in path.read_bytes(), path
+
+
+def test_the_prompt_carries_one_shape_only_example_that_holds_no_operator_text() -> None:
+    from src.ai_assist.framing import PROPOSAL_EXAMPLE, render_prompt
+
+    prompt = render_prompt(REQUEST)
+    assert prompt.count(PROPOSAL_EXAMPLE) == 1
+    assert "never to be reused" in PROPOSAL_EXAMPLE
+    assert (
+        PROPOSAL_EXAMPLE not in REQUEST.positive_text and PROPOSAL_EXAMPLE not in REQUEST.goal_text
+    )
