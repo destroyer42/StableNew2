@@ -425,7 +425,12 @@ class ComfyImageBackend:
         }
         try:
             result = self._execute_sdxl_on_runtime(
-                pipeline, request, plan, (checkpoint, loras, vae), evidence
+                pipeline,
+                request,
+                plan,
+                (checkpoint, loras, vae),
+                evidence,
+                warm_runtime=claim.warm,
             )
         except BaseException:
             self._release_owned_runtime()
@@ -518,6 +523,8 @@ class ComfyImageBackend:
         plan: SdxlComfyPlan,
         files: tuple[Any, tuple[Any, ...], Any],
         evidence: dict[str, Any],
+        *,
+        warm_runtime: bool = False,
     ) -> ImageExecutionResult:
         from src.image_backends.comfy_image_readiness import listed_option
         from src.video.comfy_workflow_backend import _actual_runtime_identity
@@ -571,7 +578,8 @@ class ComfyImageBackend:
                 + "; ".join(dict.fromkeys(problems))
             )
         system_stats = client.get_system_stats()
-        evidence["floors"] = evaluate_floors(profile, system_stats)
+        # A warm-claimed runtime already holds this job's model, so "free VRAM" is lower by design (see evaluate_floors).
+        evidence["floors"] = evaluate_floors(profile, system_stats, resident_model_ok=warm_runtime)
         evidence["actual_runtime"] = _actual_runtime_identity(system_stats)
         prompt_id = str(uuid.uuid4())
         payload = {

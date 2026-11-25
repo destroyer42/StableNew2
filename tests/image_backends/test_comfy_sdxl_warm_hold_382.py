@@ -248,6 +248,51 @@ def test_an_unowned_comfy_is_never_held(tmp_path: Path) -> None:
     assert rig.slot.snapshot() is None and rig.manager.stops == 0
 
 
+GIB = 1024**3
+
+
+def test_a_warm_reused_comfy_is_not_refused_for_the_vram_its_own_model_occupies(
+    tmp_path: Path,
+) -> None:
+    """The physical run 4 failure: the held ComfyUI reports ~4.3 GiB free because it still has the checkpoint loaded."""
+
+    from tests.helpers.comfy_image_fakes import system_stats
+
+    rig = Rig(tmp_path)
+    rig.run()
+    rig.client.stats = system_stats(vram_free=int(4.3 * GIB))
+
+    second = rig.run()
+
+    assert second.backend_metadata["runtime_reuse"]["status"] == "warm"
+    assert len(rig.client.payloads) == 2
+
+
+def test_a_cold_start_still_refuses_when_another_program_holds_the_gpu(tmp_path: Path) -> None:
+    from src.image_backends.comfy_image_readiness import ComfyImageResourceError
+    from tests.helpers.comfy_image_fakes import system_stats
+
+    rig = Rig(tmp_path)
+    rig.client.stats = system_stats(vram_free=int(4.3 * GIB))
+
+    with pytest.raises(ComfyImageResourceError, match="free GPU memory"):
+        rig.run()
+
+    assert rig.client.payloads == []
+
+
+def test_a_warm_reused_comfy_still_needs_host_ram(tmp_path: Path) -> None:
+    from src.image_backends.comfy_image_readiness import ComfyImageResourceError
+    from tests.helpers.comfy_image_fakes import system_stats
+
+    rig = Rig(tmp_path)
+    rig.run()
+    rig.client.stats = system_stats(vram_free=int(4.3 * GIB), ram_free=1 * GIB)
+
+    with pytest.raises(ComfyImageResourceError, match="free host RAM"):
+        rig.run()
+
+
 # -- the configured idle grace -----------------------------------------------------------------------------------------
 
 
