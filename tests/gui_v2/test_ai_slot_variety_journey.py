@@ -113,14 +113,13 @@ def _deliver(j, outcome):
 
 
 def _offered(dialog) -> list[str]:
-    return list(dialog.variety_list.get(0, "end"))
+    return [card.title for card in dialog.change_cards.cards if card.offered]
 
 
 def _add(dialog, label: str) -> None:
     position = _offered(dialog).index(label)
-    dialog.variety_list.selection_clear(0, "end")
-    dialog.variety_list.selection_set(position)
-    dialog.add_value_button.invoke()
+    key = dialog.change_cards.offered_keys()[position]
+    dialog.change_cards.apply_buttons[key].invoke()
 
 
 def _type_manually(frame, index: int, text: str) -> None:
@@ -240,7 +239,7 @@ def test_only_valid_values_are_offered_and_rejections_show_their_reason(variety)
     assert VARIETY_NOTICE in text
     assert "[rejected] 'Soft Light': Already a value of this slot." in text
     assert "[rejected] 'neon, rain': Contains a comma" in text
-    assert dialog.accept_button.instate(["disabled"]) and dialog.add_value_button.instate(
+    assert dialog.accept_button.instate(["disabled"]) and dialog.apply_selected_button.instate(
         ["!disabled"]
     )
     assert not j.frame.workspace_state.dirty
@@ -306,7 +305,7 @@ def test_values_are_added_one_at_a_time_and_never_twice(variety):
         "soft light",
         "golden hour",
     ]
-    assert _offered(dialog) == [] and dialog.add_value_button.instate(["disabled"])
+    assert _offered(dialog) == [] and dialog.apply_selected_button.instate(["disabled"])
     j.flow.add_variety_value(0)  # a repeated press of an added row is inert
     assert slots[2].values == ["soft light", "golden hour"]
 

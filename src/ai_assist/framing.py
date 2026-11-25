@@ -11,6 +11,8 @@ from typing import Any
 
 from src.ai_assist.contracts import (
     CHANGE_CODES,
+    MAX_PHRASE_SLOTS,
+    MAX_PHRASE_VALUES,
     MAX_PLAN_STEPS,
     MAX_PROPOSAL_SLOT_NAME_CHARS,
     MAX_PROPOSAL_VALUES,
@@ -20,6 +22,7 @@ from src.ai_assist.contracts import (
     MAX_STEP_COUNT,
     MAX_VARIETY_RATIONALE_CHARS,
     MAX_VARIETY_VALUE_CHARS,
+    MIN_PHRASE_VALUES,
     MIN_PROPOSAL_VALUES,
     SUGGESTION_SCHEMA_ID,
     VARIETY_FOCUS_EXPLORE,
@@ -47,6 +50,9 @@ _EXISTING_SLOT_MARKER = "EXISTING_SLOT:"
 _POINT_MARKER = "SENTENCE_POINT:"
 #: Every marker the new-slot proposal data block uses (AI-213). Authored text containing any of them is refused.
 PROPOSAL_RESERVED_MARKERS = (*VARIETY_RESERVED_MARKERS, _EXISTING_SLOT_MARKER, _POINT_MARKER)
+_PHRASE_MARKER = "PHRASE:"
+#: Every marker the phrase-to-slot data block uses (AI-230g). Authored text containing any of them is refused.
+PHRASE_RESERVED_MARKERS = (*PROPOSAL_RESERVED_MARKERS, _PHRASE_MARKER)
 FRAME_VERSION = "ai_assist.frame/1"
 
 
@@ -88,6 +94,31 @@ VARIETY_FOCUS_RULES = {
 }
 
 
+#: One worked example per slot kind (AI-230f). Shape only: it says what a good value or slot looks like and tells the model
+#: never to reuse its words. Whether it improves a given model is unmeasured; the case runner under
+#: ``tools/qualification/ai230`` exists to measure it, and no quality claim rests on it.
+VARIETY_EXAMPLE = (
+    'Example of the shape only, never to be reused: for the goal "moody evening scenes" and a slot lighting that already '
+    'lists "candlelight", good new values are short noun phrases such as "neon haze", "moonlit mist" and "streetlamp '
+    'glow"; poor values are whole sentences, repeats of listed values, and phrases unrelated to the goal such as "good '
+    'lighting".'
+)
+PROPOSAL_EXAMPLE = (
+    'Example of the shape only, never to be reused: for the sentence "a knight in a forest, wearing armor, at dusk" and '
+    'the goal "more atmosphere", a good proposal is the slot "weather" with the values "heavy fog", "light drizzle" and '
+    '"clear sky", placed after "forest" so that it reads "a knight in a forest [[weather]], wearing armor, at dusk". A '
+    "slot name is one short lowercase noun; a poor proposal reuses a listed slot name or repeats words the sentence "
+    "already contains."
+)
+
+PHRASE_EXAMPLE = (
+    'Example of the shape only, never to be reused: for the sentence "a knight in a forest, wearing armor, at dusk" and the '
+    'selected phrase "at dusk", a good proposal is the slot "time_of_day" with the alternatives "at dawn", "at midnight" and '
+    '"at high noon", each of which can replace the selected phrase in the sentence. A poor proposal repeats the selected '
+    "phrase, offers words that do not fit in its place, or reuses a listed slot name."
+)
+
+
 def _variety_instruction(request: AssistRequest) -> str:
     """Deterministic frame for a slot-variety request (AI-214): scope, quantity and goal focus."""
 
@@ -100,7 +131,7 @@ def _variety_instruction(request: AssistRequest) -> str:
         "characters with no commas, no square or angle brackets and no line breaks, plus a short rationale (at most "
         f"{MAX_VARIETY_RATIONALE_CHARS} characters). {VARIETY_FOCUS_RULES[request.variety_focus]} "
         "Do not repeat existing values. Do not claim that you have verified the quality of your own suggestions. "
-        "These are suggestions a person reviews one by one."
+        f"These are suggestions a person reviews one by one. {VARIETY_EXAMPLE}"
     )
 
 
@@ -118,7 +149,25 @@ def _proposal_instruction(request: AssistRequest) -> str:
         f"insertion_point as the whole number (0 to {last}) of one position listed after {_POINT_MARKER} where the marker "
         f"reads naturally in the sentence, and a short rationale (at most {MAX_VARIETY_RATIONALE_CHARS} characters). Never "
         "rewrite the sentence. Do not claim that you have verified the quality of your own suggestions. These are "
-        "suggestions a person reviews one by one."
+        f"suggestions a person reviews one by one. {PROPOSAL_EXAMPLE}"
+    )
+
+
+def _phrase_instruction(request: AssistRequest) -> str:
+    """Deterministic frame for a phrase-to-slot request (AI-230g)."""
+
+    return (
+        "The operator selected one phrase of their prompt sentence, shown after "
+        f"{_PHRASE_MARKER} in the data. Propose new matrix slots built around that phrase: a slot is a short category name "
+        "(for example lighting) whose values are alternatives that can replace the selected phrase in the sentence, which "
+        f"will then read [[slot_name]]. Give 1 to {MAX_PHRASE_SLOTS} proposals. For each proposal give a new slot_name of at "
+        f"most {MAX_PROPOSAL_SLOT_NAME_CHARS} characters that is not listed after {_EXISTING_SLOT_MARKER} and differs from "
+        f"your other proposals, {MIN_PHRASE_VALUES} to {MAX_PHRASE_VALUES} distinct alternatives that are not the selected "
+        "phrase (it is kept automatically as the first value), each a short phrase of at most "
+        f"{MAX_VARIETY_VALUE_CHARS} characters with no commas, no square or angle brackets and no line breaks, and a short "
+        f"rationale (at most {MAX_VARIETY_RATIONALE_CHARS} characters). If the operator gave a goal after {_GOAL_MARKER}, "
+        "let it guide the alternatives. Never rewrite the sentence. Do not claim that you have verified the quality of your "
+        f"own suggestions. These are suggestions a person reviews one by one. {PHRASE_EXAMPLE}"
     )
 
 
@@ -182,7 +231,35 @@ def _proposal_block(request: AssistRequest) -> list[str]:
     return [*lines, END_MARKER, ""]
 
 
+def _check_phrase_text(label: str, text: str, *, single_line: bool) -> None:
+    for marker in PHRASE_RESERVED_MARKERS:
+        if marker in text:
+            raise FramingError(f"{label} contains a reserved marker")
+    if single_line and ("\n" in text or "\r" in text):
+        raise FramingError(f"{label} contains a line break")
+
+
+def _phrase_block(request: AssistRequest) -> list[str]:
+    _check_phrase_text("goal_text", request.goal_text, single_line=False)
+    _check_phrase_text("positive_text", request.positive_text, single_line=False)
+    _check_phrase_text("phrase_text", request.phrase_text, single_line=True)
+    lines = [
+        BEGIN_MARKER,
+        _GOAL_MARKER,
+        request.goal_text,
+        "POSITIVE_PROMPT:",
+        request.positive_text,
+        f"{_PHRASE_MARKER} {request.phrase_text}",
+    ]
+    for name in request.existing_slot_names:
+        _check_phrase_text("slot name", name, single_line=True)
+        lines.append(f"{_EXISTING_SLOT_MARKER} {name}")
+    return [*lines, END_MARKER, ""]
+
+
 def _authored_block(request: AssistRequest) -> list[str]:
+    if request.kind is SuggestionKind.PHRASE_SLOT:
+        return _phrase_block(request)
     if request.kind is SuggestionKind.SLOT_PROPOSAL:
         return _proposal_block(request)
     if request.kind is SuggestionKind.SLOT_VARIETY:
@@ -229,6 +306,8 @@ def render_prompt(request: AssistRequest, *, response_instructions: str = "") ->
         if request.kind is SuggestionKind.SLOT_VARIETY
         else _proposal_instruction(request)
         if request.kind is SuggestionKind.SLOT_PROPOSAL
+        else _phrase_instruction(request)
+        if request.kind is SuggestionKind.PHRASE_SLOT
         else _INSTRUCTIONS[request.kind],
         f"Target policy: {request.target_policy_id or 'unspecified'}.",
         f"Schema id: {SUGGESTION_SCHEMA_ID}; kind: {request.kind.value}.",
@@ -339,6 +418,29 @@ def _ok_branch(request: AssistRequest) -> dict[str, Any]:
             },
         }
         required.append("proposals")
+    elif request.kind is SuggestionKind.PHRASE_SLOT:
+        # Every field is required and the list needs an item, so the grammar cannot close an empty answer (AI-202c).
+        properties["phrase_slots"] = {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": MAX_PHRASE_SLOTS,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "slot_name": {"type": "string", "maxLength": MAX_PROPOSAL_SLOT_NAME_CHARS},
+                    "values": {
+                        "type": "array",
+                        "minItems": MIN_PHRASE_VALUES,
+                        "maxItems": MAX_PHRASE_VALUES,
+                        "items": {"type": "string", "maxLength": MAX_VARIETY_VALUE_CHARS},
+                    },
+                    "rationale": {"type": "string", "maxLength": MAX_VARIETY_RATIONALE_CHARS},
+                },
+                "required": ["slot_name", "values", "rationale"],
+                "additionalProperties": False,
+            },
+        }
+        required.append("phrase_slots")
     else:
         properties["workflow"] = {"enum": list(request.allowed_workflows)}
         required.append("workflow")
@@ -387,7 +489,11 @@ __all__ = [
     "END_MARKER",
     "FRAME_VERSION",
     "PLAN_SELECTED_MODEL_RULE",
+    "PHRASE_EXAMPLE",
+    "PHRASE_RESERVED_MARKERS",
+    "PROPOSAL_EXAMPLE",
     "PROPOSAL_RESERVED_MARKERS",
+    "VARIETY_EXAMPLE",
     "VARIETY_FOCUS_RULES",
     "VARIETY_RESERVED_MARKERS",
     "FramingError",

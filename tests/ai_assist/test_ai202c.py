@@ -88,7 +88,14 @@ PROPOSAL = AssistRequest(
     existing_slot_names=("location",),
     insertion_points=("a knight in a forest|HERE|, wearing armor", "…wearing armor|HERE|"),
 )
-REQUESTS = {r.kind: r for r in (REWRITE, TARGET, WORKFLOW, PLAN, VARIETY, PROPOSAL)}
+PHRASE = AssistRequest(
+    request_id="s7",
+    kind=SuggestionKind.PHRASE_SLOT,
+    positive_text="a knight in a forest, wearing armor, at dusk",
+    phrase_text="at dusk",
+    existing_slot_names=("location",),
+)
+REQUESTS = {r.kind: r for r in (REWRITE, TARGET, WORKFLOW, PLAN, VARIETY, PROPOSAL, PHRASE)}
 
 #: One document the validator accepts for each kind (``changes`` omitted: it is the only optional field).
 ACCEPTED: dict[SuggestionKind, dict[str, Any]] = {
@@ -157,6 +164,18 @@ ACCEPTED: dict[SuggestionKind, dict[str, Any]] = {
             }
         ],
     },
+    SuggestionKind.PHRASE_SLOT: {
+        "schema": SUGGESTION_SCHEMA_ID,
+        "status": "ok",
+        "kind": "phrase_slot",
+        "phrase_slots": [
+            {
+                "slot_name": "time_of_day",
+                "values": ["at dawn", "at midnight"],
+                "rationale": "Other times of day.",
+            }
+        ],
+    },
 }
 REFUSED = {"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "cannot help"}
 #: Fields the schema requires although the validator would tolerate their absence (the schema is the stricter of the two).
@@ -167,6 +186,7 @@ SCHEMA_STRICTER_THAN_VALIDATOR = {
     SuggestionKind.PLAN_PROPOSAL: set(),
     SuggestionKind.SLOT_VARIETY: set(),
     SuggestionKind.SLOT_PROPOSAL: set(),
+    SuggestionKind.PHRASE_SLOT: set(),
 }
 
 
@@ -269,7 +289,14 @@ def test_the_schema_requires_what_the_validator_requires(kind: SuggestionKind) -
         assert key == "changes"
     assert set(ok_branch["properties"]) <= validators._ALLOWED_KEYS
     # A payload field of another kind is rejected by both.
-    foreign = {"positive": "x", "target": "sdxl", "workflow": "svd_xt", "steps": [], "slots": []}
+    foreign = {
+        "positive": "x",
+        "target": "sdxl",
+        "workflow": "svd_xt",
+        "steps": [],
+        "slots": [],
+        "phrase_slots": [],
+    }
     for key, value in foreign.items():
         if key in ok_branch["properties"]:
             continue
@@ -306,6 +333,7 @@ def test_the_payload_requirements_are_per_kind() -> None:
     assert required[SuggestionKind.PLAN_PROPOSAL][3:] == ["steps"]
     assert required[SuggestionKind.SLOT_VARIETY][3:] == ["slots"]
     assert required[SuggestionKind.SLOT_PROPOSAL][3:] == ["proposals"]
+    assert required[SuggestionKind.PHRASE_SLOT][3:] == ["phrase_slots"]
     proposals = framing.build_json_schema(PROPOSAL)["oneOf"][0]["properties"]["proposals"]
     assert (
         proposals["minItems"] == 1 and proposals["items"]["properties"]["values"]["minItems"] == 3
@@ -317,6 +345,11 @@ def test_the_payload_requirements_are_per_kind() -> None:
         "insertion_point",
         "rationale",
     ]
+    phrase = framing.build_json_schema(PHRASE)["oneOf"][0]["properties"]["phrase_slots"]
+    assert phrase["minItems"] == 1 and phrase["items"]["properties"]["values"]["minItems"] == 2
+    assert phrase["items"]["properties"]["values"]["maxItems"] == 5
+    assert phrase["items"]["required"] == ["slot_name", "values", "rationale"]
+    assert "insertion_point" not in phrase["items"]["properties"]
     slots = framing.build_json_schema(VARIETY)["oneOf"][0]["properties"]["slots"]
     assert slots["minItems"] == 1 and slots["items"]["properties"]["values"]["minItems"] == 1
     assert slots["items"]["required"] == ["slot", "values", "rationale"]
@@ -347,6 +380,13 @@ def test_choices_stay_pinned_to_the_closed_lists() -> None:
     proposal["proposals"][0]["insertion_point"] = 0
     proposal["proposals"][0]["values"] = ["only", "two"]
     assert not conforms(proposal, framing.build_json_schema(PROPOSAL))
+    phrase = json.loads(json.dumps(ACCEPTED[SuggestionKind.PHRASE_SLOT]))
+    phrase["phrase_slots"][0]["values"] = ["only one"]
+    assert not conforms(phrase, framing.build_json_schema(PHRASE))
+    phrase["phrase_slots"][0]["values"] = ["a", "b", "c", "d", "e", "f"]
+    assert not conforms(phrase, framing.build_json_schema(PHRASE))
+    phrase["phrase_slots"] = []
+    assert not conforms(phrase, framing.build_json_schema(PHRASE))
 
 
 def test_the_runtime_writes_the_schema_in_declared_order(installation: Install, tmp_path) -> None:

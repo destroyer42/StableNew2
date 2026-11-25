@@ -424,3 +424,15 @@ def test_a_valid_refusal_is_a_refusal_not_partial_coverage() -> None:
         REQUEST,
     )
     assert result.code is OutcomeCode.REFUSED_BY_MODEL and result.suggestion is None
+
+
+def test_the_prompt_carries_one_shape_only_example_that_holds_no_operator_text() -> None:
+    from src.ai_assist.framing import VARIETY_EXAMPLE
+
+    request = variety_request(goal_text="zzgoal canary")
+    prompt = render_prompt(request)
+    assert prompt.count(VARIETY_EXAMPLE) == 1
+    assert "never to be reused" in VARIETY_EXAMPLE
+    # the example is a constant: it never changes with the request, so it cannot carry authored text into the frame
+    other = render_prompt(variety_request(goal_text="another goal"))
+    assert prompt.replace("zzgoal canary", "another goal") == other
