@@ -370,11 +370,13 @@ class MotionAlignmentSession:
             self._loaded, self._loaded_key, self._preview, self._resolved = None, None, None, None
             self._loading = False
             self._load_message = (
-                "The inputs changed; reopen the workspace or press Reload to decode the new frames."
+                "The inputs changed; the old frames, points and bounds no longer apply."
             )
             self.anchors.clear()
             self._proposal = None
             self._envelope.clear()
+            if self.workspace_open:
+                self.reload()  # decode the new inputs; a newer change supersedes this one by its token
         if (
             inputs.library_asset_id != previous.library_asset_id
             or inputs.library_asset_id != self._driver_loaded_for
@@ -524,7 +526,9 @@ class MotionAlignmentSession:
                 self._loaded, self._loaded_key = None, None
                 return
             if key != self._inputs.key():  # the form moved on while this decoded
-                self._load_message = "The inputs changed while decoding; press Reload."
+                self._load_message = "The inputs changed while decoding."
+                if self.workspace_open:
+                    self.reload()
                 return
             self._loaded, self._loaded_key, self._load_message = value, key, ""
             frames_loaded = sorted(value.frames)
@@ -882,6 +886,7 @@ class MotionAlignmentSession:
             media=media,
             alignment=self._resolved,
             readiness_notes=tuple(getattr(self._loaded, "readiness_notes", ()) or ()),
+            historical=tuple(getattr(self._loaded, "historical_notes", ()) or ()),
         )
 
     def _markers(

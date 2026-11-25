@@ -440,6 +440,10 @@ def assess_compatibility(
             f"The workflow enlarges the driving frame {cover:.2f}x to cover the target frame (baseline)."
         )
 
+    unknown.append(
+        "Whether spatial alignment improves the generated motion for this pairing has not been tested; "
+        "only an evaluation (aligned versus unaligned) can show that."
+    )
     return CompatibilityAssessment(
         measured=tuple(measured),
         annotations=tuple(annotations),

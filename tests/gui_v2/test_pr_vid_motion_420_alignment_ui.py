@@ -491,14 +491,32 @@ def test_a_workflow_that_stops_supporting_alignment_blocks_an_applied_one():
     assert "not available for this workflow" in session.submission_fields()[BLOCKED_FIELD]
 
 
-def test_changed_inputs_clear_the_decoded_frames_and_marks_so_nothing_old_is_shown():
+def test_changed_inputs_clear_the_decoded_frames_and_marks_and_decode_the_new_ones():
     session, runner, ports = _opened()
     session.begin_anchor("head")
     session.place_source_point(10.0, 10.0)
     session.refresh(_inputs(source_path="new.png"))
     view = session.view()
     assert view.frame_indices == () and view.aligned_png is None and view.anchor_lines == ()
-    assert "inputs changed" in view.load_message
+    assert view.loading and runner.names() == ["align-load"]  # the new inputs are being decoded
+    runner.run_all()
+    runner.run_all()
+    assert (
+        session.view().frame_indices == (0, 8, 16)
+        and ports.loads[-1][0]["source_image_path"] == "new.png"
+    )
+
+
+def test_a_change_while_decoding_never_shows_the_old_frames_and_decodes_the_newest():
+    session, runner, ports = _session()
+    session.open_workspace()  # the first decode is queued but has not run
+    session.refresh(_inputs(source_path="second.png"))
+    session.refresh(_inputs(source_path="third.png"))  # rapid changes
+    runner.run_all()
+    runner.run_all()
+    assert [load[0]["source_image_path"] for load in ports.loads][-1] == "third.png"
+    view = session.view()
+    assert view.frame_indices == (0, 8, 16) and session._loaded_key == session.inputs.key()
 
 
 def test_closing_drops_results_and_never_raises():
@@ -846,3 +864,35 @@ def test_a_tab_without_a_controller_still_builds_and_never_raises_from_alignment
     assert tab.alignment_host.ports(lambda: True).driver_observations("mlib_" + "a" * 16) is None
     with pytest.raises(RuntimeError, match="not available"):
         tab.alignment_host.ports(lambda: True).prepare({}, {}, threading.Event())
+
+
+@needs_ffmpeg
+def test_recorded_workflow_evidence_is_shown_with_its_basis_and_nothing_claims_alignment_works(
+    tmp_path,
+):
+    app = SimpleNamespace(job_service=SimpleNamespace(), output_dir=str(tmp_path / "output"))
+    controller = VideoWorkflowController(app_controller=app)
+    clip = moving_square_clip(tmp_path)
+    source = tmp_path / "portrait.png"
+    Image.new("RGB", (600, 900), (20, 120, 200)).save(source)
+    loaded = controller.load_alignment_frames(
+        {"workflow_id": "wan_animate2_drive_i2v_v1", "workflow_version": "1.2.0", "frame_count": 17,
+         "pose_video_path": str(clip), "source_image_path": str(source)},
+        {"intent": AlignmentIntent(), "start": 0, "end": None, "unit": "frames", "fps_conversion": "none"},
+        [0, 8, 16],
+    )  # fmt: skip
+    assert loaded.historical_notes and all(note.endswith("]") for note in loaded.historical_notes)
+    session = MotionAlignmentSession(
+        ports=AlignPorts(
+            load=lambda *_a: loaded,
+            render=controller.render_alignment_frames,
+            prepare=lambda *_a: None,
+        ),
+        runner=BackgroundWorkRunner(spawn=lambda name, target: target(), dispatch=lambda fn: fn()),
+    )
+    session.refresh(_inputs(clip_path=str(clip), source_path=str(source)))
+    session.open_workspace()
+    assessment = session.view().compatibility
+    assert assessment.historical == loaded.historical_notes
+    assert any("has not been tested" in line for line in assessment.unknown)
+    assert assessment.blocking is False

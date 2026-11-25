@@ -29,6 +29,7 @@ from src.video.motion_alignment_support import AlignmentSupport, alignment_suppo
 from src.video.motion_library.models import UNKNOWN as LIBRARY_UNKNOWN
 from src.video.motion_library.store import LibraryError
 from src.video.motion_source_readiness import assess_motion_source, requested_output_timing
+from src.video.workflow_motion_guidance import motion_guidance
 
 
 class VideoMotionAlignmentControllerMixin:
@@ -64,7 +65,21 @@ class VideoMotionAlignmentControllerMixin:
         )
         if loaded.ok:
             loaded.readiness_notes = self._readiness_notes(form, loaded)
+            loaded.historical_notes = self._historical_notes(form)
         return loaded
+
+    def _historical_notes(self, form: Mapping[str, Any]) -> tuple[str, ...]:
+        """The workflow's recorded evidence statements (basis and all), reused from the existing guidance projection."""
+
+        try:
+            guidance = motion_guidance(self._njr_builder.spec_for(form))
+        except Exception:  # noqa: BLE001 - evidence is optional context, never the reason a preview fails
+            return ()
+        return tuple(
+            f"{topic.title}: {point.text} [{point.basis}]"
+            for topic in guidance.topics
+            for point in topic.points
+        )[:8]
 
     def _readiness_notes(self, form: Mapping[str, Any], loaded: PreviewSource) -> tuple[str, ...]:
         """The existing readiness advisories (crop, upscaling, rotation, timing) for this pairing, reused as is.

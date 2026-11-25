@@ -374,7 +374,10 @@ class MotionAlignmentDialog(tk.Toplevel):
             actions, text="Discard alignment", command=self.session.discard
         )
         self.discard_button.grid(row=0, column=3, padx=4)
-        ttk.Button(actions, text="Close", command=self.destroy).grid(row=0, column=4)
+        ttk.Button(actions, text="Reload frames", command=self.session.reload).grid(
+            row=0, column=4, padx=(0, 4)
+        )
+        ttk.Button(actions, text="Close", command=self.destroy).grid(row=0, column=5)
 
     def _observation_rows(self, parent: tk.Misc) -> None:
         choices = {

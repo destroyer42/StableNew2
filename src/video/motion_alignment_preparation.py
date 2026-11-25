@@ -578,6 +578,8 @@ class PreviewSource:
     #: The prepared source's geometry and the existing readiness advisories for this pairing (display only).
     source_geometry: Any = None
     readiness_notes: tuple[str, ...] = ()
+    #: Recorded evidence statements for the workflow's driving mode (single-sample, as the guidance labels them).
+    historical_notes: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
