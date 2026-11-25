@@ -29,6 +29,7 @@ from src.queue.dispatch_evidence import (
 from src.queue.job_history_store import RETURN_REFUSED_CONTROL_ACTION
 from src.queue.job_model import Job, JobStatus, StageCheckpoint
 from src.queue.job_repository import InvalidLifecycleTransition, JobRepository, JobStatusChanged
+from src.utils.contention_lock import ContentionLock
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class JobQueue:
         self._queue: list[tuple[int, int, str]] = []
         self._jobs: dict[str, Job] = {}
         self._counter = 0
-        self._lock = Lock()
+        self._lock = ContentionLock("job_queue", reentrant=False)
         # Set whenever queue state changes (see ``_notify_state_listeners``); the runner idles on it instead of polling.
         self._wake = Event()
         # Serializes durable queue-order writers (admission and complete reorders) with the

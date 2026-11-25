@@ -36,6 +36,7 @@ from src.queue.job_model import (
     RetryAttempt,
     StageCheckpoint,
 )
+from src.utils.contention_lock import ContentionLock
 from src.utils.error_envelope_v2 import (
     UnifiedErrorEnvelope,
     deserialize_envelope,
@@ -280,7 +281,7 @@ class JobRepository(JobHistoryStore):
         self.path = Path(path) if str(path) != ":memory:" else None
         if self.path is not None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.RLock()
+        self._lock = ContentionLock("job_repository")
         self._callbacks: list[Any] = []
         self._deferral = threading.local()
         self._connection = sqlite3.connect(
@@ -1201,9 +1202,29 @@ class JobRepository(JobHistoryStore):
             return int(self._connection.execute(sql, parameters).fetchone()["count"])
 
     def count_jobs_with_last_control_action(self, action: str) -> int:
-        """Count exact execution-metadata actions without hydrating jobs or NJRs."""
-        with self._lock:
-            rows = self._connection.execute("SELECT execution_metadata FROM jobs").fetchall()
+        """Count exact execution-metadata actions without hydrating jobs or NJRs.
+
+        ``execution_metadata`` sits after the ~90 KB ``njr_snapshot`` in every row, so this reads the whole file. A
+        file-backed repository therefore reads on its own short-lived read-only connection (a WAL reader sees a
+        consistent committed snapshot and never blocks the writer) and does NOT take the shared lock, which every queue
+        transition and progress commit also needs. Callers on the Tk thread must still run it on a worker.
+        """
+
+        if self.path is None:
+            with self._lock:
+                rows = self._connection.execute("SELECT execution_metadata FROM jobs").fetchall()
+            return self._count_action_rows(rows, action)
+        connection = sqlite3.connect(f"file:{self.path.resolve().as_posix()}?mode=ro", uri=True, timeout=10.0)
+        connection.row_factory = sqlite3.Row
+        try:
+            return self._count_action_rows(
+                connection.execute("SELECT execution_metadata FROM jobs"), action
+            )
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _count_action_rows(rows: Iterable[sqlite3.Row], action: str) -> int:
         count = 0
         for row in rows:
             metadata = _json_loads(row["execution_metadata"], {}, column="execution_metadata", row=row)

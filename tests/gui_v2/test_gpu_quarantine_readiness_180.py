@@ -71,6 +71,7 @@ def test_confirm_action_is_explicit_off_tk_and_reports_the_outcome(
         service=service,
         on_confirm_gpu_recovery=start,
         ui_state_store=UIStateStore(tmp_path / "ui.json"),
+        collect_in_background=False,
     )
     panel.pack()
     tk_root.update_idletasks()
@@ -105,7 +106,10 @@ def test_without_the_application_callback_there_is_no_release_control(
     tk_root: tk.Tk, tmp_path: Path
 ):
     panel = OperatorReadinessPanelV2(
-        tk_root, service=_Service(), ui_state_store=UIStateStore(tmp_path / "ui.json")
+        tk_root,
+        service=_Service(),
+        ui_state_store=UIStateStore(tmp_path / "ui.json"),
+        collect_in_background=False,
     )
     panel.pack()
     assert "confirm_gpu_recovery" not in panel.record_widgets["gpu_device"]

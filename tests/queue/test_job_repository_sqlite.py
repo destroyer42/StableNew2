@@ -399,16 +399,27 @@ def test_control_action_count_at_workstation_scale_reads_only_metadata(
         assert repository.count() == 10_926
         assert repository.count([JobStatus.QUEUED]) == 34
         changes = repository._connection.total_changes
-        queries = []
-        repository._connection.set_trace_callback(queries.append)
-        repository._connection.set_authorizer(_metadata_only_authorizer)
+        # The count reads on its own read-only connection (it must not hold the shared repository lock for a scan of
+        # the whole file), so the trace and the metadata-only authorizer go on THAT connection.
+        shared_queries: list[str] = []
+        reader_queries: list[str] = []
+        repository._connection.set_trace_callback(shared_queries.append)
+        real_connect = sqlite3.connect
+
+        def instrumented_connect(*args, **kwargs):
+            connection = real_connect(*args, **kwargs)
+            connection.set_trace_callback(reader_queries.append)
+            connection.set_authorizer(_metadata_only_authorizer)
+            return connection
+
+        monkeypatch.setattr("src.queue.job_repository.sqlite3.connect", instrumented_connect)
         _forbid_hydration(monkeypatch, repository)
         try:
             assert repository.count_jobs_with_last_control_action(_RECOVERY_ACTION) == expected
         finally:
-            repository._connection.set_authorizer(None)
             repository._connection.set_trace_callback(None)
-        assert queries == ["SELECT execution_metadata FROM jobs"]
+        assert reader_queries == ["SELECT execution_metadata FROM jobs"]
+        assert shared_queries == []
         assert repository._connection.total_changes == changes
 
 

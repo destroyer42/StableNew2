@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import queue
 import time
 import tkinter as tk
 from collections.abc import Callable
@@ -18,6 +20,8 @@ from src.services.operator_readiness_service import (
     gpu_release_message,
 )
 from src.services.ui_state_store import UIStateStore, get_ui_state_store
+
+logger = logging.getLogger(__name__)
 
 OPERATOR_READINESS_STATE_KEY = "operator_readiness"
 INTRO_DISMISSED_KEY = "intro_dismissed"
@@ -63,10 +67,20 @@ class OperatorReadinessPanelV2(ttk.Frame):
         on_open_diagnostics: Callable[[], None] | None = None,
         on_confirm_gpu_recovery: Callable[[Callable[[dict[str, Any]], None]], None] | None = None,
         ui_state_store: UIStateStore | None = None,
+        collect_in_background: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, padding=10, **kwargs)
         self.service = service
+        # ``collect`` reads the job repository, the filesystem and runtime probes, which can take seconds on a large
+        # repository while a generation runs; the Tk thread must never wait for it. ``False`` keeps the blocking
+        # behaviour for deterministic tests.
+        self._collect_in_background = bool(collect_in_background)
+        self._collect_inflight = False
+        self._collect_again = False
+        self._collect_results: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
+        self._collect_poll_id: str | None = None
+        self._collect_destroyed = False
         self._source_image_path_provider = source_image_path_provider
         self._on_close_callback = on_close
         self._on_open_diagnostics_callback = on_open_diagnostics
@@ -164,18 +178,91 @@ class OperatorReadinessPanelV2(ttk.Frame):
         self.refresh()
         self._set_intro_visible(not is_intro_dismissed(self._ui_state_store))
 
-    def refresh(self) -> OperatorReadinessSnapshot:
-        """Collect and render a new read-only snapshot."""
+    def refresh(self) -> OperatorReadinessSnapshot | None:
+        """Collect and render a new read-only snapshot.
+
+        In the default (background) mode this returns at once with the snapshot currently shown (``None`` before the
+        first one); the new snapshot is rendered on the Tk thread when the worker delivers it. A refresh requested
+        while one is running is coalesced into one more collection afterwards, so scans never overlap.
+        """
 
         source_image_path = None
         if self._source_image_path_provider is not None:
             source_image_path = self._source_image_path_provider()
-        self.snapshot = self.service.collect(source_image_path=source_image_path)
+        if not self._collect_in_background:
+            self._apply_snapshot(self.service.collect(source_image_path=source_image_path))
+            return self.snapshot
+        if self._collect_inflight:
+            self._collect_again = True
+            return self.snapshot
+        self._collect_inflight = True
+        self.snapshot_var.set("Collecting readiness...")
+        self.refresh_button.state(["disabled"])
+        try:
+            self._start_collect(source_image_path)
+        except RuntimeError as exc:
+            # The thread registry refused new work: the application is shutting down.
+            self._collect_inflight = False
+            self.refresh_button.state(["!disabled"])
+            self.snapshot_var.set(f"Readiness could not be collected: {exc}")
+            return self.snapshot
+        self._collect_poll_id = self.after(50, self._poll_collect)
+        return self.snapshot
+
+    def _start_collect(self, source_image_path: str | None) -> None:
+        from src.utils.thread_registry import get_thread_registry
+
+        def work() -> None:
+            try:
+                self._collect_results.put(
+                    ("ok", self.service.collect(source_image_path=source_image_path))
+                )
+            except Exception as exc:  # noqa: BLE001 - reported to the operator in the panel, never raised into the thread
+                logger.exception("Operator readiness collection failed")
+                self._collect_results.put(("error", exc))
+
+        get_thread_registry().spawn(
+            target=work,
+            name="OperatorReadinessCollect",
+            daemon=False,
+            purpose="Collect the operator readiness snapshot off the Tk thread",
+        )
+
+    def _poll_collect(self) -> None:
+        self._collect_poll_id = None
+        if self._collect_destroyed:
+            return
+        try:
+            kind, value = self._collect_results.get_nowait()
+        except queue.Empty:
+            self._collect_poll_id = self.after(50, self._poll_collect)
+            return
+        self._collect_inflight = False
+        self.refresh_button.state(["!disabled"])
+        if kind == "ok":
+            self._apply_snapshot(value)
+        else:
+            self.snapshot_var.set(f"Readiness could not be collected: {value}")
+        if self._collect_again:
+            self._collect_again = False
+            self.refresh()
+
+    def _apply_snapshot(self, snapshot: OperatorReadinessSnapshot) -> None:
+        self.snapshot = snapshot
         self.snapshot_var.set(
             f"State as of {time.strftime('%H:%M:%S')}. This is a snapshot: press Refresh for the current state."
         )
-        self._render_snapshot(self.snapshot)
-        return self.snapshot
+        self._render_snapshot(snapshot)
+
+    def destroy(self) -> None:
+        self._collect_destroyed = True
+        poll_id, self._collect_poll_id = self._collect_poll_id, None
+        if poll_id is not None:
+            try:
+                self.after_cancel(poll_id)
+            except tk.TclError:
+                logger.debug("readiness poll already cancelled", exc_info=True)
+        super().destroy()
 
     def _render_snapshot(self, snapshot: OperatorReadinessSnapshot) -> None:
         for child in self.records_frame.winfo_children():
