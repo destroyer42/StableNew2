@@ -36,7 +36,7 @@ from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, BinaryIO
 
 from src.utils.process_container_v2 import (
     NullProcessContainer,
@@ -390,6 +390,7 @@ def _spawn_contained(
     memory_limit_mb: float | None = None,
     allow_unenforced_memory_limit: bool = False,
     record_ownership: bool = False,
+    stdin_file: BinaryIO | None = None,
 ) -> _Spawned:
     """Start ``command`` under a memory limit when one is requested, otherwise exactly as before.
 
@@ -405,6 +406,7 @@ def _spawn_contained(
         "env": env,
         "below_normal": below_normal,
         "record_ownership": record_ownership,
+        "stdin_file": stdin_file,
     }
     if memory_limit_mb is None:
         return _launch_child(command, **kwargs)
@@ -435,6 +437,7 @@ def _launch_child(
     below_normal: bool = False,
     memory_limit_mb: float | None = None,
     record_ownership: bool = False,
+    stdin_file: BinaryIO | None = None,
 ) -> _Spawned:
     """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
 
@@ -483,7 +486,7 @@ def _launch_child(
         else 0,
         cwd=cwd,
         env=None if env is None else dict(env),
-        stdin=subprocess.DEVNULL,
+        stdin=stdin_file if stdin_file is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -598,6 +601,8 @@ def run_bounded(
     allow_unenforced_memory_limit: bool = False,
     record_ownership: bool = False,
     keep_output_tail: bool = False,
+    stdin_file: BinaryIO | None = None,
+    below_normal: bool = False,
 ) -> ProcessOutcome:
     """Run one child with a wall-clock timeout, output caps and cooperative cancellation.
 
@@ -615,7 +620,7 @@ def run_bounded(
 
     Where containment is required (``containment_required()``) the child runs inside its own container, so a timeout or
     cancellation kills its whole tree; if that cannot be arranged the child is not run and the reason is reported in
-    ``launch_error``.  ``stdin`` is closed.  A launch failure never raises.  The call returns within the timeout plus a
+    ``launch_error``. Standard input defaults to the null device. A caller can supply an open file.  A launch failure never raises.  The call returns within the timeout plus a
     short drain even if a descendant that escaped containment still holds the child's pipes.
 
     ``record_ownership`` (opt-in, read-only) has the container record every process creation and exit in the child's tree
@@ -626,7 +631,11 @@ def run_bounded(
     if memory_limit_mb is not None and not (math.isfinite(memory_limit_mb) and memory_limit_mb > 0):
         raise ValueError("memory_limit_mb must be a positive, finite number of megabytes")
     try:
-        spawn_options: dict[str, Any] = {"below_normal": True} if observe is not None else {}
+        spawn_options: dict[str, Any] = (
+            {"below_normal": True} if observe is not None or below_normal else {}
+        )
+        if stdin_file is not None:
+            spawn_options["stdin_file"] = stdin_file
         if record_ownership:
             spawn_options["record_ownership"] = True
         if memory_limit_mb is not None:

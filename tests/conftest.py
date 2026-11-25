@@ -38,6 +38,7 @@ def pytest_configure(config):
     if _QUIET_RUN is not None:
         _QUIET_RUN.relaunch_pytest_session()
 
+
 # --- Garbage collection only on the main thread ---------------------------------------
 # GUI tests leave Tk interpreters/variables behind. If the cyclic collector (automatic,
 # or an explicit ``gc.collect()`` such as ``SDWebUIClient.free_vram``) finalizes one on a
@@ -222,7 +223,9 @@ def forbid_host_runtime_access(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
-def _never_create_real_process_containers_for_webui_managers(monkeypatch: pytest.MonkeyPatch) -> None:
+def _never_create_real_process_containers_for_webui_managers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A test-built ``WebUIProcessManager`` must never own a real OS job object / cgroup.
 
     ``stop_webui()`` terminates every process in its container. Tests that mark a fake process as owned and stop
@@ -272,6 +275,27 @@ def _managed_runtime_logs_never_touch_the_operators_log_directory(
         monkeypatch.setattr(comfy_process_manager, "_GLOBAL_COMFY_PROCESS_MANAGER", None)
     except Exception:  # pragma: no cover - isolation must never break collection
         pass
+
+
+@pytest.fixture(autouse=True)
+def _isolate_site_library_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    cache = tmp_path.with_name(tmp_path.name + "-SiteLibraryCache")
+    monkeypatch.setenv("STABLENEW_SITE_LIBRARY_CACHE_DIR", str(cache))
+    yield
+    # Test fixtures can let a grant go out of scope without running app shutdown.
+    module = sys.modules.get("src.app.site_library_index")
+    if module is not None:
+        with module._SHARED_LOCK:
+            stores = [store for store in module._SHARED.values() if store.cache_dir == cache]
+        for store in stores:
+            with store.worker_lock:
+                if store.cancel:
+                    store.cancel.set()
+                    store.wake.set()
+                thread = store.thread
+            if thread is not None:
+                thread.join(4)
+                assert not thread.is_alive()
 
 
 @pytest.fixture(autouse=True)
