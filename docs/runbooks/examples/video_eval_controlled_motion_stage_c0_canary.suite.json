@@ -1,0 +1,71 @@
+{
+  "schema": "stablenew.video-eval-suite.v2",
+  "suite_id": "controlled-motion-stage-c0-canary",
+  "description": "Unexecuted template (PR-VID-MOTION-410, post-pilot Stage C). Stage C0 canary: one 81-frame job (baseline arm, head turn, subject A) to measure time and VRAM/RAM headroom at the new length before any batch. Bind your own image and driving videos; a physical run needs the owner's separate authorization.",
+  "seed": 410,
+  "baseline_arm": "baseline",
+  "cases": [
+    {
+      "case_id": "head_turn_front_to_profile_a",
+      "image": "images/subject_a.png",
+      "prompt": "a woman with long brown hair in polished steel plate armor over dark clothing, standing in a stone archway, upper body, photorealistic",
+      "tags": [
+        "head_turn",
+        "controlled-motion",
+        "subject-a",
+        "stage-c-revised"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/head_turn_front_to_profile.mp4"
+        },
+        "action": "Starts facing the camera, turns the head to the subject's left into profile, and holds.",
+        "motion_prompt": "the person starts facing the camera, slowly turns their head to their left into profile and holds, body and shoulders still",
+        "category": "head_turn",
+        "expected_outcome": "The intended subject starts facing the camera, their head rotates smoothly to their left into profile and holds there; the opening pose is natural (not already turned far over a shoulder), the shoulders and background stay still and the face is not replaced or duplicated.",
+        "direction": "to the subject's left (the viewer's right)",
+        "phases": [
+          "facing the camera",
+          "rotate to profile",
+          "hold"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "head and shoulders",
+          "viewpoint": "front",
+          "start_pose": "facing the camera (the pilot's profile-start driver, trimmed and reversed)",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "source faces the camera"
+          ],
+          "source_compatibility": "upper_body_front"
+        }
+      }
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "baseline",
+      "label": "Baseline (pose 1.0, reference 1.0)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan_animate2_drive_i2v_v1",
+        "workflow_version": "1.2.0",
+        "frame_count": 81,
+        "experimental_opt_in": true,
+        "operator_controls": {
+          "pose_strength": 1.0,
+          "reference_image_strength": 1.0
+        }
+      }
+    }
+  ]
+}

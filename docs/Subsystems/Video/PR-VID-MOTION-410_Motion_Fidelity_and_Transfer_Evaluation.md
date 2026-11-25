@@ -85,6 +85,28 @@ Full design 36 jobs = short + long. Stage A (3) is the functional pilot. Stage B
 
 **Operator steps:** copy a template into `<Output>/eval_plans/video/` or open it in the editor; bind each case's two source images and the class driver (a local clip or a Motion Library asset, using a harvested window where available); keep one frame count per suite; Validate; Save and Preview (shows the compiled jobs, the per-case driving contracts and any refusals); then, only after authorization, Queue.
 
+### 3.1 Post-pilot revision of Stage C (2026-11-24): authored, not executed
+
+**What the pilot showed (owner inspection, recorded as notes in the run folders, not as ratings).** Stage A (3 jobs) and Stage B (12 jobs) all completed on `wan_animate2_drive_i2v_v1` 1.2.0 at 49 frames with no stop condition. The three arms (pose 1.0 / 1.2, reference 1.0 / 1.3) were indistinguishable by eye; all results had the intended motion, no visible artifact and no driver bleed-through, and the source subject held. Two oddities: a driver that starts facing away in the opposite direction makes the result open with the subject unnaturally looking far over a shoulder before turning to a normal range, and one of the 12 clips (hand wave, subject B, reference 1.3) showed an extra, still arm at the subject's side. The clips (2 s) were too short to judge timing. "No visible difference" is a statement about arms 1.2 / 1.3 on this pair, not about the controls: the spread was too small to tell.
+
+**Revised templates** (`docs/runbooks/examples/`, one legal length per suite, seed 410, same workflow identity, no media): the original `stage_c_short` and `long` suites stay as the unexecuted full-design record and are **superseded for the next run** by:
+
+| File | Cases | Arms | Frames | Jobs |
+|---|---|---|---|---|
+| `video_eval_controlled_motion_stage_c0_canary.suite.json` | head turn, subject A | baseline | 81 | 1 |
+| `video_eval_controlled_motion_stage_c1_subject_a.suite.json` | head turn (start-pose matched), hand wave, subject A | 6 | 81 | 12 |
+| `video_eval_controlled_motion_stage_c2_subject_b.suite.json` | the same two cases, subject B | 6 | 81 | 12 |
+
+Arms are one-variable against the baseline (pose 1.0, reference 1.0, pose window full): `pose_low` (pose 0.5), `pose_high` (pose 2.0), `reference_low` (reference 0.5), `reference_high` (reference 2.0) and `pose_early_stop` (pose end 0.6). Values are at least a factor of two from the baseline because 1.2 / 1.3 showed nothing. All are within the declared 0-10 control bounds; the extremes may degrade identity or motion, which is the information wanted. 81 frames (3.4 s at 24 fps) is the longest legal length.
+
+**Start pose.** Match the driver's first frame to the source's pose instead of hoping the model reconciles them. Both sources face the camera, so the head-turn driver must start facing the camera. The pilot driver turned from profile to the camera; a derived clip that starts facing the camera is the first 3.4 s of it, reversed: `ffmpeg -i head_turn.mp4 -t 3.4 -vf reverse -an -c:v libx264 -crf 14 head_turn_front_to_profile.mp4`. That is a new local video with its own SHA-256 and unverified provenance (record its lineage in the case annotations); it is not the Pexels file. If a driver instead starts facing the other way, flip the source image (or the driver, `-vf hflip`) and bind the flipped file; say so in the case annotations. The `start_pose` annotation states what each driver starts as.
+
+**Runtime planning (no fresh benchmark at 81 frames).** At 49 frames the pilot took 229-311 s per job (about 49 min for 12) with whole-GPU VRAM peaking at about 11.8 GB of 12.28 GB, host RAM minimum 15.3 GB and the GPU near 83 C. 81 frames is unmeasured and will take longer and may exceed the VRAM available (a clean resource refusal or an out-of-memory failure), so **Stage C0 runs one job first**; only a completed canary with its measured time and peak headroom supports authorizing C1 (12 jobs; it repeats the canary's cell, which also checks repeatability) and then C2. Stop conditions and the authorization boundary are unchanged (section 3): device loss, resource refusal, two consecutive failures, any changed or incomparable finding, content that must not be shown, or the budget. StableNew and its Forge must be closed while a harness runs (the runtime guard refuses while a Forge it did not start is live).
+
+**Keep the inputs inside Output.** Bind images and driving videos from a folder under the Output root (for example `eval_plans/video/<suite>/images` and `/motion`). Frozen job inputs record their paths, and a viewer limited to Output (the Site) can show only files there; an input outside Output cannot be relinked afterwards without rewriting frozen records, which the report would flag as a source-image mismatch.
+
+**Results as future drivers.** A finished clip can be added to the Motion Library from Recent outputs (it keeps the originating job and artifact), and Prepare Motion Source treats it like any other driver. A generated clip carries its source subject's appearance and any artifact it had, so it is a reference to be reviewed, not a clean motion capture; a driver from a reviewed result inherits the 81-frame length and a known start pose, which is useful when the run was good and misleading when it was not.
+
 ## 4. Future extensions (documented, not implemented)
 
 Raw rendered character versus silhouette conditioning; source/driver alignment (Phase 3); alternative conditioning graphs and Fun Control qualification and comparison (Phase 4); multiple-seed robustness; longer controlled-motion sequences; an explicit prompt-only comparator; recipes and automatic recommendations (Phases 5 and 6).
