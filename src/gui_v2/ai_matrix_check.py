@@ -215,7 +215,11 @@ def run_checks(
         )
 
     sizes = [len(dedupe_values(s.values)) for s in slots if s.name.strip() and s.values]
-    if len(sizes) >= 2 and max(sizes) >= UNBALANCED_MIN_LARGEST and max(sizes) >= UNBALANCED_RATIO * min(sizes):
+    if (
+        len(sizes) >= 2
+        and max(sizes) >= UNBALANCED_MIN_LARGEST
+        and max(sizes) >= UNBALANCED_RATIO * min(sizes)
+    ):
         add(
             "unbalanced",
             SEVERITY_INFO,

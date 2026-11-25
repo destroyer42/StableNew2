@@ -69,9 +69,7 @@ PHRASE_REVERT_TEXT = (
 PHRASE_UNVERIFIED = (
     "Model-proposed, not independently relevance-verified. You decide whether a slot is useful."
 )
-NO_PHRASE_TEXT = (
-    "No phrase selected. Drag over a few words in your positive prompt; the selection is shown here."
-)
+NO_PHRASE_TEXT = "No phrase selected. Drag over a few words in your positive prompt; the selection is shown here."
 SELECTION_PREFIX = "Selected phrase: "
 PHRASE_REVIEW_ACTIONS: tuple[str, ...] = ("add_slot_and_replace_phrase",)
 
@@ -82,9 +80,7 @@ PHRASE_REASON_TEXT: dict[str, str] = {
 }
 REASON_TEXT: dict[str, str] = {**PROPOSAL_REASON_TEXT, **PHRASE_REASON_TEXT}
 
-STALE_TEXT = (
-    "The pack, its matrix or the prompt sentence changed since the request. Nothing was changed; request again."
-)
+STALE_TEXT = "The pack, its matrix or the prompt sentence changed since the request. Nothing was changed; request again."
 UNREADABLE_TEXT = "The matrix, the selection or the prompt sentence could not be read safely."
 
 
@@ -131,9 +127,7 @@ def span_problem(sentence: str, span: PhraseSpan) -> str:
     if any(marker in text or marker in sentence for marker in PHRASE_RESERVED_MARKERS):
         return "The prompt or the selection contains a reserved marker word and cannot be sent."
     if any(s < end and e > start for s, e in protected_spans(sentence)):
-        return (
-            "The selection touches a protected token (<lora:...>, [[marker]] or __wildcard__). Select plain words only."
-        )
+        return "The selection touches a protected token (<lora:...>, [[marker]] or __wildcard__). Select plain words only."
     inner = value_problem(text)
     if inner:
         return f"The selected phrase cannot be a slot value: {VALUE_REASON_TEXT[inner]}"
@@ -297,7 +291,9 @@ def detail_text(row: PhraseRow) -> str:
         for text in row.values[1:]:
             inner = value_problem(text)
             if inner:
-                return f"One of the proposed values breaks the value rules: {VALUE_REASON_TEXT[inner]}"
+                return (
+                    f"One of the proposed values breaks the value rules: {VALUE_REASON_TEXT[inner]}"
+                )
         return REASON_TEXT["values_invalid"]
     return REASON_TEXT[row.reason]
 

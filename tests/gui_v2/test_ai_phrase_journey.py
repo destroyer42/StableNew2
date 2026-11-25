@@ -96,7 +96,9 @@ def _outcome(request, entries):
     }
     validated = validate_output(json.dumps(doc), request)
     assert validated.suggestion is not None, validated.reason
-    return AssistOutcome(OutcomeCode.SUGGESTION, request.request_id, suggestion=validated.suggestion)
+    return AssistOutcome(
+        OutcomeCode.SUGGESTION, request.request_id, suggestion=validated.suggestion
+    )
 
 
 def _entry(name="time_of_day", values=("at dawn", "at midnight", "at high noon")):
@@ -164,7 +166,11 @@ def test_the_request_carries_the_sentence_the_phrase_the_slot_names_and_an_optio
     assert request.kind is SuggestionKind.PHRASE_SLOT
     assert (request.positive_text, request.phrase_text) == (SENTENCE, PHRASE)
     assert request.goal_text == "" and request.existing_slot_names == ("location",)
-    assert (request.allowed_targets, request.allowed_workflows, request.matrix_slots) == ((), (), ())
+    assert (request.allowed_targets, request.allowed_workflows, request.matrix_slots) == (
+        (),
+        (),
+        (),
+    )
     assert request.insertion_points == () and request.negative_text == ""
     assert j.frame.workspace_state.current_pack == before  # a request changes nothing
 
@@ -245,7 +251,9 @@ def test_a_remembered_selection_is_dropped_once_the_text_no_longer_matches(phras
     dialog = j.flow.open()
     _select(j)
     _clear_selection(j)
-    j.frame.editor.insert("1.0", "XX ")  # shifts every offset; the remembered span now names other characters
+    j.frame.editor.insert(
+        "1.0", "XX "
+    )  # shifts every offset; the remembered span now names other characters
     dialog.phrase_button.invoke()
     assert not j.service.requests  # the editor also has a pending change, which blocks first
     assert "pending" in _text(dialog) or NO_PHRASE_TEXT in _text(dialog)
@@ -287,7 +295,8 @@ def test_applying_adds_the_slot_with_the_phrase_first_and_replaces_exactly_those
     assert expected.replace("[[time_of_day]]", PHRASE, 1) == SENTENCE
     assert [w[0].get() for w in frame.matrix_tab_panel.slot_widgets] == ["location", "time_of_day"]
     assert (
-        frame.matrix_tab_panel.slot_widgets[1][1].get() == "at dusk,at dawn,at midnight,at high noon"
+        frame.matrix_tab_panel.slot_widgets[1][1].get()
+        == "at dusk,at dawn,at midnight,at high noon"
     )
     assert frame.workspace_state.dirty and "modified" in frame.pack_name_label.cget("text")
     assert "[applied]" in _text(dialog) and _offered(dialog) == []
@@ -321,7 +330,9 @@ def test_apply_selected_and_apply_all_use_the_same_path(phrase):
     assert len(j.flow._journal) == 1
 
 
-def test_a_proposal_with_a_taken_name_or_a_repeated_phrase_is_shown_rejected_and_never_applied(phrase):
+def test_a_proposal_with_a_taken_name_or_a_repeated_phrase_is_shown_rejected_and_never_applied(
+    phrase,
+):
     j = phrase
     before = _state(j.frame)
     dialog, _request = _ready(
@@ -400,7 +411,9 @@ def test_a_matrix_edit_between_review_and_apply_refuses_the_apply(phrase):
     dialog, _request = _ready(j)
     j.frame.workspace_state.get_matrix_config().slots[0].values.append("castle")
     changed = _state(j.frame)
-    key = dialog.change_cards.offered_keys()[0] if dialog.change_cards.offered_keys() else "phrase:0"
+    key = (
+        dialog.change_cards.offered_keys()[0] if dialog.change_cards.offered_keys() else "phrase:0"
+    )
     assert j.flow.apply_changes([key]) == 0
     assert _state(j.frame) == changed and STALE_TEXT in dialog.status_var.get()
 

@@ -39,9 +39,7 @@ from .test_service_runtime import SpawnSpy, make_service
 SENTENCE = "a knight in a forest, wearing armor, at dusk"
 
 
-def phrase_request(
-    mode: str = "", *, extra: str = "", **overrides: object
-) -> AssistRequest:
+def phrase_request(mode: str = "", *, extra: str = "", **overrides: object) -> AssistRequest:
     """``mode`` names the fake child's canned answer; it travels in the goal, like the other slot kinds' tests."""
 
     goal = "\n".join(part for part in (extra, f"TEST_MODE:{mode}" if mode else "") if part)
@@ -148,7 +146,10 @@ def test_the_digest_and_input_chars_cover_the_phrase_and_leave_other_kinds_uncha
         len(SENTENCE) + len("location") + len("at dusk") + len(REQUEST.goal_text)
     )
     rewrite = AssistRequest("r", SuggestionKind.PROMPT_REWRITE, positive_text="a barn")
-    assert rewrite.digest() == AssistRequest("r2", SuggestionKind.PROMPT_REWRITE, positive_text="a barn").digest()
+    assert (
+        rewrite.digest()
+        == AssistRequest("r2", SuggestionKind.PROMPT_REWRITE, positive_text="a barn").digest()
+    )
 
 
 # -- the frame and the schema ---------------------------------------------------------------------------------------------
@@ -181,9 +182,7 @@ def test_a_reserved_marker_anywhere_is_refused_not_rewritten(marker: str, where:
 def test_the_phrase_marker_is_reserved_in_the_sentence_and_the_phrase() -> None:
     with pytest.raises(FramingError):
         render_prompt(
-            phrase_request(
-                positive_text="a knight PHRASE: at dusk", phrase_text="at dusk"
-            )
+            phrase_request(positive_text="a knight PHRASE: at dusk", phrase_text="at dusk")
         )
 
 
@@ -203,7 +202,9 @@ def test_the_schema_is_closed_bounded_and_requires_every_payload_field() -> None
 
 
 def test_a_valid_answer_becomes_typed_phrase_slots() -> None:
-    result = validate_output(document(entry(), entry("weather", ["heavy fog", "clear sky", "rain"])), REQUEST)
+    result = validate_output(
+        document(entry(), entry("weather", ["heavy fog", "clear sky", "rain"])), REQUEST
+    )
     assert result.code is OutcomeCode.SUGGESTION and result.suggestion is not None
     slots = result.suggestion.phrase_slots
     assert slots == (
@@ -219,7 +220,10 @@ def test_a_valid_answer_becomes_typed_phrase_slots() -> None:
     [
         ({"phrase_slots": []}, "phrase_slots_missing"),
         ({"phrase_slots": [entry(), entry(), entry(), entry()]}, "too_many_phrase_slots"),
-        ({"phrase_slots": [{"slot_name": "a", "values": ["x", "y"]}]}, "phrase_slot_fields_invalid"),
+        (
+            {"phrase_slots": [{"slot_name": "a", "values": ["x", "y"]}]},
+            "phrase_slot_fields_invalid",
+        ),
         (
             {"phrase_slots": [{**entry(), "insertion_point": 0}]},
             "phrase_slot_fields_invalid",
@@ -246,9 +250,7 @@ def test_structural_problems_are_malformed_and_never_repaired(
 
 
 def test_other_fields_cannot_ride_along_and_phrase_slots_belong_to_this_kind_only() -> None:
-    assert (
-        validate_output(document(positive="x"), REQUEST).code is OutcomeCode.MALFORMED
-    )
+    assert validate_output(document(positive="x"), REQUEST).code is OutcomeCode.MALFORMED
     assert validate_output(document(slots=[]), REQUEST).code is OutcomeCode.MALFORMED
     assert validate_output(document(proposals=[]), REQUEST).code is OutcomeCode.MALFORMED
     rewrite = AssistRequest("r", SuggestionKind.PROMPT_REWRITE, positive_text="a barn")

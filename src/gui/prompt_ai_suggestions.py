@@ -1632,8 +1632,8 @@ class PromptAiSuggestions:
         state = self.tab.workspace_state
         index = state.get_current_slot_index()
         slot = state.get_current_slot()
-        before = (slot.text, slot.negative)
-        after = (suggestion.positive_text, suggestion.negative_text)
+        before = (slot.text or "", slot.negative or "")
+        after = (suggestion.positive_text or "", suggestion.negative_text or "")
         pack_identity = id(state.current_pack)
         self._write_rewrite(index, *after)
         self._journal.push(
@@ -1677,7 +1677,7 @@ class PromptAiSuggestions:
             or id(state.current_pack) != pack_identity
             or state.get_current_slot_index() != index
             or slot is None
-            or (slot.text, slot.negative) != after
+            or (slot.text or "", slot.negative or "") != after
             or (
                 self.tab.editor.get("1.0", "end-1c"),
                 self.tab.negative_editor.get("1.0", "end-1c"),
@@ -1760,7 +1760,9 @@ class PromptAiSuggestions:
         expected = with_slot_values(current, index, finding.after)
         panel = self.tab.matrix_tab_panel
         if not panel.replace_slot_values(index, list(finding.before), list(finding.after)):
-            dialog.status("The Matrix tab has an unfinished edit in that slot. Finish it, then apply again.")
+            dialog.status(
+                "The Matrix tab has an unfinished edit in that slot. Finish it, then apply again."
+            )
             return False
         after = self._current_variety()
         if after != expected:

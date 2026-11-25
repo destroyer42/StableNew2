@@ -223,7 +223,9 @@ def score_case(case: SlotCase, raw_text: str, *, seconds: float = 0.0) -> CaseRe
     # The same envelope check Remote Preview applies before the shared validator (field set, string types, duplicate keys).
     wire = _wire_problem(raw_text, build_json_schema(request))
     if wire:
-        return CaseResult(case.case_id, case.kind, OutcomeCode.MALFORMED.value, wire, seconds=seconds)
+        return CaseResult(
+            case.case_id, case.kind, OutcomeCode.MALFORMED.value, wire, seconds=seconds
+        )
     validated = validate_output(raw_text, request)
     if validated.suggestion is None:
         return CaseResult(
@@ -232,7 +234,9 @@ def score_case(case: SlotCase, raw_text: str, *, seconds: float = 0.0) -> CaseRe
     suggestion = validated.suggestion
     visible: Callable[[str], bool] = lambda _text: True  # noqa: E731 - the cases hold no hidden content
     if case.kind == KIND_VARIETY:
-        rows = judge_variety(suggestion, matrix_state(_slot_objects(case.slots)), is_visible=visible)
+        rows = judge_variety(
+            suggestion, matrix_state(_slot_objects(case.slots)), is_visible=visible
+        )
         reasons = Counter(row.reason for row in rows if row.reason)
         offered = sum(row.offered for row in rows)
         total = len(rows)
@@ -255,9 +259,7 @@ def score_case(case: SlotCase, raw_text: str, *, seconds: float = 0.0) -> CaseRe
         total = len(phrows)
     else:
         points = compute_insertion_points(case.sentence)
-        context = build_context(
-            0, 0, 0, case.sentence, _slot_objects(case.slots), points, ""
-        )
+        context = build_context(0, 0, 0, case.sentence, _slot_objects(case.slots), points, "")
         mapping = {
             "enabled": True,
             "slots": [{"name": n, "values": list(v)} for n, v in case.slots],
@@ -298,7 +300,9 @@ def run_cases(
             raw = generate(request)
         except Exception:  # noqa: BLE001 - recorded as a code, never the exception text
             results.append(
-                CaseResult(case.case_id, case.kind, OutcomeCode.UNAVAILABLE.value, "generator_error")
+                CaseResult(
+                    case.case_id, case.kind, OutcomeCode.UNAVAILABLE.value, "generator_error"
+                )
             )
             continue
         results.append(score_case(case, raw, seconds=round(clock() - started, 3)))

@@ -96,13 +96,17 @@ def ollama_generate(base_url: str, model: str) -> Callable[[AssistRequest], str]
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m tools.qualification.ai230", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="python -m tools.qualification.ai230", description=__doc__
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("cases", help="list the cases")
     run = sub.add_parser("run", help="run the cases against a loopback Ollama model")
     run.add_argument("--model", required=True, help="the Ollama model reference to measure")
     run.add_argument("--base-url", default="http://127.0.0.1:11434")
-    run.add_argument("--out", type=Path, required=True, help="where to write the counts-and-codes result")
+    run.add_argument(
+        "--out", type=Path, required=True, help="where to write the counts-and-codes result"
+    )
     args = parser.parse_args(argv)
     if args.command == "cases":
         for case in CASES:

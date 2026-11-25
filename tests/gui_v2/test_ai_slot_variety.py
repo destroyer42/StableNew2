@@ -203,9 +203,7 @@ def test_near_key_folds_only_a_trailing_plural_s() -> None:
 
 
 def test_a_plural_of_a_value_in_another_slot_is_not_a_near_duplicate() -> None:
-    rows = judge_variety(
-        suggestion(("location", ("soft lights",))), STATE, is_visible=visible
-    )
+    rows = judge_variety(suggestion(("location", ("soft lights",))), STATE, is_visible=visible)
     assert [r.reason for r in rows] == [""]
 
 

@@ -283,7 +283,7 @@ class AiSuggestionDialog(tk.Toplevel):
         self.phrase_var = tk.StringVar(value="")
         self.variety_slots_var = tk.StringVar(value=variety_slots)
         self.slots_mode_var = tk.StringVar(value=MODE_VALUES)
-        self._mode_panels: dict[str, ttk.Frame] = {}
+        self._mode_panels: dict[str, ttk.Widget] = {}
         self._mode_buttons: dict[str, ttk.Button | None] = {}
 
         modes = [
@@ -314,7 +314,7 @@ class AiSuggestionDialog(tk.Toplevel):
                 text=MODE_LABELS[mode],
                 variable=self.slots_mode_var,
                 value=mode,
-                command=lambda m=mode: self.set_slots_mode(m),
+                command=partial(self.set_slots_mode, mode),
             ).pack(side="left", padx=(0, 12))
         self.goal_row = ttk.Frame(tab)
         self.goal_row.pack(fill="x", padx=4, pady=2)
@@ -526,13 +526,13 @@ class AiSuggestionDialog(tk.Toplevel):
         frame = self.tabs.get(key)
         if frame is not None:
             try:
-                self.notebook.select(frame)
+                self.notebook.select(frame)  # type: ignore[no-untyped-call]  # typeshed leaves ttk.Notebook.select unannotated
             except tk.TclError:
                 pass
 
     def _tab_changed(self, _event: object = None) -> None:
         try:
-            current = self.notebook.select()
+            current = self.notebook.select()  # type: ignore[no-untyped-call]  # typeshed leaves ttk.Notebook.select unannotated
         except tk.TclError:
             return
         if self._on_check is not None and current == str(self.tabs.get(TAB_CHECK)):

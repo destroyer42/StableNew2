@@ -49,7 +49,9 @@ def _good(request: AssistRequest) -> str:
             }
             for name, _values in request.matrix_slots
         ]
-        return json.dumps({"schema": SCHEMA, "status": "ok", "kind": request.kind.value, "slots": slots})
+        return json.dumps(
+            {"schema": SCHEMA, "status": "ok", "kind": request.kind.value, "slots": slots}
+        )
     if request.kind is SuggestionKind.PHRASE_SLOT:
         phrase_slots = [
             {
@@ -127,7 +129,11 @@ def test_repeating_an_existing_value_is_counted_as_a_rejection() -> None:
         "status": "ok",
         "kind": request.kind.value,
         "slots": [
-            {"slot": "lighting", "values": ["Soft Light", "soft lights", "rim light"], "rationale": "x"}
+            {
+                "slot": "lighting",
+                "values": ["Soft Light", "soft lights", "rim light"],
+                "rationale": "x",
+            }
         ],
     }
     result = score_case(case, json.dumps(document))
@@ -184,22 +190,39 @@ def test_results_hold_no_authored_or_model_text() -> None:
 
 def test_summarize_counts_each_outcome() -> None:
     results = (
-        CaseResult("a", KIND_VARIETY, OutcomeCode.SUGGESTION.value, returned=3, offered=2, rejected=1,
-                   reject_reasons=(("duplicate_existing", 1),)),
+        CaseResult(
+            "a",
+            KIND_VARIETY,
+            OutcomeCode.SUGGESTION.value,
+            returned=3,
+            offered=2,
+            rejected=1,
+            reject_reasons=(("duplicate_existing", 1),),
+        ),
         CaseResult("b", KIND_VARIETY, OutcomeCode.REFUSED_BY_MODEL.value),
         CaseResult("c", KIND_PROPOSAL, OutcomeCode.MALFORMED.value, "not_json"),
         CaseResult("d", KIND_PROPOSAL, OutcomeCode.UNAVAILABLE.value),
     )
     summary = summarize(results)
     variety, proposal = summary["kinds"][KIND_VARIETY], summary["kinds"][KIND_PROPOSAL]
-    assert (variety["cases"], variety["valid"], variety["refused"], variety["offered"]) == (2, 1, 1, 2)
+    assert (variety["cases"], variety["valid"], variety["refused"], variety["offered"]) == (
+        2,
+        1,
+        1,
+        2,
+    )
     assert variety["reject_reasons"] == {"duplicate_existing": 1}
     assert (proposal["malformed"], proposal["other"], proposal["valid"]) == (1, 1, 0)
 
 
 @pytest.mark.parametrize(
     "url",
-    ["http://127.0.0.1:11434", "http://localhost:11434", "http://[::1]:11434", "http://127.0.0.1:11434/"],
+    [
+        "http://127.0.0.1:11434",
+        "http://localhost:11434",
+        "http://[::1]:11434",
+        "http://127.0.0.1:11434/",
+    ],
 )
 def test_loopback_addresses_are_accepted(url: str) -> None:
     assert driver.loopback_url(url) == url.rstrip("/")
@@ -256,13 +279,15 @@ def test_the_driver_posts_the_production_body(monkeypatch: pytest.MonkeyPatch) -
     request = build_case_request(CASES[0])
     text = driver.ollama_generate("http://127.0.0.1:11434", "some-model")(request)
     assert text == "{}"
-    (url, body), = sent
+    ((url, body),) = sent
     assert url == "http://127.0.0.1:11434/api/generate"
     assert body["model"] == "some-model"
     assert body["prompt"] == _ollama_prompt(request)
     assert body["format"] == build_json_schema(request)
     assert body["stream"] is False and body["think"] is False
-    assert "keep_alive" not in body  # GPU residency is the owner's call; the driver never changes it
+    assert (
+        "keep_alive" not in body
+    )  # GPU residency is the owner's call; the driver never changes it
     assert set(body["options"]) == {
         "num_ctx",
         "num_predict",
@@ -286,7 +311,12 @@ def test_an_unfinished_answer_is_not_scored(monkeypatch: pytest.MonkeyPatch) -> 
 def test_the_driver_refuses_a_remote_host_before_building_anything() -> None:
     with pytest.raises(driver.Refused):
         driver.ollama_generate("http://10.0.0.5:11434", "some-model")
-    assert driver.main(["run", "--model", "m", "--base-url", "http://10.0.0.5:11434", "--out", "x.json"]) == 2
+    assert (
+        driver.main(
+            ["run", "--model", "m", "--base-url", "http://10.0.0.5:11434", "--out", "x.json"]
+        )
+        == 2
+    )
 
 
 def test_the_cases_command_lists_ids_without_a_model(capsys: pytest.CaptureFixture[str]) -> None:

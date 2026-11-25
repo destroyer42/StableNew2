@@ -158,7 +158,10 @@ def test_applying_the_duplicate_fix_edits_only_that_slot_and_undo_restores_it(jo
     dialog = j.flow.open()
     dialog.check_button.invoke()
     (key,) = dialog.check_cards.offered_keys()
-    before = (_stored(j.frame), [(w[0].get(), w[1].get()) for w in j.frame.matrix_tab_panel.slot_widgets])
+    before = (
+        _stored(j.frame),
+        [(w[0].get(), w[1].get()) for w in j.frame.matrix_tab_panel.slot_widgets],
+    )
     dialog.check_cards.apply_buttons[key].invoke()
     assert _stored(j.frame) == [("light", ["a", "b"]), ("place", ["x", "y"])]
     assert j.frame.workspace_state.dirty and "No problems found." == dialog.check_summary_var.get()

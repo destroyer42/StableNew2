@@ -124,7 +124,9 @@ def test_length_line_and_marker_limits() -> None:
     long_phrase = "x" * (MAX_PHRASE_CHARS + 1)
     sentence = f"a {long_phrase} b"
     start = sentence.index(long_phrase)
-    assert "longer than" in span_problem(sentence, PhraseSpan(start, start + len(long_phrase), long_phrase))
+    assert "longer than" in span_problem(
+        sentence, PhraseSpan(start, start + len(long_phrase), long_phrase)
+    )
     two_lines = "a\nb"
     assert "one line" in span_problem(two_lines, PhraseSpan(0, 3, two_lines))
     # a reserved marker anywhere in the sentence cannot be framed, so it is refused before any request exists
@@ -142,14 +144,21 @@ def test_the_blocker_reports_a_missing_selection_and_the_usual_limits() -> None:
 
 
 def test_the_request_is_the_sentence_the_phrase_and_the_slot_names() -> None:
-    request = build_phrase_request("r1", "  different times of day ", SENTENCE, SPAN, STATE, content_class="standard")
+    request = build_phrase_request(
+        "r1", "  different times of day ", SENTENCE, SPAN, STATE, content_class="standard"
+    )
     assert request.kind is SuggestionKind.PHRASE_SLOT
     assert (request.positive_text, request.phrase_text) == (SENTENCE, PHRASE)
     assert request.goal_text == "different times of day"  # stripped
     assert request.existing_slot_names == ("location",)
-    assert build_phrase_request("r2", "", SENTENCE, SPAN, STATE, content_class="sensitive").goal_text == ""
+    assert (
+        build_phrase_request("r2", "", SENTENCE, SPAN, STATE, content_class="sensitive").goal_text
+        == ""
+    )
     with pytest.raises(ValueError):
-        build_phrase_request("r3", "", SENTENCE, PhraseSpan(0, 5, "a kni"), STATE, content_class="standard")
+        build_phrase_request(
+            "r3", "", SENTENCE, PhraseSpan(0, 5, "a kni"), STATE, content_class="standard"
+        )
 
 
 # -- the span edit ---------------------------------------------------------------------------------------------------------
@@ -158,7 +167,10 @@ def test_the_request_is_the_sentence_the_phrase_and_the_slot_names() -> None:
 def test_replace_and_restore_are_byte_exact_inverses() -> None:
     after = replace_span(SENTENCE, SPAN, "time_of_day")
     assert after == "a knight in a forest, wearing armor, [[time_of_day]]"
-    assert after[:START] == SENTENCE[:START] and after[START + len("[[time_of_day]]") :] == SENTENCE[SPAN.end :]
+    assert (
+        after[:START] == SENTENCE[:START]
+        and after[START + len("[[time_of_day]]") :] == SENTENCE[SPAN.end :]
+    )
     assert restore_span(after, SPAN, "time_of_day") == SENTENCE
 
 
@@ -230,7 +242,9 @@ def test_a_hidden_name_value_or_rationale_is_rejected_and_never_shown() -> None:
     assert [r.reason for r in rows] == ["hidden"]
     review = phrase_review(rows)
     assert "secret" not in phrase_text(review)
-    cards = phrase_changes(review, build_context(1, 2, 0, SENTENCE, SLOTS, (), "nsfw"), SPAN, is_visible=visible)
+    cards = phrase_changes(
+        review, build_context(1, 2, 0, SENTENCE, SLOTS, (), "nsfw"), SPAN, is_visible=visible
+    )
     assert all("secret" not in repr(c) and "secret" not in c.title for c in cards)
 
 
@@ -244,7 +258,10 @@ def test_the_review_counts_and_the_text_name_every_rejection() -> None:
     assert "[can apply]" in text and "[rejected]" in text and "Remote Preview" in text
     applied = phrase_review(rows, added=frozenset({0}))
     assert "[applied]" in phrase_text(applied) and applied.offered_rows == ()
-    assert unavailable_phrase_review("nope").rows == () and unavailable_phrase_review("nope").actions == ()
+    assert (
+        unavailable_phrase_review("nope").rows == ()
+        and unavailable_phrase_review("nope").actions == ()
+    )
 
 
 def test_cards_show_the_sentence_before_and_after_and_the_first_compiled_example() -> None:
@@ -258,7 +275,9 @@ def test_cards_show_the_sentence_before_and_after_and_the_first_compiled_example
     assert good.examples and "at dusk" in good.examples[0]
     assert "limit" in good.effect
     assert bad.rejected and bad.reason == "slot_name_exists" and not bad.before
-    applied = phrase_changes(phrase_review(rows, added=frozenset({0})), context, SPAN, is_visible=visible)
+    applied = phrase_changes(
+        phrase_review(rows, added=frozenset({0})), context, SPAN, is_visible=visible
+    )
     assert applied[0].applied and not applied[0].offered
 
 
@@ -268,12 +287,30 @@ def test_cards_show_the_sentence_before_and_after_and_the_first_compiled_example
 def test_the_phrase_module_imports_nothing_that_could_edit_execute_or_queue() -> None:
     tree = ast.parse(Path(ai_slot_phrase.__file__).read_text(encoding="utf-8"))
     imported = {
-        node.module or ""
+        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    } | {
+        alias.name
         for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-    } | {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
-    forbidden = ("tkinter", "subprocess", "socket", "urllib", "requests", "queue", "controller", "pipeline.job", "os")
-    assert not [name for name in imported if name.split(".")[0] in forbidden or any(f in name for f in ("job_service", "runner", "history"))]
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    forbidden = (
+        "tkinter",
+        "subprocess",
+        "socket",
+        "urllib",
+        "requests",
+        "queue",
+        "controller",
+        "pipeline.job",
+        "os",
+    )
+    assert not [
+        name
+        for name in imported
+        if name.split(".")[0] in forbidden
+        or any(f in name for f in ("job_service", "runner", "history"))
+    ]
 
 
 def test_the_review_model_has_no_intent_queue_or_save_field() -> None:

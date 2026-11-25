@@ -309,4 +309,6 @@ def test_the_prompt_carries_one_shape_only_example_that_holds_no_operator_text()
     prompt = render_prompt(REQUEST)
     assert prompt.count(PROPOSAL_EXAMPLE) == 1
     assert "never to be reused" in PROPOSAL_EXAMPLE
-    assert PROPOSAL_EXAMPLE not in REQUEST.positive_text and PROPOSAL_EXAMPLE not in REQUEST.goal_text
+    assert (
+        PROPOSAL_EXAMPLE not in REQUEST.positive_text and PROPOSAL_EXAMPLE not in REQUEST.goal_text
+    )

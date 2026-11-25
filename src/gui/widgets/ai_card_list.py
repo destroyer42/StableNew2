@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable, Sequence
+from functools import partial
 from tkinter import ttk
 
 from src.gui.scrolling import enable_mousewheel
@@ -99,9 +100,7 @@ class AiCardList(ttk.Frame):
         var.trace_add("write", lambda *_a: self._changed())
         self.check_vars[card.key] = var
         ttk.Checkbutton(top, text=card.title, variable=var).pack(side="left")
-        button = ttk.Button(
-            top, text="Apply", command=lambda key=card.key: self._on_apply(key), width=8
-        )
+        button = ttk.Button(top, text="Apply", command=partial(self._on_apply, card.key), width=8)
         button.pack(side="right")
         self.apply_buttons[card.key] = button
         if card.before:
