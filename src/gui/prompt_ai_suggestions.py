@@ -26,6 +26,7 @@ from src.gui.tooltip import attach_tooltip
 from src.gui_v2.ai_changes import (
     ApplyJournal,
     ApplyRecord,
+    phrase_changes,
     proposal_changes,
     variety_changes,
 )
@@ -44,6 +45,29 @@ from src.gui_v2.ai_plan_advice import (
     plan_review,
     planning_for_text,
     unavailable_plan_review,
+)
+from src.gui_v2.ai_slot_phrase import (
+    NO_PHRASE_TEXT,
+    SELECTION_PREFIX,
+    PhraseReview,
+    PhraseSpan,
+    build_phrase_request,
+    judge_phrase_slots,
+    marker_text,
+    phrase_blocker,
+    phrase_review,
+    trim_selection,
+    unavailable_phrase_review,
+    with_phrase_applied,
+)
+from src.gui_v2.ai_slot_phrase import (
+    STALE_TEXT as PHRASE_STALE_TEXT,
+)
+from src.gui_v2.ai_slot_phrase import (
+    UNREADABLE_TEXT as PHRASE_UNREADABLE_TEXT,
+)
+from src.gui_v2.ai_slot_phrase import (
+    detail_text as phrase_detail_text,
 )
 from src.gui_v2.ai_slot_proposal import (
     STALE_TEXT as PROPOSAL_STALE_TEXT,
@@ -136,6 +160,16 @@ class PromptAiSuggestions:
         self._proposal_request: AssistRequest | None = None
         self._proposal_suggestion: Any = None
         self._proposal_added: set[int] = set()
+        # Phrase to slot (AI-230g): the context (sentence and matrix) and the operator's selected span the request was built
+        # from, the request and the validated suggestion. Memory only; same lifetime rules. The remembered selection is the
+        # last non-empty editor selection while the window is open and is re-checked against the sentence before every use.
+        self._phrase: ProposalContext | None = None
+        self._phrase_span: PhraseSpan | None = None
+        self._phrase_request: AssistRequest | None = None
+        self._phrase_suggestion: Any = None
+        self._phrase_added: set[int] = set()
+        self._selection: PhraseSpan | None = None
+        self._selection_bound = False
         # AI-230: what this window applied and how to take it back. Memory only; cleared on close and on any pack change.
         self._journal = ApplyJournal()
         # Check tab (AI-230e): the matrix state the last run read, and its findings. Memory only.
@@ -352,8 +386,13 @@ class PromptAiSuggestions:
             on_undo=self.undo_last,
             on_check=self.run_matrix_checks,
             on_check_apply=self.apply_check_fixes,
+            on_phrase=self.suggest_phrase,
+            phrase_problem=self._phrase_availability_problem(),
             context_text=self._context_text(),
         )
+        self._watch_selection()
+        self._selection = self._read_selection()
+        self._sync_phrase_text()
         self._sync_undo()
         return self.dialog
 
@@ -620,6 +659,8 @@ class PromptAiSuggestions:
         self._variety_added = set()
         self._proposal = self._proposal_request = self._proposal_suggestion = None
         self._proposal_added = set()
+        self._phrase = self._phrase_span = self._phrase_request = self._phrase_suggestion = None
+        self._phrase_added = set()
 
     def suggest_variety(
         self,
@@ -1147,6 +1188,318 @@ class PromptAiSuggestions:
                 self.dialog.show_proposal(self._proposal_review(before, self._variety_trust()))
         return ""
 
+    # -- phrase to slot (AI-230g) -------------------------------------------------------------------------------------------
+
+    def _watch_selection(self) -> None:
+        """Remember the operator's last selection in the positive editor while this window is open (the selection can be
+        cleared when focus moves, so the last non-empty one is kept and always re-checked against the sentence)."""
+
+        editor = getattr(self.tab, "editor", None)
+        if editor is None or self._selection_bound:
+            return
+        editor.bind("<<Selection>>", self._selection_changed, add="+")
+        self._selection_bound = True
+
+    def _selection_changed(self, _event: Any = None) -> None:
+        if self._closed or self.dialog is None:
+            return
+        span = self._read_selection()
+        if span is not None:
+            self._selection = span
+        self._sync_phrase_text()
+
+    def _read_selection(self) -> PhraseSpan | None:
+        """The editor's current selection as a trimmed span of its text, or ``None``."""
+
+        try:
+            editor = self.tab.editor
+            ranges = editor.tag_ranges("sel")
+            if len(ranges) != 2:
+                return None
+            text = editor.get("1.0", "end-1c")
+            return trim_selection(
+                text, len(editor.get("1.0", ranges[0])), len(editor.get("1.0", ranges[1]))
+            )
+        except Exception:  # noqa: BLE001 - an unreadable selection is no selection
+            return None
+
+    def _selected_span(self, sentence: str) -> PhraseSpan | None:
+        """The live selection, else the remembered one, if it still names exactly those characters of ``sentence``."""
+
+        for span in (self._read_selection(), self._selection):
+            if span is not None and sentence[span.start : span.end] == span.text:
+                return span
+        return None
+
+    def _sync_phrase_text(self) -> None:
+        dialog = self.dialog
+        if dialog is None:
+            return
+        try:
+            current = self.tab.editor.get("1.0", "end-1c")
+            span = self._selected_span(current)
+            if span is None:
+                dialog.set_phrase_text(NO_PHRASE_TEXT)
+            elif self._variety_visible()(span.text):
+                dialog.set_phrase_text(f"{SELECTION_PREFIX}{span.text}")
+            else:
+                dialog.set_phrase_text(f"{SELECTION_PREFIX}{HIDDEN_TEXT}")
+        except Exception:  # noqa: BLE001 - fixed copy only
+            dialog.set_phrase_text(NO_PHRASE_TEXT)
+
+    def _phrase_availability_problem(self) -> str:
+        try:
+            context = self._capture_proposal()
+            if not context.sentence.strip():
+                return "Enter an authored positive prompt first."
+            resolver = ContentVisibilityResolver(self._mode())
+            if not resolver.is_visible(self.tab._current_slot_visibility_subject()):
+                return "This authored content is hidden by the current visibility mode."
+            return ""
+        except ContextUnavailable as exc:
+            return str(exc)
+        except Exception:  # noqa: BLE001 - fixed copy only
+            return PHRASE_UNREADABLE_TEXT
+
+    def suggest_phrase(self, goal: str) -> None:
+        """Ask for a slot built around the phrase selected in the positive prompt. The goal is optional."""
+
+        dialog = self.dialog
+        if dialog is None or self._active_id is not None or self.owner is None:
+            return
+        code, explanation = self.owner.availability()
+        if code is not None:
+            dialog.show_phrase(
+                unavailable_phrase_review(explanation, trust_label=self._trust_label())
+            )
+            return
+        text = goal.strip()
+        try:
+            problem = self._phrase_availability_problem()
+            if problem:
+                raise ContextUnavailable(problem)
+            context = self._capture_proposal()
+            span = self._selected_span(context.sentence)
+            problem = phrase_blocker(context.sentence, context.slots, span)
+            if problem or span is None:
+                raise ContextUnavailable(problem or NO_PHRASE_TEXT)
+            resolver = ContentVisibilityResolver(self._mode())
+            subject = {
+                **self.tab._current_slot_visibility_subject(),
+                "positive_prompt": "\n".join([text, context.sentence]),
+            }
+            if not resolver.is_visible(subject):
+                raise ContextUnavailable(
+                    "This authored content is hidden by the current visibility mode."
+                )
+            request = build_phrase_request(
+                uuid4().hex,
+                text,
+                context.sentence,
+                span,
+                context.slots,
+                content_class="sensitive"
+                if resolver.classify_item(subject).rating == "nsfw"
+                else "standard",
+            )
+        except ContextUnavailable as exc:
+            dialog.show_phrase(unavailable_phrase_review(str(exc)))
+            return
+        except ValueError:
+            dialog.show_phrase(
+                unavailable_phrase_review("The goal or the prompt do not meet the request limits.")
+            )
+            return
+        except Exception:  # noqa: BLE001 - no raw context in UI errors
+            dialog.show_phrase(unavailable_phrase_review(PHRASE_UNREADABLE_TEXT))
+            return
+        self._drop_variety()
+        self._phrase, self._phrase_span, self._phrase_request = context, span, request
+        self.snapshot = self.outcome = None
+        self._review_cancelled = False
+        self._active_id = request.request_id
+        dialog.running_phrase()
+        self.refresh()
+        result = self.owner.submit(request, self._phrase_completed)
+        if not result.accepted:
+            self._phrase_completed(
+                result.outcome or AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id)
+            )
+
+    def _phrase_review(self, context: ProposalContext, trust: str) -> PhraseReview:
+        span, suggestion = self._phrase_span, self._phrase_suggestion
+        if self._phrase_request is None or span is None or suggestion is None:
+            return unavailable_phrase_review(PHRASE_STALE_TEXT, trust_label=trust)
+        rows = judge_phrase_slots(
+            suggestion,
+            context,
+            span,
+            matrix_mapping=self.tab.workspace_state.get_matrix_config().to_mapping(),
+            is_visible=self._variety_visible(),
+            phrase_taken=bool(self._phrase_added),
+        )
+        review = phrase_review(rows, trust_label=trust, added=frozenset(self._phrase_added))
+        return replace(
+            review,
+            cards=phrase_changes(review, context, span, is_visible=self._variety_visible()),
+        )
+
+    def _phrase_completed(self, outcome: AssistOutcome) -> None:
+        context, request, dialog = self._phrase, self._phrase_request, self.dialog
+        if (
+            self._closed
+            or self.owner is None
+            or self.owner.closed
+            or context is None
+            or request is None
+            or dialog is None
+            or self._active_id != outcome.request_id
+            or request.request_id != outcome.request_id
+        ):
+            return
+        self._active_id = None
+        trust = result_provider_label(outcome) or self._trust_label()
+        if trust:
+            dialog.set_trust_label(trust)
+        if self._review_cancelled:
+            self._drop_variety()
+            dialog.show_phrase(
+                unavailable_phrase_review(
+                    "Request cancelled. Nothing was changed.", trust_label=trust
+                )
+            )
+            self.refresh()
+            return
+        suggestion = checked_suggestion(outcome, request) if outcome.ok else None
+        if suggestion is None:
+            self._drop_variety()
+            code = outcome.code if not outcome.ok else OutcomeCode.MALFORMED
+            text = provider_outcome_text(outcome) if code is outcome.code else OUTCOME_TEXT[code]
+            dialog.show_phrase(unavailable_phrase_review(text, trust_label=trust))
+            dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
+            self.refresh()
+            return
+        if self._current_proposal(()) != context:
+            # The pack, matrix or sentence changed while the model ran: never offer proposals judged against another state.
+            self._drop_variety()
+            dialog.clear_sensitive()
+            self.refresh()
+            return
+        self._phrase_suggestion = suggestion
+        dialog.show_phrase(self._phrase_review(context, trust))
+        dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
+        self.refresh()
+
+    def _roll_back_phrase(self, span: PhraseSpan, slot_name: str) -> None:
+        marker = marker_text(slot_name)
+        self.tab.replace_text_span(span.start, span.start + len(marker), marker, span.text)
+        self.tab.matrix_tab_panel.remove_last_slot()
+
+    def add_phrase_slot(self, row_index: int) -> bool:
+        """Apply one offered proposal: the slot (your phrase first) and the marker in place of exactly the selected words,
+        all-or-nothing, after a full stale check. Only one proposal can be applied for a selection. Returns whether it was."""
+
+        context, span = self._phrase, self._phrase_span
+        suggestion, dialog = self._phrase_suggestion, self.dialog
+        if (
+            context is None
+            or span is None
+            or suggestion is None
+            or dialog is None
+            or self._active_id is not None
+            or self._phrase_added
+        ):
+            return False
+        current = self._current_proposal(())
+        if current is None or current != context:
+            self._drop_variety()
+            dialog.clear_sensitive()
+            dialog.status(PHRASE_STALE_TEXT)
+            return False
+        trust = self._variety_trust()
+        review = self._phrase_review(current, trust)
+        row = next((r for r in review.rows if r.index == row_index), None)
+        if row is None or not row.offered:
+            dialog.show_phrase(review)
+            if row is not None:
+                dialog.status(f"That proposal cannot be applied. {phrase_detail_text(row)}")
+            return False
+        expected = with_phrase_applied(context, span, row.slot_name, row.values)
+        if not self.tab.matrix_tab_panel.append_slot(row.slot_name, list(row.values)):
+            dialog.status(
+                "The Matrix tab has an unfinished edit. Finish it, then apply the proposal again."
+            )
+            return False
+        replaced = False
+        try:
+            replaced = bool(
+                self.tab.replace_text_span(
+                    span.start, span.end, span.text, marker_text(row.slot_name)
+                )
+            )
+        except Exception:  # noqa: BLE001 - fall through to the rollback below
+            replaced = False
+        after = self._current_proposal(())
+        if not replaced or after is None or after != expected:
+            # All or nothing: take back whatever was done, then check the original state is restored.
+            if replaced:
+                self._roll_back_phrase(span, row.slot_name)
+            else:
+                self.tab.matrix_tab_panel.remove_last_slot()
+            restored = self._current_proposal(()) == context
+            self._drop_variety()
+            dialog.clear_sensitive()
+            dialog.status(
+                "The pack did not change as expected, so the change was taken back. Request again."
+                if restored
+                else "The pack did not change as expected. Check the Matrix tab and the prompt, then request again."
+            )
+            return False
+        self._phrase = after
+        self._phrase_added.add(row_index)
+        name = row.slot_name
+        self._journal.push(
+            ApplyRecord(
+                "phrase_slot",
+                f"slot {name}",
+                after.pack_identity,
+                after.slot_index,
+                lambda: self._undo_phrase(context, after, span, name, row_index),
+            )
+        )
+        dialog.show_phrase(self._phrase_review(after, trust))
+        dialog.status(
+            f"Added slot {name} and replaced the selected words with its marker. The pack is modified and unsaved; save it "
+            "through the ordinary workflow."
+        )
+        self._sync_undo()
+        return True
+
+    def _undo_phrase(
+        self,
+        before: ProposalContext,
+        after: ProposalContext,
+        span: PhraseSpan,
+        slot_name: str,
+        row_index: int,
+    ) -> str:
+        """Take back one applied phrase slot if, and only if, the workspace still equals what that apply produced."""
+
+        if self._current_proposal(()) != after:
+            return UNDO_CHANGED_TEXT
+        marker = marker_text(slot_name)
+        if not self.tab.replace_text_span(span.start, span.start + len(marker), marker, span.text):
+            return UNDO_UNEXPECTED_TEXT
+        self.tab.matrix_tab_panel.remove_last_slot()
+        if self._current_proposal(()) != before:
+            return UNDO_UNEXPECTED_TEXT
+        if self._phrase == after:
+            self._phrase = before
+            self._phrase_added.discard(row_index)
+            if self.dialog is not None and self._phrase_suggestion is not None:
+                self.dialog.show_phrase(self._phrase_review(before, self._variety_trust()))
+        return ""
+
     def _current(self, snapshot: SuggestionSnapshot) -> bool:
         try:
             return self._context(snapshot.request.kind, snapshot.request.request_id) == snapshot
@@ -1505,6 +1858,8 @@ class PromptAiSuggestions:
                 done = self.add_variety_value(int(number))
             elif kind == "slot":
                 done = self.add_slot_proposal(int(number))
+            elif kind == "phrase":
+                done = self.add_phrase_slot(int(number))
             else:
                 done = False
             if not done:
@@ -1540,6 +1895,7 @@ class PromptAiSuggestions:
         self.cancel()
         self.dialog = None
         self._journal.clear()
+        self._selection = None
         self._check_context, self._check_findings = None, ()
         self.snapshot = self.outcome = None
         self._plan = self._plan_request = None

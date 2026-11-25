@@ -16,6 +16,18 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.gui_v2.ai_slot_phrase import (
+    PhraseReview,
+    PhraseSpan,
+    marker_text,
+    replace_span,
+)
+from src.gui_v2.ai_slot_phrase import (
+    detail_text as phrase_detail_text,
+)
+from src.gui_v2.ai_slot_phrase import (
+    growth_line as phrase_growth_line,
+)
 from src.gui_v2.ai_slot_proposal import (
     ProposalContext,
     ProposalReview,
@@ -152,6 +164,18 @@ def marker_windows(sentence: str, offset: int, slot_name: str) -> tuple[str, str
     )
 
 
+def span_windows(sentence: str, span: PhraseSpan, slot_name: str) -> tuple[str, str]:
+    """``(before, after)`` windows of ``sentence`` around the selected span: the second has the span replaced by the marker."""
+
+    start = max(0, span.start - _WINDOW_CHARS)
+    end = min(len(sentence), span.end + _WINDOW_CHARS)
+    lead = "…" if start > 0 else ""
+    tail = "…" if end < len(sentence) else ""
+    before = sentence[start:end]
+    after = sentence[start : span.start] + marker_text(slot_name) + sentence[span.end : end]
+    return f"{lead}{before}{tail}", f"{lead}{after}{tail}"
+
+
 def slot_examples(
     sentence_with_marker: str,
     slots: Sequence[SlotState],
@@ -259,6 +283,58 @@ def proposal_changes(
     return tuple(cards)
 
 
+def phrase_changes(
+    review: PhraseReview,
+    context: ProposalContext,
+    span: PhraseSpan,
+    *,
+    is_visible: Callable[[str], bool],
+) -> tuple[ProposedChange, ...]:
+    """One card per proposed slot for the selected phrase, in answer order: the sentence before and after the span is replaced
+    by the marker, and the first compiled examples (the first one reads exactly as the sentence did)."""
+
+    cards: list[ProposedChange] = []
+    for row in review.rows:
+        key = f"phrase:{row.index}"
+        hidden = row.reason == "hidden"
+        title = HIDDEN_TEXT if hidden else f"{row.slot_name}: {', '.join(row.values)}"
+        if row.index in review.added:
+            cards.append(ProposedChange(key, KIND_PHRASE_SLOT, title, applied=True))
+            continue
+        if hidden or not row.offered:
+            cards.append(
+                ProposedChange(
+                    key,
+                    KIND_PHRASE_SLOT,
+                    title,
+                    effect="" if hidden else phrase_growth_line(row),
+                    rationale="" if hidden else row.rationale,
+                    reason=row.reason,
+                    detail=phrase_detail_text(row),
+                )
+            )
+            continue
+        before, after = span_windows(context.sentence, span, row.slot_name)
+        cards.append(
+            ProposedChange(
+                key,
+                KIND_PHRASE_SLOT,
+                title,
+                before=before,
+                after=after,
+                effect=phrase_growth_line(row),
+                rationale=row.rationale if is_visible(row.rationale) else HIDDEN_TEXT,
+                examples=slot_examples(
+                    replace_span(context.sentence, span, row.slot_name),
+                    context.slots,
+                    row.slot_name,
+                    row.values,
+                ),
+            )
+        )
+    return tuple(cards)
+
+
 @dataclass(slots=True)
 class ApplyRecord:
     """One applied change and how to take it back. ``undo`` re-checks that the workspace still equals the state the apply
@@ -306,7 +382,9 @@ __all__ = [
     "ApplyRecord",
     "ProposedChange",
     "marker_windows",
+    "phrase_changes",
     "proposal_changes",
     "slot_examples",
+    "span_windows",
     "variety_changes",
 ]

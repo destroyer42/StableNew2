@@ -105,6 +105,12 @@ def _protected_spans(text: str) -> list[tuple[int, int]]:
     ]
 
 
+def protected_spans(text: str) -> list[tuple[int, int]]:
+    """``(start, end)`` of every protected token (``<lora:...>``, ``[[slot]]``, ``__wildcard__``) in ``text``."""
+
+    return _protected_spans(text)
+
+
 def inside_protected_token(text: str, offset: int) -> bool:
     """Whether ``offset`` falls strictly inside ``<lora:...>``/``<embedding...>``, ``[[slot]]`` or ``__wildcard__``."""
 
@@ -289,6 +295,12 @@ def _name_problem(name: str) -> str:
     ):
         return "slot_name_chars"
     return ""
+
+
+def slot_name_problem(name: str) -> str:
+    """Why ``name`` cannot be a new slot name (a key of :data:`REASON_TEXT`), or ``""``."""
+
+    return _name_problem(name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -526,5 +538,7 @@ __all__ = [
     "proposal_blocker",
     "proposal_review",
     "proposal_text",
+    "protected_spans",
+    "slot_name_problem",
     "unavailable_proposal_review",
 ]

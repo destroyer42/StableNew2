@@ -98,6 +98,15 @@ def checked_suggestion(outcome: AssistOutcome, request: AssistRequest) -> Assist
             }
             for entry in s.slot_proposals
         ]
+    if request.kind is SuggestionKind.PHRASE_SLOT:
+        document["phrase_slots"] = [
+            {
+                "slot_name": entry.slot_name,
+                "values": list(entry.values),
+                "rationale": entry.rationale,
+            }
+            for entry in s.phrase_slots
+        ]
     if request.kind is SuggestionKind.SLOT_VARIETY:
         document["slots"] = [
             {"slot": entry.slot, "values": list(entry.values), "rationale": entry.rationale}

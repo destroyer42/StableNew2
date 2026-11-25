@@ -1,4 +1,4 @@
-"""Case set and scorer for AI Assist slot suggestions (AI-230f).
+"""Case set and scorer for AI Assist slot suggestions (AI-230f): slot variety, new-slot proposals and phrase-to-slot (AI-230g).
 
 Pure and offline: nothing here starts a process, uses the network or reads a model. ``run_cases`` takes any callable that turns
 a request into the model's raw text (a fake in tests; the operator CLI in ``__main__`` supplies a loopback Ollama call), then
@@ -24,6 +24,7 @@ from src.ai_assist.contracts import AssistRequest, OutcomeCode
 from src.ai_assist.framing import build_json_schema
 from src.ai_assist.remote import _wire_problem
 from src.ai_assist.validators import validate_output
+from src.gui_v2.ai_slot_phrase import PhraseSpan, build_phrase_request, judge_phrase_slots
 from src.gui_v2.ai_slot_proposal import (
     build_context,
     build_proposal_request,
@@ -38,6 +39,7 @@ from src.gui_v2.ai_slot_variety import (
 
 KIND_VARIETY = "variety"
 KIND_PROPOSAL = "proposal"
+KIND_PHRASE = "phrase"
 RESULT_SCHEMA = "stablenew.ai230.slot_cases.v1"
 
 Slots = tuple[tuple[str, tuple[str, ...]], ...]
@@ -58,6 +60,7 @@ class SlotCase:
     select: tuple[str, ...] = ()
     per_slot: int = 3
     focus: str = "direct"
+    phrase: str = ""
 
 
 CASES: tuple[SlotCase, ...] = (
@@ -134,6 +137,38 @@ CASES: tuple[SlotCase, ...] = (
         sentence=_ROOM,
         slots=(("furniture", ("armchair", "sofa")),),
     ),
+    SlotCase(
+        "phrase-time-of-day",
+        KIND_PHRASE,
+        "",
+        sentence=_KNIGHT,
+        slots=(("location", ("forest", "harbor")),),
+        phrase="at dusk",
+    ),
+    SlotCase(
+        "phrase-setting",
+        KIND_PHRASE,
+        "more varied places",
+        sentence=_PORTRAIT,
+        slots=(("mood", ("calm", "wistful")),),
+        phrase="in a cafe",
+    ),
+    SlotCase(
+        "phrase-clothing",
+        KIND_PHRASE,
+        "",
+        sentence=_KNIGHT,
+        slots=(("location", ("forest", "harbor")),),
+        phrase="wearing armor",
+    ),
+    SlotCase(
+        "phrase-furniture",
+        KIND_PHRASE,
+        "different moods",
+        sentence=_ROOM,
+        slots=(("era", ("medieval", "victorian")),),
+        phrase="a worn armchair",
+    ),
 )
 
 
@@ -154,6 +189,12 @@ def build_case_request(case: SlotCase, request_id: str = "a" * 32) -> AssistRequ
             selected=case.select,
             per_slot=case.per_slot,
             focus=case.focus,
+        )
+    if case.kind == KIND_PHRASE:
+        start = case.sentence.index(case.phrase)
+        span = PhraseSpan(start, start + len(case.phrase), case.phrase)
+        return build_phrase_request(
+            request_id, case.goal, case.sentence, span, states, content_class="standard"
         )
     return build_proposal_request(
         request_id, case.goal, case.sentence, states, content_class="standard"
@@ -195,6 +236,23 @@ def score_case(case: SlotCase, raw_text: str, *, seconds: float = 0.0) -> CaseRe
         reasons = Counter(row.reason for row in rows if row.reason)
         offered = sum(row.offered for row in rows)
         total = len(rows)
+    elif case.kind == KIND_PHRASE:
+        start = case.sentence.index(case.phrase)
+        context = build_context(0, 0, 0, case.sentence, _slot_objects(case.slots), (), "")
+        mapping = {
+            "enabled": True,
+            "slots": [{"name": n, "values": list(v)} for n, v in case.slots],
+        }
+        phrows = judge_phrase_slots(
+            suggestion,
+            context,
+            PhraseSpan(start, start + len(case.phrase), case.phrase),
+            matrix_mapping=mapping,
+            is_visible=visible,
+        )
+        reasons = Counter(row.reason for row in phrows if row.reason)
+        offered = sum(row.offered for row in phrows)
+        total = len(phrows)
     else:
         points = compute_insertion_points(case.sentence)
         context = build_context(
@@ -251,7 +309,7 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, Any]:
     """Rates per kind, from counts and codes only."""
 
     summary: dict[str, Any] = {"schema": RESULT_SCHEMA, "cases": len(results), "kinds": {}}
-    for kind in (KIND_VARIETY, KIND_PROPOSAL):
+    for kind in (KIND_VARIETY, KIND_PROPOSAL, KIND_PHRASE):
         mine = [r for r in results if r.kind == kind]
         if not mine:
             continue
@@ -285,6 +343,7 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, Any]:
 
 __all__ = [
     "CASES",
+    "KIND_PHRASE",
     "KIND_PROPOSAL",
     "KIND_VARIETY",
     "RESULT_SCHEMA",

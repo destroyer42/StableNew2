@@ -13,11 +13,17 @@ from typing import Any
 import pytest
 
 from src.ai_assist.contracts import AssistRequest, OutcomeCode, SuggestionKind
-from src.ai_assist.framing import PROPOSAL_EXAMPLE, VARIETY_EXAMPLE, build_json_schema
+from src.ai_assist.framing import (
+    PHRASE_EXAMPLE,
+    PROPOSAL_EXAMPLE,
+    VARIETY_EXAMPLE,
+    build_json_schema,
+)
 from src.ai_assist.remote import _ollama_prompt
 from tools.qualification.ai230 import __main__ as driver
 from tools.qualification.ai230.slot_cases import (
     CASES,
+    KIND_PHRASE,
     KIND_PROPOSAL,
     KIND_VARIETY,
     CaseResult,
@@ -44,6 +50,22 @@ def _good(request: AssistRequest) -> str:
             for name, _values in request.matrix_slots
         ]
         return json.dumps({"schema": SCHEMA, "status": "ok", "kind": request.kind.value, "slots": slots})
+    if request.kind is SuggestionKind.PHRASE_SLOT:
+        phrase_slots = [
+            {
+                "slot_name": f"{MARK}slot",
+                "values": [f"{MARK} one", f"{MARK} two"],
+                "rationale": "fits the goal",
+            }
+        ]
+        return json.dumps(
+            {
+                "schema": SCHEMA,
+                "status": "ok",
+                "kind": request.kind.value,
+                "phrase_slots": phrase_slots,
+            }
+        )
     proposals = [
         {
             "slot_name": f"{MARK}slot",
@@ -57,10 +79,11 @@ def _good(request: AssistRequest) -> str:
     )
 
 
-def test_case_ids_are_unique_and_cover_both_kinds() -> None:
+def test_case_ids_are_unique_and_cover_every_kind() -> None:
     ids = [case.case_id for case in CASES]
     assert len(ids) == len(set(ids))
-    assert {case.kind for case in CASES} == {KIND_VARIETY, KIND_PROPOSAL}
+    assert {case.kind for case in CASES} == {KIND_VARIETY, KIND_PROPOSAL, KIND_PHRASE}
+    assert sum(case.kind == KIND_PHRASE for case in CASES) >= 4
     assert sum(case.kind == KIND_VARIETY for case in CASES) >= 5
     assert sum(case.kind == KIND_PROPOSAL for case in CASES) >= 5
 
@@ -68,14 +91,21 @@ def test_case_ids_are_unique_and_cover_both_kinds() -> None:
 def test_every_case_builds_a_production_request() -> None:
     for case in CASES:
         request = build_case_request(case)
-        expected = (
-            SuggestionKind.SLOT_VARIETY if case.kind == KIND_VARIETY else SuggestionKind.SLOT_PROPOSAL
-        )
+        expected = {
+            KIND_VARIETY: SuggestionKind.SLOT_VARIETY,
+            KIND_PROPOSAL: SuggestionKind.SLOT_PROPOSAL,
+            KIND_PHRASE: SuggestionKind.PHRASE_SLOT,
+        }[case.kind]
         assert request.kind is expected
         assert request.goal_text == case.goal
         # the frame carries the worked example, so the measured prompt is the shipped prompt
         prompt = _ollama_prompt(request)
-        assert (VARIETY_EXAMPLE if case.kind == KIND_VARIETY else PROPOSAL_EXAMPLE) in prompt
+        example = {
+            KIND_VARIETY: VARIETY_EXAMPLE,
+            KIND_PROPOSAL: PROPOSAL_EXAMPLE,
+            KIND_PHRASE: PHRASE_EXAMPLE,
+        }[case.kind]
+        assert example in prompt
 
 
 def test_a_good_generator_gets_offers_for_every_case() -> None:
@@ -84,7 +114,7 @@ def test_a_good_generator_gets_offers_for_every_case() -> None:
     assert all(r.code == OutcomeCode.SUGGESTION.value for r in results)
     assert all(r.offered > 0 and r.rejected == 0 for r in results)
     summary = summarize(results)
-    for kind in (KIND_VARIETY, KIND_PROPOSAL):
+    for kind in (KIND_VARIETY, KIND_PROPOSAL, KIND_PHRASE):
         assert summary["kinds"][kind]["valid"] == summary["kinds"][kind]["cases"]
         assert summary["kinds"][kind]["cases_with_an_offer"] == summary["kinds"][kind]["cases"]
 
@@ -144,8 +174,9 @@ def test_results_hold_no_authored_or_model_text() -> None:
     for case in CASES:
         labelled = labelled.replace(case.case_id, "")
     for case in CASES:
-        assert case.goal not in labelled
+        assert case.goal == "" or case.goal not in labelled
         assert case.sentence == "" or case.sentence not in labelled
+        assert case.phrase == "" or case.phrase not in labelled
         for name, values in case.slots:
             assert name not in labelled
             assert all(value not in labelled for value in values)
@@ -276,4 +307,4 @@ def test_a_full_run_writes_counts_and_codes_only(
     assert len(document["results"]) == len(CASES)
     text = out.read_text(encoding="utf-8") + capsys.readouterr().out
     assert MARK not in text
-    assert all(case.goal not in text for case in CASES)
+    assert all(case.goal == "" or case.goal not in text for case in CASES)

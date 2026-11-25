@@ -22,6 +22,13 @@ from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
 from src.gui.widgets.ai_card_list import AiCardList
 from src.gui_v2.ai_changes import ProposedChange
 from src.gui_v2.ai_plan_advice import PLAN_ADVICE_NOTICE, PlanReview, review_text
+from src.gui_v2.ai_slot_phrase import (
+    PHRASE_LABEL,
+    PHRASE_NOTICE,
+    PHRASE_REVERT_TEXT,
+    PhraseReview,
+    phrase_text,
+)
 from src.gui_v2.ai_slot_proposal import (
     PROPOSAL_LABEL,
     PROPOSAL_NOTICE,
@@ -366,11 +373,12 @@ class AiSuggestionDialog(tk.Toplevel):
                 fill="x", padx=4, pady=2
             )
         if self._on_phrase is not None:
-            from src.gui_v2.ai_slot_phrase import PHRASE_LABEL, PHRASE_NOTICE
-
             panel = ttk.LabelFrame(tab, text=PHRASE_LABEL)
             self._mode_panels[MODE_PHRASE] = panel
             ttk.Label(panel, text=PHRASE_NOTICE, wraplength=800, justify="left").pack(
+                fill="x", padx=4, pady=2
+            )
+            ttk.Label(panel, text=PHRASE_REVERT_TEXT, wraplength=800, justify="left").pack(
                 fill="x", padx=4, pady=2
             )
             ttk.Label(panel, textvariable=self.phrase_var, wraplength=800, justify="left").pack(
@@ -747,6 +755,27 @@ class AiSuggestionDialog(tk.Toplevel):
             cards
             if cards is not None
             else (list(review.cards) or _fallback_cards("slot", review.rows, review.added)),
+            bridge=False,
+        )
+
+    def show_phrase(
+        self, review: PhraseReview, cards: Sequence[ProposedChange] | None = None
+    ) -> None:
+        """Judged phrase-to-slot proposals as cards; the text below holds the full review."""
+
+        self._clear_copy_buttons()
+        self._clear_cards()
+        self.status(review.status)
+        self._set_requests(False)
+        self._set_advise(False)
+        self.cancel_button.state(["disabled"])
+        self.accept_button.state(["disabled"])
+        self._text(phrase_text(review))
+        self.select_tab(TAB_SLOTS)
+        self._show_cards(
+            cards
+            if cards is not None
+            else (list(review.cards) or _fallback_cards("phrase", review.rows, review.added)),
             bridge=False,
         )
 

@@ -2183,6 +2183,17 @@ class PromptTabFrame(ttk.Frame):
         self._on_editor_modified(None)
         return True
 
+    def replace_text_span(self, start: int, end: int, expected: str, new: str) -> bool:
+        """Replace exactly ``[start, end)`` of the positive editor with ``new``, through the same editor edit and modified
+        handler the slot picker uses (AI-230g). Refuses, changing nothing, unless that span currently holds ``expected``."""
+        current = self.editor.get("1.0", "end-1c")
+        if not 0 <= start <= end <= len(current) or current[start:end] != expected:
+            return False
+        self.editor.delete(f"1.0 + {start} chars", f"1.0 + {end} chars")
+        self.editor.insert(f"1.0 + {start} chars", new)
+        self._on_editor_modified(None)
+        return True
+
     def restore_inserted_text(self, original: str) -> bool:
         """Undo an insert into the positive editor (rolls back a failed atomic addition): delete the one contiguous span
         that was added to ``original``. Refuses, changing nothing, when the text is not ``original`` plus one such span."""
