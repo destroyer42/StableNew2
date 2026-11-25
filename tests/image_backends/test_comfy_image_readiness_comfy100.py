@@ -134,6 +134,22 @@ def test_floors_pass_and_record_the_readings() -> None:
     assert "4070 Ti" in readings["device_name"]
 
 
+def test_a_resident_model_waives_only_the_free_vram_floor() -> None:
+    low_vram = system_stats(vram_free=4 * GIB)
+
+    readings = evaluate_floors(BASE, low_vram, resident_model_ok=True)
+
+    assert readings["vram_free_bytes"] == 4 * GIB
+    assert readings["vram_floor"] == "skipped_warm_owned_runtime"
+    assert evaluate_floors(BASE, system_stats())["vram_floor"] == "checked"
+    with pytest.raises(ComfyImageResourceError, match="free GPU memory"):
+        evaluate_floors(BASE, low_vram)
+    with pytest.raises(ComfyImageResourceError, match="free host RAM"):
+        evaluate_floors(
+            BASE, system_stats(vram_free=4 * GIB, ram_free=1 * GIB), resident_model_ok=True
+        )
+
+
 @pytest.mark.parametrize(
     ("stats", "fragment"),
     [

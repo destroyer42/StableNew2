@@ -369,8 +369,15 @@ def _int(value: Any) -> int | None:
         return None
 
 
-def evaluate_floors(profile: Any, system_stats: Any) -> dict[str, Any]:
-    """Check Comfy's own free VRAM and host RAM against the profile floors; returns the readings or raises."""
+def evaluate_floors(
+    profile: Any, system_stats: Any, *, resident_model_ok: bool = False
+) -> dict[str, Any]:
+    """Check Comfy's own free VRAM and host RAM against the profile floors; returns the readings or raises.
+
+    ``resident_model_ok`` is for reusing the ComfyUI StableNew itself kept warm after the previous job (PR-IMG-COMFY-382): its
+    own loaded model legitimately occupies VRAM, so the free-VRAM floor, which guards against *another* program holding the
+    GPU, does not apply to it. ComfyUI offloads that model itself if a job needs the space. The host-RAM floor still applies.
+    """
 
     stats = system_stats if isinstance(system_stats, Mapping) else {}
     raw_system = stats.get("system")
@@ -387,7 +394,7 @@ def evaluate_floors(profile: Any, system_stats: Any) -> dict[str, Any]:
         )
     floors = profile.resources
     gib = 1024**3
-    if vram_free < floors.min_free_vram_bytes:
+    if not resident_model_ok and vram_free < floors.min_free_vram_bytes:
         raise ComfyImageResourceError(
             f"{profile.display_name} needs {floors.min_free_vram_bytes / gib:.0f} GiB of free GPU memory, but ComfyUI "
             f"reports {vram_free / gib:.1f} GiB free. StableNew released its own runtimes; another program is using "
@@ -404,6 +411,7 @@ def evaluate_floors(profile: Any, system_stats: Any) -> dict[str, Any]:
         "ram_free_bytes": ram_free,
         "ram_total_bytes": ram_total,
         "device_name": str(device.get("name") or ""),
+        "vram_floor": "skipped_warm_owned_runtime" if resident_model_ok else "checked",
     }
 
 
