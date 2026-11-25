@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-1011 of 1011 modules have a docstring.
+1013 of 1013 modules have a docstring.
 
 ## src/
 
@@ -959,6 +959,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `cgroup_v2.py`: Manage a Linux cgroup v2 process container with enforced limits and teardown
 - `config.py`: Configuration management utilities
 - `config_helpers.py`: Helpers for logging when default configuration values are used
+- `contention_lock.py`: A lock that reports the operation that held it, or waited for it, long enough to stall other threads
 - `debug_shutdown_inspector.py`: Utilities for logging detailed shutdown state diagnostics
 - `diagnostics_bundle_v2.py`: Collect bounded runtime diagnostics into ZIP bundles with single-flight and cooldown controls
 - `embedding_prompt_utils.py`: Normalize textual-inversion references and read the backend's embedding usage report
@@ -994,6 +995,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `retry_policy_v2.py`: Retry policy definitions for StableNew WebUI interactions
 - `single_instance.py`: Simple localhost socket lock to enforce single StableNew V2 instance
 - `snapshot_builder_v2.py`: Snapshot helpers for Phase 9: Job Snapshotting + Deterministic Replay
+- `stack_sites.py`: Describe stack frames as short ``file:line in function`` strings without reading any source file
 - `system_info_v2.py`: Collect a lightweight system snapshot for diagnostics bundles
 - `thread_registry.py`: Thread Registry for Centralized Thread Lifecycle Management
 - `watchdog_v2.py`: Watch an external job process for configured runtime and resource limit violations
