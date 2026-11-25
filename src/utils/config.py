@@ -799,7 +799,7 @@ class ConfigManager:
             "image_backend_default": "webui",
             # Idle seconds the managed ComfyUI stays resident after a still-image job (PR-IMG-COMFY-382); 0 releases it
             # after every job. Any other job, a failure or application exit ends the hold sooner.
-            "comfy_image_keep_warm_seconds": 120,
+            "comfy_image_keep_warm_seconds": 60,
             "webui_workdir": str(app_config.get_webui_workdir() or ""),
             "webui_autostart_enabled": app_config.is_webui_autostart_enabled(),
             "webui_health_initial_timeout_seconds": app_config.get_webui_health_initial_timeout_seconds(),

@@ -51,7 +51,7 @@ class _Spawned:
 class Rig:
     """One backend (injected slot, fake owner) so a test can run several jobs and watch the runtime between them."""
 
-    def __init__(self, tmp_path: Path, *, seconds: float = 120.0, transition: Any = None) -> None:
+    def __init__(self, tmp_path: Path, *, seconds: float = 60.0, transition: Any = None) -> None:
         import random
 
         self.clock, self.spawned = _Clock(), _Spawned()
@@ -101,7 +101,7 @@ def test_a_successful_job_holds_the_owned_comfy_instead_of_stopping_it(tmp_path:
 
     release = result.backend_metadata["runtime_release"]
     assert release["policy"] == "keep_warm_between_jobs" and release["held"] is True
-    assert release["released"] is False and release["idle_release_seconds"] == 120
+    assert release["released"] is False and release["idle_release_seconds"] == 60
     assert rig.manager.stops == 0 and rig.manager.running is True
     assert rig.slot.snapshot()["pid"] == 4321
     assert "runtime_reuse" not in result.backend_metadata  # nothing was held before this job
@@ -254,8 +254,8 @@ def test_an_unowned_comfy_is_never_held(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        (None, 120.0),
-        ("", 120.0),
+        (None, 60.0),
+        ("", 60.0),
         (0, 0.0),
         (-5, 0.0),
         ("abc", 0.0),

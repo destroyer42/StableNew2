@@ -66,7 +66,7 @@ def normalize_image_backend_default(value: Any) -> str:
 #: skips the cold start and model load (PR-IMG-COMFY-382). ``0`` restores release-after-every-job. The hold always ends
 #: earlier when any other job prepares a runtime, on failure, and at application shutdown.
 COMFY_IMAGE_KEEP_WARM_SETTING = "comfy_image_keep_warm_seconds"
-COMFY_IMAGE_KEEP_WARM_DEFAULT_SECONDS = 120.0
+COMFY_IMAGE_KEEP_WARM_DEFAULT_SECONDS = 60.0
 COMFY_IMAGE_KEEP_WARM_MAX_SECONDS = 3600.0
 
 
