@@ -155,7 +155,6 @@
       "tests/conditioning/test_openpose_contract_210.py",
       "tests/conditioning/test_openpose_library_210.py",
       "tests/conditioning/test_openpose_snapshot_210.py",
-      "tests/conftest.py",
       "tests/controller/conftest.py",
       "tests/controller/test_app_controller_queue_control_150.py",
       "tests/controller/test_app_controller_ui_debounce.py",

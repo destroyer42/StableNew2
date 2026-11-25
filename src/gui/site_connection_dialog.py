@@ -310,11 +310,18 @@ class SiteConnectionDialog:
                 video=video,
                 followup=PhoneFollowup(repository, video),
             )
+        runner = getattr(getattr(app, "job_service", None), "runner", None)
+
+        def preview_idle() -> bool:
+            return not getattr(runner, "current_job_id", None)
+
+        self._preview_idle = preview_idle
         self._phone = SitePhoneConnector(
             review_outputs=self._review_outputs,
             review_records=records,
             phone_queue=admission,
             phone_eval=PhoneEvalReports(repository) if repository is not None else None,
+            preview_idle=self._preview_idle,
         )
         self._phone_dialog = PhoneReviewDialog(root, self._phone)
 
@@ -350,6 +357,7 @@ class SiteConnectionDialog:
             allow_promptpack_queue=True,
             claim_ticket=self._tickets.consume,
             review_outputs=self._review_outputs,
+            preview_idle=self._preview_idle,
         )
         if not self._omit_output:
             try:

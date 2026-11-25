@@ -23,6 +23,9 @@ _ID = re.compile(r"[a-f0-9]{32}")
 _LIBRARY_FIELDS = {
     "search": {"field", "kind", "query", "offset", "revision", "refresh"},
     "thumbnails": {"ids"},
+    "query_v2": set(),
+    "facets_v2": set(),
+    "previews_v2": {"ids"},
     "inspect": {"id"},
     "review_results": {"id", "digest"},
     "native_review": {"id", "digest"},
@@ -93,6 +96,7 @@ def read(catalog: SiteOutputCatalog, path: str) -> dict[str, Any] | tuple[str, b
             "library": True,
             "range": True,
             "library_sources": True,
+            "library_index_v2": True,
             "rating_root": root_identity(catalog.library.root),
             "review_results": catalog.review_outputs is not None,
             "native_review": catalog.native_review is not None,
@@ -130,6 +134,8 @@ def post(
     action = body.get("action")
     fields = _LIBRARY_FIELDS.get(action) if isinstance(action, str) else None
     optional = {"source"} if action == "search" else set()
+    if action in ("query_v2", "facets_v2"):
+        optional = {"kind", "field", "query", "sort", "filters", "offset", "revision", "refresh"}
     if fields is None or set(body) - optional != fields | {"action", "scope"}:
         raise SiteOutputError("invalid_library_request")
     if body["scope"] != catalog.scope:
@@ -137,6 +143,10 @@ def post(
     library = catalog.library
     if action == "search":
         return library.search(body)
+    if action in ("query_v2", "facets_v2"):
+        return library.search(body, indexed=True, facets=action == "facets_v2")
+    if action == "previews_v2":
+        return {"previews": library.thumbnails(body["ids"], indexed=True)}
     if action == "thumbnails":
         return {"thumbnails": library.thumbnails(body["ids"])}
     if action == "inspect":
