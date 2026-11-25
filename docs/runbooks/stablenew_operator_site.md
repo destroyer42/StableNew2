@@ -151,8 +151,31 @@ load a fresh plan. The templates run on Windows using the native evidence, model
 
 ## Native Output Library
 
-See the [native Output Library contract](stablenew_output_library.md) for the indexed
-query, filtered pagination, previews, cache configuration, and browser integration.
+A matching Site presents images and videos together, newest first. Sort and filters apply to the
+native result set. Search filename, prompt, tag, exact seed or model. Use **Filters** for local
+calendar date ranges, model family and checkpoint, workflow, source, orientation, normalized aspect
+ratio, and exact dimensions. Indexing counts are provisional. **Load more** is available alongside
+progressive loading. **Show updated results** loads a newer snapshot when automatic insertion
+would disrupt the current view.
+
+The grid uses 320-pixel image derivatives and video posters. Open an image for verified original
+inspection. Open a video, then select **Play video**. **Library settings** saves display preferences
+and controls nearby prefetch and the tab cache, which defaults to 200 previews and 50 MiB.
+**Clear preview cache** releases retained tab derivatives independently of album downloads,
+pending ratings and Queue receipts. Cached grid previews require a current authorization and the
+exact native Output scope and media version. A full page reload clears the tab cache. Persistent
+gallery media requires an owner-approved retention policy. Explicit offline album downloads
+continue under their existing consent rules.
+
+The enhanced Site needs the accepted LIBRARY-100 native build and matching Site Worker to use
+indexed operations over the hosted relay or phone connector. An older combination continues to
+use the legacy Library within the existing protocol compatibility matrix. The indexed gallery uses
+connection protocol 2 and needs no database migration, new enrollment or new grant. Either
+build can be staged first. Rolling back the Site restores legacy browsing. Live gateway and device
+acceptance require separate authorization.
+
+See the [native Output Library contract](stablenew_output_library.md) for the API, native cache
+configuration and index processing measurements.
 
 ## Ownership and access
 
