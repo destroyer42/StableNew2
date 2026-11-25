@@ -177,7 +177,9 @@ class ComfyProcessManager:
                 host = str(address) if address.version == 4 else f"[{address}]"
                 return f"{url.scheme}://{host}:{port}"
         except (ValueError, OSError) as exc:
-            raise ComfyStartupError("Could not verify the owned attention-profile ComfyUI listener.") from exc
+            raise ComfyStartupError(
+                "Could not verify the owned attention-profile ComfyUI listener."
+            ) from exc
         raise ComfyStartupError(
             "The configured attention-profile ComfyUI endpoint is not served by the owned launch."
         )

@@ -76,7 +76,6 @@ from src.video.video_interpolation import (
     normalize_interpolation_request,
 )
 from src.video.workflow_asset_integrity import configured_asset_issues
-from src.video.workflow_launch_attention import launch_attention
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import (
     frame_count_policy,
@@ -84,6 +83,7 @@ from src.video.workflow_frame_count import (
     parse_frame_count,
 )
 from src.video.workflow_input_integrity import verify_exact_dispatch_inputs
+from src.video.workflow_launch_attention import launch_attention
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_readiness import required_launch_flags as _required_launch_flags
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry

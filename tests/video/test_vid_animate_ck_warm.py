@@ -126,13 +126,20 @@ def test_the_profile_resolves_from_immutable_identity_and_only_for_the_speed_rev
     assert sorted(key for key, value in resolved.items() if value == "ck") == sorted(
         [(WAN_ANIMATE2_DRIVE_ID, WAN_ANIMATE2_SPEED_VERSION), (WAN_A14B_CK_LAUNCH_ID, "1.0.0")]
     )
-    assert animate2_launch_attention(SimpleNamespace(workflow_id=WAN_ANIMATE2_DRIVE_ID, workflow_version="1.3.1")) is None
+    assert (
+        animate2_launch_attention(
+            SimpleNamespace(workflow_id=WAN_ANIMATE2_DRIVE_ID, workflow_version="1.3.1")
+        )
+        is None
+    )
 
 
 # ------------------------------------------------------------------------------------- launch plan
 
 
-def test_launch_plan_adds_the_ck_flag_for_the_speed_revision_and_leaves_1_2_0_alone(tmp_path) -> None:
+def test_launch_plan_adds_the_ck_flag_for_the_speed_revision_and_leaves_1_2_0_alone(
+    tmp_path,
+) -> None:
     command = fake_comfy_source(
         tmp_path / "runtime",
         "parser.add_argument('--disable-pinned-memory', action='store_true')\n"
@@ -142,19 +149,27 @@ def test_launch_plan_adds_the_ck_flag_for_the_speed_revision_and_leaves_1_2_0_al
     workdir = str(tmp_path / "runtime")
     old, new = _drive(WAN_ANIMATE2_RUNTIME_VERSION), _drive(WAN_ANIMATE2_SPEED_VERSION)
 
-    launched_old = plan_comfy_launch(command, workdir, required_launch_flags(old), attention_profile=launch_attention(old))
-    launched_new = plan_comfy_launch(command, workdir, required_launch_flags(new), attention_profile=launch_attention(new))
+    launched_old = plan_comfy_launch(
+        command, workdir, required_launch_flags(old), attention_profile=launch_attention(old)
+    )
+    launched_new = plan_comfy_launch(
+        command, workdir, required_launch_flags(new), attention_profile=launch_attention(new)
+    )
 
     assert CK_ATTENTION_FLAG not in launched_old and PINNED_MEMORY_FLAG in launched_old
     assert CK_ATTENTION_FLAG in launched_new and PINNED_MEMORY_FLAG in launched_new
 
 
-def test_a_runtime_that_does_not_offer_ck_attention_is_refused_before_anything_starts(tmp_path) -> None:
+def test_a_runtime_that_does_not_offer_ck_attention_is_refused_before_anything_starts(
+    tmp_path,
+) -> None:
     command = fake_comfy_command(tmp_path / "runtime", PINNED_MEMORY_FLAG)
     new = _drive(WAN_ANIMATE2_SPEED_VERSION)
 
     with pytest.raises(ValueError, match="does not support --use-ck-attention"):
-        plan_comfy_launch(command, str(tmp_path / "runtime"), required_launch_flags(new), attention_profile="ck")
+        plan_comfy_launch(
+            command, str(tmp_path / "runtime"), required_launch_flags(new), attention_profile="ck"
+        )
 
 
 # ------------------------------------------------------------- real manager and backend, fake Comfy
@@ -166,7 +181,9 @@ def stack(tmp_path, monkeypatch):
     client = _AnimateComfy(tmp_path)
     backend = ComfyWorkflowVideoBackend(
         client=client,
-        readiness=WorkflowResourceReadiness(ram_probe=lambda: 24.0, gpu_probe=_driver_probe(client.stats)),
+        readiness=WorkflowResourceReadiness(
+            ram_probe=lambda: 24.0, gpu_probe=_driver_probe(client.stats)
+        ),
         transition=_no_transition(),
         history_timeout=5.0,
         history_poll_interval=0.1,
@@ -207,11 +224,15 @@ def stack(tmp_path, monkeypatch):
         ],
     )
     manager = ComfyProcessManager(
-        ComfyProcessConfig(command=list(command), autostart_enabled=True, base_url="http://localhost:8188"),
+        ComfyProcessConfig(
+            command=list(command), autostart_enabled=True, base_url="http://localhost:8188"
+        ),
         process_factory=factory,
     )
     backend._process_manager = manager
-    monkeypatch.setattr("src.video.comfy_process_manager.probe_comfy_endpoint", lambda *_a, **_k: "free")
+    monkeypatch.setattr(
+        "src.video.comfy_process_manager.probe_comfy_endpoint", lambda *_a, **_k: "free"
+    )
     monkeypatch.setattr(manager, "check_health", lambda **_kw: True)
     monkeypatch.setattr(
         client,
@@ -258,21 +279,34 @@ def _request(tmp_path: Path, version: str, job: str) -> VideoExecutionRequest:
         workflow_id=WAN_ANIMATE2_DRIVE_ID,
         workflow_version=version,
         requested_controls=tuple(
-            sorted([CONTROL_SOURCE_IMAGE, CONTROL_PROMPT_TEXT, CONTROL_NEGATIVE_PROMPT, CONTROL_POSE_VIDEO])
+            sorted(
+                [
+                    CONTROL_SOURCE_IMAGE,
+                    CONTROL_PROMPT_TEXT,
+                    CONTROL_NEGATIVE_PROMPT,
+                    CONTROL_POSE_VIDEO,
+                ]
+            )
         ),
         experimental_opt_in=True,
     )
 
 
-def test_the_speed_revision_launches_with_ck_attention_and_stays_warm_between_jobs(stack, tmp_path) -> None:
+def test_the_speed_revision_launches_with_ck_attention_and_stays_warm_between_jobs(
+    stack, tmp_path
+) -> None:
     backend, client, manager, children = stack
 
     for index in range(3):
-        result = backend.execute(None, _request(tmp_path, WAN_ANIMATE2_SPEED_VERSION, f"job-{index}"))
+        result = backend.execute(
+            None, _request(tmp_path, WAN_ANIMATE2_SPEED_VERSION, f"job-{index}")
+        )
         evidence = result.backend_metadata["comfy_attention"]
         assert evidence["profile"] == "ck" and evidence["dynamic_vram"] is True
         assert evidence["flags"] == [PINNED_MEMORY_FLAG, CK_ATTENTION_FLAG]
-        assert CK_ATTENTION_FLAG in children[-1].command and PINNED_MEMORY_FLAG in children[-1].command
+        assert (
+            CK_ATTENTION_FLAG in children[-1].command and PINNED_MEMORY_FLAG in children[-1].command
+        )
         release = result.backend_metadata["runtime_release"]
         assert release["policy"] == "keep_warm_between_jobs" and release["held"] is True
         assert release["idle_release_seconds"] == WAN_ANIMATE2_KEEP_WARM_SECONDS
@@ -284,11 +318,15 @@ def test_the_speed_revision_launches_with_ck_attention_and_stays_warm_between_jo
     assert CK_ATTENTION_FLAG not in manager.config.command
 
 
-def test_a_job_frozen_at_1_2_0_still_launches_cold_without_ck_and_is_not_kept_warm(stack, tmp_path) -> None:
+def test_a_job_frozen_at_1_2_0_still_launches_cold_without_ck_and_is_not_kept_warm(
+    stack, tmp_path
+) -> None:
     backend, _client, manager, children = stack
 
     for index in range(2):
-        result = backend.execute(None, _request(tmp_path, WAN_ANIMATE2_RUNTIME_VERSION, f"old-{index}"))
+        result = backend.execute(
+            None, _request(tmp_path, WAN_ANIMATE2_RUNTIME_VERSION, f"old-{index}")
+        )
         assert "comfy_attention" not in result.backend_metadata
         assert CK_ATTENTION_FLAG not in children[-1].command
         assert result.backend_metadata["runtime_release"]["released"] is True
@@ -298,7 +336,9 @@ def test_a_job_frozen_at_1_2_0_still_launches_cold_without_ck_and_is_not_kept_wa
 
 
 @pytest.mark.parametrize("first, second", [("1.3.0", "1.2.0"), ("1.2.0", "1.3.0")])
-def test_switching_between_the_speed_revision_and_1_2_0_releases_and_relaunches(stack, tmp_path, first, second) -> None:
+def test_switching_between_the_speed_revision_and_1_2_0_releases_and_relaunches(
+    stack, tmp_path, first, second
+) -> None:
     backend, _client, _manager, children = stack
 
     for index, version in enumerate((first, first, second, second)):
@@ -313,12 +353,16 @@ def test_switching_between_the_speed_revision_and_1_2_0_releases_and_relaunches(
     assert (CK_ATTENTION_FLAG in children[-1].command) is (second == "1.3.0")
 
 
-def test_an_unverified_ck_startup_cannot_dispatch_the_speed_revision(stack, tmp_path, monkeypatch) -> None:
+def test_an_unverified_ck_startup_cannot_dispatch_the_speed_revision(
+    stack, tmp_path, monkeypatch
+) -> None:
     backend, client, manager, children = stack
 
     def no_ck_line(argv, **kwargs):
         child = _FakeManaged(argv, **kwargs)
-        child._stderr = ["[INFO] DynamicVRAM support detected and enabled"]  # CK flag set, CK never selected
+        child._stderr = [
+            "[INFO] DynamicVRAM support detected and enabled"
+        ]  # CK flag set, CK never selected
         children.append(child)
         return child
 
