@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 371,
+    "total": 370,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -360,7 +360,6 @@
       "tools/qualification/img115/spec.py",
       "tools/qualification/img151/feasibility.py",
       "tools/qualification/img_forge_100/compare.py",
-      "tools/qualification/img_forge_100/contact_sheet.py",
       "tools/qualification/img_forge_100/preflight.py",
       "tools/qualification/img_forge_100/provenance.py",
       "tools/qualification/img_forge_100/run.py",
