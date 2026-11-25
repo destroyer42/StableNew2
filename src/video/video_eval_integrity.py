@@ -41,6 +41,8 @@ class ComparisonKind(str, Enum):
     ONE_VARIABLE = "one_variable"
     MULTI_ARM = "multi_arm"
     CROSS_SUBJECT = "cross_subject"
+    #: PR-VID-MOTION-420: the declared spatial alignment is the only intervention.
+    ALIGNMENT = "alignment"
 
 
 INTEGRITY_LABELS = {
@@ -56,6 +58,7 @@ KIND_LABELS = {
     ComparisonKind.ONE_VARIABLE: "One-variable experiment",
     ComparisonKind.MULTI_ARM: "Multi-setting comparison (effects not separable)",
     ComparisonKind.CROSS_SUBJECT: "Cross-subject transfer",
+    ComparisonKind.ALIGNMENT: "Spatial alignment comparison",
 }
 
 #: Settings that must be identical for two jobs to be compared at all (a different driver, seed or motion prompt is a
@@ -72,7 +75,13 @@ DISCLOSABLE_KEYS = (
     "ordered_frames_sha256",
     "preparation_settings",
     "interpolation",
+    "alignment",
+    "temporal_plan_sha256",
 )
+#: What an aligned and an unaligned derivative of the same temporal selection legitimately differ in.
+ALIGNMENT_EXPECTED_KEYS = ("alignment", "driver_effective_sha256", "ordered_frames_sha256")
+#: Keys that say *which source frames* are consumed; they must not move when only the alignment varies.
+TEMPORAL_KEYS = ("temporal_plan_sha256", "preparation_settings")
 _FIXED_LABELS = {
     "driver_original_sha256": "driving video",
     "seed": "seed",
@@ -155,6 +164,29 @@ def classify_pair(
             (),
             (f"the arms differ in what must stay fixed: {', '.join(labels)}",),
         )
+    if "alignment" in varied:
+        if any(key in varied for key in TEMPORAL_KEYS):
+            return PairIntegrity(
+                ComparisonKind.MULTI_ARM,
+                IntegrityClass.INCOMPARABLE,
+                varied,
+                (),
+                (
+                    "the temporal frame selection differs as well as the spatial alignment, so the "
+                    "alignment is not the only intervention",
+                ),
+            )
+        if all(key in ALIGNMENT_EXPECTED_KEYS for key in varied):
+            return PairIntegrity(
+                ComparisonKind.ALIGNMENT,
+                IntegrityClass.VERIFIED_COMPARABLE,
+                varied,
+                (
+                    "only the declared spatial alignment differs: the prepared driving clip differs by "
+                    "design, while the original driver, the temporal frame selection, the source image "
+                    "and every other setting are identical",
+                ),
+            )
     if len(controls) == 1 and not disclosable:
         name = controls[0].split(".", 1)[1]
         return PairIntegrity(
@@ -179,6 +211,10 @@ def classify_pair(
     for key in ("frame_count", "fps", "interpolation"):
         if key in disclosable:
             disclosed.append(f"{key.replace('_', ' ')} differs")
+    if "alignment" in disclosable:
+        disclosed.append(
+            "the spatial alignment differs together with other settings; its effect is not separable"
+        )
     if any(
         key in disclosable
         for key in ("driver_effective_sha256", "ordered_frames_sha256", "preparation_settings")
@@ -255,8 +291,10 @@ def classify_group(
 
 
 __all__ = [
+    "ALIGNMENT_EXPECTED_KEYS",
     "DISCLOSABLE_KEYS",
     "FIXED_KEYS",
+    "TEMPORAL_KEYS",
     "INTEGRITY_LABELS",
     "KIND_LABELS",
     "ComparisonKind",

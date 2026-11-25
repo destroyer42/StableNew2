@@ -284,6 +284,11 @@ class EvalSuiteDraft:
         copy["case_id"] = _next_id(self.cases, "case")
         copy.pop("image_sha256", None)
         copy["image"] = ""
+        motion = copy.get(MOTION_BLOCK)
+        if isinstance(motion, dict):
+            # PR-VID-MOTION-420: an alignment belongs to one source image and one driver; another subject must be
+            # aligned for itself, never inherit these numbers.
+            motion.pop("alignment", None)
         if image:
             copy.update(image)
         self.cases.append(copy)

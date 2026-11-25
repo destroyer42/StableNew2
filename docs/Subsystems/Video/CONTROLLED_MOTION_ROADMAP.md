@@ -82,7 +82,7 @@ at 81 frames: arms at 0.5 / 2.0 are visibly different, about 7 min and 11.6 GB o
 did not show the matched driver winning). No motion quality, transferability or workflow qualification is claimed, the
 motion-specific ratings were not filled, and the full campaign has not run (PR record sections 3.1 and 3.2).
 
-### Phase 3 - PR-VID-MOTION-420: Subject Alignment and Compatibility
+### Phase 3 - PR-VID-MOTION-420: Subject Alignment and Compatibility (implemented on a feature branch; stacked on the unmerged Phase 2 branch)
 
 Source/driver visual comparison, initial-pose and subject-position alignment, operator-controlled spatial preparation
 and evidence-informed compatibility advisories. Evaluate manual transforms before any automatic landmark-based
@@ -90,6 +90,12 @@ retargeting. Preserve movement trajectories and avoid silent transformations.
 
 Exit criterion: the operator can identify and correct meaningful source/driver alignment differences with explicit,
 reproducible transformations.
+
+Status: implemented (deterministic CPU preparation; no physical generation). Compatibility advisories, the Align Motion workspace,
+a verified aligned derivative bound to one source image, admission/dispatch/replay checks, and aligned-versus-unaligned
+comparison inside the Phase 2 evaluation kit. The bounded physical campaign (2 / 8 / 16 jobs) is authored and **not executed**;
+whether alignment improves generated motion is unverified. This branch was built on Phase 2's unmerged tip by owner decision and
+cannot merge before Phase 2. Record: `PR-VID-MOTION-420_Subject_Alignment_and_Compatibility.md`; guide: `docs/runbooks/motion_alignment.md`.
 
 ### Phase 4 - PR-VID-MOTION-430: Alternative Conditioning and Engine Qualification
 

@@ -153,13 +153,24 @@ def _driver_role(
         if prepared
         else f"Effective input: the original file {orig_sha}... used as bound (not prepared)."
     )
+    alignment = job_motion.get("alignment_detail")
+    if prepared and alignment:
+        note += (
+            f" Spatially aligned to this source image: scale {alignment.get('scale')}, shift "
+            f"({alignment.get('translate_x')}, {alignment.get('translate_y')}) px"
+            + (", mirrored" if alignment.get("mirror") else "")
+            + f" (transform {str(alignment.get('transform_sha256') or '')[:12]}...). A preview of the alignment is "
+            "not evidence that the generated motion succeeded."
+        )
     if changed:
         note += " The file on disk changed after admission; it is not the admitted input."
     if missing:
         note += " The file is missing or unreadable now, so it cannot be shown or verified."
     return ReviewRole(
         ROLE_DRIVER,
-        "Driving reference (effective input)"
+        "Driving reference (aligned effective input)"
+        if prepared and alignment
+        else "Driving reference (effective input)"
         if prepared
         else "Driving reference (original, unprepared)",
         effective,
