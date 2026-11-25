@@ -49,7 +49,19 @@ _ENDPOINT = f"/api/stablenew/connector/v{_CONNECTION_VERSION}/"
 _REQUIRED_CAPABILITIES = frozenset({"enrollment", "presence", "browser_lease"})
 _VERSION_MESSAGE = "Update the Site and StableNew to matching connection versions."
 _HOST = urlsplit(SITE_ORIGIN).netloc
-_LIBRARY_READS = frozenset({"search", "thumbnails", "inspect", "albums", "album", "review_results"})
+_LIBRARY_READS = frozenset(
+    {
+        "search",
+        "thumbnails",
+        "inspect",
+        "albums",
+        "album",
+        "review_results",
+        "query_v2",
+        "facets_v2",
+        "previews_v2",
+    }
+)
 _RUN = re.compile(r"/v1/output/runs/(\d{8}_\d{6}_[A-Za-z0-9_-]{1,150})")
 _MEDIA = re.compile(r"/v1/output/media/([a-f0-9]{32})")
 _POLL_INTERVAL = 4.0
@@ -288,11 +300,13 @@ class SitePhoneConnector:
         review_records: Path | None = None,
         phone_queue: PhoneQueueView | PhoneQueueAdmission | None = None,
         phone_eval: PhoneEvalReports | None = None,
+        preview_idle: Callable[[], bool] = lambda: True,
     ) -> None:
         self._store = store if store is not None else PhoneGrantStore()
         self._http = http if http is not None else PhoneHttp()
         self._review_outputs = review_outputs
         self._review_records = review_records
+        self._preview_idle = preview_idle
         self._phone_queue = phone_queue
         self._phone_eval = phone_eval
         self._commands: Queue[Callable[[], None]] = Queue()
@@ -625,12 +639,15 @@ class SitePhoneConnector:
                 active=lambda: self._live(session, grant.folder),
                 review_outputs=self._review_outputs,
                 review_records=self._review_records if grant.native_review else None,
+                preview_idle=self._preview_idle,
             )
         self._presence = session, started + ttl / 1000
         self._needs_compatibility = False
         if not self._live(session, grant.folder):
             self._drop_presence()
             return
+        if self._catalog is not None:
+            self._catalog.library.start()
         self.status = f"Phone review online · {grant.name}"
         if self._claim is not None and self._claim.reply.done():
             claim, self._claim = self._claim, None

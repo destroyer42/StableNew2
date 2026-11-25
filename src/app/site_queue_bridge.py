@@ -13,6 +13,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socket import socket
+from sqlite3 import Error as SQLiteError
 from threading import Event, Lock
 from typing import Any
 
@@ -82,6 +83,7 @@ class SiteSession:
         allow_promptpack_queue: bool = False,
         claim_ticket: Callable[[str], bool] | None = None,
         review_outputs: Callable[[str], Sequence[str]] | None = None,
+        preview_idle: Callable[[], bool] = lambda: True,
     ) -> None:
         self.code = secrets.token_urlsafe(32)
         self.expires_at = time.monotonic() + PAIR_SECONDS
@@ -96,6 +98,7 @@ class SiteSession:
         self._catalog: SiteOutputCatalog | None = None
         self._get_job = get_job
         self._review_outputs = review_outputs
+        self._preview_idle = preview_idle
         self._admitted: set[str] = set()
         self._packs: SitePackCatalog | None = None
         self._prepare: PreparePack | None = None
@@ -167,7 +170,10 @@ class SiteSession:
     def set_output_folder(self, folder: Path | None) -> None:
         catalog = (
             SiteOutputCatalog(
-                folder, active=lambda: not self.expired, review_outputs=self._review_outputs
+                folder,
+                active=lambda: not self.expired,
+                review_outputs=self._review_outputs,
+                preview_idle=self._preview_idle,
             )
             if folder is not None
             else None
@@ -177,6 +183,8 @@ class SiteSession:
             self._catalog = catalog
         if previous is not None:
             previous.revoke()
+        if catalog is not None and not self.expired:
+            catalog.library.start()
 
     @property
     def output_catalog(self) -> SiteOutputCatalog | None:
@@ -563,7 +571,7 @@ def make_handler(session: SiteSession, port: int) -> type[BaseHTTPRequestHandler
             except SiteOutputError as exc:
                 self._reply(HTTPStatus.CONFLICT, {"error": str(exc)})
                 return
-            except (OSError, ValueError, RecursionError):
+            except (OSError, ValueError, RecursionError, SQLiteError):
                 self._reply(HTTPStatus.CONFLICT, {"error": "output_unavailable"})
                 return
             if session.output_catalog is not catalog:

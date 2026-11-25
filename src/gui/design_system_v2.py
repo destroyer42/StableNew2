@@ -21,6 +21,7 @@ SECONDARY_BUTTON = "Secondary.TButton"
 GHOST_BUTTON = "Ghost.TButton"
 DANGER_BUTTON = "Danger.TButton"
 CARD_FRAME = "Card.TFrame"
+SELECTED_CARD_FRAME = "SelectedCard.TFrame"
 STAGE_CARD_FRAME = "StageCard.TFrame"
 HEADING_LABEL = "Heading.TLabel"
 SUBHEADING_LABEL = "Subheading.TLabel"
@@ -64,6 +65,17 @@ def apply_card_styles(style: ttk.Style) -> None:
         borderwidth=1,
         relief="solid",
         bordercolor=Colors.BORDER,
+        padding=(Spacing.MD, Spacing.MD),
+    )
+    # The selected Storyboard take: an accent border; the fill matches CARD_FRAME because the labels inside paint
+    # their own background. Width 2, not wider: the "alt" theme draws ``bordercolor`` only at widths 1 and 2 and falls
+    # back to a black Motif border at 3 and up, which would hide the selection.
+    style.configure(
+        SELECTED_CARD_FRAME,
+        background=Colors.CARD_BG,
+        borderwidth=2,
+        relief="solid",
+        bordercolor=Colors.PRIMARY_ACCENT,
         padding=(Spacing.MD, Spacing.MD),
     )
     style.configure(

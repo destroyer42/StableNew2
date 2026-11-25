@@ -149,6 +149,11 @@ test value and review the plan before building Preview. Review the exact jobs, t
 StableNew checks the original evidence again before admission. If it changed, return to the current evidence and
 load a fresh plan. The templates run on Windows using the native evidence, model policy, and workflow catalog.
 
+## Native Output Library
+
+See the [native Output Library contract](stablenew_output_library.md) for the indexed
+query, filtered pagination, previews, cache configuration, and browser integration.
+
 ## Ownership and access
 
 The native listener binds only IPv4 loopback port 49381 and requires the precise Site origin and an in-memory bearer.

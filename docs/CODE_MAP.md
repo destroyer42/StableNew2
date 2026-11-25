@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-993 of 993 modules have a docstring.
+998 of 998 modules have a docstring.
 
 ## src/
 
@@ -60,6 +60,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
+- `site_library_index.py`: Rebuildable, root-local SQLite projection for Operator Site browsing
+- `site_library_query.py`: Validated query values shared by the Site library and its SQLite projection
+- `site_library_reconcile.py`: Incremental discovery for one approved Output root
+- `site_library_video.py`: CPU-only media inspection with a verified input handle and bounded output
 - `site_media_files.py`: Filesystem operations for a revocable, approved Site output root
 - `site_native_review.py`: Project and reconcile a phone judgment using native Review evidence
 - `site_output_catalog.py`: Read-only projection of eval reports and exact media from an operator-approved output root
@@ -518,6 +522,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `matrix_slot_picker.py`: MatrixSlotPickerDialog - Modal dialog for selecting matrix slot to insert
 - `matrix_tab_panel.py`: MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab
 - `media_inspector.py`: Shared local media controls, bounded inspection and safely recreated dock/detach renderers
+- `mirrored_text_v2.py`: A word-wrapped, multi-line text field that mirrors a ``StringVar`` (Storyboard Continue prompts)
 - `openpose_picker_panel.py`: PromptPack OpenPose reference picker (PR-IMG-CNET-210)
 - `reference_map_browser.py`: Searchable reference-map list with a bounded thumbnail (PR-GUI-UX-550)
 - `reference_map_dialog.py`: The "Create map from image" dialog: thin Tk over ``ReferenceMapFlow`` (PR-IMG-CNET-230)

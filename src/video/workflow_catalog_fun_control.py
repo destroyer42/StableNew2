@@ -36,6 +36,53 @@ FUN_ASSETS = {
 }
 
 
+FUN_TRIAL_VERSION = "1.1.0"
+# Provisional floors for the trial: the TI2V-5B figures (same 5B backbone, owner-qualified at 10000 MiB / 16 GB).
+# Physical run 3 (VID-MOTION-354, 2026-11-02, RTX 4070 Ti 12 GB) completed 14/14 cases with a peak of
+# 11.0-11.9 GB VRAM used, so the floor is a necessary-not-sufficient guard, not a headroom guarantee.
+FUN_TRIAL_RESOURCE_READINESS = {
+    "policy": "wan22_fun_control_5b_trial",
+    "qualification_status": "trial_unqualified",
+    "min_available_to_comfy_vram_mib": 10000,
+    "min_available_ram_gb": 16.0,
+}
+
+
+def build_fun_control_trial_spec(published: WorkflowSpec) -> WorkflowSpec:
+    """1.1.0: the identical 1.0.0 graph, admitted for owner testing under an enforced VRAM floor.
+
+    1.0.0 stays pinned byte for byte (``not_qualified``, never admitted). This version only replaces the
+    hard admission refusal with the standard readiness policy so the workflow can be queued, evaluated
+    and measured. It is still EXPERIMENTAL (per-job opt-in) and is not a qualification or promotion."""
+
+    defaults = deepcopy(published.backend_defaults)
+    defaults["resource_readiness"] = dict(FUN_TRIAL_RESOURCE_READINESS)
+    defaults["provenance"].update(
+        qualification="TRIAL (owner-authorized 2026-11-24); physical feasibility 14/14 in VID-MOTION-354 "
+        "run 3; visual quality and repeatability NOT QUALIFIED"
+    )
+    projection = defaults["operator_projection"]
+    projection.pop("admission_block_reason", None)
+    # Declared, not inferred: task-first engine choice never makes a trial the default (workflow_tasks).
+    projection["trial_unqualified"] = True
+    projection["fixed_settings"]["hardware"] = (
+        "TRIAL: VRAM floor 10000 MiB enforced, RAM advisory 16 GB; peak use measured at 11-12 GB on a 12 GB card"
+    )
+    return replace(
+        published,
+        workflow_version=FUN_TRIAL_VERSION,
+        description=published.description.replace(
+            "Hardware feasibility is NOT QUALIFIED.",
+            "Trial version: hardware feasibility was observed on one host (12 GB GPU) and is not qualified.",
+        ),
+        backend_defaults=defaults,
+        pinned_revision=f"catalog:{FUN_ID}@{FUN_TRIAL_VERSION}",
+        governance_notes="EXPERIMENTAL TRIAL, per-job opt-in only. Queueable under the enforced VRAM floor so it can "
+        "be tested and evaluated; visual quality and repeatability are NOT QUALIFIED. No exact start/end "
+        "anchor or identity guarantee; no automatic downloads.",
+    )
+
+
 def build_fun_control_spec(frames_base: WorkflowSpec) -> WorkflowSpec:
     """Reuse existing frames-out/source policies without changing any published TI2V spec."""
     defaults = deepcopy(frames_base.backend_defaults)

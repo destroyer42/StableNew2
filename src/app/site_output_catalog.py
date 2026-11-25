@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, Lock
 from typing import Any
+from weakref import ref
 
 from src.app.site_media_files import MEDIA_TYPES, checked_digest, inside, open_scoped
 from src.app.site_media_files import SiteOutputError as SiteOutputError
@@ -95,6 +96,7 @@ class SiteOutputCatalog:
         active: Callable[[], bool] = lambda: True,
         review_outputs: Callable[[str], Sequence[str]] | None = None,
         review_records: Path | None = None,
+        preview_idle: Callable[[], bool] = lambda: True,
     ) -> None:
         self._root = output_root.resolve(strict=True)
         if not self._root.is_dir():
@@ -103,7 +105,15 @@ class SiteOutputCatalog:
         self._revoked = Event()
         self._active = active
         self.scope = secrets.token_hex(16)
-        self.library = OutputLibrary(self._root, self.scope, self.require_active)
+        catalog_ref = ref(self)
+
+        def require_active() -> None:
+            catalog = catalog_ref()
+            if catalog is None:
+                raise SiteOutputError("output_folder_not_shared")
+            catalog.require_active()
+
+        self.library = OutputLibrary(self._root, self.scope, require_active, preview_idle)
         self.review_outputs = review_outputs
         self.native_review = (
             NativeImageReview(self.library, review_records) if review_records is not None else None

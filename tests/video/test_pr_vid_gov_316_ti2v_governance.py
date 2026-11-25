@@ -65,6 +65,8 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
         {key for key, state in states.items() if state == "experimental"}
         == {
             ("wan22_fun_control_5b_canny_i2v_v1", "1.0.0"),
+            # Owner-authorized trial of the identical graph under an enforced VRAM floor (still experimental).
+            ("wan22_fun_control_5b_canny_i2v_v1", "1.1.0"),
             (
                 "wan22_ti2v_5b_i2v_v1",
                 "1.4.0",
@@ -86,7 +88,7 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
             ),
         }
     )
-    assert len(states) == 21
+    assert len(states) == 22
 
 
 def test_only_approved_versions_are_runnable_without_opt_in() -> None:
@@ -95,7 +97,7 @@ def test_only_approved_versions_are_runnable_without_opt_in() -> None:
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
     ] == [A14B_APPROVED, TI2V_720P_APPROVED, APPROVED, APPROVED_FRAMES_OUT]
-    assert len(registry.list_offerable_specs("comfy")) == 21
+    assert len(registry.list_offerable_specs("comfy")) == 22
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:

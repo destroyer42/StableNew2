@@ -20,6 +20,7 @@ from src.queue.job_history_store import INTERRUPTED_RESTART_ACTION_REQUIRED
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
+from src.services import persistence_worker
 from src.utils.logger import StructuredLogger, close_all_structured_loggers
 
 # ----------------------------------------------------------------------------------------------------- helpers
@@ -311,13 +312,27 @@ def test_g7_shutdown_closes_the_one_repository_once(
 
     monkeypatch.setattr(JobRepository, "close", recording_close)
     log = construction_log(monkeypatch)
-    controller = AppController(
-        None,
-        threaded=False,
-        structured_logger=StructuredLogger(output_dir=str(tmp_path / "structured_logs")),
-    )
-    repository = controller.job_service.history_store
-    controller.shutdown_app("g7")
+    # A previous application's failed writes must not carry into this shutdown test.
+    monkeypatch.setattr(persistence_worker, "_global_worker", None)
+    worker = persistence_worker.get_persistence_worker()
+    manifest = tmp_path / "manifest.json"
+    try:
+        assert worker.enqueue(
+            persistence_worker.PersistenceTask(
+                "manifest", {"file_path": str(manifest), "payload": {"job": "g7"}}
+            )
+        )
+        controller = AppController(
+            None,
+            threaded=False,
+            structured_logger=StructuredLogger(output_dir=str(tmp_path / "structured_logs")),
+        )
+        repository = controller.job_service.history_store
+        controller.shutdown_app("g7")
+        assert manifest.is_file()
+        assert worker.active_thread() is None
+    finally:
+        worker.stop()
     assert log.count("JobRepository") == 1
     assert closed == [repository]
 

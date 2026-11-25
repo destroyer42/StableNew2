@@ -9,59 +9,51 @@ import json
 import logging
 import os
 import re
-import secrets
+import sqlite3
+import stat
 import warnings
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event, Lock
-from time import monotonic
+from time import monotonic, time
 from typing import Any
+from weakref import ref as weakref
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
-from src.app.site_media_files import (
-    MEDIA_TYPES,
-    SiteOutputError,
-    checked_digest,
-    inside,
-    is_link,
-    open_scoped,
-)
+from src.app import site_library_video
+from src.app.site_library_index import LibraryIndex, index_for
+from src.app.site_library_query import SOURCES, LibraryQuery, ratio_of, timestamp
+from src.app.site_library_reconcile import Reconciliation, key_for, manifest_path, version_of
+from src.app.site_media_files import SiteOutputError, checked_digest, inside, open_scoped
 from src.app.site_rating_sync import edit_stamp, field_conflicts, root_identity, was_applied
 from src.utils.atomic_io import atomic_write_bytes
 from src.utils.image_metadata import (
     ImageMetadataContractV26,
     decode_payload,
     read_jpg_metadata,
+    resolve_model_vae_fields,
     resolve_prompt_fields,
 )
 from src.utils.thread_registry import get_thread_registry
 
 _STORAGE = ".stablenew-library"
 _IMAGE_LIMIT = 32 * 1024 * 1024
-_SEARCH_LIMIT = 100_000
-_ENTRY_LIMIT = 250_000
-_METADATA_BUDGET = 128 * 1024 * 1024
-_SOURCE_ORDER = {
-    "image": ("pipeline", "learning", "reprocess", "movie_clips", "svd", "video_eval", "other"),
-    "video": ("movie_clips", "svd", "reprocess", "pipeline", "learning", "video_eval", "other"),
-}
-SOURCES = frozenset(_SOURCE_ORDER["image"])
-_SCAN_FIRST = ("pipeline", "movie_clips", "svd", "learning", "reprocess", "video_eval")
-logger = logging.getLogger(__name__)
 _DOCUMENT_LIMIT = 512 * 1024
-# Catalog grants have separate identifiers but can write the same native record.
-_GALLERY_WRITE_LOCK = Lock()
+_METADATA_PROMPT_LIMIT = 65536
+_POLL_SECONDS = 1.0
+_RESCAN_SECONDS = 120.0
+_WARM_COUNT = 200
+_PREVIEW_VERSION = "grid-320-v1"
+_MAX_PREVIEW_REQUESTS = 32
 _IMAGE_TYPES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
 _ID = re.compile(r"[a-f0-9]{32}")
 _DIGEST = re.compile(r"[a-f0-9]{64}")
 _RATING_RECEIPTS = "site_rating_receipts"
-
-
-def _key(relative: str) -> str:
-    return hashlib.sha256(os.path.normcase(relative).encode()).hexdigest()[:32]
+_GALLERY_WRITE_LOCK = Lock()
+logger = logging.getLogger(__name__)
 
 
 def _dict(value: object) -> dict[str, Any]:
@@ -77,14 +69,28 @@ def _seed(value: object) -> str | None:
 
 
 def _bounded_string(value: object, limit: int) -> str:
-    return value[:limit] if isinstance(value, str) else ""
+    return (
+        value[:limit].encode("utf-8", "replace").decode("utf-8") if isinstance(value, str) else ""
+    )
+
+
+def _metadata_text(value: object) -> str | None:
+    text = _bounded_string(value, 240).strip()
+    if not text or text.casefold() in {"unknown", "unclassified"} or any(ord(c) < 32 for c in text):
+        return None
+    # Checkpoints may be recorded by absolute path. A catalogue exposes names only.
+    return text.replace("\\", "/").rsplit("/", 1)[-1] or None
+
+
+def _utc_text(value: int) -> str:
+    return (datetime(1970, 1, 1, tzinfo=UTC) + timedelta(microseconds=value)).isoformat()
 
 
 @dataclass(frozen=True)
 class LibraryItem:
     path: str
     mime: str
-    version: tuple[int, int, int, int]
+    version: tuple[int, ...]
     width: int = 0
     height: int = 0
     prompt: str = ""
@@ -92,12 +98,68 @@ class LibraryItem:
     seed: str | None = None
     provenance: str = "unknown"
     canonical_id: str | None = None
+    canonical_digest: str | None = None
+    recorded_at: int | None = None
+    family: str | None = None
+    model: str | None = None
+    workflow: str | None = None
+    duration: float | None = None
+    fps: float | None = None
+
+    @property
+    def kind(self) -> str:
+        return self.mime.split("/")[0]
 
     @property
     def source(self) -> str:
         folder, slash, _ = self.path.partition("/")
         source = folder.casefold()
         return source if slash and source in SOURCES else "other"
+
+    @property
+    def orientation(self) -> str | None:
+        if not self.width or not self.height:
+            return None
+        if self.width == self.height:
+            return "square"
+        return "portrait" if self.width < self.height else "landscape"
+
+    @property
+    def effective_time(self) -> int:
+        return self.recorded_at if self.recorded_at is not None else self.version[3] // 1000
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> LibraryItem:
+        body = json.loads(row["body"])
+        body["version"] = tuple(body["version"])
+        body["tags"] = tuple(body["tags"])
+        return cls(**body)
+
+    def row(self, sidecar: str, *, enriched: bool) -> tuple[Any, ...]:
+        return (
+            key_for(self.path),
+            self.path,
+            json.dumps(self.version),
+            sidecar,
+            self.kind,
+            Path(self.path).name.casefold(),
+            self.effective_time,
+            self.source,
+            self.width or None,
+            self.height or None,
+            ratio_of(self.width, self.height),
+            self.orientation,
+            self.family,
+            self.model,
+            self.workflow,
+            self.model.casefold() if self.model else None,
+            self.prompt.casefold(),
+            json.dumps([tag.casefold() for tag in self.tags], ensure_ascii=False),
+            self.seed,
+            json.dumps(asdict(self), ensure_ascii=True),
+            int(enriched),
+            Path(self.path).parent.as_posix(),
+        )
 
     def public(self, identifier: str) -> dict[str, Any]:
         return {
@@ -114,128 +176,453 @@ class LibraryItem:
             "source": self.source,
         }
 
+    def browse(self, identifier: str, preview: str) -> dict[str, Any]:
+        return {
+            **self.public(identifier),
+            "width": self.width or None,
+            "height": self.height or None,
+            "kind": self.kind,
+            "modified_at": _utc_text(self.version[3] // 1000),
+            "recorded_at": _utc_text(self.recorded_at) if self.recorded_at is not None else None,
+            "timestamp": _utc_text(self.effective_time),
+            "timestamp_basis": "recorded" if self.recorded_at is not None else "modified",
+            "aspect_ratio": ratio_of(self.width, self.height),
+            "orientation": self.orientation,
+            "model_family": self.family,
+            "model": self.model,
+            "workflow": self.workflow,
+            "duration": self.duration,
+            "fps": self.fps,
+            "preview": preview,
+        }
 
-def _version(status: os.stat_result) -> tuple[int, int, int, int]:
-    return status.st_dev, status.st_ino, status.st_size, status.st_mtime_ns
 
+@dataclass(frozen=True)
+class Preview:
+    mime: str
+    data: bytes
+    digest: str | None = None
 
-@dataclass
-class Index:
-    items: dict[str, LibraryItem] = field(default_factory=dict)
-    revision: str = field(default_factory=lambda: secrets.token_hex(16))
-    metadata_revision: str = field(default_factory=lambda: secrets.token_hex(16))
-    scanning: bool = False
-    limited: bool = False
-    metadata_limited: bool = False
-    error: bool = False
+    @property
+    def ready(self) -> bool:
+        return bool(self.data)
+
+    @property
+    def checksum(self) -> str:
+        return hashlib.sha256(self.data).hexdigest()
 
 
 class OutputLibrary:
-    def __init__(self, root: Path, scope: str, require_active: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        root: Path,
+        scope: str,
+        require_active: Callable[[], None],
+        preview_idle: Callable[[], bool] = lambda: True,
+    ) -> None:
         self.root = root
         self.scope = scope
         self.require_active = require_active
-        self.index = Index()
-        self._lock = Lock()
-        self._started = False
-        self._scan_cancel: Event | None = None
+        self.preview_idle = preview_idle
+        self.store = index_for(root)
+        self._issued: dict[str, tuple[str, tuple[int, ...]]] = {}
+        self._issued_lock = Lock()
 
     def close(self) -> None:
-        with self._lock:
-            if self._scan_cancel is not None:
-                self._scan_cancel.set()
-            self.index = Index()
+        with self.store.worker_lock:
+            self.store.clients.discard(self)
+            for key, (owner, _item) in tuple(self.store.requested.items()):
+                if owner() is self:
+                    self.store.requested.pop(key)
+            self.store.wake.set()
+        with self._issued_lock:
+            self._issued.clear()
+
+    def _issue(self, item: LibraryItem) -> str:
+        key = key_for(item.path)
+        identifier = hashlib.sha256(
+            (self.scope + key + json.dumps(item.version)).encode()
+        ).hexdigest()[:32]
+        with self._issued_lock:
+            # Browser-visible IDs can accumulate only to the inventory ceiling,
+            # with a small allowance for active pages from prior revisions.
+            if len(self._issued) >= 104_096 and identifier not in self._issued:
+                self._issued.pop(next(iter(self._issued)))
+            self._issued[identifier] = key, item.version
+        return identifier
 
     def _id(self, relative: str) -> str:
-        return self._scoped_id(_key(relative))
+        return self._registered(key_for(relative))
 
-    def _scoped_id(self, target: str) -> str:
-        return hashlib.sha256((self.scope + target).encode()).hexdigest()[:32]
+    def _registered(self, key: str) -> str:
+        self.require_active()
+        row = self.store.get(key)
+        if row is None:
+            with self.store.worker_lock:
+                if self.store.scanning:
+                    raise SiteOutputError("library_scanning")
+            raise SiteOutputError("unknown_media")
+        return self._issue(LibraryItem.from_row(row))
 
     def resolve_rating_target(self, target: object) -> str:
         if not isinstance(target, str) or not _ID.fullmatch(target):
             raise SiteOutputError("invalid_rating")
         self.start()
-        identifier = self._scoped_id(target)
-        with self._lock:
-            if identifier in self.index.items:
-                return identifier
-            if self.index.scanning:
-                raise SiteOutputError("library_scanning")
-        raise SiteOutputError("unknown_media")
+        return self._registered(target)
+
+    def start(self, *, refresh: bool = False) -> None:
+        self.require_active()
+        store = self.store
+        with store.worker_lock:
+            store.clients.add(self)
+            if refresh:
+                store.refresh.set()
+                store.scanning = True
+                store.wake.set()
+            if store.running:
+                return
+            store.running = store.scanning = True
+            store.worker_error = False
+            registry = get_thread_registry()
+            cancel = Event()
+            store.cancel = cancel
+
+            def stop() -> None:
+                cancel.set()
+                store.wake.set()
+
+            unsubscribe = registry.add_shutdown_listener(stop)
+
+            def run() -> None:
+                try:
+                    OutputLibrary._reconcile(store, cancel)
+                except (OSError, ValueError, sqlite3.Error):
+                    with store.worker_lock:
+                        store.worker_error = True
+                    logger.exception("Output Library reconciliation failed")
+                finally:
+                    unsubscribe()
+                    with store.worker_lock:
+                        store.running = store.scanning = False
+                        store.cancel = None
+                        store.thread = None
+
+            try:
+                store.thread = registry.spawn(
+                    target=run, name="Site Output index", purpose="Browse paired Output"
+                )
+            except RuntimeError:
+                unsubscribe()
+                store.running = store.scanning = False
+                store.worker_error = True
+                logger.exception("Could not start Output Library indexing")
+
+    @staticmethod
+    def _owner(store: LibraryIndex) -> OutputLibrary:
+        with store.worker_lock:
+            clients = tuple(store.clients)
+        for client in clients:
+            try:
+                client.require_active()
+            except SiteOutputError:
+                continue
+            return client
+        raise SiteOutputError("output_folder_not_shared")
+
+    @staticmethod
+    def _reconcile(store: LibraryIndex, cancel: Event) -> None:
+        def ensure_active() -> None:
+            OutputLibrary._owner(store)
+            if cancel.is_set():
+                raise SiteOutputError("output_folder_not_shared")
+
+        scan = Reconciliation(store)
+        next_full = 0.0
+        next_inventory = 0.0
+        state = "incomplete"
+        warmed: set[str] = set()
+        warm_revision = -1
+        warm_rows: list[sqlite3.Row] = []
+        first = True
+        pending = False
+        while not cancel.is_set():
+            try:
+                owner = OutputLibrary._owner(store)
+            except SiteOutputError:
+                return
+            try:
+                now = monotonic()
+                full = now >= next_full or store.refresh.is_set()
+                if full or now >= next_inventory:
+                    if full:
+                        store.refresh.clear()
+                        with store.worker_lock:
+                            store.scanning = True
+                    if first:
+                        store.previews.enforce_budget()
+                        first = False
+                    result = scan.inventory(cancel, ensure_active, owner._basic, full=full)
+                    if full:
+                        next_full = monotonic() + _RESCAN_SECONDS
+                    if full or result != "complete":
+                        state = result
+                    next_inventory = monotonic() + _POLL_SECONDS
+                if cancel.is_set():
+                    return
+                serviced = owner._serve_preview_request(cancel)
+                pending = owner._enrich(cancel, ensure_active) if not serviced else True
+                visible = "reconciling" if pending or scan.unsettled else state
+                if state == "error":
+                    visible = state
+                with store.connection() as db:
+                    db.execute("UPDATE status SET state = ? WHERE state != ?", (visible, visible))
+                with store.worker_lock:
+                    store.scanning = visible == "reconciling" or store.refresh.is_set()
+                    store.worker_error = state == "error"
+                if (
+                    store.previews.budget
+                    and not serviced
+                    and not cancel.is_set()
+                    and owner.preview_idle()
+                ):
+                    with store.connection() as db:
+                        revision = db.execute("SELECT revision FROM status").fetchone()[0]
+                        if warm_revision != revision:
+                            warm_revision = revision
+                            warm_rows = list(
+                                db.execute(
+                                    "SELECT * FROM media WHERE enriched = 1 ORDER BY timestamp DESC, key LIMIT ?",
+                                    (_WARM_COUNT,),
+                                )
+                            )
+                            warmed.intersection_update(
+                                row["version"] + row["key"] for row in warm_rows
+                            )
+                    for row in warm_rows:
+                        warm_id = row["version"] + row["key"]
+                        if warm_id in warmed:
+                            continue
+                        try:
+                            if (
+                                owner._preview(LibraryItem.from_row(row), warm=True, cancel=cancel)
+                                is not None
+                            ):
+                                warmed.add(warm_id)
+                        except (OSError, SiteOutputError):
+                            warmed.add(warm_id)
+                        break
+            except SiteOutputError as error:
+                if cancel.is_set():
+                    return
+                if str(error) != "output_folder_not_shared":
+                    with store.worker_lock:
+                        store.worker_error = True
+                        store.scanning = False
+                    return
+                # A different catalogue for this root may still have an active grant.
+                next_full = 0.0
+            finally:
+                del owner
+            store.wake.wait(0.06 if pending or len(warmed) < len(warm_rows) else _POLL_SECONDS)
+            store.wake.clear()
+
+    def _basic(
+        self, path: Path, mime: str, version: tuple[int, ...], sidecar: str
+    ) -> tuple[Any, ...]:
+        item = LibraryItem(path.relative_to(self.root).as_posix(), mime, version)
+        return item.row(sidecar, enriched=False)
+
+    def _enrich(self, cancel: Event, ensure_active: Callable[[], None]) -> bool:
+        with self.store.connection() as db:
+            pending = list(
+                db.execute(
+                    "SELECT * FROM media WHERE enriched = 0 AND (? OR kind = 'image') ORDER BY timestamp DESC, key LIMIT 128",
+                    (self.preview_idle(),),
+                )
+            )
+        if not pending:
+            return False
+        deadline = monotonic() + 0.10
+        enriched = []
+        for row in pending:
+            if cancel.is_set():
+                return True
+            ensure_active()
+            basic = LibraryItem.from_row(row)
+            item = basic
+            limit = _IMAGE_LIMIT if basic.kind == "image" else site_library_video.VIDEO_LIMIT
+            if 0 < basic.version[2] <= limit:
+                acquired = basic.kind != "video" or self.store.previews.lock.acquire(blocking=False)
+                if not acquired:
+                    break
+                try:
+                    path = self.path_for(basic)
+                    item = self._metadata(path, basic, cancel=cancel)
+                    self.path_for(basic)
+                except (OSError, SiteOutputError):
+                    item = basic
+                finally:
+                    if basic.kind == "video":
+                        self.store.previews.lock.release()
+            enriched.append(item.row(row["sidecar"], enriched=True))
+            if monotonic() >= deadline:
+                break
+        if not cancel.is_set():
+            ensure_active()
+            with self.store.connection() as db:
+                self.store.write_rows(db, enriched)
+        return len(pending) == 128 or len(enriched) < len(pending)
 
     def _metadata(
-        self, path: Path, relative: str, mime: str, version: tuple[int, int, int, int]
+        self, path: Path, basic: LibraryItem, *, cancel: Event | None = None
     ) -> LibraryItem:
-        basic = LibraryItem(relative, mime, version)
-        if not mime.startswith("image/") or version[2] > _IMAGE_LIMIT:
+        if basic.kind == "video":
+            if not 0 < basic.version[2] <= site_library_video.VIDEO_LIMIT:
+                return basic
+            with open_scoped(self.root, path) as stream:
+                if version_of(os.fstat(stream.fileno()))[:4] != basic.version[:4]:
+                    return basic
+
+                def stopped() -> bool:
+                    return self._preview_cancelled(cancel)
+
+                facts = site_library_video.probe(stream, stopped)
+            payload = facts.pop("payload", {})
+            return self._describe(
+                replace(basic, **facts), payload, "embedded" if payload else "unknown"
+            )
+        if not 0 < basic.version[2] <= _IMAGE_LIMIT:
             return basic
         try:
             with open_scoped(self.root, path) as stream, warnings.catch_warnings():
+                if version_of(os.fstat(stream.fileno()))[:4] != basic.version[:4]:
+                    return basic
                 warnings.simplefilter("error", Image.DecompressionBombWarning)
                 with Image.open(stream) as image:
                     if (
-                        image.width * image.height > 64_000_000
-                        or _IMAGE_TYPES.get(image.format or "") != mime
+                        image.width * image.height > site_library_video.MAX_PIXELS
+                        or _IMAGE_TYPES.get(image.format or "") != basic.mime
                     ):
                         return basic
                     width, height = image.size
                     fields = {
-                        key: value for key, value in image.info.items() if isinstance(value, str)
+                        key: value
+                        for key, value in image.info.items()
+                        if isinstance(key, str) and isinstance(value, str)
                     }
-                if mime == "image/jpeg":
+                if basic.mime == "image/jpeg":
                     stream.seek(0)
                     fields.update(read_jpg_metadata(stream))
+            basic = replace(basic, width=width, height=height)
             contract = ImageMetadataContractV26
             payload = (
                 _dict(decode_payload(fields, max_decoded_bytes=contract.HARD_LIMIT_BYTES).payload)
                 if fields.get(contract.KEY_SCHEMA) == contract.SCHEMA
                 else {}
             )
-            provenance = "embedded" if payload else "unknown"
-            manifest = self._manifest(path)
-            if manifest:
-                payload, provenance = manifest, "manifest"
+            recorded = (
+                fields.get(contract.KEY_CREATED_UTC)
+                if fields.get(contract.KEY_SCHEMA) == contract.SCHEMA
+                else None
+            )
+            if recorded:
+                payload.setdefault("created_utc", recorded)
+            if manifest := self._manifest(path, basic):
+                item = self._describe(basic, manifest, "manifest")
+                if item.recorded_at is None and recorded:
+                    try:
+                        return replace(item, recorded_at=timestamp(recorded))
+                    except (ValueError, OverflowError):
+                        return item
+                return item
             if payload:
-                generation = _dict(payload.get("generation"))
-                stage = _dict(payload.get("stage_manifest"))
-                prompt, _ = resolve_prompt_fields(payload)
-                seed = next(
-                    (
-                        value
-                        for section in (stage, generation, payload)
-                        if (value := _seed(section.get("seed"))) is not None
-                    ),
-                    None,
-                )
-                tags = payload.get("tags", generation.get("tags"))
-            else:
-                prompt, seed, tags = self._legacy(fields)
-                provenance = "legacy" if prompt or seed is not None or tags else "unknown"
-            tag_values = (
-                tuple(_bounded_string(value, 120) for value in tags[:32] if isinstance(value, str))
-                if isinstance(tags, list)
-                else ()
+                return self._describe(basic, payload, "embedded")
+            prompt, seed, tags = self._legacy(fields)
+            return replace(
+                basic,
+                prompt=_bounded_string(prompt, _METADATA_PROMPT_LIMIT),
+                tags=tuple(_bounded_string(tag, 120) for tag in tags[:32]),
+                seed=seed,
+                provenance="legacy" if prompt or seed is not None or tags else "unknown",
             )
-            return LibraryItem(
-                relative,
-                mime,
-                version,
-                width,
-                height,
-                _bounded_string(prompt, 65536),
-                tag_values,
-                seed,
-                provenance,
-                _bounded_string(_dict(manifest.get("artifact")).get("artifact_id"), 160) or None,
-            )
-        except (OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+        except (
+            OSError,
+            ValueError,
+            RecursionError,
+            Image.DecompressionBombError,
+            Image.DecompressionBombWarning,
+        ):
             return basic
 
-    def _manifest(self, path: Path) -> dict[str, Any]:
-        candidate = path.parent / "manifests" / (path.stem + ".json")
+    @staticmethod
+    def _describe(basic: LibraryItem, payload: dict[str, Any], provenance: str) -> LibraryItem:
+        if not payload:
+            return basic
+        generation = _dict(payload.get("generation"))
+        stage = _dict(payload.get("stage_manifest"))
+        artifact = _dict(payload.get("artifact"))
+        sections = (artifact, stage, generation, payload)
+        recorded = None
+        for section in sections:
+            for name in ("created_utc", "created_at", "generated_at", "timestamp"):
+                try:
+                    recorded = timestamp(section.get(name))
+                    break
+                except (ValueError, OverflowError):
+                    continue
+            if recorded is not None:
+                break
+        recorded_model, _vae = resolve_model_vae_fields(payload)
+        family = next(
+            (
+                value
+                for section in sections
+                if (value := _metadata_text(section.get("model_family")))
+            ),
+            None,
+        )
+        model = _metadata_text(payload.get("model_id")) or _metadata_text(recorded_model)
+        workflow = next(
+            (
+                value
+                for section in sections
+                if (value := _metadata_text(section.get("workflow_id")))
+            ),
+            None,
+        )
+        prompt, _negative = resolve_prompt_fields(payload)
+        seed = next(
+            (
+                value
+                for section in (stage, generation, payload)
+                if (value := _seed(section.get("seed"))) is not None
+            ),
+            None,
+        )
+        tags = payload.get("tags", generation.get("tags"))
+        return replace(
+            basic,
+            recorded_at=recorded,
+            model=model,
+            family=family,
+            workflow=workflow,
+            prompt=_bounded_string(prompt, _METADATA_PROMPT_LIMIT),
+            seed=seed,
+            provenance=provenance,
+            tags=tuple(_bounded_string(tag, 120) for tag in tags[:32] if isinstance(tag, str))
+            if isinstance(tags, list)
+            else (),
+            canonical_id=(_bounded_string(artifact.get("artifact_id"), 160) or None)
+            if provenance == "manifest"
+            else None,
+            canonical_digest=(artifact.get("sha256") or payload.get("artifact_sha256"))
+            if provenance == "manifest"
+            else None,
+        )
+
+    def _manifest(self, path: Path, item: LibraryItem) -> dict[str, Any]:
         try:
-            with open_scoped(self.root, candidate) as stream:
+            with open_scoped(self.root, manifest_path(path)) as stream:
                 content = stream.read(_DOCUMENT_LIMIT + 1)
             data = _dict(json.loads(content)) if len(content) <= _DOCUMENT_LIMIT else {}
         except (OSError, ValueError, RecursionError):
@@ -245,9 +632,8 @@ class OutputLibrary:
         if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
             return {}
         with open_scoped(self.root, path) as source:
-            if source.seek(0, 2) > _IMAGE_LIMIT:
+            if version_of(os.fstat(source.fileno()))[:4] != item.version[:4]:
                 return {}
-            source.seek(0)
             return data if digest == checked_digest(source, size_limit=_IMAGE_LIMIT) else {}
 
     @staticmethod
@@ -263,272 +649,98 @@ class OutputLibrary:
         ]
         return fields.get("prompt", prompt), _seed(found[1] if found else fields.get("seed")), tags
 
-    def _publish(
-        self,
-        items: dict[str, LibraryItem],
-        *,
-        scanning: bool,
-        limited: bool,
-        error: bool,
-        inventory_revision: str | None = None,
-        metadata_limited: bool = False,
-    ) -> None:
-        with self._lock:
-            self.require_active()
-            self.index = Index(
-                items,
-                scanning=scanning,
-                limited=limited,
-                error=error,
-                metadata_limited=metadata_limited,
-            )
-            if inventory_revision is not None:
-                self.index.revision = inventory_revision
+    def search(
+        self, body: dict[str, Any], *, indexed: bool = False, facets: bool = False
+    ) -> dict[str, Any]:
+        query = LibraryQuery.parse(body, legacy=not indexed)
+        self.start(refresh=query.refresh)
+        identity = self.scope + query.identity()
 
-    @staticmethod
-    def _sort_key(entry: tuple[str, LibraryItem]) -> tuple[int, int, str]:
-        item = entry[1]
-        sources = _SOURCE_ORDER[item.mime.split("/")[0]]
-        return sources.index(item.source), -item.version[3], item.path
+        def revision(epoch: str, current: int) -> str:
+            return hashlib.sha256(f"{identity}/{epoch}/{current}".encode()).hexdigest()[:32]
 
-    def _inventory(self, cancel: Event) -> tuple[dict[str, LibraryItem], bool, bool]:
-        items: dict[str, LibraryItem] = {}
-        limited = False
-        error = False
-        visited = 0
-        next_publish = monotonic() + 1
-        published = 0
-
-        def walk_error(_error: OSError) -> None:
-            nonlocal error
-            error = True
-
-        for parent, directories, files in os.walk(
-            self.root, topdown=True, onerror=walk_error, followlinks=False
-        ):
-            if cancel.is_set():
-                break
-            self.require_active()
+        self.store.check_root()
+        rows, total, token, state, limited, pending, values = self.store.query(
+            query, facets=facets, revision=revision
+        )
+        with self.store.worker_lock:
+            scanning = self.store.scanning
+            worker_error = self.store.worker_error
+        if worker_error:
+            state = "error"
+        scanning = not worker_error and (
+            scanning or state == "reconciling" or (state == "incomplete" and not limited) or pending
+        )
+        entries = []
+        for row in rows:
+            item = LibraryItem.from_row(row)
             try:
-                directory = inside(self.root, Path(parent))
+                self.path_for(item)
             except (OSError, SiteOutputError):
-                directories.clear()
-                error = True
                 continue
-            allowed = []
-            for name in directories:
-                try:
-                    if name.casefold() != _STORAGE and not is_link((directory / name).lstat()):
-                        allowed.append(name)
-                except OSError:
-                    error = True
-            if directory == self.root:
-                allowed.sort(
-                    key=lambda name: (
-                        _SCAN_FIRST.index(name.casefold())
-                        if name.casefold() in _SCAN_FIRST
-                        else len(_SCAN_FIRST),
-                        name.casefold(),
-                    )
-                )
-            directories[:] = allowed
-            for name in files:
-                if cancel.is_set():
-                    break
-                self.require_active()
-                visited += 1
-                if visited > _ENTRY_LIMIT or len(items) >= _SEARCH_LIMIT:
-                    limited = True
-                    break
-                path = directory / name
-                mime = MEDIA_TYPES.get(path.suffix.lower())
-                if mime is None or name.startswith("."):
-                    continue
-                try:
-                    info = path.lstat()
-                except OSError:
-                    error = True
-                    continue
-                if is_link(info):
-                    continue
-                relative = path.relative_to(self.root).as_posix()
-                items[self._id(relative)] = LibraryItem(relative, mime, _version(info))
-                if (published == 0 and len(items) == 24) or monotonic() >= next_publish:
-                    snapshot = dict(sorted(items.items(), key=self._sort_key))
-                    self._publish(snapshot, scanning=True, limited=False, error=error)
-                    published = len(items)
-                    next_publish = monotonic() + 1
-            if limited:
-                break
-        return dict(sorted(items.items(), key=self._sort_key)), limited, error
-
-    def _scan(self, cancel: Event) -> None:
-        inventory, limited, error = self._inventory(cancel)
-        if cancel.is_set():
-            return
-        self._publish(inventory, scanning=True, limited=limited, error=error)
-        with self._lock:
-            revision = self.index.revision
-        items = inventory.copy()
-        metadata_bytes = 0
-        metadata_limited = False
-        next_publish = monotonic() + 2
-        for key, basic in inventory.items():
-            if cancel.is_set():
-                return
-            self.require_active()
-            if not basic.mime.startswith("image/"):
-                continue
-            item = self._metadata(self.root / basic.path, basic.path, basic.mime, basic.version)
-            metadata_bytes += 4 * (len(item.prompt) + sum(map(len, item.tags)))
-            if metadata_bytes > _METADATA_BUDGET:
-                metadata_limited = True
-                break
-            items[key] = item
-            if monotonic() >= next_publish:
-                self._publish(
-                    items.copy(),
-                    scanning=True,
-                    limited=limited,
-                    error=error,
-                    inventory_revision=revision,
-                )
-                next_publish = monotonic() + 2
-        self._publish(
-            items,
-            scanning=False,
-            limited=limited,
-            error=error,
-            inventory_revision=revision,
-            metadata_limited=metadata_limited,
-        )
-
-    def start(self, *, refresh: bool = False) -> None:
-        with self._lock:
-            if self.index.scanning or (self._started and not refresh):
-                return
-            self.index.scanning = True
-            self._started = True
-            registry = get_thread_registry()
-            cancel = Event()
-            self._scan_cancel = cancel
-            remove_listener = registry.add_shutdown_listener(cancel.set)
-
-            def run_scan() -> None:
-                try:
-                    self._scan(cancel)
-                except SiteOutputError:
-                    logger.info("Output library grant ended during indexing")
-                except (OSError, ValueError, TypeError, RuntimeError):
-                    logger.exception("Output library indexing failed")
-                finally:
-                    remove_listener()
-                    with self._lock:
-                        if self._scan_cancel is cancel and self.index.scanning:
-                            self.index.scanning = False
-                            self.index.error = True
-
-            try:
-                registry.spawn(
-                    target=run_scan, name="Site Output index", purpose="Browse paired Output"
-                )
-            except RuntimeError:
-                remove_listener()
-                self.index.scanning = False
-                self.index.error = True
-                logger.exception("Could not start Output library indexing")
-
-    @staticmethod
-    def _match(item: LibraryItem, field: str, query: str) -> bool:
-        if not query:
-            return True
-        fields = {
-            "name": (Path(item.path).name,),
-            "tag": item.tags,
-            "prompt": (item.prompt,),
-        }
-        seed_match = query == item.seed
-        if field == "seed":
-            return seed_match
-        values = (
-            (*fields["name"], *fields["tag"], *fields["prompt"])
-            if field == "all"
-            else fields[field]
-        )
-        return (field == "all" and seed_match) or any(query in text.casefold() for text in values)
-
-    def search(self, body: dict[str, Any]) -> dict[str, Any]:
-        field, kind, query, offset = (body.get(key) for key in ("field", "kind", "query", "offset"))
-        source = body.get("source", "")
-        if (
-            field not in ("all", "name", "tag", "prompt", "seed")
-            or kind not in ("image", "video")
-            or not isinstance(query, str)
-            or len(query) > 240
-            or type(offset) is not int
-            or not 0 <= offset <= _SEARCH_LIMIT
-            or type(body.get("refresh")) is not bool
-            or not isinstance(source, str)
-            or (source and source not in SOURCES)
-        ):
-            raise SiteOutputError("invalid_library_request")
-        query = query.strip().casefold()
-        needs_metadata = bool(
-            query and field in ("all", "tag", "prompt", "seed") and kind == "image"
-        )
-        self.start(refresh=body["refresh"])
-        with self._lock:
-            items, revision, scanning, limited, metadata_limited, error = (
-                self.index.items,
-                self.index.metadata_revision if needs_metadata else self.index.revision,
-                self.index.scanning,
-                self.index.limited,
-                self.index.metadata_limited,
-                self.index.error,
-            )
-        if offset and body.get("revision") != revision:
-            raise SiteOutputError("stale_library_page")
-        if field == "seed" and query:
-            query = _seed(query) or "\0"
-        matches = [
-            (key, item)
-            for key, item in items.items()
-            if item.mime.startswith(kind + "/")
-            and (not source or item.source == source)
-            and self._match(item, field, query)
-        ]
-        return {
-            "items": [item.public(key) for key, item in matches[offset : offset + 24]],
-            "total": len(matches),
-            "revision": revision,
+            entries.append(item)
+        stale = len(entries) != len(rows)
+        if indexed:
+            keys = [self._preview_key(item, legacy=False) for item in entries]
+            previews = self.store.previews.preview_states(keys)
+            items = [
+                item.browse(self._issue(item), previews.get(key, "pending"))
+                for item, key in zip(entries, keys, strict=True)
+            ]
+        else:
+            items = [item.public(self._issue(item)) for item in entries]
+        self.require_active()
+        payload = {
+            "items": items,
+            "total": total,
+            "revision": token,
             "scanning": scanning,
             "limited": limited,
-            "metadata_limited": metadata_limited,
-            "scan_error": error,
+            "metadata_limited": pending,
+            "scan_error": worker_error or state == "error",
         }
+        if indexed:
+            payload.update(
+                state="reconciling" if scanning else state,
+                partial=stale or scanning or state != "complete" or limited or pending,
+                next_offset=query.offset + len(rows) if query.offset + len(rows) < total else None,
+            )
+        if facets:
+            payload["facets"] = values
+        return payload
 
     def item(self, identifier: object) -> LibraryItem:
+        self.require_active()
         if not isinstance(identifier, str) or not _ID.fullmatch(identifier):
             raise SiteOutputError("unknown_media")
-        with self._lock:
-            item = self.index.items.get(identifier)
-        if item is None:
+        with self._issued_lock:
+            issued = self._issued.get(identifier)
+        if issued is None or (row := self.store.get(issued[0])) is None:
             raise SiteOutputError("unknown_media")
+        item = LibraryItem.from_row(row)
+        if issued[1] != item.version:
+            raise SiteOutputError("media_changed")
         return item
 
     def path_for(self, item: LibraryItem) -> Path:
+        self.require_active()
+        self.store.check_root()
         path = inside(self.root, self.root / item.path)
-        if _version(path.stat()) != item.version:
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or version_of(info) != item.version:
             raise SiteOutputError("media_changed")
         return path
 
-    def image(self, identifier: object, *, thumb: bool = False) -> tuple[LibraryItem, bytes, str]:
+    def image(self, identifier: object) -> tuple[LibraryItem, bytes, str]:
         item = self.item(identifier)
-        if not item.mime.startswith("image/"):
+        if item.kind != "image":
             raise SiteOutputError("unsupported_media")
-        if not thumb and not item.width:
-            item = self._metadata(self.path_for(item), item.path, item.mime, item.version)
-        with open_scoped(self.root, self.path_for(item)) as stream:
+        path = self.path_for(item)
+        if not item.width:
+            item = self._metadata(path, item)
+        with open_scoped(self.root, path) as stream:
+            if version_of(os.fstat(stream.fileno()))[:4] != item.version[:4]:
+                raise SiteOutputError("media_changed")
             raw = stream.read(_IMAGE_LIMIT + 1)
         self.path_for(item)
         if len(raw) > _IMAGE_LIMIT:
@@ -538,37 +750,200 @@ class OutputLibrary:
             with Image.open(io.BytesIO(raw)) as image:
                 if (
                     _IMAGE_TYPES.get(image.format or "") != item.mime
-                    or image.width * image.height > 64_000_000
+                    or image.width * image.height > site_library_video.MAX_PIXELS
                 ):
                     raise SiteOutputError("unsupported_media")
-                if thumb:
-                    image.thumbnail((320, 240))
-                    output = io.BytesIO()
-                    image.convert("RGB").save(output, "JPEG", quality=76)
-                    return item, output.getvalue(), digest
                 item = replace(item, width=image.width, height=image.height)
                 image.verify()
         except (UnidentifiedImageError, Image.DecompressionBombError, OSError) as exc:
             raise SiteOutputError("unsupported_media") from exc
         return item, raw, digest
 
-    def thumbnails(self, items: object) -> dict[str, dict[str, Any]]:
+    def _preview_key(self, item: LibraryItem, *, legacy: bool) -> str:
+        variant = (
+            "legacy-jpeg" if legacy else "poster-jpeg" if item.kind == "video" else "webp-or-jpeg"
+        )
+        return hashlib.sha256(
+            json.dumps(
+                (self.store.identity, item.path, item.version, _PREVIEW_VERSION, variant)
+            ).encode()
+        ).hexdigest()
+
+    def _preview(
+        self,
+        item: LibraryItem,
+        *,
+        legacy: bool = False,
+        warm: bool = False,
+        cancel: Event | None = None,
+    ) -> Preview | None:
+        if legacy and item.kind != "image":
+            raise SiteOutputError("unsupported_media")
+        path = self.path_for(item)
+        if item.kind == "video" and not 0 < item.version[2] <= site_library_video.VIDEO_LIMIT:
+            return Preview("", b"")
+        key = self._preview_key(item, legacy=legacy)
+
+        def cached() -> Preview | None:
+            row = self.store.previews.preview(key, touch=None if warm else int(time()))
+            if row is None:
+                return None
+            result = Preview(row["mime"], row["data"], row["digest"])
+            return result if result.checksum == row["checksum"] else None
+
+        if result := cached():
+            self.path_for(item)
+            return result
+        if not self.store.previews.lock.acquire(blocking=not warm):
+            return None
+        try:
+            if result := cached():
+                self.path_for(item)
+                return result
+            if cancel is not None and cancel.is_set():
+                return None
+            with open_scoped(self.root, path) as stream:
+                if version_of(os.fstat(stream.fileno()))[:4] != item.version[:4]:
+                    raise SiteOutputError("media_changed")
+                if item.kind == "video":
+
+                    def stopped() -> bool:
+                        return self._preview_cancelled(cancel)
+
+                    raw = site_library_video.poster(stream, item.duration, stopped)
+                    result = Preview("image/jpeg", raw)
+                elif 0 < item.version[2] <= _IMAGE_LIMIT:
+                    digest = checked_digest(stream, size_limit=_IMAGE_LIMIT) if legacy else None
+                    stream.seek(0)
+                    result = self._encode_preview(stream, item.mime, legacy=legacy, digest=digest)
+                else:
+                    result = Preview("", b"")
+            self.path_for(item)
+            if cancel is not None and cancel.is_set():
+                return None
+            self.store.previews.put_preview(
+                key,
+                result.ready,
+                result.mime,
+                result.data,
+                result.digest,
+                result.checksum,
+                int(time()),
+            )
+            return result
+        finally:
+            self.store.previews.lock.release()
+
+    def _preview_cancelled(self, cancel: Event | None) -> bool:
+        try:
+            self.require_active()
+        except SiteOutputError:
+            return True
+        return cancel is not None and cancel.is_set()
+
+    @staticmethod
+    def _encode_preview(
+        stream: Any,
+        mime: str,
+        *,
+        legacy: bool,
+        digest: str | None,
+    ) -> Preview:
+        try:
+            with Image.open(stream) as image:
+                if (
+                    _IMAGE_TYPES.get(image.format or "") != mime
+                    or image.width * image.height > site_library_video.MAX_PIXELS
+                ):
+                    return Preview("", b"")
+                image.thumbnail((site_library_video.EDGE, site_library_video.EDGE))
+                rgb = ImageOps.exif_transpose(image).convert("RGB")
+                output = io.BytesIO()
+                if not legacy:
+                    try:
+                        rgb.save(output, "WEBP", quality=78, method=2)
+                        return Preview("image/webp", output.getvalue())
+                    except OSError:
+                        output = io.BytesIO()
+                rgb.save(output, "JPEG", quality=76)
+                return Preview("image/jpeg", output.getvalue(), digest)
+        except (UnidentifiedImageError, Image.DecompressionBombError, OSError):
+            return Preview("", b"")
+
+    def _request_poster(self, item: LibraryItem) -> Preview | None:
+        self.path_for(item)
+        if not 0 < item.version[2] <= site_library_video.VIDEO_LIMIT:
+            return Preview("", b"")
+        key = self._preview_key(item, legacy=False)
+        row = self.store.previews.preview(key, touch=int(time()))
+        if row is not None:
+            preview = Preview(row["mime"], row["data"])
+            if preview.checksum == row["checksum"]:
+                self.path_for(item)
+                return preview
+        if self.store.previews.budget <= 256:
+            return Preview("", b"")
+        self.start()
+        with self.store.worker_lock:
+            if (
+                key not in self.store.requested
+                and len(self.store.requested) < _MAX_PREVIEW_REQUESTS
+            ):
+                self.store.requested[key] = weakref(self), item
+                self.store.wake.set()
+        return None
+
+    def _serve_preview_request(self, cancel: Event) -> bool:
+        with self.store.worker_lock:
+            if not self.store.requested:
+                return False
+            _, (owner_ref, item) = self.store.requested.popitem(last=False)
+        owner = owner_ref()
+        if owner is not None:
+            try:
+                owner._preview(item, cancel=cancel)
+            except (OSError, SiteOutputError):
+                logger.debug("Requested poster is unavailable")
+        return True
+
+    def thumbnails(self, items: object, *, indexed: bool = False) -> dict[str, dict[str, Any]]:
         if not isinstance(items, list) or len(items) > 8:
             raise SiteOutputError("invalid_library_request")
-        result = {}
+        result: dict[str, dict[str, Any]] = {}
         for identifier in items:
             try:
-                item, raw, digest = self.image(identifier, thumb=True)
+                item = self.item(identifier)
+                preview = (
+                    self._request_poster(item)
+                    if indexed and item.kind == "video"
+                    else self._preview(item, legacy=not indexed)
+                )
             except (OSError, SiteOutputError):
                 continue
-            try:
-                rating = self._read_rating(item, digest)
-            except (OSError, SiteOutputError):
-                rating = {}
-            result[identifier] = {
-                "image": base64.b64encode(raw).decode("ascii"),
-                "score": rating.get("score"),
-            }
+            if preview is None:
+                if indexed:
+                    result[identifier] = {"state": "pending", "kind": item.kind}
+                continue
+            if indexed:
+                result[identifier] = (
+                    {
+                        "state": "ready",
+                        "mime": preview.mime,
+                        "image": base64.b64encode(preview.data).decode("ascii"),
+                    }
+                    if preview.ready
+                    else {"state": "placeholder", "kind": item.kind}
+                )
+            elif preview.ready and preview.digest is not None:
+                try:
+                    rating = self._read_rating(item, preview.digest)
+                except (OSError, SiteOutputError):
+                    rating = {}
+                result[identifier] = {
+                    "image": base64.b64encode(preview.data).decode("ascii"),
+                    "score": rating.get("score"),
+                }
+        self.require_active()
         return result
 
     def _folder(self, kind: str, *, create: bool = False) -> Path:
@@ -674,7 +1049,7 @@ class OutputLibrary:
             "item": item.public(str(identifier)),
             "digest": digest,
             "rating": self._public_rating(rating),
-            "rating_target": _key(item.path),
+            "rating_target": key_for(item.path),
             "prompt": item.prompt,
         }
 
@@ -702,7 +1077,7 @@ class OutputLibrary:
 
     def _read_rating(self, item: LibraryItem, digest: str) -> dict[str, Any]:
         try:
-            path = self._folder("ratings") / f"{_key(item.path)}-{digest}.rating.json"
+            path = self._folder("ratings") / f"{key_for(item.path)}-{digest}.rating.json"
             return self._document(path, "stablenew.output-rating.v1")
         except FileNotFoundError:
             return {}
@@ -720,7 +1095,7 @@ class OutputLibrary:
             "score": score,
             "notes": notes,
         }
-        path = self._folder("ratings", create=True) / f"{_key(item.path)}-{digest}.rating.json"
+        path = self._folder("ratings", create=True) / f"{key_for(item.path)}-{digest}.rating.json"
         return self._save(path, record, self._mutation(body))
 
     @staticmethod
@@ -762,7 +1137,7 @@ class OutputLibrary:
             raise SiteOutputError("media_changed")
         record = {"schema": "stablenew.output-rating.v1", "sha256": digest, **changes}
         self.require_active()
-        path = self._folder("ratings", create=True) / f"{_key(item.path)}-{digest}.rating.json"
+        path = self._folder("ratings", create=True) / f"{key_for(item.path)}-{digest}.rating.json"
         return self._save(
             path,
             record,
@@ -818,7 +1193,7 @@ class OutputLibrary:
                         "download": {
                             "bytes": len(raw),
                             "digest": digest,
-                            "rating_target": _key(item.path),
+                            "rating_target": key_for(item.path),
                         },
                     }
                 )
@@ -860,7 +1235,8 @@ class OutputLibrary:
                 value = previous[ref]
             elif isinstance(ref, str):
                 item, _raw, digest = self.image(ref)
-                value = {"path": item.path, "sha256": digest, "canonical_id": item.canonical_id}
+                canonical = item.canonical_id if item.canonical_digest == digest else None
+                value = {"path": item.path, "sha256": digest, "canonical_id": canonical}
             else:
                 raise SiteOutputError("invalid_library_request")
             if value["path"] in used:

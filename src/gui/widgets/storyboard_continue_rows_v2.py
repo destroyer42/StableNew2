@@ -21,6 +21,8 @@ from src.gui.view_contracts.storyboard_tree_contract import (
     SEED_RANDOM,
     SEED_TIPS,
 )
+from src.gui.widgets.mirrored_text_v2 import MirroredText
+from src.gui.widgets.scrollable_frame_v2 import forward_wheel
 from src.video.storyboard_tree import MAX_ROWS
 
 PROMPT_MINSIZE = 140
@@ -50,8 +52,9 @@ class ContinueRowFields:
         #: The Fixed seed's text; it is only sent when the mode is Fixed.
         self.seed_var = tk.StringVar(value=seed)
         self.number_label = ttk.Label(parent, text=str(number), width=2, anchor="e")
-        self.prompt_entry = ttk.Entry(parent, textvariable=self.prompt_var)
-        self.negative_entry = ttk.Entry(parent, textvariable=self.negative_var)
+        #: Word-wrapped multi-line fields that mirror the variables above (a long prompt never scrolls sideways).
+        self.prompt_entry = MirroredText(parent, self.prompt_var)
+        self.negative_entry = MirroredText(parent, self.negative_var)
         self.seed_frame = ttk.Frame(parent, style="Panel.TFrame")
         self.seed_box = ttk.Combobox(
             self.seed_frame,
@@ -61,6 +64,8 @@ class ContinueRowFields:
             width=7,
         )
         self.seed_entry = ttk.Entry(self.seed_frame, textvariable=self.seed_var, width=11)
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.seed_box.bind(sequence, self._on_seed_wheel)
         self.seed_box.pack(side="left")
         self.seed_entry.pack(side="left", padx=(3, 0))
         self.remove_button = ttk.Button(parent, text="✕", width=3, command=lambda: on_remove(self))
@@ -75,6 +80,11 @@ class ContinueRowFields:
     def seed_mode(self) -> str:
         return SEED_FIXED if self.seed_mode_var.get() == SEED_FIXED else SEED_RANDOM
 
+    def _on_seed_wheel(self, event: tk.Event) -> str | None:
+        """Scrolling over the panel must never flip a seed between Random and Fixed (a combobox's wheel does)."""
+
+        return forward_wheel(self.seed_box, event, consume=True)
+
     def _mode_changed(self, on_change: Callable[[], None]) -> None:
         self.sync_seed()
         on_change()
@@ -86,7 +96,7 @@ class ContinueRowFields:
         self.seed_entry.configure(state="normal" if fixed else "disabled")
         self.seed_box.tooltip.text = SEED_TIPS[self.seed_mode]  # type: ignore[attr-defined]
 
-    def widgets(self) -> tuple[ttk.Widget, ...]:
+    def widgets(self) -> tuple[tk.Widget, ...]:
         return (
             self.number_label,
             self.prompt_entry,
@@ -97,7 +107,8 @@ class ContinueRowFields:
 
     def place(self, grid_row: int, number: int) -> None:
         self.number_label.configure(text=str(number))
-        sticky = ("e", "ew", "ew", "w", "")
+        # A row's cells hang from its top, so they stay put when a prompt field grows.
+        sticky = ("ne", "new", "new", "nw", "n")
         for column, (widget, edge) in enumerate(zip(self.widgets(), sticky, strict=True)):
             widget.grid(row=grid_row, column=column, sticky=edge, padx=2, pady=1)
 
