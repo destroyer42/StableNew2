@@ -199,7 +199,7 @@ def test_accepting_adds_one_slot_and_exactly_one_marker(proposals):
     dialog, request = _ask(j)
     _deliver(j, _outcome(request, [_entry(point=1)]))
     assert _offered(dialog) == ["lighting: golden hour, neon glow, soft window light"]
-    assert "from 2 to 6 combinations (limit 8)" in _text(dialog)
+    assert "go from 2 to 6; compiled per prompt row: 6 (limit 8)" in _text(dialog)
     _add(dialog)
 
     frame = j.frame
@@ -453,16 +453,20 @@ def test_hidden_authored_content_is_never_submitted(proposals):
 # -- matrix growth and the limit ------------------------------------------------------------------------------------------------
 
 
-def test_a_proposal_past_the_matrix_limit_is_shown_rejected_and_never_added(journey):  # noqa: F811
+def test_a_proposal_past_the_matrix_limit_is_offered_and_can_be_added(journey):  # noqa: F811
     j = journey
     _setup(j.frame, limit=4)
     dialog, request = _ask(j)
     _deliver(j, _outcome(request, [_entry()]))
-    assert _offered(dialog) == []
+    assert len(_offered(dialog)) == 1
     text = _text(dialog)
-    assert "from 2 to 6 combinations (limit 4)" in text and "combination limit" in text
-    assert [s.name for s in j.frame.workspace_state.get_matrix_config().slots] == ["location"]
-    assert _editor(j.frame) == SENTENCE
+    assert "go from 2 to 6; compiled per prompt row: 4 (limit 4)" in text
+    _add(dialog)
+    assert [s.name for s in j.frame.workspace_state.get_matrix_config().slots] == [
+        "location",
+        "lighting",
+    ]
+    assert "[[lighting]]" in _editor(j.frame)
 
 
 # -- failures, labels, scrubbing ---------------------------------------------------------------------------------------------------

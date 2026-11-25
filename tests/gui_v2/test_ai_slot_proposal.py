@@ -302,7 +302,8 @@ def test_growth_counts_the_combinations_before_and_after() -> None:
     assert matrix_growth({"slots": []}, "b", ["1", "2", "3"])[:2] == (1, 3)
 
 
-def test_a_proposal_past_the_matrix_limit_is_refused_with_both_counts() -> None:
+def test_a_proposal_past_the_matrix_limit_is_offered_with_both_counts() -> None:
+    # AI-230a: the limit only caps how many combinations compile per prompt row, so it is information, not a verdict.
     config = {
         "enabled": True,
         "limit": 4,
@@ -316,9 +317,31 @@ def test_a_proposal_past_the_matrix_limit_is_refused_with_both_counts() -> None:
         matrix_mapping=config,
         is_visible=visible,
     )
-    assert row.reason == "matrix_limit" and row.growth == (2, 6, 4)
+    assert row.offered and row.growth == (2, 6, 4)
     shown = proposal_text(proposal_review((row,)))
-    assert "from 2 to 6 combinations (limit 4)" in shown and "combination limit" in shown
+    assert "go from 2 to 6; compiled per prompt row: 4 (limit 4)" in shown
+    assert "[can add]" in shown
+
+
+def test_a_matrix_already_past_its_limit_still_takes_a_new_slot() -> None:
+    config = {
+        "enabled": True,
+        "limit": 8,
+        "slots": [
+            {"name": "a", "values": [str(i) for i in range(5)]},
+            {"name": "b", "values": [str(i) for i in range(5)]},
+        ],
+    }
+    request, context, _ = setup(mapping=config)
+    (row,) = judge_proposals(
+        suggestion(("lighting", VALUES, 0)),
+        request,
+        context,
+        matrix_mapping=config,
+        is_visible=visible,
+    )
+    assert row.offered and row.growth == (25, 75, 8)
+    assert "compiled per prompt row: 8" in proposal_text(proposal_review((row,)))
 
 
 def test_a_proposal_exactly_at_the_limit_is_offered() -> None:

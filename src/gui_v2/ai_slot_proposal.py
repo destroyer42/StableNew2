@@ -79,7 +79,6 @@ REASON_TEXT: dict[str, str] = {
     "values_invalid": "One of the proposed values breaks the value rules.",
     "point_taken": "That position already received a marker from an earlier addition.",
     "point_protected": "That position is inside a protected token.",
-    "matrix_limit": "Adding this slot would take the matrix past its combination limit.",
     **{f"value:{key}": f"Value problem: {text}" for key, text in VALUE_REASON_TEXT.items()},
 }
 
@@ -356,9 +355,10 @@ def judge_proposals(
                 ):
                     reason = "point_protected"
             if not reason:
+                # AI-230a: growth is information, never a verdict. The matrix limit only caps how many combinations
+                # compile per prompt row (``selected = min(possible, limit)``); a matrix already past it must still be
+                # able to take a new slot.
                 growth = matrix_growth(matrix_mapping, name, values)
-                if growth[1] > growth[2]:
-                    reason = "matrix_limit"
         if key and not _name_problem(name) and not (taken.get(key)):
             seen.add(key)
         rows.append(
@@ -460,7 +460,10 @@ def growth_line(row: ProposalRow) -> str:
     if row.growth is None:
         return ""
     now, after, limit = row.growth
-    return f"Matrix goes from {now:,} to {after:,} combinations (limit {limit:,})."
+    return (
+        f"Possible combinations go from {now:,} to {after:,}; compiled per prompt row: "
+        f"{min(after, limit):,} (limit {limit:,})."
+    )
 
 
 def proposal_text(review: ProposalReview) -> str:
