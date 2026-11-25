@@ -71,14 +71,16 @@ compatible driving-video form without modifying the original or launching genera
 
 Extends the existing evaluation system to compare source images, driving motion and generated outputs. Captures action
 achievement, subject attachment, motion fidelity, identity, anatomy and continuity, supports repeatable cross-subject
-evaluations and authors a bounded, **unexecuted** 36-job campaign (staged 3 / 12 / remainder). Record:
+evaluations and authors a bounded 36-job campaign (staged 3 / 12 / remainder; 26 jobs run so far: the Stage A / B pilot and, after revision, Stage C0, the C1 head-turn cells and C3). Record:
 `docs/Subsystems/Video/PR-VID-MOTION-410_Motion_Fidelity_and_Transfer_Evaluation.md`; operator guide:
 `docs/runbooks/video_eval_kit.md` section 9.
 
 Exit criterion: motion-transfer experiments can be authored, admitted, compared and rated with verified
-case/arm/input/output identity; physical evaluation remains separately authorized. Met by deterministic tests only: no
-physical pilot, diagnostic sample or full campaign has been run, and no motion quality, transferability or workflow
-qualification is claimed. Phases 3 and 4 now depend on the owner authorizing and accepting the Stage A pilot.
+case/arm/input/output identity; physical evaluation remains separately authorized. Met by deterministic tests; the owner then
+ran and partially reviewed the pilot (15 jobs at 49 frames: no visible arm difference at 1.2 / 1.3) and a revised Stage C (11 jobs
+at 81 frames: arms at 0.5 / 2.0 are visibly different, about 7 min and 11.6 GB of 12.3 GB VRAM per job; the start-pose contrast
+did not show the matched driver winning). No motion quality, transferability or workflow qualification is claimed, the
+motion-specific ratings were not filled, and the full campaign has not run (PR record sections 3.1 and 3.2).
 
 ### Phase 3 - PR-VID-MOTION-420: Subject Alignment and Compatibility
 
