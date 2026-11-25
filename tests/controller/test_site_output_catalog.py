@@ -11,7 +11,13 @@ import pytest
 from src.app.site_output_catalog import SiteOutputCatalog, SiteOutputError
 from src.app.site_queue_bridge import SiteSession
 from src.gui import site_connection_dialog
-from src.video.video_eval_ratings_store import RATING_COLUMNS, load_ratings, render_csv
+from src.video.video_eval_ratings_store import (
+    MOTION_RATING_COLUMNS,
+    RATING_COLUMNS,
+    load_ratings,
+    render_csv,
+)
+from src.video.video_eval_rubric import MOTION_COLUMNS, MOTION_RUBRIC_VERSION
 from src.video.video_eval_run import RUN_SCHEMA
 from tests.controller.test_site_queue_bridge import request
 
@@ -91,6 +97,144 @@ def test_site_reports_and_reads_only_hash_matched_media_from_approved_folder(rep
     (output / "clip.mp4").write_bytes(b"different")
     with pytest.raises(SiteOutputError, match="media_changed"):
         catalog.read_media(one["clip"])
+
+
+def test_motion_review_preserves_partial_ratings_and_checks_driving_evidence(report):
+    output, directory, metrics = report
+    path = directory / "ratings.csv"
+    run_path = directory / "run.json"
+    manifest = json.loads(run_path.read_text())
+    first, second = manifest["jobs"]
+    original = directory.parent.parent.parent / "private-driver.mp4"
+    original.write_bytes(b"original")
+    driver = output / "driver.mp4"
+    driver.write_bytes(b"driver")
+    original_hash = hashlib.sha256(b"original").hexdigest()
+    driver_hash = hashlib.sha256(b"driver").hexdigest()
+    context = "a" * 64
+    first["motion"] = {
+        "driver_original_path": str(original),
+        "driver_original_sha256": original_hash,
+        "driver_effective_path": str(driver),
+        "driver_effective_sha256": driver_hash,
+    }
+    manifest["cases"][0]["motion"] = {"action": "Head turn", "expected_outcome": "Turns left"}
+    _save(run_path, manifest)
+    artifact = metrics["cells"][0]["artifact_sha256"]
+    metrics["motion_evaluation"] = {"rubric_version": MOTION_RUBRIC_VERSION}
+    metrics["identity_assessment"] = {
+        "cells": [
+            {
+                **first,
+                "artifact_sha256": artifact,
+                "motion": {
+                    "integrity": "verified_comparable",
+                    "driver_original_sha256": original_hash,
+                    "driver_effective_sha256": driver_hash,
+                    "driving_context_sha256": context,
+                },
+            }
+        ]
+    }
+    _save(directory / "metrics.json", metrics)
+    first_key = {key: first[key] for key in ("case_id", "arm_id", "job_id")}
+    row = {
+        **first_key,
+        "requested_action": "achieved",
+        "source_fidelity_1_to_5": "4",
+        "artifact_sha256": artifact,
+        "operator_extra": "Keep",
+    }
+    header = (*RATING_COLUMNS, *MOTION_RATING_COLUMNS, "operator_extra")
+    path.write_bytes(render_csv(header, [row, {**second, "notes": "Another clip"}]).encode())
+    cat = SiteOutputCatalog(output)
+    view = cat.get_run(RUN_ID, review=True)
+    clip = view["clips"][0]
+    assert clip["motion"]["original_driver"] is None
+    assert str(original) not in json.dumps(view)
+    assert cat.read_media(clip["motion"]["driver"]) == ("video/mp4", b"driver")
+    assert "motion" not in view["clips"][1]
+    judgments = {
+        "subject_attachment": "correct_subject",
+        "motion_fidelity_1_to_5": "4",
+        "action_timing": "minor_difference",
+        "root_displacement": "not_applicable",
+        "motion_comments": "First phase late.\nComparison still useful.",
+    }
+    body = {
+        **first_key,
+        "scope": cat.scope,
+        "revision": view["revision"],
+        "source_sha256": clip["source_sha256"],
+        "artifact_sha256": artifact,
+        "driving_context_sha256": context,
+        "rebind": False,
+        "judgments": judgments,
+        "sync": {
+            "root": view["rating_root"],
+            "base": dict.fromkeys(judgments, ""),
+            "base_artifact_sha256": artifact,
+            "operation": "c" * 32,
+            "actor_time": "2026-11-25T08:00:00.000Z",
+        },
+    }
+    before = path.read_bytes()
+    with pytest.raises(SiteOutputError, match="invalid_rating"):
+        cat.save_rating(RUN_ID, {**body, "judgments": {**judgments, "action_timing": "late"}})
+    with pytest.raises(SiteOutputError, match="motion_context_changed"):
+        cat.save_rating(RUN_ID, {**body, "driving_context_sha256": "b" * 64})
+    assert path.read_bytes() == before
+    assert cat.save_rating(RUN_ID, body)["saved"]
+    loaded = load_ratings(path)
+    saved, other = loaded.rows
+    assert all(saved[key] == value for key, value in {**row, **judgments}.items())
+    assert saved["driving_context_sha256"] == context
+    assert saved["rubric_version"] == MOTION_RUBRIC_VERSION
+    assert other["notes"] == "Another clip"
+    assert (
+        cat.get_run(RUN_ID, review=True)["clips"][0]["rating"]["action_timing"]
+        == "minor_difference"
+    )
+    on_disk = path.read_bytes()
+    assert cat.save_rating(RUN_ID, body)["saved"]
+    assert path.read_bytes() == on_disk
+
+    new_context = "d" * 64
+    metrics["identity_assessment"]["cells"][0]["motion"]["driving_context_sha256"] = new_context
+    _save(directory / "metrics.json", metrics)
+    with pytest.raises(SiteOutputError, match="motion_context_changed"):
+        cat.save_rating(RUN_ID, body)
+
+    updated_view = cat.get_run(RUN_ID, review=True)
+    updated_body = {
+        **{key: value for key, value in body.items() if key != "sync"},
+        "revision": updated_view["revision"],
+        "driving_context_sha256": new_context,
+        "judgments": {"action_timing": "major_difference"},
+    }
+    with pytest.raises(SiteOutputError, match="rereview_required"):
+        cat.save_rating(RUN_ID, updated_body)
+    assert path.read_bytes() == on_disk
+    updated_body.update(
+        rebind=True,
+        judgments={
+            **dict.fromkeys(MOTION_COLUMNS, ""),
+            "requested_action": "achieved",
+            "action_timing": "major_difference",
+        },
+    )
+    assert cat.save_rating(RUN_ID, updated_body)["saved"]
+    saved = load_ratings(path).rows[0]
+    assert saved["source_fidelity_1_to_5"] == "4"
+    assert saved["operator_extra"] == "Keep"
+    assert saved["subject_attachment"] == ""
+    assert saved["driving_context_sha256"] == new_context
+    assert saved["action_timing"] == "major_difference"
+    on_disk = path.read_bytes()
+    driver.write_bytes(b"changed")
+    with pytest.raises(SiteOutputError, match="media_changed"):
+        cat.save_rating(RUN_ID, updated_body)
+    assert path.read_bytes() == on_disk
 
 
 def test_durable_video_edits_merge_fields_and_replay_without_reapplying(report):

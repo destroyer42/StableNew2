@@ -23,9 +23,12 @@ from src.app.site_video_playback import VIDEO_LIMIT, VideoPlayback
 from src.video.video_eval_catalog import RUN_ID_PATTERN, list_run_ids
 from src.video.video_eval_ratings_store import (
     ARTIFACT_COLUMN,
+    CONTEXT_COLUMN,
     KEY_COLUMNS,
     MAX_RATINGS_BYTES,
+    MOTION_RATING_COLUMNS,
     RATING_COLUMNS,
+    RUBRIC_COLUMN,
     LoadedRatings,
     RatingsFileError,
     load_ratings,
@@ -33,7 +36,14 @@ from src.video.video_eval_ratings_store import (
     render_csv,
     write_ratings,
 )
-from src.video.video_eval_rubric import parse_rating_row, row_has_content
+from src.video.video_eval_rubric import (
+    ACTION_COLUMN,
+    MOTION_COLUMNS,
+    MOTION_RUBRIC_VERSION,
+    parse_rating_row,
+    row_has_content,
+    row_has_motion_content,
+)
 from src.video.video_eval_run import EVAL_OUTPUT_FOLDER, RUN_MANIFEST_NAME, RUN_SCHEMA
 
 _REPORT_SCHEMA = "stablenew.video-eval-report.v1"
@@ -42,6 +52,9 @@ _MAX_REPORT = 5 * 1024 * 1024
 _MAX_MEDIA = 64 * 1024 * 1024
 _MAX_CELLS = 500
 _JUDGMENTS = set(RATING_COLUMNS) - {*KEY_COLUMNS, ARTIFACT_COLUMN}
+_MOTION_JUDGMENTS = frozenset(MOTION_COLUMNS)
+_ALL_JUDGMENTS = _JUDGMENTS | _MOTION_JUDGMENTS
+_MOTION_REVIEW_FIELDS = _MOTION_JUDGMENTS | {ACTION_COLUMN}
 _RECEIPTS_COLUMN = "site_rating_receipts"
 
 
@@ -226,6 +239,16 @@ class SiteOutputCatalog:
         assessment = metrics.get("identity_assessment")
         sources = assessment.get("sources") if isinstance(assessment, dict) else {}
         sources = sources if isinstance(sources, dict) else {}
+        motion_evaluation = metrics.get("motion_evaluation")
+        assessed_motion = (
+            _index(assessment["cells"], "job_id")
+            if review
+            and isinstance(motion_evaluation, dict)
+            and motion_evaluation.get("rubric_version") == MOTION_RUBRIC_VERSION
+            and isinstance(assessment, dict)
+            and isinstance(assessment.get("cells"), list)
+            else {}
+        )
         for identity, job in jobs.items():
             case_id, arm_id = _text(job.get("case_id")), _text(job.get("arm_id"))
             cell = cells[identity]
@@ -259,6 +282,9 @@ class SiteOutputCatalog:
                 saved = ratings.get((case_id, arm_id, identity))
                 if saved is None:
                     raise SiteOutputError("ratings_unavailable")
+                motion = self._motion_review(
+                    job, case, cell, assessed_motion.get(identity, {}), media
+                )
                 cell_metrics = cell.get("metrics")
                 duration = (
                     cell_metrics.get("duration_seconds") if isinstance(cell_metrics, dict) else None
@@ -280,9 +306,13 @@ class SiteOutputCatalog:
                     rating={
                         key: value
                         for key, value in saved.items()
-                        if key in _JUDGMENTS or key == ARTIFACT_COLUMN
+                        if key in _JUDGMENTS
+                        or key == ARTIFACT_COLUMN
+                        or (motion is not None and key in MOTION_RATING_COLUMNS)
                     },
                 )
+                if motion is not None:
+                    row["motion"] = motion
             rows.append(row)
         with self._lock:
             self._media.update(media)
@@ -308,6 +338,56 @@ class SiteOutputCatalog:
                 pairs=self._verified_pairs(assessment, rows, media),
             )
         return result
+
+    def _motion_review(
+        self,
+        job: dict[str, Any],
+        case: dict[str, Any],
+        cell: dict[str, Any],
+        assessed: dict[str, Any],
+        media: dict[str, _Asset],
+    ) -> dict[str, Any] | None:
+        case_motion, job_motion = case.get("motion"), job.get("motion")
+        if not isinstance(case_motion, dict) or not isinstance(job_motion, dict):
+            return None
+        evidence = assessed.get("motion")
+        context = ""
+        drivers: dict[str, str | None] = {}
+        if (
+            isinstance(evidence, dict)
+            and assessed.get("case_id") == job["case_id"]
+            and assessed.get("arm_id") == job["arm_id"]
+            and assessed.get(ARTIFACT_COLUMN) == cell.get(ARTIFACT_COLUMN)
+            and evidence.get("integrity") == "verified_comparable"
+            and _DIGEST.fullmatch(_text(evidence.get(CONTEXT_COLUMN)))
+            and all(
+                _DIGEST.fullmatch(_text(job_motion.get(f"driver_{kind}_sha256")))
+                and evidence.get(f"driver_{kind}_sha256") == job_motion[f"driver_{kind}_sha256"]
+                for kind in ("original", "effective")
+            )
+        ):
+            context = evidence[CONTEXT_COLUMN]
+            for kind in ("original", "effective"):
+                path_value = job_motion.get(f"driver_{kind}_path")
+                drivers[kind] = self._register(
+                    path_value,
+                    job_motion.get(f"driver_{kind}_sha256"),
+                    "video/",
+                    media,
+                )
+                if isinstance(path_value, str) and not drivers[kind]:
+                    path = Path(path_value)
+                    # Missing or linked media inside the grant invalidates the recorded context.
+                    if not path.is_absolute() or path.is_relative_to(self._root):
+                        context = ""
+        return {
+            CONTEXT_COLUMN: context,
+            "driver_sha256": _text(job_motion.get("driver_effective_sha256")),
+            "driver": drivers.get("effective"),
+            "original_driver": drivers.get("original"),
+            "action": _text(case_motion.get("action")),
+            "expected_outcome": _text(case_motion.get("expected_outcome"), limit=8000),
+        }
 
     @staticmethod
     def _verified_pairs(
@@ -363,6 +443,9 @@ class SiteOutputCatalog:
         durable = "sync" in body
         if durable:
             fields.add("sync")
+        context = _text(body.get(CONTEXT_COLUMN))
+        if CONTEXT_COLUMN in body:
+            fields.add(CONTEXT_COLUMN)
         patch = body.get("judgments")
         if (
             set(body) != fields
@@ -375,7 +458,7 @@ class SiteOutputCatalog:
                 for name in fields - {"rebind", "judgments", "sync"}
             )
             or any(
-                key not in _JUDGMENTS or not isinstance(value, str) or len(value) > 8000
+                key not in _ALL_JUDGMENTS or not isinstance(value, str) or len(value) > 8000
                 for key, value in patch.items()
             )
             or parse_rating_row(patch).issues
@@ -385,6 +468,10 @@ class SiteOutputCatalog:
         stamp = None
         if durable:
             stamp = self._rating_stamp(run_id, body, sync)
+        motion_edit = CONTEXT_COLUMN in body or bool(patch.keys() & _MOTION_JUDGMENTS)
+        report_checks = (
+            [(path, path.stat()) for path in self._report_paths(run_id)] if motion_edit else []
+        )
         report = self.get_run(run_id, review=True)
         case_id, arm_id, job_id = (body[name] for name in KEY_COLUMNS)
         clip = next(
@@ -403,8 +490,21 @@ class SiteOutputCatalog:
             or clip["source_sha256"] != body["source_sha256"]
         ):
             raise SiteOutputError("media_changed")
-        clip_check = self.verify_media(clip["clip"])
-        source_check = self.verify_media(clip["source"])
+        motion = clip.get("motion")
+        checks = [
+            *report_checks,
+            self.verify_media(clip["clip"]),
+            self.verify_media(clip["source"]),
+        ]
+        if motion_edit:
+            if not motion or not context or context != motion[CONTEXT_COLUMN]:
+                raise SiteOutputError("motion_context_changed")
+            # Only check drivers already within the approved output grant.
+            checks.extend(
+                self.verify_media(motion[key])
+                for key in ("driver", "original_driver")
+                if motion[key]
+            )
         loaded = self._ratings(run_id)
         revision = hashlib.sha256(loaded.raw or b"").hexdigest()
         key = (case_id, arm_id, job_id)
@@ -427,25 +527,37 @@ class SiteOutputCatalog:
                 return {"revision": revision, "conflict": conflicts}
             extra[_RECEIPTS_COLUMN] = json.dumps({**receipts, operation: stamp}, sort_keys=True)
         else:
-            matches = previous.get(ARTIFACT_COLUMN) == digest and all(
-                previous.get(column, "") == value for column, value in patch.items()
+            matches = (
+                previous.get(ARTIFACT_COLUMN) == digest
+                and (not motion_edit or previous.get(CONTEXT_COLUMN) == context)
+                and all(previous.get(column, "") == value for column, value in patch.items())
             )
             if matches:
                 return {"revision": revision, "saved": True}
             if revision != body["revision"]:
                 raise SiteOutputError("ratings_conflict")
         if previous.get(ARTIFACT_COLUMN) != digest and row_has_content(previous):
-            if not body["rebind"] or set(patch) != _JUDGMENTS:
+            required = _ALL_JUDGMENTS if motion else _JUDGMENTS
+            if not body["rebind"] or patch.keys() != required:
                 raise SiteOutputError("rereview_required")
+        if (
+            motion_edit
+            and previous.get(CONTEXT_COLUMN) != context
+            and (previous.get(CONTEXT_COLUMN) or row_has_motion_content(previous))
+            and (not body["rebind"] or not _MOTION_REVIEW_FIELDS <= patch.keys())
+        ):
+            raise SiteOutputError("rereview_required")
         if parse_rating_row(patch, duration_seconds=clip["duration"]).issues:
             raise SiteOutputError("invalid_rating")
+        if motion_edit:
+            extra.update({CONTEXT_COLUMN: context, RUBRIC_COLUMN: MOTION_RUBRIC_VERSION})
         updated = {**previous, **patch, **extra, ARTIFACT_COLUMN: digest}
         rows = [
             updated if tuple(row[name] for name in KEY_COLUMNS) == key else row
             for row in loaded.rows
         ]
         try:
-            header = output_header(loaded)
+            header = output_header(loaded, motion=motion_edit)
             if durable and _RECEIPTS_COLUMN not in header:
                 header = (*header, _RECEIPTS_COLUMN)
             all_rows = (*rows, *loaded.keyless)
@@ -456,7 +568,7 @@ class SiteOutputCatalog:
                 loaded,
                 header,
                 all_rows,
-                before_replace=lambda: self._confirm_rating_media(clip_check, source_check),
+                before_replace=lambda: self._confirm_rating_media(*checks),
                 reader=self._read_ratings_file,
             )
         except RatingsFileError as exc:
