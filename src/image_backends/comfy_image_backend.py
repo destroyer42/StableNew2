@@ -14,7 +14,10 @@ cancellation authorities are the existing ones, and Comfy's own queue and histor
 7. **observe** the prompt's history; cancellation interrupts or dequeues this prompt only;
 8. **artifacts**: the one PNG is fetched into the run directory, re-saved with StableNew's embedded metadata and given
    a manifest with full provenance;
-9. **release** the owned ComfyUI on every exit path (the graph's runtime policy).
+9. **release** the owned ComfyUI on every exit path (the graph's runtime policy). The SDXL path may instead *hold* it
+   warm for a bounded idle grace after a successful job (PR-IMG-COMFY-382, mirroring VID-WARM-373): the next SDXL job claims
+   the hold before it prepares the runtime and skips the cold start; any other job, a failure, the grace elapsing or
+   application exit ends it. Qwen-Image keeps its qualified release-after-every-job policy.
 
 Nothing is retried and nothing falls back to another backend. No ``src/video`` behaviour is changed: the managed
 runtime, transport and the pure prompt-observation predicates are reused as they are.
@@ -72,12 +75,14 @@ from src.image_backends.image_backend_types import (
     ImageBackendCapabilities,
     ImageExecutionRequest,
     ImageExecutionResult,
+    configured_comfy_image_keep_warm_seconds,
 )
 from src.services.runtime_transition_service import (
     RUNTIME_COMFY,
     RuntimeTransitionCoordinator,
     RuntimeTransitionError,
 )
+from src.services.runtime_warm_hold import RuntimeWarmHold, WarmHoldClaim, get_runtime_warm_hold
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +151,11 @@ class ComfyImageBackend:
         poll_seconds: float = HISTORY_POLL_SECONDS,
         family_lookup: Callable[[str], Any] | None = None,
         sdxl_assets: SdxlAssetResolver | None = None,
+        warm_hold: RuntimeWarmHold | None = None,
+        keep_warm_seconds: Callable[[], float] | float | None = None,
     ) -> None:
+        self._warm_hold = warm_hold or get_runtime_warm_hold()
+        self._keep_warm_seconds = keep_warm_seconds
         self._family_lookup = family_lookup
         self._sdxl_assets = sdxl_assets
         self._transition = transition or RuntimeTransitionCoordinator()
@@ -392,9 +401,17 @@ class ComfyImageBackend:
         checkpoint, loras, vae = resolver.resolve_all(
             plan.checkpoint, [item.name for item in plan.loras], plan.vae
         )
-        transition = self._transition.prepare_for(self.transition_target)
-        if not transition.ready:
-            raise RuntimeTransitionError(transition)
+        # PR-IMG-COMFY-382: claim the idle warm hold before preparing the runtime. The same graph on the very owned process
+        # that served the previous job is reused; anything else held is released first, so this job starts as it would
+        # have without the hold. ``prepare_for`` ends a still-held slot, so the claim must come first.
+        claim = self._claim_warm_hold()
+        try:
+            transition = self._transition.prepare_for(self.transition_target)
+            if not transition.ready:
+                raise RuntimeTransitionError(transition)
+        except BaseException:
+            self._release_owned_runtime()  # a claimed process is neither held nor used: release it
+            raise
         evidence: dict[str, Any] = {
             "assets": {
                 "checkpoint": checkpoint.evidence(),
@@ -413,10 +430,86 @@ class ComfyImageBackend:
         except BaseException:
             self._release_owned_runtime()
             raise
-        release = self._release_owned_runtime()
+        release = self._hold_owned_runtime() or self._release_owned_runtime()
         result.backend_metadata["runtime_release"] = dict(release)
         result.diagnostic_payload["runtime_release"] = dict(release)
+        if claim.status != "none":
+            result.backend_metadata["runtime_reuse"] = claim.to_dict()
+            result.diagnostic_payload["runtime_reuse"] = claim.to_dict()
         return result
+
+    # -- warm hold (PR-IMG-COMFY-382) -------------------------------------------------------------------------------
+
+    def _warm_key(self) -> tuple[str, str, str]:
+        return (self.backend_id, SDXL_T2I.graph_id, str(SDXL_T2I.version))
+
+    def _keep_warm_grace(self) -> float:
+        value = self._keep_warm_seconds
+        seconds = value() if callable(value) else value
+        if seconds is None:
+            seconds = configured_comfy_image_keep_warm_seconds()
+        try:
+            return max(0.0, float(seconds))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _owned_running_pid(self) -> int | None:
+        """The pid of the ComfyUI StableNew launched and still owns, or ``None`` (external, stopped, unreadable)."""
+
+        try:
+            manager = self._resolve_process_manager(SDXL_RUN_PROFILE.display_name)
+            if manager.owns_process and manager.is_running() and manager.pid:
+                return int(manager.pid)
+        except Exception:  # noqa: BLE001 - an unreadable owner is never treated as warm
+            return None
+        return None
+
+    def _claim_warm_hold(self) -> WarmHoldClaim:
+        claim = self._warm_hold.claim(
+            runtime=RUNTIME_COMFY, key=self._warm_key(), current_pid=self._owned_running_pid
+        )
+        if claim.status != "none":
+            logger.info("ComfyUI SDXL warm-hold claim: %s", claim.to_dict())
+        return claim
+
+    def _hold_owned_runtime(self) -> dict[str, Any] | None:
+        """Arm the warm hold for the owned process that just served an SDXL job; ``None`` means release as usual."""
+
+        seconds = self._keep_warm_grace()
+        if seconds <= 0:
+            return None
+        pid = self._owned_running_pid()
+        if pid is None:
+            return None  # nothing StableNew owns is running: there is nothing to keep warm
+
+        def release_if_same_process() -> dict[str, Any]:
+            if self._owned_running_pid() != pid:
+                return {
+                    "policy": "keep_warm_between_jobs",
+                    "pid": pid,
+                    "released": False,
+                    "reason": "the held process is no longer the one StableNew owns",
+                }
+            return self._release_owned_runtime()
+
+        held = self._warm_hold.hold(
+            runtime=RUNTIME_COMFY,
+            key=self._warm_key(),
+            pid=pid,
+            seconds=seconds,
+            release=release_if_same_process,
+        )
+        if not held.get("held"):
+            logger.info("Warm hold not armed (%s); releasing as usual", held.get("reason"))
+            return None
+        return {
+            "policy": "keep_warm_between_jobs",
+            "ownership": "owned",
+            "pid": pid,
+            "released": False,
+            "held": True,
+            "idle_release_seconds": seconds,
+        }
 
     def _execute_sdxl_on_runtime(
         self,

@@ -218,7 +218,11 @@ def test_timing_is_labelled_cold_for_the_first_job_of_each_arm_and_warm_after(ev
     for arm in driver.ARMS:
         phases = [pair[arm]["phase"] for pair in compare["pairs"]]
         assert phases[0] == "cold" and set(phases[1:]) == {"warm"}
-    assert "warm file cache only" in compare["timing_note"]
+    assert "held warm" in compare["timing_note"]
+    assert all(
+        "warm_hold_end" in record and record["warm_hold_end"] is None
+        for record in compare["arms"].values()
+    )  # the arm ended the (absent) hold through the warm-hold owner
 
 
 def test_the_verdict_is_owner_pending_with_no_numeric_threshold_and_the_fairness_text_is_verbatim(

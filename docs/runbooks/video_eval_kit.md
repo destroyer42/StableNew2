@@ -441,5 +441,7 @@ conditions and the authorization boundary. Staged runs keep separate reports; th
 **After the Stage A / B pilot (2026-11-24):** the pilot (15 jobs, 49 frames, arms 1.2 / 1.3) showed no visible difference between
 arms and an unnatural opening when the driver started in a different pose from the source. The next Stage C is the revised
 `stage_c0_canary` (1 job), `stage_c1_subject_a` (12), `stage_c2_subject_b` (12) and `stage_c3_start_pose_contrast` (4, matched versus unmatched driver) at 81 frames with arms at 0.5 / 2.0 and a
-start-pose-matched head-turn driver (section 3.1 of the PR record). Keep suite images and driving videos inside the Output
+start-pose-matched head-turn driver (section 3.1 of the PR record). **Since run (2026-11-25):** C0, the C1 head-turn cells (6 jobs) and C3 completed at
+81 frames in about 7 min per job with the VRAM peak at 11.6 of 12.3 GB and no stop condition (section 3.2: measured figures, partial owner review, nothing
+qualified); the C1 hand-wave cells and C2 have not run. Keep suite images and driving videos inside the Output
 folder so a viewer limited to Output can show them and so frozen input paths never need relinking.

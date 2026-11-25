@@ -108,6 +108,9 @@ def make_backend(
     models = models or Models(tmp_path)
     client = client or FakeComfyClient(info=sdxl_object_info())
     manager, transition = FakeManager(), FakeTransition()
+    kw.setdefault(
+        "keep_warm_seconds", 0
+    )  # release after every job; the warm hold has its own tests (382)
     ticks = iter(range(0, 1_000_000))
     jobs = tmp_path / "jobs"
     jobs.mkdir(exist_ok=True)
