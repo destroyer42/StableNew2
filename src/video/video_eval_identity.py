@@ -26,6 +26,7 @@ from typing import Any
 
 from src.pipeline.njr_core_v26 import thaw_json
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+from src.video.video_eval_motion import MotionFacts, motion_facts_from_config
 
 MAX_ARTIFACT_BYTES = 8 * 1024**3
 MAX_SOURCE_BYTES = 64 * 1024**2
@@ -170,6 +171,8 @@ class JobFacts:
     prompt: str | None
     #: For a multi-segment job, each frozen segment's ``(prompt, seed)``; ``None`` for a single clip.
     segments: tuple[tuple[str | None, int | None], ...] | None = None
+    #: PR-VID-MOTION-410: the driving context the stored NJR froze (driver, preparation, controls), or ``None``.
+    motion: MotionFacts | None = None
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -202,6 +205,7 @@ def read_job_facts(snapshot: Mapping[str, Any] | None) -> JobFacts | None:
                 source_image=str(original) if original else first_input,
                 prompt=str(block.get("prompt")) if block.get("prompt") is not None else None,
                 segments=_sequence_segments(block.get("sequence_metadata")),
+                motion=motion_facts_from_config(block, thaw_json(njr.extra_metadata)),
             )
         svd = config.get("svd_native") if isinstance(config, Mapping) else None
         if isinstance(svd, Mapping):

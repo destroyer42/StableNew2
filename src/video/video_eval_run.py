@@ -18,6 +18,7 @@ from typing import Any
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.utils.atomic_io import atomic_write_json
+from src.video.video_eval_motion import MotionFacts, motion_facts_from_njr
 from src.video.video_eval_suite import (
     EvalArm,
     EvalCase,
@@ -56,6 +57,10 @@ class EvalJobPlan:
     frame_count: int | None
     njr: Any = field(repr=False, compare=False)
     segment_seeds: tuple[int, ...] = ()
+    #: Driving context frozen into the compiled NJR (motion cases only).
+    motion: MotionFacts | None = None
+    #: ``(label, path, sha256)`` of every input the preview froze; admission re-hashes each one.
+    inputs: tuple[tuple[str, str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -86,6 +91,16 @@ class EvalRunPlan:
                 f"  {len(sequences)} case(s) are multi-segment sequences ({segments} segments per arm, "
                 "segment i seeded with the suite seed + i); each runs as one job rated as a whole."
             )
+        motion_cases = [case for case in suite.cases if case.motion is not None]
+        if motion_cases:
+            drivers = {case.motion.driving_sha256 for case in motion_cases if case.motion}
+            sources = {case.image_sha256 for case in motion_cases}
+            lines.append(
+                f"  {len(motion_cases)} case(s) bind a driving-motion reference "
+                f"({len(drivers)} distinct driver(s), {len(sources)} distinct source image(s)); "
+                "the driver is part of every job and is never dropped."
+            )
+            lines.extend(f"  - {note}" for note in preparation_disclosures(self.jobs))
         for arm in suite.arms:
             flag = (
                 " (experimental workflow, opted in by the suite)"
@@ -111,6 +126,82 @@ class EvalRunRefused(RuntimeError):
     """Nothing was queued; the message says why."""
 
 
+def _frozen_inputs(
+    case: EvalCase, njr: Any
+) -> tuple[MotionFacts | None, tuple[tuple[str, str, str], ...]]:
+    """What the compiled NJR really froze for a motion case, checked against the case, plus the hashes to re-verify.
+
+    The NJR is the authority: a driver that is missing from it (a silently dropped reference), a different driver, a
+    different motion prompt, or a preparation the case did not ask for refuses the job."""
+
+    binding = case.motion
+    if binding is None:
+        return None, ()
+    facts = motion_facts_from_njr(njr)
+    if facts is None:
+        raise ValueError(
+            "the compiled job carries no driving video; the case's driving reference is never dropped"
+        )
+    if facts.driver_original_sha256 != binding.driving_sha256:
+        raise ValueError("the compiled job froze a different driving video than the case binds")
+    if facts.motion_prompt != binding.motion_prompt:
+        raise ValueError("the compiled job froze a different motion prompt than the case")
+    if facts.frame_count is None or facts.fps is None:
+        raise ValueError(
+            "the compiled job froze no output length or rate, so its motion cannot be compared"
+        )
+    if binding.library_asset is not None and (
+        facts.library_asset is None
+        or facts.library_asset.get("asset_id") != binding.library_asset.get("asset_id")
+    ):
+        raise ValueError("the compiled job lost the case's Motion Library binding")
+    if binding.library_asset is None and facts.library_asset is not None:
+        raise ValueError("the compiled job claims a Motion Library asset the case does not bind")
+    if (binding.preparation_mode == "workflow_prepared") != facts.prepared:
+        raise ValueError(
+            "the compiled job's driving preparation differs from the case's request "
+            f"({binding.preparation_mode})"
+        )
+    inputs: list[tuple[str, str, str]] = []
+    first = list(getattr(njr, "input_image_paths", ()) or ())
+    if first:
+        inputs.append(("prepared source image", str(first[0]), file_sha256(Path(str(first[0])))))
+    inputs.append(("driving video", facts.driver_original_path, facts.driver_original_sha256))
+    if facts.prepared:
+        inputs.append(
+            ("prepared driving video", facts.driver_effective_path, facts.driver_effective_sha256)
+        )
+    return facts, tuple(inputs)
+
+
+def preparation_disclosures(jobs: tuple[EvalJobPlan, ...]) -> list[str]:
+    """Plain statements where arms of one case consume different prepared driving derivatives (never hidden)."""
+
+    notes: list[str] = []
+    for case_id in dict.fromkeys(job.case_id for job in jobs):
+        rows = [job for job in jobs if job.case_id == case_id and job.motion is not None]
+        contracts = {
+            (
+                job.motion.workflow_id,
+                job.motion.workflow_version,
+                job.motion.frame_count,
+                job.motion.ordered_frames_sha256,
+            ): job.arm_id
+            for job in rows
+            if job.motion is not None
+        }
+        if len(contracts) > 1:
+            notes.append(
+                f"case {case_id}: arms use {len(contracts)} different driving contracts "
+                "(workflow, version, length or prepared frames differ) and are not identical inputs: "
+                + "; ".join(
+                    f"{arm}={workflow} {version} {frames} frames"
+                    for (workflow, version, frames, _digest), arm in contracts.items()
+                )
+            )
+    return notes
+
+
 class VideoEvalRunService:
     def __init__(self, *, builders: dict[str, EvalJobBuilder]) -> None:
         self._builders = dict(builders)
@@ -129,6 +220,7 @@ class VideoEvalRunService:
             for case in suite.cases:
                 try:
                     built = builder(case, arm, suite.seed)
+                    facts, inputs = _frozen_inputs(case, built.njr)
                 except (ValueError, RuntimeError, OSError, KeyError) as exc:
                     errors.append(f"{case.case_id} x {arm.arm_id}: {exc}")
                     continue
@@ -142,6 +234,8 @@ class VideoEvalRunService:
                         frame_count=built.frame_count,
                         njr=built.njr,
                         segment_seeds=tuple(built.segment_seeds),
+                        motion=facts,
+                        inputs=inputs,
                     )
                 )
         return EvalRunPlan(run_id=run_id, suite=suite, jobs=tuple(jobs), errors=tuple(errors))
@@ -172,6 +266,21 @@ class VideoEvalRunService:
                     f"case {case.case_id}: {case.image_path.name} changed after the preview; "
                     "preview the suite again. Nothing was queued."
                 )
+        for job in plan.jobs:
+            for label, path, frozen_sha in job.inputs:
+                try:
+                    current = file_sha256(Path(path))
+                except OSError as exc:
+                    raise EvalRunRefused(
+                        f"{job.case_id} x {job.arm_id}: the {label} is no longer readable ({path}): {exc}. "
+                        "Preview the suite again. Nothing was queued."
+                    ) from exc
+                if current != frozen_sha:
+                    raise EvalRunRefused(
+                        f"{job.case_id} x {job.arm_id}: the {label} changed after the preview "
+                        f"({Path(path).name}); it is not the input that was validated. Preview the suite "
+                        "again. Nothing was queued."
+                    )
         submit = getattr(job_service, "submit_njrs", None)
         if not callable(submit):
             raise EvalRunRefused("JobService.submit_njrs is unavailable; nothing was queued.")
@@ -213,6 +322,17 @@ class VideoEvalRunService:
         )
 
 
+def _job_motion_record(job: EvalJobPlan) -> dict[str, Any]:
+    assert job.motion is not None
+    record = job.motion.to_record()
+    prepared_source = next(
+        (sha for label, _path, sha in job.inputs if label == "prepared source image"), None
+    )
+    if prepared_source:
+        record["prepared_source_sha256"] = prepared_source
+    return record
+
+
 def build_run_manifest(plan: EvalRunPlan) -> dict[str, Any]:
     suite = plan.suite
     return {
@@ -221,6 +341,7 @@ def build_run_manifest(plan: EvalRunPlan) -> dict[str, Any]:
         "created_at": datetime.now(UTC).isoformat(),
         "suite": {
             "suite_id": suite.suite_id,
+            "schema": suite.schema,
             "path": str(suite.path) if suite.path is not None else None,
             "sha256": suite.sha256,
             "description": suite.description,
@@ -245,6 +366,7 @@ def build_run_manifest(plan: EvalRunPlan) -> dict[str, Any]:
                     if case.is_sequence
                     else {}
                 ),
+                **({"motion": case.motion.to_record()} if case.motion is not None else {}),
             }
             for case in suite.cases
         ],
@@ -267,6 +389,7 @@ def build_run_manifest(plan: EvalRunPlan) -> dict[str, Any]:
                 "seed": job.seed,
                 "frame_count": job.frame_count,
                 **({"segment_seeds": list(job.segment_seeds)} if job.segment_seeds else {}),
+                **({"motion": _job_motion_record(job)} if job.motion is not None else {}),
             }
             for job in plan.jobs
         ],

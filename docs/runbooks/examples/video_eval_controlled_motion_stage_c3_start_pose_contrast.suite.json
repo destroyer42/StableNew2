@@ -1,0 +1,208 @@
+{
+  "schema": "stablenew.video-eval-suite.v2",
+  "suite_id": "controlled-motion-stage-c3-start-pose-contrast",
+  "description": "Unexecuted template (PR-VID-MOTION-410, post-pilot Stage C). Stage C3 start-pose contrast: the same head turn on both subjects with a start-pose-matched driver (facing the camera) and with the pilot's unmatched profile-start driver, baseline arm only (4 jobs) at 81 frames. Compare each subject's two cases to see what a start-pose mismatch does. Bind your own images and driving videos; a physical run needs the owner's separate authorization.",
+  "seed": 410,
+  "baseline_arm": "baseline",
+  "cases": [
+    {
+      "case_id": "head_turn_front_to_profile_a",
+      "image": "images/subject_a.png",
+      "prompt": "a woman with long brown hair in polished steel plate armor over dark clothing, standing in a stone archway, upper body, photorealistic",
+      "tags": [
+        "head_turn",
+        "controlled-motion",
+        "subject-a",
+        "stage-c-revised"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/head_turn_front_to_profile.mp4"
+        },
+        "action": "Starts facing the camera, turns the head to the subject's left into profile, and holds.",
+        "motion_prompt": "the person starts facing the camera, slowly turns their head to their left into profile and holds, body and shoulders still",
+        "category": "head_turn",
+        "expected_outcome": "The intended subject starts facing the camera, their head rotates smoothly to their left into profile and holds there; the opening pose is natural (not already turned far over a shoulder), the shoulders and background stay still and the face is not replaced or duplicated.",
+        "direction": "to the subject's left (the viewer's right)",
+        "phases": [
+          "facing the camera",
+          "rotate to profile",
+          "hold"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "head and shoulders",
+          "viewpoint": "front",
+          "start_pose": "facing the camera (the pilot's profile-start driver, trimmed and reversed)",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "source faces the camera"
+          ],
+          "source_compatibility": "upper_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "head_turn_profile_start_a",
+      "image": "images/subject_a.png",
+      "prompt": "a woman with long brown hair in polished steel plate armor over dark clothing, standing in a stone archway, upper body, photorealistic",
+      "tags": [
+        "head_turn",
+        "controlled-motion",
+        "subject-a",
+        "stage-c-revised"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/head_turn_profile_start.mp4"
+        },
+        "action": "Starts looking away in profile, turns the head over the shoulder to face the camera, and holds.",
+        "motion_prompt": "the person turns their head from profile to look at the camera and holds, body and shoulders still",
+        "category": "head_turn",
+        "expected_outcome": "The intended subject's head rotates from a profile view to face the camera and holds there; the shoulders and background stay still and the face is not replaced or duplicated. The driver starts in profile while the source faces the camera, so this case shows what a start-pose mismatch does.",
+        "direction": "from profile to facing the camera",
+        "phases": [
+          "profile",
+          "turn toward the camera",
+          "hold"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "head and shoulders",
+          "viewpoint": "profile to front",
+          "start_pose": "in profile, facing away from the camera (the pilot driver, unchanged); deliberately unmatched to the source",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "source faces the camera",
+            "start pose NOT matched to the source"
+          ],
+          "source_compatibility": "upper_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "head_turn_front_to_profile_b",
+      "image": "images/subject_b.png",
+      "prompt": "a woman with wavy light-brown hair in polished steel plate armor with blue cloth sleeves, standing in a stone hall, upper body, photorealistic",
+      "tags": [
+        "head_turn",
+        "controlled-motion",
+        "subject-b",
+        "stage-c-revised"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/head_turn_front_to_profile.mp4"
+        },
+        "action": "Starts facing the camera, turns the head to the subject's left into profile, and holds.",
+        "motion_prompt": "the person starts facing the camera, slowly turns their head to their left into profile and holds, body and shoulders still",
+        "category": "head_turn",
+        "expected_outcome": "The intended subject starts facing the camera, their head rotates smoothly to their left into profile and holds there; the opening pose is natural (not already turned far over a shoulder), the shoulders and background stay still and the face is not replaced or duplicated.",
+        "direction": "to the subject's left (the viewer's right)",
+        "phases": [
+          "facing the camera",
+          "rotate to profile",
+          "hold"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "head and shoulders",
+          "viewpoint": "front",
+          "start_pose": "facing the camera (the pilot's profile-start driver, trimmed and reversed)",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "source faces the camera"
+          ],
+          "source_compatibility": "upper_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "head_turn_profile_start_b",
+      "image": "images/subject_b.png",
+      "prompt": "a woman with wavy light-brown hair in polished steel plate armor with blue cloth sleeves, standing in a stone hall, upper body, photorealistic",
+      "tags": [
+        "head_turn",
+        "controlled-motion",
+        "subject-b",
+        "stage-c-revised"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/head_turn_profile_start.mp4"
+        },
+        "action": "Starts looking away in profile, turns the head over the shoulder to face the camera, and holds.",
+        "motion_prompt": "the person turns their head from profile to look at the camera and holds, body and shoulders still",
+        "category": "head_turn",
+        "expected_outcome": "The intended subject's head rotates from a profile view to face the camera and holds there; the shoulders and background stay still and the face is not replaced or duplicated. The driver starts in profile while the source faces the camera, so this case shows what a start-pose mismatch does.",
+        "direction": "from profile to facing the camera",
+        "phases": [
+          "profile",
+          "turn toward the camera",
+          "hold"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "head and shoulders",
+          "viewpoint": "profile to front",
+          "start_pose": "in profile, facing away from the camera (the pilot driver, unchanged); deliberately unmatched to the source",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "source faces the camera",
+            "start pose NOT matched to the source"
+          ],
+          "source_compatibility": "upper_body_front"
+        }
+      }
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "baseline",
+      "label": "Baseline (pose 1.0, reference 1.0)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan_animate2_drive_i2v_v1",
+        "workflow_version": "1.2.0",
+        "frame_count": 81,
+        "experimental_opt_in": true,
+        "operator_controls": {
+          "pose_strength": 1.0,
+          "reference_image_strength": 1.0
+        }
+      }
+    }
+  ]
+}

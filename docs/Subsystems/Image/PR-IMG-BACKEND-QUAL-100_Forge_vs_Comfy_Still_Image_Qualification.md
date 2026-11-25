@@ -176,4 +176,4 @@ This package still has no driver. `tools/acceptance/img_comfy_381_compare.py` no
 (S1 SDXL baseline, 6 prompts x 2 seeds; S3 SDXL + LoRA) through the normal compile, runs them through the canonical queue/runner
 path, and writes `plan.json`, `compare.json`, a blind contact sheet, a review CSV and a separate `review_key.json`. Its verdict is
 always `OWNER_REVIEW_PENDING` with no numeric threshold, and it repeats the fairness critiques above verbatim. A physical run needs
-the owner's approved plan digest (`--approved-plan-sha256`, from `plan.json`) and is not self-authorized by an agent; none has run.
+the owner's approved plan digest (`--approved-plan-sha256`, from `plan.json`) and is not self-authorized by an agent. One owner-authorized run (2026-11-25, 16 pairs, exit 0) happened before ComfyUI keep-warm existed, so its ComfyUI "warm" timings include a model reload on every job and are not a fair speed comparison; PR-IMG-COMFY-382 holds the owned ComfyUI between consecutive jobs, and timings should be re-measured after it. The blind review of that run's images is still the owner's.

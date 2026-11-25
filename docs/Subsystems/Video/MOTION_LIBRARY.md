@@ -156,6 +156,10 @@ needed), and `tests/video/test_pr_vid_motion_lib_353_catalog.py`, `..._handoff.p
 (temp directories, a fake inspector, real Tk, a KB-sized clip from CPU-only FFmpeg where a real probe is needed and skipped
 without FFmpeg; no runtime, model, GPU or network).
 
+### 6.1 Suitability versus demonstrated transfer (PR-VID-MOTION-410)
+
+An asset's **Good for motion driving** flag, motion label, "motion achieved" and reuse notes are the operator's statements about a clip; they are never evidence that the motion transfers. What happened when a clip drove another subject is recorded only by an eval run (`docs/runbooks/video_eval_kit.md` section 9): the asset id and SHA-256 travel in the case, and the report's per-asset summary counts attempts, completions, rated results, action achievement, subject attachment, critical identity breaks, distinct source subjects and seeds, each with its denominator. Nothing aggregates those results back into the library: an operator-selected flag and observed outcomes stay separate, a missing review is not a failure, and no flag, rank or recommendation changes automatically. Automated recommendation belongs to a later roadmap phase.
+
 ## 7. Harvested motion assets (PR-VID-MOTION-400)
 
 **Harvest Motion** cuts the part of an existing video that contains the movement you want into a new, reusable Motion Library

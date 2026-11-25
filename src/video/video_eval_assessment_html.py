@@ -194,8 +194,9 @@ def _arm_rows(summary: ArmSummary) -> list[tuple[str, str]]:
             _counts(summary.subject_stability_counts),
         ),
         (
-            "Motion achieved / partial / not / cannot assess",
-            f"{motion['achieved']} / {motion['partially_achieved']} / {motion['not_achieved']} / {motion['cannot_assess']}",
+            "Motion achieved / partial / not / incorrect / cannot assess",
+            f"{motion['achieved']} / {motion['partially_achieved']} / {motion['not_achieved']} / "
+            f"{motion['incorrect_or_contradictory']} / {motion['cannot_assess']}",
         ),
         ("Temporal concerns", str(summary.temporal_concerns)),
         ("Scene concerns", str(summary.scene_concerns)),

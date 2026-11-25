@@ -9,6 +9,13 @@ every case even when its source image is missing. **Save as New Version** adds a
 selects it. **Save & Preview…** also displays the compiled job matrix and any refusals. **Queue All Jobs**
 in that preview is the explicit confirmation.
 
+For a **driving-motion** evaluation, choose **Add Driving Motion** on a case, bind a local video or a verified Motion Library
+clip, state the intended action, motion prompt and expected outcome, and **Duplicate Case for Another Source…** to test the
+same movement on another image. Such a suite is saved as `stablenew.video-eval-suite.v2`; existing v1 plans open and save
+unchanged (a new version file is always written) and cannot carry a driver. The arms pick a driving-video workflow and its
+controls; the driver and motion prompt come from the cases, and a workflow that takes no driving video refuses the case.
+**Review Motion…** appears for a built driving-motion run. See `docs/runbooks/video_eval_kit.md` section 9.
+
 Use **Other file…** for direct preview or the existing copy/import flow when no edits are needed.
 Invalid plans show the loader's reason and disable **Queue…**. They can still be opened in the editor
 when their JSON structure can be read.
@@ -26,10 +33,10 @@ configured Output folder even with a plan-root override.
 
 | Folder | Files | Schema or purpose |
 |---|---|---|
-| `video/` | `YYYYmmdd_slug_vNNN.suite.json` | `schema: "stablenew.video-eval-suite.v1"`. The schema identifies the suite. |
+| `video/` | `YYYYmmdd_slug_vNNN.suite.json` | `schema: "stablenew.video-eval-suite.v1"`, or `.v2` when a case binds a driving-motion reference (v2 is a superset). The schema identifies the suite. |
 | `image/` | `YYYYmmdd_slug.plan.json` | Image comparison plans use the schema of the consuming tool. |
 | `qualification/<tool>/` | One dated directory per default CLI invocation | Frozen qualification plans with each tool's existing schema. |
-| `templates/` | Copies of runbook example suites | Open in the suite editor and bind local source images before saving. |
+| `templates/` | Copies of runbook example suites | Open in the suite editor and bind local source images (and, for the controlled-motion campaign templates, driving videos) before saving. |
 | `_imported/` | `imports.jsonl` | Source path, source SHA-256, destination and timestamp for each import. |
 
 Use absolute image paths or paths relative to the suite file. Pin `image_sha256` when you need to
