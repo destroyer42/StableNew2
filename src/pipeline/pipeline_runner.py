@@ -314,7 +314,10 @@ class PipelineRunner:
         folder_name: str,
         now: datetime,
     ) -> Path:
-        cached_dir = cls._pack_folder_cache.get(route_cache_key)
+        # The cache is process-wide, so the output root belongs in the key: two runners (or jobs) with different
+        # output roots but the same pack/model/VAE must never be handed each other's folder.
+        cache_key = f"{route_root}|{route_cache_key}"
+        cached_dir = cls._pack_folder_cache.get(cache_key)
         if cached_dir and cached_dir.exists() and cls._folder_is_reusable(cached_dir, now):
             return cached_dir
 
@@ -324,12 +327,12 @@ class PipelineRunner:
             now=now,
         )
         if existing_dir is not None:
-            cls._pack_folder_cache[route_cache_key] = existing_dir
+            cls._pack_folder_cache[cache_key] = existing_dir
             return existing_dir
 
         run_dir = route_root / f"{now.strftime('%Y%m%d_%H%M%S')}_{folder_name}"
         run_dir.mkdir(parents=True, exist_ok=True)
-        cls._pack_folder_cache[route_cache_key] = run_dir
+        cls._pack_folder_cache[cache_key] = run_dir
         return run_dir
 
     @property
