@@ -1,6 +1,6 @@
 # PR-VID-MOTION-410: motion fidelity, transfer evaluation and evidence
 
-Status: implemented on a feature branch (Phase 2 of `docs/Subsystems/Video/CONTROLLED_MOTION_ROADMAP.md`). This is a per-PR record: the code and the living docs (`VIDEO_PIPELINE.md`, `docs/runbooks/video_eval_kit.md`, `docs/runbooks/eval_plans.md`) win where they differ. **No physical generation was run.** Implementation is not demonstration of motion quality, and nothing here is a qualification verdict.
+Status: implemented and merged (PR #405, merge commit `e421db70`; Phase 2 of `docs/Subsystems/Video/CONTROLLED_MOTION_ROADMAP.md`). This is a per-PR record: the code and the living docs (`VIDEO_PIPELINE.md`, `docs/runbooks/video_eval_kit.md`, `docs/runbooks/eval_plans.md`) win where they differ. The implementation was proven by deterministic tests; afterwards the owner authorized and ran a 15-job pilot (Stages A and B) and an 11-job Stage C (C0, the C1 head-turn cells and C3), sections 3.1 and 3.2. Implementation is not demonstration of motion quality, and nothing here is a qualification verdict.
 
 ## 1. Outcome and class
 
@@ -85,7 +85,7 @@ Full design 36 jobs = short + long. Stage A (3) is the functional pilot. Stage B
 
 **Operator steps:** copy a template into `<Output>/eval_plans/video/` or open it in the editor; bind each case's two source images and the class driver (a local clip or a Motion Library asset, using a harvested window where available); keep one frame count per suite; Validate; Save and Preview (shows the compiled jobs, the per-case driving contracts and any refusals); then, only after authorization, Queue.
 
-### 3.1 Post-pilot revision of Stage C (2026-11-24): authored, not executed
+### 3.1 Post-pilot revision of Stage C (2026-11-24): C0, C1 head-turn and C3 since run (3.2); the rest not run
 
 **What the pilot showed (owner inspection, recorded as notes in the run folders, not as ratings).** Stage A (3 jobs) and Stage B (12 jobs) all completed on `wan_animate2_drive_i2v_v1` 1.2.0 at 49 frames with no stop condition. The three arms (pose 1.0 / 1.2, reference 1.0 / 1.3) were indistinguishable by eye; all results had the intended motion, no visible artifact and no driver bleed-through, and the source subject held. Two oddities: a driver that starts facing away in the opposite direction makes the result open with the subject unnaturally looking far over a shoulder before turning to a normal range, and one of the 12 clips (hand wave, subject B, reference 1.3) showed an extra, still arm at the subject's side. The clips (2 s) were too short to judge timing. "No visible difference" is a statement about arms 1.2 / 1.3 on this pair, not about the controls: the spread was too small to tell.
 
@@ -104,11 +104,53 @@ Arms are one-variable against the baseline (pose 1.0, reference 1.0, pose window
 
 **Start pose.** Match the driver's first frame to the source's pose instead of hoping the model reconciles them. Both sources face the camera, so the head-turn driver must start facing the camera. The pilot driver turned from profile to the camera; a derived clip that starts facing the camera is the first 3.4 s of it, reversed: `ffmpeg -t 3.4 -i head_turn.mp4 -vf reverse -an -c:v libx264 -crf 14 -pix_fmt yuv420p head_turn_front_to_profile.mp4` (the `-t 3.4` must come **before** `-i`: after it, ffmpeg reverses the whole clip and keeps the first 3.4 s of the reversal, which is the final hold, not the turn; check the first and last frames). That is a new local video with its own SHA-256 and unverified provenance (record its lineage in the case annotations); it is not the Pexels file. If a driver instead starts facing the other way, flip the source image (or the driver, `-vf hflip`) and bind the flipped file; say so in the case annotations. The `start_pose` annotation states what each driver starts as.
 
-**Runtime planning (no fresh benchmark at 81 frames).** At 49 frames the pilot took 229-311 s per job (about 49 min for 12) with whole-GPU VRAM peaking at about 11.8 GB of 12.28 GB, host RAM minimum 15.3 GB and the GPU near 83 C. 81 frames is unmeasured and will take longer and may exceed the VRAM available (a clean resource refusal or an out-of-memory failure), so **Stage C0 runs one job first**; only a completed canary with its measured time and peak headroom supports authorizing C1 (12 jobs; it repeats the canary's cell, which also checks repeatability) and then C2. Stop conditions and the authorization boundary are unchanged (section 3): device loss, resource refusal, two consecutive failures, any changed or incomparable finding, content that must not be shown, or the budget. StableNew and its Forge must be closed while a harness runs (the runtime guard refuses while a Forge it did not start is live).
+**Runtime planning (written before any 81-frame run; measured figures are in 3.2).** At 49 frames the pilot took 229-311 s per job (about 49 min for 12) with whole-GPU VRAM peaking at about 11.8 GB of 12.28 GB, host RAM minimum 15.3 GB and the GPU near 83 C. 81 frames is unmeasured and will take longer and may exceed the VRAM available (a clean resource refusal or an out-of-memory failure), so **Stage C0 runs one job first**; only a completed canary with its measured time and peak headroom supports authorizing C1 (12 jobs; it repeats the canary's cell, which also checks repeatability) and then C2. Stop conditions and the authorization boundary are unchanged (section 3): device loss, resource refusal, two consecutive failures, any changed or incomparable finding, content that must not be shown, or the budget. StableNew and its Forge must be closed while a harness runs (the runtime guard refuses while a Forge it did not start is live).
 
 **Keep the inputs inside Output.** Bind images and driving videos from a folder under the Output root (for example `eval_plans/video/<suite>/images` and `/motion`). Frozen job inputs record their paths, and a viewer limited to Output (the Site) can show only files there; an input outside Output cannot be relinked afterwards without rewriting frozen records, which the report would flag as a source-image mismatch.
 
 **Results as future drivers.** A finished clip can be added to the Motion Library from Recent outputs (it keeps the originating job and artifact), and Prepare Motion Source treats it like any other driver. A generated clip carries its source subject's appearance and any artifact it had, so it is a reference to be reviewed, not a clean motion capture; a driver from a reviewed result inherits the 81-frame length and a known start pose, which is useful when the run was good and misleading when it was not.
+
+### 3.2 Stage C results (2026-11-25): C0, C1 head-turn cells and C3 run; partially reviewed; nothing qualified
+
+**Authorization and scope.** The owner authorized C0 (1 job), the C1 head-turn cells (head turn, subject A, six arms: 6 jobs) and then C3 (4 jobs). Not run: the C1 hand-wave cells, C2 (subject B, 12 jobs) and the rest of the 36-job design. Inputs were bound inside Output (`eval_plans/video/vid410_stage_c/images|motion`): the head-turn driver is the first 3.4 s of the Pexels turn clip, reversed (SHA-256 begins `2d514881b13ba3c8`), the unmatched C3 driver is the pilot's profile-start clip (`a16b0a5f1393d3e0`). Workflow `wan_animate2_drive_i2v_v1` 1.2.0, seed 410, 81 frames at 24 fps (3.375 s), arms as in 3.1. The harness ran the branch tree at `e2a6520a` (later commits are docs, tests and a CI baseline fix).
+
+| Run (folder under Output `video_eval/`) | Jobs | Wall per job | Peak VRAM (of 12,282 MiB) | Min available RAM | Peak GPU temp |
+|---|---|---|---|---|---|
+| C0 `20261125_062605_controlled-motion-stage-c0-canary_56a952f5` | 1 | 450 s | 11,620 MiB | 15.3 GB | 82.3 C |
+| C1 `20261125_063426_controlled-motion-stage-c1-subject-a_4b0c5a11` | 6 | 388-430 s (early-stop arm 388 s) | 11,640 MiB | 13.2 GB | 83.8 C |
+| C3 `20261125_072750_controlled-motion-stage-c3-start-pose-contrast_de4d3af4` | 4 | 429-450 s | 11,298 MiB | 14.1 GB | 83.1 C |
+
+No device loss, resource refusal, failed job or teardown error; PCIe stayed at x16 Gen4; the self-imposed stop line (VRAM 12,100 MiB) was never reached. Available RAM was 30+ GB before each job; the in-run minimum fell below the 16 GB start-of-job floor in C1 (13.2 GB) and C3 (14.1 GB) without a failure (the floor itself is unchanged). All 11 clips are 81 frames. Raw evidence is local and not committed: `StableNewAcceptance/VID-410/stage_c/run_20261125T062603Z` (C0), `..T063424Z` (C1), `..T072748Z` (C3). The 26 completed job rows of Stages A, B and C were imported into the app's job history (additive, with backups under `D:/StableNew-Archive/jobs-backups`) so the app's Build report works on them.
+
+**Owner review (partial).** C0: unrated. C1 and C3: all 10 clips carry the base rubric (overall, source fidelity, subject stability, continuity, anatomy, scene stability, identity break) and a note; the motion-specific columns (subject attachment, motion fidelity, direction, timing, completion, root displacement, start/end pose, driver contamination) are blank everywhere, and the note on `head_turn_profile_start_a` ends mid-sentence. Nothing below is a motion-fidelity rating.
+
+C1, head turn, subject A (the owner's overall rating, 1-5, and requested action):
+
+| Arm | Overall / action | Owner's observation |
+|---|---|---|
+| baseline | 5 / partial | Head turns, body barely moves; source fidelity 4. |
+| pose_low (0.5) | 5 / partial | Head turns, no body movement, and not as far. |
+| pose_high (2.0) | 5 / achieved | More full-body movement, closer to the driver (whose body also moves); a broad smile the source lacks, possibly bleed-through from the driver. |
+| reference_low (0.5) | 4 / achieved | Good head turn and body movement. |
+| reference_high (2.0) | 4 / partial | Yellowish colour shift (scene stability 4, flagged background drift), less body movement, opens with a smile the source lacks. |
+| pose_early_stop (0.6) | 4 / partial | Head turn only, little body movement (continuity 4). |
+
+At this spread the arms are visibly different, unlike 1.2 / 1.3 at 49 frames. The global image-motion diagnostic agrees in direction (about 2.7x and 3.2x the baseline's mean motion for `pose_high` and `reference_low`, the two arms with the most body movement in the owner's notes, and both flagged as losing more detail than the baseline; `pose_low` measured lower, 0.34 against 0.60), but it is a global luma-change signal and not pose fidelity, and this is one subject, one case and one seed: an observation to test, not a finding that pose or reference strength causes body motion.
+
+C3 (baseline arm; matched = the driver starts facing the camera, unmatched = the pilot's profile-start driver):
+
+| Subject | Driver | Trace correlation (diagnostic) | Overall / action | Owner's observation |
+|---|---|---|---|---|
+| A | matched | 0.68 | 5 / partial | Head only, slight smile the source lacks. |
+| A | unmatched | 0.18 | 5 / partial | Note incomplete (it begins with the subject in profile). |
+| B | matched | 0.67 | 4 / achieved | Head rotation beyond what the neck allows without the body following; anatomy 3, first failure at 2.55 s. |
+| B | unmatched | 0.22 | 5 / achieved | Quick but anatomically plausible; the first second is the movement, the rest is the subject smiling. |
+
+The diagnostic's trace correlation is much lower for the unmatched driver on both subjects (0.18 / 0.22 against 0.68 / 0.67), but the owner's review does not show the matched driver winning: for subject B the unmatched clip was judged the more plausible, and for A the review is incomplete. The correlation compares a clip's global motion trace with the driver's; a clip that opens in a different pose can differ in trace and still look right. So C3 neither confirms nor refutes the pilot's unnatural-opening observation, and it does not establish how much alignment (PR-VID-MOTION-420) is worth.
+
+**Across the clips.** Four of the ten reviewed clips (pose_high, reference_high, C3 subject A matched, C3 subject B unmatched) show a smile the neutral source does not have; the owner suspects expression bleed-through from the driver. At 49 frames the pilot saw none. Unconfirmed: the driver's expression has not been checked frame by frame, and no contamination column was filled.
+
+**What this is and is not.** Implemented and demonstrated: 11 more completed 81-frame jobs, the runtime headroom at 81 frames on this machine (VRAM peak 11.64 GB of 12.28 GB, about 7 min per job, RAM dipping to 13.2 GB), arms at a wide spread that differ visibly, and the start-pose contrast run. Not demonstrated: the hand wave at 81 frames, subject B across arms, a second seed, any repeatability at 81 frames (the C0 cell and C1's baseline have the same inputs, but their clips were not compared frame by frame), any motion-fidelity rating, pose fidelity, or timing. **NOT QUALIFIED**: no workflow, asset or setting is promoted. Any further run (C1 hand wave, C2, more subjects) needs the owner's fresh, exact authorization.
 
 ## 4. Future extensions (documented, not implemented)
 
