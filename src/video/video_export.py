@@ -96,7 +96,13 @@ def export_video_mp4(
     if not creator.ffmpeg_available:
         raise SVDExportError("FFmpeg is not available for MP4 export")
 
-    with tempfile.TemporaryDirectory(prefix="svd_export_", dir=str(output.parent)) as temp_dir:
+    # Windows scanners/indexers can briefly hold a frame PNG open; a failed cleanup of scratch
+    # frames must not fail an export that already succeeded.
+    with tempfile.TemporaryDirectory(
+        prefix="svd_export_",
+        dir=str(output.parent),
+        ignore_cleanup_errors=True,
+    ) as temp_dir:
         frame_paths = save_video_frames(
             frames=frames,
             output_dir=temp_dir,
@@ -165,7 +171,11 @@ def _export_gif_with_ffmpeg(
     ffmpeg_executable: Path,
     cancel_token: CancelToken | None,
 ) -> None:
-    with tempfile.TemporaryDirectory(prefix="gif_export_", dir=str(output.parent)) as temp_dir:
+    with tempfile.TemporaryDirectory(
+        prefix="gif_export_",
+        dir=str(output.parent),
+        ignore_cleanup_errors=True,
+    ) as temp_dir:
         save_video_frames(frames=frames, output_dir=temp_dir, prefix="frame")
         cmd = [
             str(ffmpeg_executable),
