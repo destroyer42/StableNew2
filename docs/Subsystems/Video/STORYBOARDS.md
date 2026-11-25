@@ -84,9 +84,12 @@ still image and stay exactly as they are; the shared word is a known wording ove
   **Export cut…** reveals the stitched MP4 or sends it to Movie Clips; a take without a video says `not encoded` and offers
   Resume; a middle take of a chain names the chain file and the timecode where the take ends. Failed or cancelled cards
   offer **Resume** and **Replay** through the existing sequence controller; a replay becomes a new sibling take.
-- **Entry from other tabs:** `route_job_to_storyboard` (`src/gui/controllers/video_workspace_handoff.py`) is in place. The
-  **Continue in Storyboard** buttons in Job History, Recent outputs and the Make Video result are **not wired yet**: they
-  wait for the Video Workflow layout work (VID-UX-384) to land on `main`, because they touch the same files.
+- **Entry from other tabs:** **Continue in Storyboard** opens a finished clip's job in this tab as a new storyboard root. It
+  is a button in Job History (also in its context menu, enabled for a completed job with a recorded video) and in the
+  Video Workflow tab's Recent outputs list, which is where Make Video results appear (enabled for the selected clip). Both
+  call `route_job_to_storyboard` (`src/gui/controllers/video_workspace_handoff.py`), which selects the tab and starts the
+  root; nothing is queued. A job the tab cannot root (not a completed Comfy video job, a missing frame) is refused in the
+  tab's status line.
 
 Acceptance boundary: deterministic tests only (Tk-free contract and projection tests, Tk tests with a fake service and real
 PNG frames, the gate). **NOT TESTED on hardware:** no GPU run, no A14B stitched continuation, no live use of the tab.
