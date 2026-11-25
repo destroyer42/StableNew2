@@ -151,6 +151,30 @@ def _columns(root, columns: tuple[Column, ...], width: int = 600, height: int = 
     return widget
 
 
+def _diag_ai230(widget, root):  # TEMP-DIAG-AI230: remove before merge
+    import threading
+    import tkinter.font as tkfont
+
+    frame, canvas = widget.card_frames["d6"], widget._canvas
+    try:
+        theme = ttk.Style(root).theme_use()
+    except Exception as exc:  # noqa: BLE001
+        theme = repr(exc)
+    return {
+        "scaling": round(float(root.tk.call("tk", "scaling")), 4),
+        "screen_px_mm": (root.winfo_screenwidth(), root.winfo_screenmmwidth()),
+        "canvas_w": canvas.winfo_width(),
+        "card_w": frame.winfo_width(),
+        "inner_w": widget._inner.winfo_width(),
+        "xview": canvas.xview(),
+        "card_left_in_canvas": frame.winfo_rootx() - canvas.winfo_rootx(),
+        "default_font": tkfont.nametofont("TkDefaultFont").actual(),
+        "theme": theme,
+        "threads": [t.name for t in threading.enumerate()][:10],
+        "scaling_log_tail": getattr(tk, "_ai230_scaling_log", [])[-6:],
+    }
+
+
 def _inside_viewport(widget: StoryboardColumnsV2, take_id: str) -> bool:
     frame, canvas = widget.card_frames[take_id], widget._canvas
     return (
@@ -186,7 +210,7 @@ def test_see_leaves_the_card_whole_whatever_the_window_width(tk_root, width):
     for take_id in ("d6", "c6"):
         widget.see(take_id)
         _settle(tk_root)
-        assert _inside_viewport(widget, take_id), (width, take_id)
+        assert _inside_viewport(widget, take_id), (width, take_id, _diag_ai230(widget, tk_root))
     widget.see("root")
     _settle(tk_root)
     assert _inside_viewport(widget, "root"), width
