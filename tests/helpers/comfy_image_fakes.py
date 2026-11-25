@@ -223,6 +223,7 @@ class FakeManager:
         self.healthy = healthy
         self.running = False
         self.stops = 0
+        self.starts = 0
         self.required: list[tuple[str, ...]] = []
 
     @property
@@ -244,6 +245,8 @@ class FakeManager:
             raise ComfyStartupError(
                 "Cannot launch managed ComfyUI: a healthy external ComfyUI is already serving; refusing to adopt"
             )
+        if not self.running and self.healthy:
+            self.starts += 1
         self.running = self.healthy
         return self.healthy
 

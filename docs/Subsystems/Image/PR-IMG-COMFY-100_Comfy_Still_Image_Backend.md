@@ -309,6 +309,11 @@ enhancer, warm-runtime reuse, matched Forge comparison, default switch, shared C
 > exclusions no longer apply. The operator can now choose ComfyUI as the default still-image backend (setting
 > `image_backend_default`), SDXL txt2img runs there, and a Forge-vs-ComfyUI comparison package exists. Forge stays the shipped
 > default; Qwen-Image behavior is unchanged.
+>
+> Warm reuse (PR-IMG-COMFY-382): the SDXL path now holds the owned ComfyUI after a successful job through the shared
+> `runtime_warm_hold` slot (VID-WARM-373) instead of stopping it, for `comfy_image_keep_warm_seconds` of idle time (default 60,
+> `0` restores release-after-every-job). Another job preparing any runtime, a failure, the idle grace or application exit ends it.
+> Qwen-Image keeps its qualified release-after-every-job policy; the "warm-runtime reuse" exclusion above no longer applies to SDXL.
 
 ## 14. Stop conditions and authorization boundaries
 
