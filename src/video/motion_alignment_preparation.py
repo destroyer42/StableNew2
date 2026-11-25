@@ -1202,15 +1202,18 @@ def verify_aligned_dispatch(stage_config: Mapping[str, Any], input_image_path: A
             "The aligned clip was made for a different target frame than this job's reference image."
         )
     expected = _mapping(_mapping(data.get("alignment")).get("source_image")).get("prepared_sha256")
-    if input_image_path:
-        try:
-            actual = sha256_file(input_image_path)
-        except OSError as exc:
-            raise AlignedPreparationError("The reference image is no longer readable.") from exc
-        if actual != expected:
-            raise AlignedPreparationError(
-                "The reference image differs from the one this alignment was made for."
-            )
+    if (
+        not input_image_path
+    ):  # fail closed: an aligned clip is never run without its own reference image
+        raise AlignedPreparationError("The aligned job has no reference image to verify.")
+    try:
+        actual = sha256_file(input_image_path)
+    except OSError as exc:
+        raise AlignedPreparationError("The reference image is no longer readable.") from exc
+    if actual != expected:
+        raise AlignedPreparationError(
+            "The reference image differs from the one this alignment was made for."
+        )
 
 
 # --- form-level entry points (the controller and the eval authoring call these) -------------------------

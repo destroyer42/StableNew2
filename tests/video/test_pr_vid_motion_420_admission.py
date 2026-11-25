@@ -357,6 +357,8 @@ def test_dispatch_and_replay_reverify_the_frozen_aligned_artifacts(world):
     Image.new("RGB", (480, 832), (1, 2, 3)).save(other_ref)
     with pytest.raises(AlignedPreparationError, match="reference image"):
         verify_aligned_dispatch(stage, other_ref)
+    with pytest.raises(AlignedPreparationError, match="no reference image"):
+        verify_aligned_dispatch(stage, None)  # fail closed: never run an aligned clip unverified
 
     Path(record["derived"]["path"]).write_bytes(b"gone wrong")
     [issue] = verify_inputs(checks)

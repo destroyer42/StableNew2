@@ -359,6 +359,8 @@ class MotionAlignmentSession:
         loaded preview obsolete; nothing is silently reused."""
 
         previous = self._inputs
+        if inputs == previous:
+            return  # nothing moved: no notification, so a listener that re-reads the form cannot loop
         self._inputs = inputs
         applied = self._applied
         if applied is not None and applied.state == "preparing" and self._stale_names():

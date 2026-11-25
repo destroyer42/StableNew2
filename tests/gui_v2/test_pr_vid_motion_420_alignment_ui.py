@@ -808,3 +808,41 @@ def test_the_compatibility_panel_reuses_the_existing_readiness_advisories(tmp_pa
     assert any(
         note in measured for note in loaded.readiness_notes
     )  # shown as measured/reported facts
+
+
+@pytest.mark.gui
+def test_the_tab_gates_alignment_media_on_show_media_and_the_content_filter(tk_root, tmp_path):
+    tab, *_ = _tab(tk_root, tmp_path)
+    assert tab._alignment_media_allowed() is True
+    tab.show_media_var.set(False)  # the operator hid media: nothing may be decoded or previewed
+    assert tab._alignment_media_allowed() is False
+    session = tab.alignment_host.session
+    ports = Ports(allowed=False)
+    runner = ManualRunner()
+    session._ports, session._runner = ports.ports(), runner
+    tab.alignment_host.refresh()
+    session.open_workspace()
+    assert ports.loads == [] and runner.queue == []
+
+
+def test_refreshing_with_unchanged_inputs_is_silent_so_a_form_reading_listener_cannot_loop():
+    session, runner, ports = _session()
+    heard: list[int] = []
+    session.subscribe(lambda: heard.append(1))
+    session.refresh(_inputs())  # identical to the inputs already held
+    session.refresh(_inputs())
+    assert heard == []
+    session.refresh(_inputs(source_path="other.png"))  # a real change is announced exactly once
+    assert heard == [1]
+
+
+@pytest.mark.gui
+def test_a_tab_without_a_controller_still_builds_and_never_raises_from_alignment(tk_root, tmp_path):
+    from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
+
+    tab = VideoWorkflowTabFrameV2(tk_root, app_controller=None, app_state=SimpleNamespace())
+    assert tab.alignment_host.session.submission_fields() == {}
+    tab.alignment_row.refresh()  # no controller: the row hides or disables itself, nothing is raised
+    assert tab.alignment_host.ports(lambda: True).driver_observations("mlib_" + "a" * 16) is None
+    with pytest.raises(RuntimeError, match="not available"):
+        tab.alignment_host.ports(lambda: True).prepare({}, {}, threading.Event())

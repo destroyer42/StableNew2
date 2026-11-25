@@ -60,7 +60,16 @@ class AlignmentHost:
 
     def ports(self, media_allowed: Callable[[], bool]) -> AlignPorts:
         def ctl() -> Any:
-            return self._controller()
+            controller = self._controller()
+            if controller is None:
+                raise RuntimeError("The Video Workflow controller is not available.")
+            return controller
+
+        def observations(asset_id: str) -> Any:
+            controller = self._controller()
+            if controller is None:
+                return None  # annotations are optional context; no controller simply means none
+            return controller.motion_asset_observations(asset_id)
 
         def load(
             form: Mapping[str, Any],
@@ -82,7 +91,7 @@ class AlignmentHost:
             load=load,
             render=render,
             prepare=prepare,
-            driver_observations=lambda asset_id: ctl().motion_asset_observations(asset_id),
+            driver_observations=observations,
             media_allowed=media_allowed,
         )
 
