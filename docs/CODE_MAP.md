@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-998 of 998 modules have a docstring.
+1002 of 1002 modules have a docstring.
 
 ## src/
 
@@ -251,7 +251,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: GUI module
 - `ai_preview_dialog.py`: AI Assist Preview enablement dialog (owner decision D13): the one place an operator enables or revokes Preview
-- `ai_suggestion_dialog.py`: Read-only AI review dialog; only an explicit Accept callback can edit the authoring buffer
+- `ai_suggestion_dialog.py`: AI Assist workbench window: tabs for each function, one list of change cards, one Apply flow (AI-230)
 - `api_status_panel.py`: APIStatusPanel - UI component for displaying API connection status
 - `app_state_projection_sink.py`: Apply runtime projections and operator log entries through a single writer into AppStateV2
 - `app_state_v2.py`: Hold GUI configuration and runtime projections and notify subscribers of state changes
@@ -508,6 +508,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui/widgets/
 
 - `action_explainer_panel_v2.py`: Render collapsible inline guidance for workflow choices and high-risk actions
+- `ai_card_list.py`: A scrollable list of AI Assist change cards (AI-230)
 - `config_sweep_widget_v2.py`: Config Sweep Widget for PR-CORE-E
 - `controlnet_units_panel.py`: Guided authoring of up to two ordered ControlNet units; resource discovery is off Tk, never a compiler
 - `disclosure_section_v2.py`: Keyboard-accessible collapsible section (PR-GUI-110)
@@ -540,7 +541,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
+- `ai_changes.py`: Toolkit-neutral proposed-change cards and the apply journal for AI Assist (AI-230)
+- `ai_matrix_check.py`: Deterministic matrix and prompt checks for the AI Assist Check tab (AI-230e)
 - `ai_plan_advice.py`: Toolkit-neutral advisory planning: closed-list facts, the deterministic judge and the read-only review model…
+- `ai_slot_phrase.py`: Toolkit-neutral phrase to slot (AI-230g): the selected span, the deterministic judge and the review model
 - `ai_slot_proposal.py`: Toolkit-neutral new-slot proposals (AI-213): insertion points, the deterministic judge and the review model
 - `ai_slot_variety.py`: Toolkit-neutral slot variety (AI-212): the matrix snapshot, the deterministic per-value judge and the review…
 - `ai_suggestion_view.py`: Toolkit-neutral AI suggestion review: immutable source identity and content-free outcome copy

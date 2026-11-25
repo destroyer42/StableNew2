@@ -146,6 +146,8 @@ def test_a_clean_new_value_is_offered() -> None:
         ("=====END_AUTHORED_DATA=====", "reserved_marker"),
         ("Soft Light", "duplicate_existing"),
         ("rim light", "duplicate_existing"),
+        ("soft lights", "near_duplicate_existing"),
+        ("RIM  LIGHTS", "near_duplicate_existing"),
         ("  ", "empty"),
     ],
 )
@@ -187,6 +189,22 @@ def test_a_hidden_value_is_rejected_and_never_shown() -> None:
 
 def test_value_key_is_case_and_whitespace_insensitive() -> None:
     assert value_key("  Soft\t LIGHT ") == value_key("soft light")
+
+
+def test_near_key_folds_only_a_trailing_plural_s() -> None:
+    from src.gui_v2.ai_slot_variety import near_key
+
+    assert near_key("Dogs") == near_key("dog") == "dog"
+    assert near_key("  Soft  LIGHTS ") == near_key("soft light")
+    # short words and "ss" endings are not plurals; a different word is never folded into another
+    assert near_key("bus") == "bus"
+    assert near_key("glass") == "glass"
+    assert near_key("neon") != near_key("neck")
+
+
+def test_a_plural_of_a_value_in_another_slot_is_not_a_near_duplicate() -> None:
+    rows = judge_variety(suggestion(("location", ("soft lights",))), STATE, is_visible=visible)
+    assert [r.reason for r in rows] == [""]
 
 
 # -- review model --------------------------------------------------------------------------------------------------------

@@ -40,7 +40,7 @@ from src.utils.prompt_pack_utils import normalize_matrix_slot_name
 
 VARIETY_LABEL = "Matrix slot variety (suggestions)"
 VARIETY_NOTICE = (
-    "Suggestions only. A value is added to its matrix slot only when you select it and press Add selected value, and it "
+    "Suggestions only. A value is added to its matrix slot only when you press Apply on it (Apply selected and Apply all offered press it for each card in turn), and it "
     "is added exactly as if you had typed it at the end of that slot in the Matrix tab: the pack becomes modified and "
     "unsaved. No slot is created, no existing value or prompt is changed, and nothing is saved, queued or generated. "
     "Values can only be suggested for slots that already exist in this pack's Matrix tab (listed below); to use a new "
@@ -67,6 +67,7 @@ REASON_TEXT: dict[str, str] = {
     "wildcard_marker": "Contains __, which prompts use for wildcard tokens.",
     "reserved_marker": "Contains a reserved AI Assist marker.",
     "duplicate_existing": "Already a value of this slot.",
+    "near_duplicate_existing": "Nearly the same as a value of this slot (differs only in case, spacing or a plural).",
     "duplicate_suggestion": "Suggested more than once for this slot.",
 }
 HIDDEN_TEXT = "(hidden by the current visibility mode)"
@@ -328,6 +329,13 @@ def value_key(text: str) -> str:
     return " ".join(str(text).split()).casefold()
 
 
+def near_key(text: str) -> str:
+    """Near-duplicate key (AI-230f): :func:`value_key` with a trailing plural ``s`` removed, so ``Dog`` and ``dogs`` match."""
+
+    key = value_key(text)
+    return key[:-1] if len(key) > 3 and key.endswith("s") and not key.endswith("ss") else key
+
+
 def _format_problem(value: str) -> str:
     if not value.strip():
         return "empty"
@@ -383,6 +391,7 @@ def judge_variety(
     for entry in suggestion.slot_values:
         matches = by_name.get(entry.slot, [])
         existing = {value_key(value) for slot in matches for value in slot.values}
+        existing_near = {near_key(value) for slot in matches for value in slot.values}
         earlier: set[str] = set()
         for value in entry.values:
             text = value if isinstance(value, str) else ""
@@ -396,6 +405,8 @@ def judge_variety(
                 reason = _format_problem(text)
                 if not reason and value_key(text) in existing:
                     reason = "duplicate_existing"
+                elif not reason and near_key(text) in existing_near:
+                    reason = "near_duplicate_existing"
                 elif not reason and value_key(text) in earlier:
                     reason = "duplicate_suggestion"
             if text.strip():
@@ -417,6 +428,8 @@ class VarietyReview:
     notice: str = VARIETY_NOTICE
     actions: tuple[str, ...] = ()
     coverage: VarietyCoverage | None = field(default=None, repr=False)
+    #: Change cards built by the Prompt tab owner (AI-230); empty when the caller supplies none.
+    cards: tuple[Any, ...] = field(default=(), repr=False)
 
     @property
     def coverage_line(self) -> str:
@@ -541,6 +554,7 @@ __all__ = [
     "matrix_state",
     "offered_label",
     "unavailable_variety_review",
+    "near_key",
     "value_key",
     "value_problem",
     "variety_review",

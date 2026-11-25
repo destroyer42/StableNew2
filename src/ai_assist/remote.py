@@ -61,6 +61,10 @@ _SUCCESS_PAYLOAD = {
         "Put the proposals in proposals. Each needs a new slot_name, its values, the insertion_point number copied from "
         "the numbered positions listed in the data, and a rationale."
     ),
+    SuggestionKind.PHRASE_SLOT: (
+        "Put the proposals in phrase_slots. Each needs a new slot_name, its alternative values for the selected phrase, "
+        "and a rationale."
+    ),
     SuggestionKind.SLOT_VARIETY: (
         "Put the proposals in slots. Copy each slot name exactly into slot and put the new phrases in values. "
         "Follow the requested category for each value."
