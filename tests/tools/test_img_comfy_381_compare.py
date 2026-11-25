@@ -242,6 +242,7 @@ def test_the_blind_review_hides_the_arm_and_the_key_is_separate_and_reproducible
     review = reports / "review"
     rows = list(csv.DictReader((review / "review.csv").read_text(encoding="utf-8").splitlines()))
     assert len(rows) == 16 and (review / "contact_sheet.png").is_file()
+    assert (review / "rater.html").is_file()
     assert "forge" not in (review / "review.csv").read_text(encoding="utf-8").lower()
     key = json.loads((reports / "review_key.json").read_text(encoding="utf-8"))
     assert key["shuffle_seed"] == 7 == compare["shuffle_seed"]

@@ -11,7 +11,7 @@ and reports what happened. It adds no second queue, runner, compiler or runtime 
 keeps its owned ComfyUI warm between consecutive SDXL jobs (PR-IMG-COMFY-382), so the first ComfyUI job is cold and later
 ones are warm; the harness ends the hold when an arm finishes.
 
-Outputs (new evidence directory only): ``plan.json``, ``compare.json``, ``review/contact_sheet.png``, ``review/review.csv``,
+Outputs (new evidence directory only): ``plan.json``, ``compare.json``, ``review/contact_sheet.png``, ``review/review.csv``, ``review/rater.html`` (a blind A/B rating page that exports the CSV),
 ``review/images/*`` (metadata-free copies, blind A/B) and ``review_key.json`` (the only place the A/B mapping is recorded;
 withhold it from the reviewer until ratings are in).
 
@@ -421,10 +421,20 @@ def write_review(
         writer.writeheader()
         writer.writerows(rows)
     _write_new(reports / "review_key.json", {"shuffle_seed": shuffle_seed, "pairs": key})
+    rater = None
+    if rows:
+        try:  # a convenience page: a failure to write it must never fail a finished physical run
+            from tools.acceptance.img_comfy_381_rater import write_rater
+
+            write_rater(review)
+            rater = "review/rater.html"
+        except Exception:  # noqa: BLE001
+            rater = None
     return {
         "pairs_reviewed": len(rows),
         "contact_sheet": "review/contact_sheet.png" if sheet_pairs else None,
         "csv": "review/review.csv",
+        "rater": rater,
     }
 
 
