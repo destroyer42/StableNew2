@@ -35,6 +35,7 @@ _RECORD_ONLY = frozenset(
         "prepared",
         "library_asset",
         "prepared_source_sha256",
+        "alignment_detail",
     }
 )
 

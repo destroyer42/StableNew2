@@ -318,11 +318,16 @@ class SitePhoneConnector:
         self._catalog: SiteOutputCatalog | None = None
         self._presence: tuple[str, float] | None = None
         self._needs_compatibility = True
+        self._supports_resume = False
+        self._remember = True
+        self._paused_saved_grant = False
         self._claim: _Claim | None = None
         self.status = "Phone review is off."
 
-    def start(self) -> None:
+    def start(self, *, remember: bool = True) -> None:
         if self._thread is None:
+            self._remember = remember
+            self._paused_saved_grant = not remember
             registry = get_thread_registry()
             remove_listener = registry.add_shutdown_listener(self._signal_stop)
 
@@ -342,6 +347,46 @@ class SitePhoneConnector:
                 remove_listener()
                 self.status = "Phone review is unavailable during shutdown."
 
+    def set_remember(self, enabled: bool) -> None:
+        self._remember = enabled
+
+        def command() -> None:
+            if self._remember:
+                self._paused_saved_grant = False
+
+        self._commands.put(command)
+
+    def change_folder(self, folder: Path) -> Future[None]:
+        future: Future[None] = Future()
+
+        def command() -> None:
+            current = self._grant
+            try:
+                if (
+                    current is None
+                    or current.pending
+                    or current.revoked
+                    or self._revoke_requested.is_set()
+                ):
+                    raise PhoneConnectorError("There is no approved phone pairing.")
+                changed = replace(current, folder=PhoneFolder.approve(folder))
+                if changed != current:
+                    self._drop_presence()
+                    if not self._paused_saved_grant:
+                        self._check_compatibility(current.site_secret, current.host_secret)
+                        self._request(current, "suspend" if self._supports_resume else "close")
+                    self._store.save(changed)
+                    self._grant = changed
+                    self._instance = secrets.token_hex(16)
+                future.set_result(None)
+            except PhoneConnectorError as error:
+                future.set_exception(error)
+            except (OSError, ValueError):
+                future.set_exception(PhoneConnectorError("Could not approve this Output folder."))
+
+        self._commands.put(command)
+        return future
+
     def _check_compatibility(self, site_secret: str, credential: str) -> None:
         reply = self._http.request("compatibility", site_secret, credential)
         version, capabilities = reply.get("version"), reply.get("capabilities")
@@ -354,6 +399,7 @@ class SitePhoneConnector:
             or not _REQUIRED_CAPABILITIES.issubset(capabilities)
         ):
             raise PhoneVersionMismatch(_VERSION_MESSAGE)
+        self._supports_resume = "remembered_phone" in capabilities
 
     def inspect(self, site_secret: str, challenge: str) -> Future[PhoneEnrollment]:
         future: Future[PhoneEnrollment] = Future()
@@ -413,6 +459,7 @@ class SitePhoneConnector:
                     raise PhoneConnectorError("Phone pairing was canceled.")
                 self._store.save(grant)
                 self._grant = grant
+                self._paused_saved_grant = False
                 self.status = "Confirming phone pairing with the private Site…"
                 try:
                     self._confirm_enrollment(grant)
@@ -493,13 +540,21 @@ class SitePhoneConnector:
     def _run(self) -> None:
         try:
             self._grant = self._store.load()
+            if self._grant is not None and self._paused_saved_grant:
+                self.status = (
+                    "Saved phone pairing is paused. Enable remembered connections or revoke it."
+                )
         except (OSError, ValueError):
             self.status = "Windows could not read the saved phone pairing."
         try:
             while not self._stopping.is_set():
                 if self._revoke_requested.is_set():
                     self._apply_revocation()
-                if self._grant is not None and not self._revoke_requested.is_set():
+                if (
+                    self._grant is not None
+                    and not self._revoke_requested.is_set()
+                    and (not self._paused_saved_grant or self._grant.revoked)
+                ):
                     self._step(self._grant)
                 try:
                     self._commands.get(timeout=_POLL_INTERVAL)()
@@ -513,8 +568,9 @@ class SitePhoneConnector:
                 try:
                     if self._grant.revoked:
                         self._flush_revocation(self._grant)
-                    elif not self._grant.pending:
-                        self._request(self._grant, "close")
+                    elif not self._grant.pending and not self._paused_saved_grant:
+                        action = "suspend" if self._supports_resume and self._remember else "close"
+                        self._request(self._grant, action)
                 except (PhoneConnectorError, OSError):
                     pass  # The hosted presence expires without a heartbeat.
 
@@ -545,7 +601,7 @@ class SitePhoneConnector:
                 return
             if not grant.folder.matches():
                 self._drop_presence()
-                self.status = "The approved Output folder changed. Revoke and pair the phone again."
+                self.status = "The approved Output folder changed. Choose a shared Output folder."
                 return
             if self._presence is not None and self._presence[1] <= time.monotonic():
                 self._drop_presence()
@@ -622,7 +678,10 @@ class SitePhoneConnector:
 
     def _poll(self, grant: PhoneGrant) -> None:
         started = time.monotonic()
-        reply = self._request(grant, "poll", body={"claim": self._claim is None})
+        body = {"claim": self._claim is None}
+        if self._supports_resume:
+            body["resume"] = self._remember
+        reply = self._request(grant, "poll", body=body)
         if type(reply.get("version")) is not int or reply["version"] != _CONNECTION_VERSION:
             raise PhoneVersionMismatch(_VERSION_MESSAGE)
         session, ttl = reply.get("session"), reply.get("ttl")

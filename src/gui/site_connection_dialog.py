@@ -11,6 +11,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.app.site_desktop_approval import DesktopApprovalStore
 from src.app.site_pack_catalog import PreparePack, SitePackCatalog, pack_digest
 from src.app.site_pairing_protocol import PairingTickets, register_protocol
 from src.app.site_phone_admission import PhoneQueueAdmission
@@ -61,6 +62,7 @@ class PreviewQueueConnection:
         self.uncertain: PreviewWitness | None = None
         self.prepared: PreparePack | None = None
         self.prepared_entries: tuple[PackJobEntry, ...] = ()
+        self.epoch = session.epoch
 
     def _owns_draft(self) -> bool:
         draft = self.app.app_state.job_draft
@@ -228,6 +230,7 @@ class PreviewQueueConnection:
 
     def _consume(self, receipt: SubmissionReceipt) -> None:
         witness = self.witness
+        epoch = self.session.epoch
         if witness is None or receipt.preview_id != self.preview_id:
             self._finish(receipt, "preview_changed")
             return
@@ -254,6 +257,9 @@ class PreviewQueueConnection:
                 self.uncertain = witness
                 self._finish(receipt, "check_native_queue")
                 return
+            if not self.session.begin_admission(receipt, epoch, job_ids):
+                self._finish(receipt, "connection_closed")
+                return
             if not self.app.submit_frozen_site_preview(witness):
                 self._finish(receipt, "native_queue_refused")
                 return
@@ -262,7 +268,6 @@ class PreviewQueueConnection:
             self.uncertain = witness
             self._finish(receipt, "check_native_queue")
             return
-        self.session.finish(receipt, "submitting")
         self.pending = (receipt, job_ids, time.monotonic() + _RECEIPT_SECONDS)
 
     def tick(self) -> None:
@@ -271,6 +276,10 @@ class PreviewQueueConnection:
         self._check_receipt()
         if self.pending is not None:
             return
+        if self.epoch != self.session.epoch:
+            self.epoch = self.session.epoch
+            self.preview_id = self.witness = self.prepared = None
+            self.prepared_entries = ()
         preparation = self.session.take_preparation()
         if preparation is not None:
             self._prepare_draft(preparation)
@@ -291,6 +300,7 @@ class SiteConnectionDialog:
         self._timer: str | None = None
         self._checkout = Path(__file__).resolve().parents[2]
         self._tickets = PairingTickets(self._checkout)
+        self._desktop_store = DesktopApprovalStore()
         self._shared_output: Path | None = None
         self._omit_output = False
         self._startup_error = ""
@@ -327,7 +337,11 @@ class SiteConnectionDialog:
 
     def start_default(self) -> None:
         """Enable pairing when the Windows app starts, with the existing output and pack scopes."""
-        self._phone.start()
+        try:
+            remembering = self._desktop_store.load().enabled
+        except (OSError, ValueError):
+            remembering = False
+        self._phone.start(remember=remembering)
         try:
             register_protocol(self._checkout)
         except OSError:
@@ -358,6 +372,12 @@ class SiteConnectionDialog:
             claim_ticket=self._tickets.consume,
             review_outputs=self._review_outputs,
             preview_idle=self._preview_idle,
+            approval_store=self._desktop_store,
+        )
+        output_mode, saved_output = session.output_preference
+        self._shared_output = saved_output
+        self._omit_output = output_mode == "private" or (
+            output_mode == "specific" and saved_output is None
         )
         if not self._omit_output:
             try:
@@ -411,7 +431,40 @@ class SiteConnectionDialog:
         ).pack(anchor="w", pady=(5, 12))
         self._lease_status = ttk.Label(frame, text="Desktop · Waiting for pairing", wraplength=370)
         self._lease_status.pack(anchor="w")
+        remember = tk.BooleanVar(master=dialog, value=session.remember_enabled)
+
+        def remember_connection() -> None:
+            try:
+                session.set_remember(remember.get())
+                self._phone.set_remember(remember.get())
+            except OSError:
+                remember.set(session.remember_enabled)
+                messagebox.showerror(
+                    "StableNew Site connection",
+                    "Windows could not save the connection preference.",
+                    parent=dialog,
+                )
+
+        ttk.Checkbutton(
+            frame,
+            text="Remember this connection across StableNew restarts",
+            variable=remember,
+            command=remember_connection,
+        ).pack(anchor="w")
         ttk.Button(frame, text="Reconnect", command=self._reconnect).pack(anchor="w")
+
+        def extend() -> None:
+            try:
+                if session.resume_desktop(None, extend=True) is None:
+                    session.renew_desktop_lease()
+            except OSError:
+                messagebox.showerror(
+                    "StableNew Site connection",
+                    "Windows could not extend the lease.",
+                    parent=dialog,
+                )
+
+        ttk.Button(frame, text="Extend 8 hours", command=extend).pack(anchor="w")
         ttk.Label(
             frame,
             text="The paired Site can read visible PromptPacks, build Previews and submit its own Preview to the queue. Choose Disconnect to stop sharing.",
@@ -431,7 +484,7 @@ class SiteConnectionDialog:
 
         def share_default() -> None:
             if share_configured.get():
-                if not self._grant_output(session, output_root, output_status):
+                if not self._grant_output(session, output_root, output_status, configured=True):
                     share_configured.set(False)
                 else:
                     self._shared_output = None
@@ -495,8 +548,8 @@ class SiteConnectionDialog:
         self.root.clipboard_append(code)
 
     def _reconnect(self) -> None:
-        self.close()
-        self.open()
+        if self.close():
+            self.root.after(300, self.open)
 
     def _share_packs(self, session: SiteSession, status: ttk.Label | None = None) -> None:
         if session.expired:
@@ -547,16 +600,21 @@ class SiteConnectionDialog:
         )
         if not folder or session.expired or dialog is not self.dialog:
             return
-        if self._grant_output(session, Path(folder), status):
+        if self._grant_output(session, Path(folder), status, configured=False):
             selected = Path(folder).absolute()
-            self._shared_output = selected if selected != output_root else None
+            self._shared_output = selected
             self._omit_output = False
             share_configured.set(self._shared_output is None)
 
     @staticmethod
-    def _grant_output(session: SiteSession, folder: Path, status: ttk.Label) -> bool:
+    def _grant_output(
+        session: SiteSession, folder: Path, status: ttk.Label, *, configured: bool
+    ) -> bool:
         try:
             folder = folder.resolve(strict=True)
+            session.remember_output(
+                "configured" if configured else "specific", None if configured else folder
+            )
             session.set_output_folder(folder)
         except (OSError, ValueError):
             status.configure(text="The selected output folder could not be opened.")
@@ -567,7 +625,14 @@ class SiteConnectionDialog:
     def _stop_sharing_output(self, session: SiteSession, status: ttk.Label) -> None:
         self._omit_output = True
         session.set_output_folder(None)
-        status.configure(text="Output folder is private.")
+        try:
+            session.remember_output("private")
+        except OSError:
+            status.configure(
+                text="Output is private in this process. Windows could not save the preference."
+            )
+        else:
+            status.configure(text="Output folder is private.")
 
     def _confirm(self, count: int) -> bool:
         dialog = self.dialog or self.root
@@ -585,9 +650,9 @@ class SiteConnectionDialog:
         if connection is None:
             return
         if self.app._is_shutting_down:
-            self.close()
+            self.shutdown()
             return
-        if connection.session.expired:
+        if connection.session.listener_finished:
             if self.dialog is not None:
                 self._lease_status.configure(text="Desktop · Expired or revoked. Select Reconnect.")
                 if self.listener is not None:
@@ -595,14 +660,16 @@ class SiteConnectionDialog:
                 self.listener = None
                 self.connection = None
             else:
-                self.close()
+                self._disconnect()
                 self._timer = self.root.after(1500, self._start)
             return
         if self.dialog is not None:
             lease = connection.session.connection_status()
-            minutes = (lease["remaining_ms"] + 59999) // 60000
+            deadline = time.strftime(
+                "%Y-%m-%d %H:%M", time.localtime(time.time() + lease["remaining_ms"] / 1000)
+            )
             self._lease_status.configure(
-                text=f"Desktop · {lease['state'].capitalize()} · Expires in {minutes} min"
+                text=f"Desktop · {lease['state'].capitalize()} · Deadline {deadline}"
             )
         connection.tick()
         if connection is self.connection:
@@ -623,11 +690,22 @@ class SiteConnectionDialog:
             self.listener.close()
             self.listener = None
 
-    def close(self) -> None:
+    def close(self) -> bool:
         dialog = self.dialog
+        if self.connection is not None:
+            try:
+                self.connection.session.forget()
+            except OSError:
+                messagebox.showerror(
+                    "StableNew Site connection",
+                    "Windows could not revoke the saved connection. Keep StableNew open and retry.",
+                    parent=dialog or self.root,
+                )
+                return False
         self._disconnect()
         if dialog is not None:
             dialog.destroy()
+        return True
 
     def shutdown(self) -> None:
         """Signal the transports and drop UI references without waiting or calling Tk."""

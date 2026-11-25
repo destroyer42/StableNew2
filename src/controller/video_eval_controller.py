@@ -14,11 +14,16 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from src.video.motion_alignment_preparation import prepare_aligned_for_form
+from src.video.motion_alignment_support import alignment_support
 from src.video.motion_source_preparation import prepare_for_form
 from src.video.svd_config import SVDConfig
 from src.video.svd_preprocess import read_svd_source_size
 from src.video.svd_target import select_svd_target_size
 from src.video.video_eval_motion import (
+    ALIGNMENT_ARM_KEY,
+    ALIGNMENT_CASE,
+    ALIGNMENT_NONE,
     PREP_WORKFLOW,
     MotionPreparationCache,
     driving_support_error,
@@ -122,7 +127,24 @@ class VideoEvalControllerMixin:
             if problem:  # the driving reference is never removed to make the arm queueable
                 raise ValueError(problem)
             record = None
-            if binding.preparation_mode == PREP_WORKFLOW:
+            wants_alignment = form.pop(ALIGNMENT_ARM_KEY, ALIGNMENT_NONE) == ALIGNMENT_CASE
+            if wants_alignment:
+                if binding.alignment is None:
+                    raise ValueError(
+                        f"arm {arm.arm_id} applies the case's alignment but case {case.case_id} declares none"
+                    )
+                support = alignment_support(spec)
+                if not support.supported:  # an alignment is never dropped to make an arm queueable
+                    raise ValueError(support.reason)
+                record = (prepared or MotionPreparationCache()).prepare_aligned(
+                    binding,
+                    spec,
+                    form,
+                    case.image_path,
+                    self._njr_builder.output_dir(),
+                    getattr(self, "_motion_aligner", prepare_aligned_for_form),
+                )
+            elif binding.preparation_mode == PREP_WORKFLOW:
                 record = (prepared or MotionPreparationCache()).prepare(
                     binding,
                     spec,

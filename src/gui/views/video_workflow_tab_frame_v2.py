@@ -16,6 +16,13 @@ from src.gui.view_contracts.motion_library_contract import MotionLibraryPorts
 from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
 from src.gui.view_contracts.video_batch_contract import VideoBatchSession
 from src.gui.view_contracts.video_experiment_contract import VideoExperimentSession
+from src.gui.view_contracts.video_motion_alignment_contract import (
+    BLOCKED_FIELD as ALIGN_BLOCKED_FIELD,
+)
+from src.gui.view_contracts.video_motion_alignment_contract import (
+    PREPARED_FIELD as ALIGN_PREPARED_FIELD,
+)
+from src.gui.view_contracts.video_motion_alignment_contract import AlignInputs
 from src.gui.view_contracts.video_motion_prep_contract import MotionPreparationSession
 from src.gui.view_contracts.video_motion_readiness_contract import MotionReadinessSession
 from src.gui.view_contracts.video_runtime_readiness_contract import RuntimeReadinessSession
@@ -31,6 +38,7 @@ from src.gui.views.motion_conversion_dialog import (
     MotionConversionDialog,
 )
 from src.gui.views.video_eval_panel_v2 import VideoEvalPanel
+from src.gui.views.video_workflow_alignment_host import AlignmentHost, AlignmentRow
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_evaluate_view_v2 import VideoWorkflowEvaluateView
@@ -634,6 +642,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 "add_to_library": self._add_output_to_library,
                 "on_library_changed": self._refresh_motion_library,
                 "harvest_motion": self._harvest_recent_output,
+                "continue_in_storyboard": self._continue_output_in_storyboard,
             },
         )
         self.show_media_check = self._media_pane.check
@@ -705,10 +714,20 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             tools,
             session=self._motion_prep_session,
             read_form=self._read_motion_prep_form,
-            on_change=self._invalidate_experiment_preview,
+            on_change=self._on_motion_prep_changed,
         )
         self.motion_prep_panel.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self.motion_prep_panel.grid_remove()
+        # PR-VID-MOTION-420: optional explicit spatial alignment of the driving motion to this source image.
+        self.alignment_host = AlignmentHost(
+            self,
+            controller=self._experiment_controller,
+            read_inputs=self._read_alignment_inputs,
+            media_allowed=self._alignment_media_allowed,
+            on_change=self._invalidate_experiment_preview,
+        )
+        self.alignment_row = AlignmentRow(tools, host=self.alignment_host)
+        self.alignment_row.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         # PR-VID-MOTION-LIB-353: local motion-reference catalog; Use as Driving Video fills the
         # driving-video field above and nothing else.
         self._recent_controller = self._experiment_controller()
@@ -725,7 +744,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_preview_conditioning=self._open_conditioning_preview,
             on_harvest=self.open_motion_harvest,
         )
-        self.motion_library_panel.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        self.motion_library_panel.grid(row=2, column=0, sticky="ew", pady=(0, 6))
 
     def _build_sequence_panel(self, body: ttk.Frame) -> None:
         """Row 5, built after the Settings block because the panel reads the form as it is created."""
@@ -1058,6 +1077,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             if for_submission:
                 # The prepared record, or a blocker while a preparation is running/failed/stale.
                 state.update(self.motion_prep_panel.submission_fields())
+                self.alignment_host.refresh()
+                aligned = self.alignment_host.submission_fields()
+                if (
+                    aligned
+                ):  # an applied alignment supersedes the unaligned preparation, never mixes with it
+                    state.pop(ALIGN_PREPARED_FIELD, None)
+                    state.pop(ALIGN_BLOCKED_FIELD, None)
+                    state.update(aligned)
                 binding = binding_for_submission(
                     self._library_binding,
                     current_path=str(state["pose_video_path"]),
@@ -1433,6 +1460,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         prep_panel = getattr(self, "motion_prep_panel", None)
         if prep_panel is not None:
             prep_panel.refresh()
+        alignment_row = getattr(self, "alignment_row", None)
+        if alignment_row is not None:
+            alignment_row.refresh()
         self._refresh_advanced_status()
         self._refresh_suggested_line()
 
@@ -1525,6 +1555,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self._library_bound_path = ""
             self._motion_prep_session.clear()
             self.motion_prep_panel.refresh()
+            self.alignment_host.discard()
         if task_id == TASK_FOLLOW_CLIP:
             self.follow_clip_frame.grid()
             self.follow_clip_tools.grid()
@@ -1996,6 +2027,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             status_message=f"Loaded {output.file_name} into Movie Clips.",
         )
 
+    def _continue_output_in_storyboard(self, output: Any) -> None:
+        """Open a recent clip's job in the Storyboard tab as a new root (intent only; nothing is queued)."""
+
+        from src.gui.controllers.video_workspace_handoff import route_job_to_storyboard
+
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            raise RuntimeError("The main window is not available.")
+        route_job_to_storyboard(main_window=main_window, job_id=output.job_id)
+
     def _read_runtime_readiness_selection(self) -> tuple[str, str]:
         """The selected workflow for the runtime strip; empty (strip hidden) when there is no controller."""
 
@@ -2017,6 +2058,59 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             "frame_count": meta.get("frame_count"),
             "selected_frames": selected,
         }
+
+    def _on_motion_prep_changed(self) -> None:
+        self._invalidate_experiment_preview()
+        row = getattr(self, "alignment_row", None)
+        if row is not None:
+            row.refresh()  # the window or rate conversion changed: an applied alignment may be stale
+
+    def _alignment_media_allowed(self) -> bool:
+        clip = self.pose_video_var.get().strip()
+        return self._readiness_media_allowed() and media_allowed(self._content_mode(), clip)
+
+    def _read_alignment_inputs(self) -> AlignInputs:
+        """What the Align Motion workspace needs from the form (Tk reads happen here, on the UI thread)."""
+
+        form = self._read_motion_prep_form()
+        available, reason = bool(form["available"]), str(form["unavailable_reason"])
+        controller = self._experiment_controller()
+        if available and controller is not None:
+            support = controller.motion_alignment_support(
+                {"workflow_id": form["workflow_id"], "workflow_version": form["workflow_version"]}
+            )
+            available, reason = support.supported, "" if support.supported else support.reason
+        panel = self.motion_prep_panel
+        binding = binding_for_submission(
+            self._library_binding,
+            current_path=str(form["clip_path"]),
+            bound_path=self._library_bound_path,
+        )
+        source = self.source_image_var.get().strip()
+
+        def stat(path: str) -> tuple[int, int] | None:
+            try:
+                info = Path(path).expanduser().stat()
+            except (OSError, ValueError):
+                return None
+            return (info.st_size, info.st_mtime_ns)
+
+        return AlignInputs(
+            available=available,
+            unavailable_reason=reason,
+            workflow_id=str(form["workflow_id"]),
+            workflow_version=str(form["workflow_version"]),
+            frame_count=form["frame_count"],
+            output_fps=form["output_fps"],
+            clip_path=str(form["clip_path"]),
+            source_path=source,
+            start_text=panel.start_var.get(),
+            end_text=panel.end_var.get(),
+            convert=bool(panel.convert_var.get()),
+            clip_stat=stat(str(form["clip_path"])) if form["clip_path"] else None,
+            source_stat=stat(source) if source else None,
+            library_asset_id=str((binding or {}).get("asset_id") or ""),
+        )
 
     def _read_motion_prep_form(self) -> dict[str, Any]:
         """What the Prepare Motion Source panel needs from the form (Tk reads happen here)."""

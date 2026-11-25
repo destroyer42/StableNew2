@@ -1,0 +1,411 @@
+{
+  "schema": "stablenew.video-eval-suite.v2",
+  "suite_id": "motion-alignment-full",
+  "description": "Unexecuted template (PR-VID-MOTION-420). Bind your own images and driving videos, then replace each case's alignment numbers with the alignment you accepted in Align Motion for that exact source image and driver (an alignment never transfers to another subject). Both arms share the seed, workflow, version, length, controls, original driver and temporal frame selection; only the spatial alignment differs. A physical run needs the owner's separate authorization. Full initial design: four scenarios, two compatible subjects each, aligned versus unaligned (16 jobs).",
+  "seed": 420,
+  "baseline_arm": "unaligned",
+  "arms": [
+    {
+      "arm_id": "unaligned",
+      "label": "Unaligned (Prepare Motion Source only)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan_animate2_drive_i2v_v1",
+        "workflow_version": "1.2.0",
+        "frame_count": 49,
+        "experimental_opt_in": true,
+        "motion_alignment": "none",
+        "operator_controls": {
+          "pose_strength": 1.0,
+          "reference_image_strength": 1.0
+        }
+      }
+    },
+    {
+      "arm_id": "aligned",
+      "label": "Aligned (the case's declared spatial alignment)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan_animate2_drive_i2v_v1",
+        "workflow_version": "1.2.0",
+        "frame_count": 49,
+        "experimental_opt_in": true,
+        "motion_alignment": "case",
+        "operator_controls": {
+          "pose_strength": 1.0,
+          "reference_image_strength": 1.0
+        }
+      }
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "position_subject_a",
+      "image": "images/subject_a.png",
+      "prompt": "a woman with long brown hair in a dark jacket, standing in a plain studio, full figure, photorealistic",
+      "tags": [
+        "hand_wave",
+        "spatial-alignment",
+        "subject-a",
+        "position"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/hand_wave_centered.mp4"
+        },
+        "action": "Raises the right hand to shoulder height and waves twice, then lowers it.",
+        "motion_prompt": "the person raises their right hand, waves twice and lowers it, body otherwise still",
+        "category": "hand_wave",
+        "expected_outcome": "The intended subject waves with their right hand twice and lowers it; the body, face and background stay still and nothing is duplicated.",
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "alignment": {
+          "scale": 1.0,
+          "translate_x": -60.0,
+          "translate_y": 0.0,
+          "mirror": false,
+          "note": "horizontal position only"
+        },
+        "annotations": {
+          "framing": "upper body",
+          "viewpoint": "front",
+          "start_pose": "standing, arms at the sides",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "driver centred; source subject off-centre"
+          ],
+          "source_compatibility": "upper_body_front_offset"
+        }
+      }
+    },
+    {
+      "case_id": "position_subject_b",
+      "image": "images/subject_b.png",
+      "prompt": "a man with short black hair in a grey sweater, standing in a plain studio, full figure, photorealistic",
+      "tags": [
+        "hand_wave",
+        "spatial-alignment",
+        "subject-b",
+        "position"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/hand_wave_centered.mp4"
+        },
+        "action": "Raises the right hand to shoulder height and waves twice, then lowers it.",
+        "motion_prompt": "the person raises their right hand, waves twice and lowers it, body otherwise still",
+        "category": "hand_wave",
+        "expected_outcome": "The intended subject waves with their right hand twice and lowers it; the body, face and background stay still and nothing is duplicated.",
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "alignment": {
+          "scale": 1.0,
+          "translate_x": 48.0,
+          "translate_y": 0.0,
+          "mirror": false,
+          "note": "horizontal position only"
+        },
+        "annotations": {
+          "framing": "upper body",
+          "viewpoint": "front",
+          "start_pose": "standing, arms at the sides",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "driver centred; source subject off-centre"
+          ],
+          "source_compatibility": "upper_body_front_offset"
+        }
+      }
+    },
+    {
+      "case_id": "scale_subject_a",
+      "image": "images/subject_a.png",
+      "prompt": "a woman with long brown hair in a dark jacket, standing in a plain studio, full figure, photorealistic",
+      "tags": [
+        "raise_arms",
+        "spatial-alignment",
+        "subject-a",
+        "scale"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/raise_arms_large.mp4"
+        },
+        "action": "Raises both arms overhead and lowers them.",
+        "motion_prompt": "the person raises both arms overhead, holds for a moment and lowers them, feet planted",
+        "category": "raise_arms",
+        "expected_outcome": "The intended subject raises both arms overhead and lowers them with the feet planted; the arms stay inside the frame and the body is not duplicated.",
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "alignment": {
+          "scale": 0.8,
+          "translate_x": 12.0,
+          "translate_y": 40.0,
+          "mirror": false,
+          "note": "uniform scale plus position"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "start_pose": "standing, arms at the sides",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "driver subject larger than source subject"
+          ],
+          "source_compatibility": "full_body_front_smaller"
+        }
+      }
+    },
+    {
+      "case_id": "scale_subject_b",
+      "image": "images/subject_b.png",
+      "prompt": "a man with short black hair in a grey sweater, standing in a plain studio, full figure, photorealistic",
+      "tags": [
+        "raise_arms",
+        "spatial-alignment",
+        "subject-b",
+        "scale"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/raise_arms_large.mp4"
+        },
+        "action": "Raises both arms overhead and lowers them.",
+        "motion_prompt": "the person raises both arms overhead, holds for a moment and lowers them, feet planted",
+        "category": "raise_arms",
+        "expected_outcome": "The intended subject raises both arms overhead and lowers them with the feet planted; the arms stay inside the frame and the body is not duplicated.",
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "alignment": {
+          "scale": 0.75,
+          "translate_x": -10.0,
+          "translate_y": 52.0,
+          "mirror": false,
+          "note": "uniform scale plus position"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "start_pose": "standing, arms at the sides",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "driver subject larger than source subject"
+          ],
+          "source_compatibility": "full_body_front_smaller"
+        }
+      }
+    },
+    {
+      "case_id": "locomotion_subject_a",
+      "image": "images/subject_a.png",
+      "prompt": "a woman with long brown hair in a dark jacket, standing in a plain studio, full figure, photorealistic",
+      "tags": [
+        "walk_forward",
+        "spatial-alignment",
+        "subject-a",
+        "locomotion"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/walk_forward_clear.mp4"
+        },
+        "action": "Walks toward the camera with a steady stride.",
+        "motion_prompt": "the person walks steadily toward the camera, arms swinging naturally, camera locked",
+        "category": "walk_forward",
+        "expected_outcome": "The intended subject walks toward the camera with a plausible stride and keeps their identity; the trajectory stays inside the frame and the background is steady.",
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "alignment": {
+          "scale": 0.9,
+          "translate_x": 0.0,
+          "translate_y": 20.0,
+          "mirror": false,
+          "note": "initial-state alignment of the whole figure"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "start_pose": "standing, facing the camera",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "source has space around the figure"
+          ],
+          "source_compatibility": "full_body_front_roomy"
+        }
+      }
+    },
+    {
+      "case_id": "locomotion_subject_b",
+      "image": "images/subject_b.png",
+      "prompt": "a man with short black hair in a grey sweater, standing in a plain studio, full figure, photorealistic",
+      "tags": [
+        "walk_forward",
+        "spatial-alignment",
+        "subject-b",
+        "locomotion"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/walk_forward_clear.mp4"
+        },
+        "action": "Walks toward the camera with a steady stride.",
+        "motion_prompt": "the person walks steadily toward the camera, arms swinging naturally, camera locked",
+        "category": "walk_forward",
+        "expected_outcome": "The intended subject walks toward the camera with a plausible stride and keeps their identity; the trajectory stays inside the frame and the background is steady.",
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "alignment": {
+          "scale": 0.85,
+          "translate_x": 8.0,
+          "translate_y": 30.0,
+          "mirror": false,
+          "note": "initial-state alignment of the whole figure"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "start_pose": "standing, facing the camera",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "source has space around the figure"
+          ],
+          "source_compatibility": "full_body_front_roomy"
+        }
+      }
+    },
+    {
+      "case_id": "start_pose_subject_a",
+      "image": "images/subject_a.png",
+      "prompt": "a woman with long brown hair in a dark jacket, standing in a plain studio, full figure, photorealistic",
+      "tags": [
+        "head_turn",
+        "spatial-alignment",
+        "subject-a",
+        "start_pose"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/head_turn_front_start.mp4"
+        },
+        "action": "Starts facing the camera and turns the head to the subject's left into profile.",
+        "motion_prompt": "the person starts facing the camera, slowly turns their head to their left into profile and holds, shoulders still",
+        "category": "head_turn",
+        "expected_outcome": "The intended subject turns the head smoothly into profile and holds; spatial alignment alone is not expected to change a start-pose difference, which is what this case measures.",
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "alignment": {
+          "scale": 1.1,
+          "translate_x": 0.0,
+          "translate_y": -14.0,
+          "mirror": false,
+          "note": "framing only; a pose difference is not a geometric one"
+        },
+        "annotations": {
+          "framing": "head and shoulders",
+          "viewpoint": "front",
+          "start_pose": "facing the camera (source starts slightly turned)",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "similar subjects, different start pose"
+          ],
+          "source_compatibility": "head_shoulders_start_pose_differs"
+        }
+      }
+    },
+    {
+      "case_id": "start_pose_subject_b",
+      "image": "images/subject_b.png",
+      "prompt": "a man with short black hair in a grey sweater, standing in a plain studio, full figure, photorealistic",
+      "tags": [
+        "head_turn",
+        "spatial-alignment",
+        "subject-b",
+        "start_pose"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/head_turn_front_start.mp4"
+        },
+        "action": "Starts facing the camera and turns the head to the subject's left into profile.",
+        "motion_prompt": "the person starts facing the camera, slowly turns their head to their left into profile and holds, shoulders still",
+        "category": "head_turn",
+        "expected_outcome": "The intended subject turns the head smoothly into profile and holds; spatial alignment alone is not expected to change a start-pose difference, which is what this case measures.",
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "alignment": {
+          "scale": 1.05,
+          "translate_x": 6.0,
+          "translate_y": -10.0,
+          "mirror": false,
+          "note": "framing only; a pose difference is not a geometric one"
+        },
+        "annotations": {
+          "framing": "head and shoulders",
+          "viewpoint": "front",
+          "start_pose": "facing the camera (source starts slightly turned)",
+          "compatibility": [
+            "single subject",
+            "static camera",
+            "similar subjects, different start pose"
+          ],
+          "source_compatibility": "head_shoulders_start_pose_differs"
+        }
+      }
+    }
+  ]
+}
