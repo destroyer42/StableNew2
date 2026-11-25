@@ -114,6 +114,7 @@ class SiteOutputCatalog:
         self._root = output_root.resolve(strict=True)
         if not self._root.is_dir():
             raise SiteOutputError("output_folder_required")
+        self._root_identity = root_identity(self._root)
         self._lock = Lock()
         self._revoked = Event()
         self._active = active
@@ -143,6 +144,12 @@ class SiteOutputCatalog:
     def require_active(self) -> None:
         if self._revoked.is_set() or not self._active():
             raise SiteOutputError("output_folder_not_shared")
+        try:
+            matches = self._root_identity == root_identity(self._root)
+        except OSError:
+            matches = False
+        if not matches:
+            raise SiteOutputError("output_folder_changed")
 
     def _inside(self, path: Path) -> Path:
         return inside(self._root, path)

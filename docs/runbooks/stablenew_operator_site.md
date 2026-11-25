@@ -13,15 +13,16 @@ Site** is in the top toolbar beside **Readiness**.
 3. To work from another device, click **Start remote session** in the paired PC browser. Keep that tab, the StableNew
    window and the PC online. Sign in to the same private Site on the other device and enter the separate remote code.
    Hosted requests are handled by the paired browser on the PC. The local StableNew pairing code stays on the PC.
-4. With matching Site and Windows builds, the desktop authorization expires after eight hours without
-   authenticated activity. Active use renews it. Unclaimed pairing codes still expire after about 15 minutes,
-   and the one-time connection ticket has its own shorter lifetime. The connection status shows the type and
-   expiry. Brief loopback interruptions can recover while the authorization is valid. Choose **Reconnect
-   StableNew** after expiry, a StableNew restart, or a disconnect.
+4. In StableNew, **Remember this connection across StableNew restarts** is selected by default. The
+   same Site account and browser can recover the approved desktop connection after restarting StableNew.
+   Restarting preserves the remaining lease. **Extend 8 hours** shows alongside the connection deadline
+   and can renew an expired remembered approval. Active use also renews a live inactivity lease.
+   Unclaimed pairing codes still expire after about 15 minutes. **Forget pairing** revokes the saved approval.
+   Clearing the checkbox disables automatic recovery across restarts.
 5. A hosted remote session has an absolute eight-hour limit. A host without a heartbeat for 80 seconds stops
-   accepting new remote requests. The same authorized host can return after a temporary outage. Keep its
-   Windows Site tab open because the hosted credentials are held in that tab. The host shows an expiry
-   warning and lets you **Reauthorize remote session** on the StableNew PC. Choose **Stop remote session**
+   accepting new remote requests. The remembered Windows browser can return with the same remote session
+   and deadline after StableNew restarts. Keep its Windows Site tab open while reviewing remotely. The
+   host shows the deadline and offers **Extend 8 hours** on the StableNew PC. Choose **Stop remote session**
    from that tab to revoke it. When a submission response is lost, check the native receipt or queue before
    committing work again. Automatic recovery checks status and receipts without repeating submissions.
 
@@ -49,9 +50,10 @@ Wi-Fi or cellular while the PC's browser is closed.
 3. Use **Output Library** or **Video Review** on the phone. After a lock or network switch, the Site can resume
    the same desktop process while the browser lease, device enrollment and Sites sign-in are valid. The browser
    lease expires after eight hours without authorized activity. Passive status checks do not reset the timer.
-   Use **Reconnect phone** after expiry or a StableNew restart to authorize a fresh browser lease under the
-   same active enrollment and permissions. Pair again when the 30-day enrollment expires. Open a result or clip
-   again if its individual media link expired.
+   A remembered phone returns under the same enrollment, permissions and deadline after StableNew restarts.
+   Choose **Extend 8 hours** to renew its lease. Pair again when the 30-day enrollment expires. Use
+   **Change shared Output** in the Windows Phone review dialog to approve a new folder under the same
+   pairing. Media and writes from the previous folder retain their original scope.
 4. Choose **Revoke phone** in StableNew to stop new native work for this device
    immediately. StableNew saves the revocation locally and confirms it with
    the Site when reachable. On a disconnect, the hosted presence and result
@@ -60,7 +62,7 @@ Wi-Fi or cellular while the PC's browser is closed.
    device cookie or a replacement PC must pair again after revoking the old
    grant on the original phone or PC.
 
-Windows protects the credentials and exact folder identity with current-user
+Windows protects the remembered desktop approval, phone credentials and explicitly chosen folder identities with current-user
 DPAPI under local application data. Use **Update credential** if the owner
 replaces the Site service credential. The credential belongs to the whole
 Site. Keep it in the Windows control and provision it only after the guarded
@@ -195,6 +197,23 @@ and persistence.
 
 ## Connection protocol and release
 
+With the update-capable Site, a compatible newer deployed release shows a 60-second countdown, **Update
+now**, and **Defer**. Defer pauses automatic refresh for that release. A regular refresh also loads the
+deployed release. The browser verifies its same-tab checkpoint before refreshing. The checkpoint preserves
+the selected page and verified review identity, playback position, and drafts. An unavailable draft store or
+unresolved write holds the page open. The desktop bridge and Phone Queue look up pending activity through
+the original receipt. StableNew uses its existing job repository to confirm which jobs were admitted.
+
+Remembered desktop approval is scoped to the original browser device and signed-in Site account.
+Startup issues a new process bearer. The hosted Worker binds the original host credential to the desktop
+approval and relay incarnation and retires calls from the previous incarnation. A hosted viewer retains
+viewer access and can see the deadline. Only the Windows host can extend the relay. Phone leases carry
+their original deadline into the new presence, with a new epoch fencing old requests. An older matching
+Windows/Site protocol 2 pair continues to work with its legacy recovery. The newer Worker requires additive
+migration 0005 for the relay binding. In a mixed rollout, new desktop and phone capabilities appear when
+the corresponding Windows and Site builds support them. Confirm the migration before opening hosted
+remote sessions. Retain the additive schema during rollback and align the Windows and Site versions.
+
 The Windows phone connector requires protocol 2 with enrollment, presence and browser lease
 capabilities. The private Site authenticates its capability probe with the existing service
 credential. Windows checks before inspecting or saving a new pairing, when restoring or recovering
@@ -265,16 +284,17 @@ owner-approved equivalent coverage.
 
 ## Execution profile and validation
 
-Architectural Windows and hosted Site integration. Use Claude Code Opus 5.5 High or Codex GPT-6 Astra
-High on local Windows for access to both worktrees and scoped Chrome loopback. This tier reduces
-retries across the asynchronous browser, Worker and native authorization boundaries.
+Architectural Windows and hosted Site integration. **Model recommendation**. Claude Code Opus 5.5
+High or Codex GPT-6.2 Sol Extra High on local Windows. Cross-process authorization, durable state and
+browser compatibility justify the higher reasoning effort to reduce retries. Expected usage is on the
+order of tens of thousands of output tokens.
 
-Controller Surface Assessment. The connector and browser apply connection consent and lifecycle
-rules through their existing transport boundaries. AppController and JobService stay unchanged.
-The native Preview, queue and repository remain authoritative for admissions and receipts.
+Controller Surface Assessment. The native Site dialog wires the desktop approval store and phone
+connector into the existing startup and shutdown hooks. The native Preview, JobService and
+repository still own admission and committed jobs.
 
-Token-Efficient Validation Plan. Reproduce connection defects with focused native and Site tests,
-using controlled clocks, deferred responses, synthetic grants and isolated storage. Run the Site
-build and maintained deterministic and browser suites with Chrome protections enabled. Run the
-native PR gate near closeout and review the two aggregate diffs against their exact heads. At
-authorized publication verify `required`, `full-suite` and `windows` at the native PR head.
+Token-Efficient Validation Plan. Test compatibility and release recovery first, then run focused
+desktop, relay and phone tests with controlled clocks, synthetic grants and isolated storage. Run the
+Site build and maintained deterministic and Chrome browser fixtures. Run the native PR gate near
+closeout and review the two aggregate diffs against their exact heads. At authorized publication
+verify `required`, `full-suite` and `windows` at the native PR head.

@@ -141,6 +141,27 @@ class PhoneReviewDialog:
                 feedback,
             )
 
+        def change_output() -> None:
+            folder = filedialog.askdirectory(
+                parent=dialog,
+                title="Choose the Output folder to share with the approved phone",
+                mustexist=True,
+            )
+            if folder and messagebox.askyesno(
+                "Change phone Output?",
+                f"Share this folder with the approved phone using its existing permissions?\n\n{folder}",
+                parent=dialog,
+                default=messagebox.NO,
+            ):
+                self._watch(
+                    dialog,
+                    self._connector.change_folder(Path(folder)),
+                    lambda _: feedback.configure(
+                        text="The phone's shared Output folder was updated."
+                    ),
+                    feedback,
+                )
+
         def update_status() -> None:
             if dialog.winfo_exists():
                 status.configure(text=self._connector.status)
@@ -153,6 +174,7 @@ class PhoneReviewDialog:
             side="left", padx=8
         )
         ttk.Button(buttons, text="Revoke phone", command=revoke).pack(side="right")
+        ttk.Button(panel, text="Change shared Output…", command=change_output).pack(anchor="w")
         update_status()
 
     def _watch[T](
