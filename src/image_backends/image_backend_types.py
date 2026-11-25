@@ -62,6 +62,43 @@ def normalize_image_backend_default(value: Any) -> str:
     return text
 
 
+#: Idle grace (seconds) the managed ComfyUI stays resident after a successful still-image job so the next ComfyUI image job
+#: skips the cold start and model load (PR-IMG-COMFY-382). ``0`` restores release-after-every-job. The hold always ends
+#: earlier when any other job prepares a runtime, on failure, and at application shutdown.
+COMFY_IMAGE_KEEP_WARM_SETTING = "comfy_image_keep_warm_seconds"
+COMFY_IMAGE_KEEP_WARM_DEFAULT_SECONDS = 120.0
+COMFY_IMAGE_KEEP_WARM_MAX_SECONDS = 3600.0
+
+
+def normalize_comfy_image_keep_warm_seconds(value: Any) -> float:
+    """A bounded idle grace; absent, blank, non-numeric or negative values mean the default or none, never an error."""
+
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return COMFY_IMAGE_KEEP_WARM_DEFAULT_SECONDS
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if seconds != seconds or seconds <= 0:  # NaN or non-positive: no hold
+        return 0.0
+    return min(seconds, COMFY_IMAGE_KEEP_WARM_MAX_SECONDS)
+
+
+def configured_comfy_image_keep_warm_seconds() -> float:
+    """The configured idle grace for a held ComfyUI image runtime. Unreadable settings mean no hold (release as before)."""
+
+    try:
+        from src.api.webui_runtime_identity import load_backend_settings
+
+        return normalize_comfy_image_keep_warm_seconds(
+            load_backend_settings().get(COMFY_IMAGE_KEEP_WARM_SETTING)
+        )
+    except Exception:  # noqa: BLE001 - holding a GPU runtime is optional; never block a job on it
+        return 0.0
+
+
 def configured_webui_image_backend_id() -> str:
     """The configured WebUI-family identity: ``forge_webui`` (the product default) unless the operator explicitly
     selected the ``a1111_webui`` rollback (``webui_runtime_identity``). An unrecognized or unreadable configuration
