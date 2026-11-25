@@ -29,6 +29,13 @@ from src.gui_v2.ai_changes import (
     proposal_changes,
     variety_changes,
 )
+from src.gui_v2.ai_matrix_check import (
+    Finding,
+    check_summary,
+    finding_cards,
+    run_checks,
+    with_slot_values,
+)
 from src.gui_v2.ai_plan_advice import (
     PlanJudgement,
     build_plan_request,
@@ -131,6 +138,9 @@ class PromptAiSuggestions:
         self._proposal_added: set[int] = set()
         # AI-230: what this window applied and how to take it back. Memory only; cleared on close and on any pack change.
         self._journal = ApplyJournal()
+        # Check tab (AI-230e): the matrix state the last run read, and its findings. Memory only.
+        self._check_context: VarietyContext | None = None
+        self._check_findings: tuple[Finding, ...] = ()
         self.outcome: AssistOutcome | None = None
         self._active_id: str | None = None
         self._closed = False
@@ -340,6 +350,8 @@ class PromptAiSuggestions:
             proposal_problem=self._proposal_problem(),
             on_apply=self.apply_changes,
             on_undo=self.undo_last,
+            on_check=self.run_matrix_checks,
+            on_check_apply=self.apply_check_fixes,
             context_text=self._context_text(),
         )
         self._sync_undo()
@@ -1323,6 +1335,115 @@ class PromptAiSuggestions:
         self._write_rewrite(index, *before)
         return ""
 
+    # -- Check tab (AI-230e): deterministic, no model; the only fix is removing exact duplicate values ----------------------
+
+    def _pack_prompts(self) -> list[tuple[str, str]]:
+        pack = self.tab.workspace_state.current_pack
+        if pack is None:
+            raise ContextUnavailable("Select a PromptPack first.")
+        return [(str(slot.text), str(slot.negative)) for slot in pack.slots]
+
+    def run_matrix_checks(self) -> None:
+        """Run the deterministic checks against the pack as it is now and show the findings."""
+
+        dialog = self.dialog
+        if dialog is None or self._closed:
+            return
+        try:
+            context = self._capture_matrix()
+            prompts = self._pack_prompts()
+        except ContextUnavailable as exc:
+            self._check_context, self._check_findings = None, ()
+            dialog.show_checks((), str(exc))
+            return
+        except Exception:  # noqa: BLE001 - fixed copy only
+            self._check_context, self._check_findings = None, ()
+            dialog.show_checks((), "The matrix and prompts could not be read safely.")
+            return
+        visible = self._variety_visible()
+        findings = run_checks(context.slots, prompts, is_visible=visible)
+        self._check_context, self._check_findings = context, findings
+        dialog.show_checks(finding_cards(findings, is_visible=visible), check_summary(findings))
+
+    def apply_check_fixes(self, keys: Sequence[str]) -> int:
+        """Apply the named fixable findings in order, each after a full stale check. Returns how many were applied."""
+
+        dialog = self.dialog
+        if dialog is None or self._active_id is not None:
+            return 0
+        applied = 0
+        for key in keys:
+            finding = next((f for f in self._check_findings if f.key == key), None)
+            if finding is None or finding.fix != "dedupe" or not self._apply_dedupe(finding):
+                break
+            applied += 1
+        if applied:
+            self.run_matrix_checks()
+            dialog.status(
+                f"Removed duplicate values in {applied} slot(s). The pack is modified and unsaved; save it through the "
+                "ordinary workflow."
+            )
+            self._sync_undo()
+        return applied
+
+    def _apply_dedupe(self, finding: Finding) -> bool:
+        dialog, context = self.dialog, self._check_context
+        if dialog is None or context is None:
+            return False
+        current = self._current_variety()
+        index = finding.slot_index
+        if (
+            current is None
+            or current != context
+            or not 0 <= index < len(current.slots)
+            or not current.slots[index].editable
+            or [str(v) for v in current.slots[index].values] != list(finding.before)
+        ):
+            dialog.status(
+                "The matrix changed since the checks ran, so nothing was changed. The findings were refreshed."
+            )
+            self.run_matrix_checks()
+            return False
+        expected = with_slot_values(current, index, finding.after)
+        panel = self.tab.matrix_tab_panel
+        if not panel.replace_slot_values(index, list(finding.before), list(finding.after)):
+            dialog.status("The Matrix tab has an unfinished edit in that slot. Finish it, then apply again.")
+            return False
+        after = self._current_variety()
+        if after != expected:
+            panel.replace_slot_values(index, list(finding.after), list(finding.before))
+            dialog.status(
+                "The matrix did not change as expected, so the change was taken back. Check the Matrix tab."
+            )
+            self.run_matrix_checks()
+            return False
+        self._check_context = after
+        slot_index = self.tab.workspace_state.get_current_slot_index()
+        name = current.slots[index].name
+        self._journal.push(
+            ApplyRecord(
+                "remove_duplicate",
+                f"duplicates in {name}",
+                after.pack_identity,
+                slot_index,
+                lambda: self._undo_dedupe(current, after, index),
+            )
+        )
+        return True
+
+    def _undo_dedupe(self, before: VarietyContext, after: VarietyContext, index: int) -> str:
+        if self._current_variety() != after:
+            return UNDO_CHANGED_TEXT
+        if not self.tab.matrix_tab_panel.replace_slot_values(
+            index, list(after.slots[index].values), list(before.slots[index].values)
+        ):
+            return UNDO_UNFINISHED_TEXT
+        if self._current_variety() != before:
+            return UNDO_UNEXPECTED_TEXT
+        self._check_context = before
+        self.run_matrix_checks()
+        return ""
+
     # -- apply journal and Undo (AI-230) --------------------------------------------------------------------------------------
 
     def _sync_undo(self) -> None:
@@ -1419,6 +1540,7 @@ class PromptAiSuggestions:
         self.cancel()
         self.dialog = None
         self._journal.clear()
+        self._check_context, self._check_findings = None, ()
         self.snapshot = self.outcome = None
         self._plan = self._plan_request = None
         self._drop_variety()

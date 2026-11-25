@@ -71,7 +71,7 @@ def _press(dialog, key):
 def test_the_window_has_one_tab_per_function_and_a_header(journey):  # noqa: F811
     dialog = journey.flow.open()
     labels = [dialog.notebook.tab(t, "text") for t in dialog.notebook.tabs()]
-    assert labels == ["Prompt", "Matrix slots", "Plan", "Details"]
+    assert labels == ["Prompt", "Matrix slots", "Plan", "Check", "Details"]
     assert "Slot 1" in dialog.context_var.get()
     assert dialog.undo_button.instate(["disabled"])
 

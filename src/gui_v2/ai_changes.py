@@ -65,14 +65,20 @@ class ProposedChange:
     applied: bool = False
 
     @property
-    def offered(self) -> bool:
-        """Can be applied now: no rejection reason and not already applied."""
+    def note(self) -> bool:
+        """Information only: shown, never applied."""
 
-        return not self.reason and not self.applied
+        return self.kind == KIND_NOTE
+
+    @property
+    def offered(self) -> bool:
+        """Can be applied now: no rejection reason, not already applied and not a note."""
+
+        return not self.reason and not self.applied and not self.note
 
     @property
     def rejected(self) -> bool:
-        return bool(self.reason) and not self.applied
+        return bool(self.reason) and not self.applied and not self.note
 
 
 def _values_text(values: Sequence[Any]) -> str:

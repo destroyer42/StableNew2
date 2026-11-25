@@ -73,7 +73,9 @@ class AiCardList(ttk.Frame):
         self.clear()
         self._cards = tuple(cards)
         for card in self._cards:
-            if card.applied:
+            if card.note:
+                self._note_row(card)
+            elif card.applied:
                 self._applied_row(card)
             elif card.rejected:
                 self._rejected_row(card)
@@ -124,6 +126,17 @@ class AiCardList(ttk.Frame):
         )
         label.configure(foreground=TEXT_DISABLED)
         label.pack(fill="x", padx=4, anchor="w")
+
+    def _note_row(self, card: ProposedChange) -> None:
+        frame = ttk.Frame(self.inner)
+        frame.pack(fill="x", padx=2, pady=1)
+        ttk.Label(frame, text=card.title, wraplength=_WRAP, justify="left").pack(
+            fill="x", padx=4, anchor="w"
+        )
+        if card.detail:
+            label = ttk.Label(frame, text=card.detail, wraplength=_WRAP, justify="left")
+            label.configure(foreground=TEXT_MUTED)
+            label.pack(fill="x", padx=(24, 4), anchor="w")
 
     def _applied_row(self, card: ProposedChange) -> None:
         frame = ttk.Frame(self.inner)
