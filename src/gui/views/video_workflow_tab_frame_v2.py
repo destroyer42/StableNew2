@@ -1922,8 +1922,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def _conditioning_context(self, detail: Any) -> Any:
         """The effective-driver inspection context for the selected engine, or ``None`` when it takes no driving clip."""
 
-        controller = self._library_controller()
-        choice = controller.motion_conversion_workflow(*self._selected_workflow_identity())
+        resolve = getattr(self._library_controller(), "motion_conversion_workflow", None)
+        if resolve is None:
+            return None
+        choice = resolve(*self._selected_workflow_identity())
         if getattr(choice, "spec", None) is None:
             return None
         prepared = self._motion_prep_session.submission_fields().get(PREPARED_FIELD)

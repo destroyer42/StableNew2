@@ -153,6 +153,7 @@ def test_workflow_projection_gains_one_key_and_keeps_every_existing_one(tmp_path
             "accepts_driving_video",
             "driving_frame_consumption",
             "guidance",
+            "conditioning",  # PR-VID-MOTION-430: additive; None for a workflow that takes no driving video
         }
     # the offered version per workflow is still the newest registered one
     assert records[WAN_ANIMATE2_DRIVE_ID]["workflow_version"] == WAN_ANIMATE2_RUNTIME_VERSION
