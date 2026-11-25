@@ -58,6 +58,19 @@ def _esc(value: object) -> str:
     return html.escape(str(value))
 
 
+def _alignment_html(alignment: Any) -> str:
+    """The frozen spatial alignment, in words; empty for an unaligned job."""
+
+    if not isinstance(alignment, Mapping) or not alignment:
+        return ""
+    shift = f"({alignment.get('translate_x')}, {alignment.get('translate_y')}) px"
+    return _esc(
+        f", spatially aligned: scale {alignment.get('scale')}, shift {shift}"
+        + (", mirrored" if alignment.get("mirror") else "")
+        + f", transform {str(alignment.get('transform_sha256') or '')[:12]}..."
+    )
+
+
 def _num(value: Any, suffix: str = "") -> str:
     if value is None:
         return "unavailable"
@@ -116,6 +129,7 @@ def case_html(
             + (
                 f"prepared derivative {_esc(str(effective.get('driver_effective_sha256') or '')[:16])}... "
                 f"(original {_esc(str(effective.get('driver_original_sha256') or '')[:16])}...)"
+                + _alignment_html(effective.get("alignment_detail"))
                 if prepared
                 else "the original file, used as bound (not prepared)"
             )

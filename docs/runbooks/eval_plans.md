@@ -14,7 +14,11 @@ clip, state the intended action, motion prompt and expected outcome, and **Dupli
 same movement on another image. Such a suite is saved as `stablenew.video-eval-suite.v2`; existing v1 plans open and save
 unchanged (a new version file is always written) and cannot carry a driver. The arms pick a driving-video workflow and its
 controls; the driver and motion prompt come from the cases, and a workflow that takes no driving video refuses the case.
-**Review Motion…** appears for a built driving-motion run. See `docs/runbooks/video_eval_kit.md` section 9.
+**Review Motion…** appears for a built driving-motion run. See `docs/runbooks/video_eval_kit.md` section 9. To test a spatial
+alignment, a case declares `motion.alignment` and two arms differ only in `form.motion_alignment` (`none` or `case`); the
+three campaign templates `templates/video_eval_motion_alignment_{pilot,diagnostic,full}.suite.json` (2, 8 and 16 jobs) are
+authored the same way, with each case's numbers taken from the alignment you accepted in Align Motion for that exact pair
+(`docs/runbooks/video_eval_kit.md` section 10, `docs/runbooks/motion_alignment.md`).
 
 Use **Other file…** for direct preview or the existing copy/import flow when no edits are needed.
 Invalid plans show the loader's reason and disable **Queue…**. They can still be opened in the editor

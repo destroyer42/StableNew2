@@ -48,6 +48,7 @@ from src.video.managed_comfy_runtime import (
     verify_a14b_launch_args,
     workflow_launch_requirements,
 )
+from src.video.motion_alignment_preparation import verify_aligned_dispatch
 from src.video.runtime_version_check import runtime_version_warning
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_backend_types import (
@@ -571,6 +572,7 @@ class ComfyWorkflowVideoBackend:
             )
         # Retired secondary motion (D8) is refused before any runtime is started or dispatched.
         verify_exact_dispatch_inputs(spec, request)
+        verify_aligned_dispatch(request.stage_config or {}, request.input_image_path)
         if spec.backend_defaults.get("asset_integrity"):
             manager = self._resolve_process_manager()
             config = getattr(manager, "config", None) if manager else build_default_comfy_process_config()
@@ -1308,6 +1310,7 @@ class ComfyWorkflowVideoBackend:
         spec = self._workflow_registry.get(compiled.workflow_id, compiled.workflow_version,
                                           allow_experimental=bool(request.experimental_opt_in))
         verify_exact_dispatch_inputs(spec, request)
+        verify_aligned_dispatch(request.stage_config or {}, request.input_image_path)
         _raise_if_cancelled(request.cancel_token, "after verifying workflow inputs")
         if stage_config.get("pose_video_path"):
             self._verify_driving_video_source(

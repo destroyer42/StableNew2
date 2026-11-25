@@ -18,7 +18,13 @@ from typing import Any
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.utils.atomic_io import atomic_write_json
-from src.video.video_eval_motion import MotionFacts, motion_facts_from_njr
+from src.video.video_eval_motion import (
+    ALIGNMENT_ARM_KEY,
+    ALIGNMENT_CASE,
+    ALIGNMENT_NONE,
+    MotionFacts,
+    motion_facts_from_njr,
+)
 from src.video.video_eval_suite import (
     EvalArm,
     EvalCase,
@@ -127,7 +133,7 @@ class EvalRunRefused(RuntimeError):
 
 
 def _frozen_inputs(
-    case: EvalCase, njr: Any
+    case: EvalCase, arm: EvalArm, njr: Any
 ) -> tuple[MotionFacts | None, tuple[tuple[str, str, str], ...]]:
     """What the compiled NJR really froze for a motion case, checked against the case, plus the hashes to re-verify.
 
@@ -162,6 +168,23 @@ def _frozen_inputs(
             "the compiled job's driving preparation differs from the case's request "
             f"({binding.preparation_mode})"
         )
+    wants_alignment = arm.overrides.get(ALIGNMENT_ARM_KEY, ALIGNMENT_NONE) == ALIGNMENT_CASE
+    if wants_alignment != (facts.alignment is not None):
+        raise ValueError(
+            "the compiled job's spatial alignment differs from the arm's request "
+            "(an alignment is never dropped or invented to make an arm queueable)"
+        )
+    if facts.alignment is not None:
+        declared, frozen = binding.alignment or {}, facts.alignment
+        if (
+            round(float(frozen.get("scale") or 0), 4) != round(float(declared.get("scale", 1.0)), 4)
+            or round(float(frozen.get("translate_x") or 0), 2)
+            != round(float(declared.get("translate_x", 0.0)), 2)
+            or round(float(frozen.get("translate_y") or 0), 2)
+            != round(float(declared.get("translate_y", 0.0)), 2)
+            or bool(frozen.get("mirror")) != bool(declared.get("mirror", False))
+        ):
+            raise ValueError("the compiled job froze a different alignment than the case declares")
     inputs: list[tuple[str, str, str]] = []
     first = list(getattr(njr, "input_image_paths", ()) or ())
     if first:
@@ -185,7 +208,7 @@ def preparation_disclosures(jobs: tuple[EvalJobPlan, ...]) -> list[str]:
                 job.motion.workflow_id,
                 job.motion.workflow_version,
                 job.motion.frame_count,
-                job.motion.ordered_frames_sha256,
+                job.motion.temporal_plan_sha256,
             ): job.arm_id
             for job in rows
             if job.motion is not None
@@ -198,6 +221,28 @@ def preparation_disclosures(jobs: tuple[EvalJobPlan, ...]) -> list[str]:
                     f"{arm}={workflow} {version} {frames} frames"
                     for (workflow, version, frames, _digest), arm in contracts.items()
                 )
+            )
+        aligned = {
+            job.arm_id: job.motion.alignment
+            for job in rows
+            if job.motion is not None and job.motion.alignment is not None
+        }
+        if aligned:
+            unaligned = [
+                job.arm_id
+                for job in rows
+                if job.motion is not None and job.motion.alignment is None
+            ]
+            notes.append(
+                f"case {case_id}: spatial alignment is an intervention here -- "
+                + "; ".join(
+                    f"{arm} applies scale {a.get('scale')}, shift ({a.get('translate_x')}, {a.get('translate_y')}) px"
+                    + (", mirrored" if a.get("mirror") else "")
+                    for arm, a in aligned.items()
+                )
+                + (f"; {', '.join(unaligned)} use(s) no alignment" if unaligned else "")
+                + ". The prepared driving clips differ by design; the original driver and the temporal frame "
+                "selection are the same."
             )
     return notes
 
@@ -220,7 +265,7 @@ class VideoEvalRunService:
             for case in suite.cases:
                 try:
                     built = builder(case, arm, suite.seed)
-                    facts, inputs = _frozen_inputs(case, built.njr)
+                    facts, inputs = _frozen_inputs(case, arm, built.njr)
                 except (ValueError, RuntimeError, OSError, KeyError) as exc:
                     errors.append(f"{case.case_id} x {arm.arm_id}: {exc}")
                     continue
