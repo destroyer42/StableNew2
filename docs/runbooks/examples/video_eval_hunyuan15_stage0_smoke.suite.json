@@ -1,0 +1,42 @@
+{
+ "schema": "stablenew.video-eval-suite.v1",
+ "suite_id": "vidcand382-stage0",
+ "description": "VID-CAND-382 stage 0: Hunyuan 8-step smoke, one case run twice (cold then warm) to prove it loads, completes and stays inside the VRAM and commit envelope, and to set the readiness floor.",
+ "seed": 382,
+ "baseline_arm": "hy15_8step",
+ "cases": [
+  {
+   "case_id": "s0_cold",
+   "image": "images/synthetic_closeup_portrait.png",
+   "prompt": "The person in the image turns their head toward the camera and smiles, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "smoke",
+    "cold"
+   ]
+  },
+  {
+   "case_id": "s0_warm",
+   "image": "images/synthetic_closeup_portrait.png",
+   "prompt": "The person in the image turns their head toward the camera and smiles, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "smoke",
+    "warm"
+   ]
+  }
+ ],
+ "arms": [
+  {
+   "arm_id": "hy15_8step",
+   "label": "HunyuanVideo 1.5 480p I2V 8-step (experimental)",
+   "backend": "video_workflow",
+   "form": {
+    "workflow_id": "hunyuan_video15_i2v_480p_8step_v1",
+    "workflow_version": "1.0.0",
+    "frame_count": 121,
+    "experimental_opt_in": true
+   }
+  }
+ ]
+}

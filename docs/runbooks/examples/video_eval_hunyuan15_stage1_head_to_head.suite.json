@@ -1,0 +1,123 @@
+{
+ "schema": "stablenew.video-eval-suite.v1",
+ "suite_id": "vidcand382-stage1",
+ "description": "VID-CAND-382 stage 1: the eight VID-CLIP-371 cases (same images, same structured prompts, seed 371) under A14B 1.0.0, Hunyuan 8-step and Hunyuan 12-step.",
+ "seed": 371,
+ "baseline_arm": "a14b_base",
+ "cases": [
+  {
+   "case_id": "head_turn_smile",
+   "image": "images/synthetic_closeup_portrait.png",
+   "prompt": "The person in the image turns their head toward the camera and smiles, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "head_turn_smile"
+   ]
+  },
+  {
+   "case_id": "walk_toward",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image walks slowly toward the camera, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "walk_toward"
+   ]
+  },
+  {
+   "case_id": "wave",
+   "image": "images/synthetic_halfbody_portrait.png",
+   "prompt": "The person in the image raises their right hand and waves, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "wave"
+   ]
+  },
+  {
+   "case_id": "sway",
+   "image": "images/synthetic_halfbody_portrait.png",
+   "prompt": "The person in the image sways gently from side to side, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "sway"
+   ]
+  },
+  {
+   "case_id": "laugh_hair_toss",
+   "image": "images/synthetic_closeup_portrait.png",
+   "prompt": "The person in the image laughs and tosses their hair back, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "laugh_hair_toss"
+   ]
+  },
+  {
+   "case_id": "turn_in_place",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image turns around slowly in place, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "turn_in_place"
+   ]
+  },
+  {
+   "case_id": "single_step",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image takes one small step forward, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "single_step"
+   ]
+  },
+  {
+   "case_id": "gaze_shift",
+   "image": "images/synthetic_closeup_portrait.png",
+   "prompt": "The person in the image looks down, then slowly lifts their gaze to the camera, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "gaze_shift"
+   ]
+  }
+ ],
+ "arms": [
+  {
+   "arm_id": "a14b_base",
+   "label": "I2V-A14B 4-step 1.0.0 (approved baseline)",
+   "backend": "video_workflow",
+   "form": {
+    "workflow_id": "wan22_i2v_a14b_4step_v1",
+    "workflow_version": "1.0.0",
+    "frame_count": 81
+   }
+  },
+  {
+   "arm_id": "hy15_8step",
+   "label": "HunyuanVideo 1.5 480p I2V 8-step (experimental)",
+   "backend": "video_workflow",
+   "form": {
+    "workflow_id": "hunyuan_video15_i2v_480p_8step_v1",
+    "workflow_version": "1.0.0",
+    "frame_count": 121,
+    "experimental_opt_in": true
+   }
+  },
+  {
+   "arm_id": "hy15_12step",
+   "label": "HunyuanVideo 1.5 480p I2V 12-step (experimental)",
+   "backend": "video_workflow",
+   "form": {
+    "workflow_id": "hunyuan_video15_i2v_480p_12step_v1",
+    "workflow_version": "1.0.0",
+    "frame_count": 121,
+    "experimental_opt_in": true
+   }
+  }
+ ]
+}
