@@ -15,6 +15,7 @@ from tools.qualification.fun354.plan import (
     ROLE_DRIVING,
     ROLE_Q2_DRIVING,
     ROLE_REFERENCE,
+    WORKFLOW_VERSION,
     CoverageEntry,
     InputPin,
     QualificationPlan,
@@ -39,8 +40,9 @@ class InputSet:
     coverage: tuple[CoverageEntry, ...]
     paths: dict[str, Path]
 
-    def build_plan(self) -> QualificationPlan:
+    def build_plan(self, workflow_version: str = WORKFLOW_VERSION) -> QualificationPlan:
         return build_plan(
+            workflow_version=workflow_version,
             driving_clip_sha256=self.driving.sha256,
             driving_clip_size=self.driving.size,
             reference_sha256=self.reference.sha256,
@@ -96,6 +98,7 @@ def rebuild_plan(record: dict) -> QualificationPlan:
     )
     coverage = tuple(CoverageEntry(**c) for c in record.get("coverage", []))
     return build_plan(
+        workflow_version=str(record.get("workflow", {}).get("version") or WORKFLOW_VERSION),
         driving_clip_sha256=pins[ROLE_DRIVING]["sha256"],
         driving_clip_size=pins[ROLE_DRIVING]["size"],
         reference_sha256=pins[ROLE_REFERENCE]["sha256"],

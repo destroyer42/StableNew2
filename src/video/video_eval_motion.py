@@ -30,6 +30,7 @@ from typing import Any
 
 from src.video.motion_alignment import MAX_SCALE, MIN_SCALE, AlignmentIntent
 from src.video.motion_alignment_preparation import ALIGNED_SCHEMA, temporal_plan_sha256
+from src.video.workflow_conditioning import RGB_VIDEO_REPRESENTATIONS
 
 MOTION_BLOCK = "motion"
 #: A suite that carries a motion case is ``stablenew.video-eval-suite.v2``; v1 readers refuse it instead of ignoring it.
@@ -259,7 +260,41 @@ def _load_library_asset(raw: Any, driving_sha: str) -> dict[str, Any] | None:
                 "end_frame": end,
                 "cadence": str(derived.get("cadence") or "")[:20],
             }
+    representation = _load_representation(raw.get("representation"))
+    if representation is not None:
+        binding["representation"] = representation
     return binding
+
+
+def _load_representation(raw: Any) -> dict[str, str] | None:
+    """PR-VID-MOTION-430: the optional, additive statement that a library clip is one representation of a movement.
+
+    It is a claim recorded when the suite was authored from the clip's own conversion record; nothing here proves it.  A
+    malformed block is refused rather than ignored, so a typo cannot silently turn a controlled comparison exploratory."""
+
+    if raw in (None, {}):
+        return None
+    _require(isinstance(raw, Mapping), "driving.library_asset.representation must be an object")
+    unknown = sorted(set(raw) - {"representation", "movement_key", "profile", "plan_digest"})
+    _require(
+        not unknown, f"driving.library_asset.representation: unknown field(s) {', '.join(unknown)}"
+    )
+    kind = str(raw.get("representation") or "")
+    _require(
+        kind in RGB_VIDEO_REPRESENTATIONS,
+        f"driving.library_asset.representation.representation must be one of {', '.join(RGB_VIDEO_REPRESENTATIONS)}",
+    )
+    key = str(raw.get("movement_key") or "").lower()
+    _require(
+        bool(_SHA256.match(key)),
+        "driving.library_asset.representation.movement_key is not a SHA-256",
+    )
+    return {
+        "representation": kind,
+        "movement_key": key,
+        "profile": str(raw.get("profile") or "")[:60],
+        "plan_digest": str(raw.get("plan_digest") or "")[:64],
+    }
 
 
 def parse_motion(raw: Any, case_id: str, suite_dir: Path | None) -> MotionBinding:
@@ -475,8 +510,12 @@ def motion_form(
     form: Mapping[str, Any],
     *,
     prepared_record: Mapping[str, Any] | None = None,
+    takes_motion_prompt: bool = True,
 ) -> dict[str, Any]:
-    """The arm's form with this case's driving reference applied (a new dict; ``form`` is not modified)."""
+    """The arm's form with this case's driving reference applied (a new dict; ``form`` is not modified).
+
+    ``takes_motion_prompt`` is False for an engine that declares no separate motion prompt (Fun Control): the case's prompt is
+    then not sent to it, and the pair is disclosed as an engine-specific difference instead of being refused."""
 
     merged = dict(form)
     merged["pose_video_path"] = str(binding.driving_path)
@@ -487,8 +526,10 @@ def motion_form(
         if isinstance(merged.get("operator_controls"), Mapping)
         else {}
     )
-    controls["pose_prompt"] = binding.motion_prompt
-    merged["operator_controls"] = controls
+    if takes_motion_prompt:
+        controls["pose_prompt"] = binding.motion_prompt
+    if controls or takes_motion_prompt:
+        merged["operator_controls"] = controls
     if prepared_record is not None:
         merged["prepared_motion_source"] = json.loads(json.dumps(dict(prepared_record)))
     return merged

@@ -16,6 +16,7 @@ from src.video.motion_source_preparation import sha256_file
 from src.video.workflow_asset_integrity import verify_assets
 from tools.qualification.fun354.plan import (
     OUTPUT_RESERVE_BYTES,
+    WORKFLOW_VERSION,
     PlanError,
     QualificationPlan,
     build_plan,
@@ -92,14 +93,19 @@ def read_host_facts(output_dir: str | Path) -> HostFacts:
 
 def _catalog_check(plan: QualificationPlan) -> Check:
     try:
-        current = build_plan()
-        spec = fun_control_spec()
+        current = build_plan(workflow_version=plan.workflow_version)
+        spec = (
+            fun_control_spec()
+            if plan.workflow_version == WORKFLOW_VERSION
+            else fun_control_spec(plan.workflow_version)
+        )
     except PlanError as exc:
         return Check("catalog_identity", BLOCKED, str(exc))
     same = (
         current.graph_sha256 == plan.graph_sha256
         and current.assets == plan.assets
         and current.workflow_version == plan.workflow_version
+        and current.resource_policy == plan.resource_policy
         and spec.governance_state == "experimental"
     )
     if not same:
@@ -111,7 +117,8 @@ def _catalog_check(plan: QualificationPlan) -> Check:
     return Check(
         "catalog_identity",
         PASS,
-        f"{plan.workflow_id}@{plan.workflow_version} graph {plan.graph_sha256[:12]} unchanged; still not_qualified.",
+        f"{plan.workflow_id}@{plan.workflow_version} graph {plan.graph_sha256[:12]} and resource policy unchanged; "
+        "still not qualified.",
     )
 
 

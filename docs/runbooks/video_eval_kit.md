@@ -489,3 +489,34 @@ numbers in the templates are placeholders, different per subject on purpose), va
 aligned clips on the CPU and queues nothing), and ask the owner to authorize the exact stage. The authorization names the suite
 and its SHA-256, every bound image and driver hash, the workflow and version, the stage and budget, the resource constraints and
 the stop conditions (`docs/Subsystems/Video/PR-VID-MOTION-420_Subject_Alignment_and_Compatibility.md` section 8).
+
+## 11. Engine and representation comparisons (PR-VID-MOTION-430)
+
+A motion suite may contain arms on different driving-video engines (Wan-Animate-2 Driving Video and Fun Control 5B Canny) and cases
+whose drivers are different renderings of one movement. Two comparison kinds are added to the integrity vocabulary:
+
+* **Multi-engine comparison.** Arms that differ in workflow id are never a one-variable experiment. The pair is *verified, with
+  disclosed differences*: conditioning mechanism, controls, prepared derivative and noise semantics change together; a shared seed value
+  is not equivalent noise across architectures; a length outside the shared 17-49 frame envelope is stated. A case's motion prompt is sent
+  only to an engine that declares a motion-prompt control (Animate-2 1.1.0+); Fun Control declares none, so the prompt is not sent and the pair
+  discloses it. Two different prompts, or a missing prompt within one engine, stay incomparable. The engine's own preparation contract still
+  applies per arm (exact frames for that workflow, version and length).
+* **Driving-representation group.** Cases that share a source image, arm and motion category but bind different drivers are grouped. The group
+  is a *controlled* comparison only when every driver's library binding carries a `representation` claim (kind, `movement_key`) taken from
+  its own conversion record by binding the clip from the Motion Library in the eval editor (**Bind this clip**), the keys are equal, the source image, engine, seed, length and
+  controls are identical and at least two representations are present. A different alignment is disclosed as an additional intervention.
+  Anything else (a local video, an unverified clip, different movements) is labelled exploratory. The additive suite field is
+  `driving.library_asset.representation = {representation, movement_key, profile, plan_digest}`; a malformed block is refused.
+
+The report adds summary levels *Engine and conditioning mechanism*, *Driving representation*, *Verified movement group*, *Alignment intervention* and
+*Generation length* to the existing ones, each with planned, completed, failed, duplicate, verified-comparable and rated counts and the
+motion rubric. Failed generations stay in every denominator; an unrated clip is not a failed transfer; critical identity breaks are separate from visual
+quality. A run manifest holds no generation time or resource headroom, so the report says so rather than inventing a performance ranking.
+
+### 11.1 The staged comparative templates (unexecuted)
+
+`docs/runbooks/examples/video_eval_conditioning_stage1_engine_pilot.suite.json` (2 jobs), `..._stage2_representation_screen...` (12),
+`..._stage3_cross_subject...` (12) and `..._stage4_repeatability...` (4) total 30 jobs before reuse of identical accepted cells. They contain no media or machine paths; bind
+your own files. Stage 3 uses, per movement, the representation Stage 2 supports (run it twice if the engines favour different ones; a single suite crosses cases with
+both engines). Each physical stage needs the owner's authorization of the exact suite digest, workflow versions, input identities, job count, budget, stop conditions and
+host. The separate Fun Control qualification plan (`python -m tools.qualification.fun354 propose --workflow-version 1.1.0`) is not part of the 30 jobs.
