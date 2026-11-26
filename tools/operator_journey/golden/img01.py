@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from tkinter import ttk
@@ -85,6 +86,8 @@ def run_img01(
     if match is None:
         raise JourneyHold(f"model {wanted_model!r} is not selectable in StableNew ({models[:5]})")
     d.select_combobox(combo_for(run, pipeline, base.model_var), match, label="Model")
+    # The picker may append a status badge such as " (unverified)"; the model name is what the preview and NJR carry.
+    model_name = re.sub(r" \((?:unverified|unsupported)\)$", "", match.split(" [")[0])
     profile_text = str(base._profile_strip.status_label.cget("text"))
     ev.observe("generation_profile_status", profile_text)
     ev.observe("requested_model", match, source=source)
@@ -151,7 +154,7 @@ def run_img01(
     run.check(
         "preview",
         "preview_shows_selected_model",
-        match.split(" [")[0].lower() in preview_model.lower(),
+        model_name.replace(".safetensors", "").lower() in preview_model.lower(),
         f"preview model label {preview_model!r}",
     )
     run.check(
@@ -198,7 +201,7 @@ def run_img01(
     run.check(
         "njr",
         "model_in_njr",
-        match.split(" [")[0].replace(".safetensors", "") in blob,
+        model_name.replace(".safetensors", "") in blob,
         f"model {match!r} missing from NJR",
     )
 
@@ -226,7 +229,7 @@ def run_img01(
     # Requested versus observed settings, read back from the frozen NJR (the same in every mode).
     njr_config = (njr.get("workload") or {}).get("config") or {}
     requested = {
-        "model": match.split(" [")[0].replace(".safetensors", ""),
+        "model": model_name.replace(".safetensors", ""),
         "steps": steps,
         "seed": seed,
         "prompt": text_identity(prompt),

@@ -594,6 +594,9 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
     """
 
     expected = {
+        # VID-CAND-382 experimental eval candidates, pinned from their first registration.
+        "hunyuan_video15_i2v_480p_12step_v1@1.0.0": "e5bce29663a3b165010d7e9bb1c36f46230012262b697001f1b6d289df8e0bc7",
+        "hunyuan_video15_i2v_480p_8step_v1@1.0.0": "bdab3e71debe7ee6692a8497aaaab260ea6ba35261d0f8a6f99f8be7a58e11d2",
         "wan22_fun_control_5b_canny_i2v_v1@1.0.0": "8882daeda0571cc4cc00cf6d96e6a4fff25411a571f62626dd5bfc87389beac5",
         # Trial: the identical 1.0.0 graph; only the resource policy (VRAM floor instead of a hard refusal) differs.
         "wan22_fun_control_5b_canny_i2v_v1@1.1.0": "ed7b2ec74ff8971a3276d8510be0e28b47a19754b5cc115bdb1493b91640fed9",
