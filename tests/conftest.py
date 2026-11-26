@@ -418,6 +418,26 @@ def _hermetic_video_preflight_probes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _hermetic_forge_host_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exact Forge profiles (Klein, Z-Image, FLUX.1) need a 32-GB-class host, checked at Queue and at dispatch (N1c).
+
+    Without this, whether such a job is admitted would depend on the RAM of the machine running the tests (a 16 GB CI
+    runner refuses it). Substitute a qualified host; a test about the minimum patches its own reading and wins.
+    """
+
+    try:
+        import src.image_backends.forge_webui_backend as forge_module
+        from src.image_backends.forge_klein_readiness import HostMemorySnapshot
+    except Exception:  # pragma: no cover - isolation must never break collection
+        return
+    monkeypatch.setattr(
+        forge_module,
+        "read_host_memory",
+        lambda: HostMemorySnapshot(total_bytes=34_359_738_368, available_bytes=17_179_869_184),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _mock_webui_discovery(monkeypatch, tmp_path: Path):
     """Prevent tests from launching or probing real WebUI services.
 

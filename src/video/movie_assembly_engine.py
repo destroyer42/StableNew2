@@ -44,6 +44,7 @@ from src.utils.atomic_io import atomic_write_json
 from src.video.movie_assembly_models import (
     CLIP_KIND_IMAGE,
     MODE_SEQUENCE,
+    MOVIE_ASSEMBLY_STAGE,
     AssemblyAudio,
     AssemblyTimeline,
     MovieAssemblySpec,
@@ -288,6 +289,39 @@ def _manifest_payload(
     }
 
 
+def require_ffmpeg(*, outcome: str = "") -> Path:
+    """The FFmpeg executable that assembles Movie Clips; ``MovieAssemblyError`` when none resolves."""
+
+    executable = resolve_ffmpeg_executable()
+    if executable is None:
+        raise MovieAssemblyError(
+            " ".join(
+                part
+                for part in (
+                    "FFmpeg was not found, so the movie cannot be assembled.",
+                    outcome,
+                    "Install FFmpeg or set STABLENEW_FFMPEG_PATH.",
+                )
+                if part
+            )
+        )
+    return executable
+
+
+def require_movie_assembly_admission(record: Any) -> None:
+    """Queue twin of the FFmpeg check (N1 follow-up), so a batch is never queued only to fail after the operator left.
+
+    Dispatch re-checks in ``run_movie_assembly``: FFmpeg can be installed or removed while the job waits.
+    """
+
+    if MOVIE_ASSEMBLY_STAGE not in tuple(getattr(record, "stage_chain_labels", ()) or ()):
+        return
+    try:
+        require_ffmpeg(outcome="Nothing was queued.")
+    except MovieAssemblyError as exc:
+        raise ValueError(str(exc)) from exc
+
+
 def run_movie_assembly(
     spec: MovieAssemblySpec,
     *,
@@ -313,11 +347,7 @@ def run_movie_assembly(
     _check_cancel(cancel_token)
     verify_assembly_inputs(spec, hash_file=hash_file)
     _check_cancel(cancel_token)
-    executable = ffmpeg if ffmpeg is not None else resolve_ffmpeg_executable()
-    if executable is None:
-        raise MovieAssemblyError(
-            "FFmpeg was not found, so the movie cannot be assembled. Install FFmpeg or set STABLENEW_FFMPEG_PATH."
-        )
+    executable = ffmpeg if ffmpeg is not None else require_ffmpeg()
 
     run_dir.mkdir(parents=True, exist_ok=True)
     output_path = _unique_output_path(run_dir, spec.clip_name)
@@ -395,6 +425,8 @@ __all__ = [
     "build_sequence_command",
     "build_slideshow_command",
     "encode_timeout_seconds",
+    "require_ffmpeg",
+    "require_movie_assembly_admission",
     "run_movie_assembly",
     "stage_still",
     "verify_assembly_inputs",

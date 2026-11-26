@@ -74,7 +74,11 @@ from src.video.video_interpolation import (
 from src.video.workflow_asset_integrity import configured_asset_issues
 from src.video.workflow_catalog_wan_a14b import a14b_launch_attention
 from src.video.workflow_compiler import WorkflowCompiler
-from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
+from src.video.workflow_frame_count import (
+    frame_count_policy,
+    interpolation_source_fps,
+    parse_frame_count,
+)
 from src.video.workflow_input_integrity import verify_exact_dispatch_inputs
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_readiness import required_launch_flags as _required_launch_flags
@@ -206,27 +210,6 @@ def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
         "required_frontend_version": system.get("required_frontend_version"),
     }
     return {name: str(value) for name, value in fields.items() if value}
-
-
-def _interpolation_source_fps(spec: Any, stage_config: Mapping[str, Any]) -> int:
-    """The encoded frame rate RIFE multiplies, from the output policy for saved frames."""
-
-    output_fps = frames_output_fps(spec)
-    if output_fps is not None:
-        return output_fps
-
-    policy = frame_count_policy(spec)
-    raw = stage_config.get("fps") or (policy or {}).get("fps") or 0
-    try:
-        fps = int(raw)
-    except (TypeError, ValueError):
-        fps = 0
-    if fps < 1:
-        raise ValueError(
-            f"Workflow '{spec.workflow_id}' declares no frame rate, so RIFE smoothing cannot "
-            "choose an output rate. Nothing was generated."
-        )
-    return fps
 
 
 def _expected_frame_count(stage_config: Mapping[str, Any]) -> int | None:
@@ -589,7 +572,7 @@ class ComfyWorkflowVideoBackend:
         # Requested RIFE smoothing is validated before anything starts: an unsupported factor, a missing
         # runtime or an unknown frame rate fails here, not after the clip has been generated.
         if normalize_interpolation_request(stage_config.get("interpolation")) is not None:
-            _interpolation_source_fps(spec, stage_config)
+            interpolation_source_fps(spec, stage_config)
         # VID-WARM-373: take the process-wide warm hold before anything touches the runtime. The same workflow on
         # the very owned process that served the previous job reuses it; anything else held is released first,
         # so this job starts exactly as it would have without the hold (including the launch-flag check below,
@@ -862,7 +845,7 @@ class ComfyWorkflowVideoBackend:
                     frame_paths=resolved_outputs["frame_paths"],
                     output_dir=request.output_dir,
                     stem=Path(frames_out_record.video_path).stem,
-                    source_fps=_interpolation_source_fps(spec, stage_config),
+                    source_fps=interpolation_source_fps(spec, stage_config),
                     request=smoothing,
                     cancel_token=request.cancel_token,
                 )
@@ -870,7 +853,7 @@ class ComfyWorkflowVideoBackend:
                 smoothed = interpolate_video_file(
                     video_path=str(resolved_outputs["video_path"]),
                     output_dir=request.output_dir,
-                    source_fps=_interpolation_source_fps(spec, stage_config),
+                    source_fps=interpolation_source_fps(spec, stage_config),
                     request=smoothing,
                     cancel_token=request.cancel_token,
                 )

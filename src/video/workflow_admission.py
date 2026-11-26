@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from src.video.video_execution_resolver import effective_workflow_identity
+from src.video.workflow_frame_count import interpolation_requested, interpolation_source_fps
 from src.video.workflow_input_integrity import requires_exact_motion, verify_exact_dispatch_inputs
 from src.video.workflow_registry import build_default_workflow_registry
 
@@ -33,6 +34,7 @@ def require_workflow_admission(record: Any) -> None:
             f"'{spec.display_name}' is experimental and this job has no recorded experimental opt-in. Queue it from a summary "
             "that shows its warning to record the opt-in. Nothing was queued."
         )
+    _require_interpolation_rate(record, spec, stage)
     if not requires_exact_motion(spec):
         return
     if not workflow_version:
@@ -47,3 +49,20 @@ def require_workflow_admission(record: Any) -> None:
     policy = spec.backend_defaults.get("resource_readiness") or {}
     if policy.get("qualification_status") == "not_qualified":
         raise ValueError(str(policy["reason"]))
+
+
+def _require_interpolation_rate(record: Any, spec: Any, stage: Any) -> None:
+    """RIFE needs a frame rate to multiply; a workflow that declares none is refused at Queue (N1 follow-up).
+
+    Only the rate is checked here. The RIFE runtime can be installed while the job waits, so dispatch resolves it.
+    """
+
+    stage_config = dict(stage)
+    for item in getattr(record, "stage_chain", None) or ():
+        if getattr(item, "stage_type", None) == "video_workflow":
+            # What dispatch reads: the stage's own fields with its extra flattened over them.
+            stage_config = item.to_dict()
+            stage_config.update(stage_config.pop("extra", None) or {})
+            break
+    if interpolation_requested(stage_config.get("interpolation")):
+        interpolation_source_fps(spec, stage_config, outcome="Nothing was queued.")

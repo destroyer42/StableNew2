@@ -217,12 +217,31 @@ def test_a1111_with_a_klein_profile_is_rejected_and_never_switched() -> None:
     assert transport.generation_calls == []
 
 
-def test_host_ram_below_the_qualified_class_fails_before_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_host_ram_below_the_qualified_class_is_refused_at_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """N1 follow-up: total RAM is a fixed host fact, so the block is reported at Queue, before anything waits."""
+
     monkeypatch.setattr(
         forge_backend_module,
         "read_host_memory",
         lambda: HostMemorySnapshot(total_bytes=17_000_000_000, available_bytes=9_000_000_000),
     )
+    transport = _transport()
+    with pytest.raises(ValueError, match="32-GB-class host.*Nothing was queued"):
+        _run(_t2i_njr(), transport)
+    assert transport.calls == []
+
+
+def test_host_ram_below_the_qualified_class_fails_before_generation_for_work_admitted_earlier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dispatch copy stays for a job admitted before the Queue check existed (simulated by skipping admission)."""
+
+    monkeypatch.setattr(
+        forge_backend_module,
+        "read_host_memory",
+        lambda: HostMemorySnapshot(total_bytes=17_000_000_000, available_bytes=9_000_000_000),
+    )
+    monkeypatch.setattr("src.controller.job_service.require_execution_admission", lambda record: None)
     transport = _transport()
     entry = _run(_t2i_njr(), transport)
     assert entry.status is JobStatus.FAILED
