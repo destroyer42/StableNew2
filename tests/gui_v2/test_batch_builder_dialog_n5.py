@@ -183,3 +183,16 @@ def _record_init(opened):  # type: ignore[no-untyped-def]
         opened.append(self)
 
     return init
+
+
+def test_saved_recipes_are_on_by_default_and_the_owner_can_turn_them_off(dialog):  # type: ignore[no-untyped-def]
+    assert dialog.use_recipes_var.get() is True
+    dialog._plan()
+    dialog.calls.plan_reply[0](_plan(dialog.calls.planned[-1]))
+    assert dialog.queue_button.instate(["!disabled"])
+
+    dialog.use_recipes_var.set(False)
+    dialog._changed()
+    assert dialog.queue_button.instate(["disabled"])
+    dialog._plan()
+    assert dialog.calls.planned[-1].use_recipes is False

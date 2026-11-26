@@ -25,7 +25,6 @@ Status: in progress (2026-11-26). Way Forward item N5, after N12 (one canonical 
     `prompt_excerpt`, `job_id` and `workflow` (`src/app/review_gateway_protocol.py`), so grouping by batch is a
     separate RG package that reads the provenance written here.
   - Per-model ETA calibration.
-  - Applying a model's saved generation profile per model (decision 3, open).
   - Video, img2img and reprocess sources.
   - Any new queue, runner, submission path or job model.
 
@@ -59,9 +58,12 @@ BatchBuilderDialog (Tk: capture intent, render plan)
 ```
 
 - **One cell = one pack × one model.** The cell's config snapshot is the Pipeline tab's working settings (captured
-  on the GUI thread, exactly as `prepare_pack_draft` does). The only changes are `txt2img.model` (and
-  `model_name`) set to that model, and the batch's ADetailer and upscale stage flags. Each model's compile policy is
-  still applied per prompt by the builder (`compile_model_policy`).
+  on the GUI thread, exactly as `prepare_pack_draft` does). The changes are:
+  - the model's saved recipe, when it has one and recipes are on (decision 3; `pack_model_batch_recipes`);
+  - `txt2img.model` (and `model_name`) set to that model;
+  - the batch's ADetailer and upscale stage flags.
+
+  Each model's compile policy is still applied per prompt by the builder (`compile_model_policy`).
 - **The count is the compiled count, not an estimate.** Every cell compiles before the summary shows. So "N jobs,
   M images" is the number of NJRs Queue will submit, and their summed `estimated_image_count()`. Matrix and
   randomizer expansion is included, and the summary names any cell the matrix limit truncated
@@ -83,13 +85,19 @@ Each NJR's `provenance.metadata["batch"]` is stamped at Queue time, so Preview c
 
 ```json
 {"schema": "stablenew.batch.v1", "batch_id": "<uuid4>", "name": "<owner text>",
- "cell": {"pack_id": "...", "pack_name": "...", "model": "<as selected>", "model_key": "<N12 checkpoint_key>"},
- "cells": 6, "jobs": 240}
+ "cell": {"pack_id": "...", "pack_name": "...", "model": "<as selected>", "model_key": "<N12 checkpoint_key>",
+          "recipe": {"ref": {"kind": "custom", "profile_id": "...", "revision": 2}, "label": "Custom: Daily",
+                     "changes": {"steps": 40, "cfg_scale": 5.5}},
+          "recipe_replaced_by_pack": []},
+ "settings": "model_recipes", "cells": 6, "jobs": 240}
 ```
 
 - The stamp uses the same `replace(record, provenance=...)` re-freeze as N1's accepted warnings, so the job's
   identity and plan are unchanged.
 - `model_key` is N12's canonical key, so the gateway and Learning can join on it.
+- `settings` is `model_recipes` (recipes on) or `pipeline_tab` (the owner turned them off for this batch).
+  `cell.recipe` is `null` when the cell used the Pipeline tab's settings. `recipe_replaced_by_pack` names recipe
+  settings the PromptPack's own saved settings replaced in that cell.
 - Reader: `batch_identity(record_or_snapshot) -> BatchIdentity | None` in the same module, for the later RG package.
 
 ### Where code lives (controller ratchets)
@@ -112,10 +120,20 @@ The orchestrator answered these on 2026-11-26, relaying owner direction:
    Accepted.
 2. **ETA source:** the existing Queue ETA source (`DurationStatsService`: history median per stage chain, per-stage
    defaults when history is thin). Accepted. Per-model calibration is on the follow-up list.
-3. **Per-model settings: open, put to the owner.** Should a model with a saved generation profile (recipe) use its
-   own sampler, steps and CFG? Until the owner answers, the default holds: the Pipeline tab's working settings plus
-   each model's compile policy. The per-cell settings change lives in one function
-   (`pack_model_batch_service.with_model`), so adding "use the model's saved recipe" is a small change there.
+3. **Per-model settings: owner decision (2026-11-26), relayed by the orchestrator in the owner's words:** "I think
+   model with a saved recipe use it's own, but allow for override if specifically needed requested by user."
+   Implemented as follows:
+   - A model's recipe is the generation profile the model picker applies when that model is chosen: its favorite,
+     else its first Research profile (`GenerationProfileService.plan_for_model`, which selects nothing).
+   - Each cell gets that recipe's changes (sampler, scheduler, steps, CFG, size, VAE) on the Pipeline tab's working
+     settings, written where the picker writes them. That includes the pack-settings override bundle when the
+     override is on.
+   - A PromptPack's own saved settings still win where they would for a single model, and the summary names any
+     recipe setting a pack replaced.
+   - A model without a recipe uses the Pipeline tab's settings.
+   - The override is per batch: clearing **Use each model's saved recipe** (on by default) uses the Pipeline tab's
+     settings for every model.
+   - The summary lists each model's settings source, and `provenance.metadata.batch` records it.
 4. **Default batch name:** `YYYY-MM-DD <first pack> +N x <M> model(s)`, editable. Accepted.
 5. **Large batches:** no cap. A warning line shows above 500 images, and Queue stays enabled. Accepted; this matches
    the owner's standing "no self-imposed limits" rule.
@@ -148,7 +166,6 @@ The orchestrator answered these on 2026-11-26, relaying owner direction:
 
 - A controller ceiling cannot be met without raising it.
 - Batch identity would need an NJR schema change.
-- The owner's answer to decision 3 changes the design beyond `with_model`.
 
 ## Documentation impact
 

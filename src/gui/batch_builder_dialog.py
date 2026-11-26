@@ -79,6 +79,13 @@ class BatchBuilderDialog(tk.Toplevel):
         ttk.Checkbutton(
             options, text="Upscale", variable=self.upscale_var, command=self._changed
         ).pack(side="left", padx=(12, 0))
+        self.use_recipes_var = tk.BooleanVar(master=self, value=True)
+        ttk.Checkbutton(
+            options,
+            text="Use each model's saved recipe",
+            variable=self.use_recipes_var,
+            command=self._changed,
+        ).pack(side="left", padx=(12, 0))
         ttk.Label(options, text="Batch name").pack(side="left", padx=(24, 4))
         self.name_var = tk.StringVar(master=self, value="")
         self.name_entry = ttk.Entry(options, textvariable=self.name_var, width=48)
@@ -89,8 +96,10 @@ class BatchBuilderDialog(tk.Toplevel):
         ttk.Label(
             frame,
             text=(
-                "Every model uses the Pipeline tab's current settings; only the checkpoint changes. "
-                "Plan compiles every combination first, so the totals below are exactly what Queue adds."
+                "A model with a saved recipe uses its own sampler, steps, CFG and size; other models use the "
+                "Pipeline tab's settings. Clear \"Use each model's saved recipe\" to use the Pipeline tab's "
+                "settings for every model. Plan compiles every combination first, so the totals below are "
+                "exactly what Queue adds."
             ),
             wraplength=900,
             justify="left",
@@ -145,6 +154,7 @@ class BatchBuilderDialog(tk.Toplevel):
             models=tuple(models),
             adetailer=bool(self.adetailer_var.get()),
             upscale=bool(self.upscale_var.get()),
+            use_recipes=bool(self.use_recipes_var.get()),
         )
 
     def _mark_name_edited(self) -> None:

@@ -1,9 +1,10 @@
 """N5: packs x models batch builder - plan, count, estimate and queue one named batch on the existing path.
 
 One *cell* is one PromptPack compiled for one checkpoint. Every cell compiles through the same
-``PromptPackNormalizedJobBuilder`` the Pipeline tab's Preview uses, from the Pipeline tab's working settings, with only
-the checkpoint (and the batch's ADetailer and upscale choices) changed. So the totals the summary shows are the
-records Queue submits, not an estimate. Queue goes through ``PipelineController._submit_normalized_jobs`` (sorting by
+``PromptPackNormalizedJobBuilder`` the Pipeline tab's Preview uses, from the Pipeline tab's working settings with the
+checkpoint, the model's saved recipe (``pack_model_batch_recipes``; owner decision 3, which the owner can turn off per
+batch) and the batch's ADetailer and upscale choices applied. So the totals the summary shows are the records Queue
+submits, not an estimate. Queue goes through ``PipelineController._submit_normalized_jobs`` (sorting by
 the canonical checkpoint key, freezing N1 warnings) into ``JobService.submit_njrs``: there is no second queue.
 
 Each queued NJR records its batch in ``provenance.metadata["batch"]`` (``BATCH_SCHEMA``). The stamp is added at Queue
@@ -19,7 +20,7 @@ import logging
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
 
@@ -27,6 +28,13 @@ from src.contracts import PackJobEntry
 from src.controller.app_controller_services.pack_draft_service import (
     build_pack_config,
     build_pack_entries,
+)
+from src.controller.app_controller_services.pack_model_batch_recipes import (
+    ModelRecipe,
+    capture_recipe_context,
+    replaced_by_pack,
+    resolve_recipes,
+    with_recipe,
 )
 from src.image_backends.model_policy_warnings import shown_model_warnings
 from src.pipeline.policy_warnings import PolicyWarning, pending_warnings, with_provenance_metadata
@@ -54,6 +62,8 @@ class BatchRequest:
     #: ``None`` keeps the Pipeline tab's current choice for that stage.
     adetailer: bool | None = None
     upscale: bool | None = None
+    #: ``True``: a model with a saved recipe uses it. ``False``: every model uses the Pipeline tab's settings.
+    use_recipes: bool = True
 
     def problems(self) -> list[str]:
         problems: list[str] = []
@@ -74,6 +84,8 @@ class BatchBase:
     draft_config: Any
     stage_flags: Mapping[str, bool]
     randomizer_metadata: Mapping[str, Any]
+    #: ``pack_model_batch_recipes.RecipeContext`` (``None`` when saved recipes cannot be read).
+    recipe_context: Any = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +112,8 @@ class BatchCell:
     model: str
     records: tuple[Any, ...] = ()
     problem: str = ""
+    #: Recipe settings the PromptPack's own saved settings replaced in this cell.
+    replaced: tuple[str, ...] = ()
 
     @property
     def jobs(self) -> int:
@@ -119,6 +133,7 @@ class BatchPlan:
     warnings: tuple[PolicyWarning, ...] = ()
     eta_seconds: float = 0.0
     eta_jobs_from_history: int = 0
+    recipes: Mapping[str, ModelRecipe] = field(default_factory=dict)
 
     @property
     def records(self) -> list[Any]:
@@ -160,12 +175,29 @@ class BatchPlan:
                 f"This is a large batch ({self.images} images). It still queues as one batch."
             )
         lines.append("")
+        if not request.use_recipes:
+            lines.append(
+                "Settings: the Pipeline tab's settings for every model (saved recipes off)."
+            )
+        else:
+            lines.append("Settings per model (a saved recipe is used where the model has one):")
+            lines.extend(
+                f"  {(self.recipes.get(model) or ModelRecipe(model)).describe()}"
+                for model in request.models
+            )
+        lines.append("")
         for cell in self.cells:
             label = f"{cell.pack_name} / {cell.model}"
             if cell.problem:
                 lines.append(f"  {label}: not queued. {cell.problem}")
             else:
                 lines.append(f"  {label}: {cell.jobs} job(s), {cell.images} image(s)")
+                if cell.replaced:
+                    lines.append(
+                        "    The pack's saved settings replace the recipe's "
+                        + ", ".join(cell.replaced)
+                        + "."
+                    )
         if self.warnings:
             lines.append("")
             lines.append("Warnings (queueing accepts them for every job in this batch):")
@@ -203,7 +235,7 @@ def default_batch_name(
 
 
 def with_model(config: Mapping[str, Any], model: str) -> dict[str, Any]:
-    """``config`` with every checkpoint field set to ``model`` (the only per-cell setting change)."""
+    """``config`` with every checkpoint field set to ``model`` (the recipe is applied before, in ``with_recipe``)."""
 
     result = dict(config)
     txt2img = dict(result.get("txt2img") or {})
@@ -231,9 +263,11 @@ def compile_cells(
     base: BatchBase,
     sources: Sequence[PackSource],
     compile_entries: CompileEntries,
+    recipes: Mapping[str, ModelRecipe] | None = None,
 ) -> tuple[BatchCell, ...]:
     """Compile every pack x model cell; a cell that cannot compile is reported, never dropped silently."""
 
+    recipes = recipes if request.use_recipes and recipes else {}
     flags = cell_stage_flags(base, request)
     randomizer = dict(base.randomizer_metadata)
     cells: list[BatchCell] = []
@@ -245,7 +279,7 @@ def compile_cells(
                 continue
             try:
                 config = build_pack_config(
-                    deepcopy(base.draft_config),
+                    deepcopy(with_recipe(base.draft_config, recipes.get(model))),
                     deepcopy(dict(source.pack_config or {})),
                     flags,
                     randomizer,
@@ -267,7 +301,12 @@ def compile_cells(
                 cells.append(replace(cell, problem=str(exc) or type(exc).__name__))
                 continue
             cells.append(
-                replace(cell, records=records, problem="" if records else "It compiled no jobs.")
+                replace(
+                    cell,
+                    records=records,
+                    problem="" if records else "It compiled no jobs.",
+                    replaced=replaced_by_pack(recipes.get(model), records),
+                )
             )
     return tuple(cells)
 
@@ -305,7 +344,12 @@ def estimate_seconds(records: Iterable[Any], stats: Any = None) -> tuple[float, 
     return total, from_history
 
 
-def build_plan(request: BatchRequest, cells: Sequence[BatchCell], stats: Any = None) -> BatchPlan:
+def build_plan(
+    request: BatchRequest,
+    cells: Sequence[BatchCell],
+    stats: Any = None,
+    recipes: Mapping[str, ModelRecipe] | None = None,
+) -> BatchPlan:
     records = [record for cell in cells for record in cell.records]
     eta, from_history = estimate_seconds(records, stats)
     return BatchPlan(
@@ -314,6 +358,7 @@ def build_plan(request: BatchRequest, cells: Sequence[BatchCell], stats: Any = N
         warnings=collect_warnings(records),
         eta_seconds=eta,
         eta_jobs_from_history=from_history,
+        recipes=dict(recipes or {}) if request.use_recipes else {},
     )
 
 
@@ -324,6 +369,7 @@ def stamp_batch(plan: BatchPlan, batch_id: str | None = None) -> list[Any]:
     queueable = [cell for cell in plan.cells if cell.records]
     stamped: list[Any] = []
     for cell in queueable:
+        recipe = plan.recipes.get(cell.model)
         for record in cell.records:
             metadata = dict(record.extra_metadata or {})
             metadata[BATCH_METADATA_KEY] = {
@@ -335,7 +381,12 @@ def stamp_batch(plan: BatchPlan, batch_id: str | None = None) -> list[Any]:
                     "pack_name": cell.pack_name,
                     "model": cell.model,
                     "model_key": checkpoint_key(cell.model),
+                    "recipe": recipe.provenance()
+                    if recipe is not None and recipe.applies
+                    else None,
+                    "recipe_replaced_by_pack": list(cell.replaced),
                 },
+                "settings": "model_recipes" if plan.request.use_recipes else "pipeline_tab",
                 "cells": len(queueable),
                 "jobs": plan.jobs,
             }
@@ -369,10 +420,16 @@ def batch_identity(source: Any) -> dict[str, Any] | None:
 def capture_batch_base(app: Any) -> BatchBase:
     """GUI thread: the working settings Add to Job would use."""
 
+    try:
+        recipe_context = capture_recipe_context(app)
+    except Exception:  # noqa: BLE001 - without the profile service every model uses the Pipeline settings
+        log.info("[batch] saved recipes are unavailable", exc_info=True)
+        recipe_context = None
     return BatchBase(
         draft_config=app._capture_pack_draft_config(),
         stage_flags=dict(app._build_stage_flags()),
         randomizer_metadata=dict(app._build_randomizer_metadata()),
+        recipe_context=recipe_context,
     )
 
 
@@ -419,8 +476,9 @@ def plan_batch(app: Any, request: BatchRequest, base: BatchBase) -> BatchPlan:
     from src.utils.file_io import read_prompt_pack
 
     sources = load_pack_sources(app, request.pack_ids, read_prompt_pack)
-    cells = compile_cells(request, base, sources, batch_compiler(app))
-    return build_plan(request, cells, getattr(app, "duration_stats_service", None))
+    recipes = resolve_recipes(base.recipe_context, request.models) if request.use_recipes else {}
+    cells = compile_cells(request, base, sources, batch_compiler(app), recipes)
+    return build_plan(request, cells, getattr(app, "duration_stats_service", None), recipes)
 
 
 def request_batch_plan(

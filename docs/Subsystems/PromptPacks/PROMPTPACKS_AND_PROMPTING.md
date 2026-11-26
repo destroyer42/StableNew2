@@ -162,9 +162,15 @@ and Queue live in `src/controller/app_controller_services/pack_model_batch_servi
 `docs/work_packages/N5_batch_builder.md`).
 
 - **Compiling.** One cell is one pack compiled for one checkpoint by a batch-owned `PromptPackNormalizedJobBuilder`,
-  built off the Tk thread. Each cell starts from the Pipeline tab's working settings, captured like Add to Job; only
-  the checkpoint (`with_model`, the one per-cell settings seam) and the batch's stage choices change. Each model's
-  compile policy still applies.
+  built off the Tk thread. Each cell starts from the Pipeline tab's working settings, captured like Add to Job. Then
+  the checkpoint (`with_model`) and the batch's stage choices are applied, and each model's compile policy still
+  applies.
+- **Saved recipes (owner decision 3).** `pack_model_batch_recipes` applies a model's saved recipe to its cells. The
+  recipe is the generation profile the picker would apply for that model (`GenerationProfileService.plan_for_model`),
+  written into the working settings where the picker writes it. A PromptPack's own saved settings still win as they
+  do for one model, and the summary names what they replaced. A model without a recipe uses the Pipeline tab's
+  settings. Clearing **Use each model's saved recipe** uses the Pipeline tab's settings for every model
+  [V: `tests/controller/test_pack_model_batch_recipes_n5.py`].
 - **Counting.** Jobs and images are counted from the compiled records. Images per NJR is `images_per_prompt`, since
   `loop_count` is already one NJR per run [V]. A cell that cannot compile is listed with its reason, and the rest
   still queue. A Klein checkpoint that needs a LoRA selection review is one example: the batch has no selection
@@ -172,7 +178,7 @@ and Queue live in `src/controller/app_controller_services/pack_model_batch_servi
 - **Warnings and time.** N1 warnings are collected once across the batch. The ETA is the Queue's
   `DurationStatsService` estimate per stage chain, with per-stage defaults when there is no history.
 - **Queueing.** Queue stamps `provenance.metadata.batch` (`stablenew.batch.v1`: `batch_id`, `name`, the cell's pack
-  and model with the N12 `model_key`, `cells`, `jobs`) and makes one `_submit_normalized_jobs` call, which sorts by
+  and model with the N12 `model_key` and the recipe it used, `settings`, `cells`, `jobs`) and makes one `_submit_normalized_jobs` call, which sorts by
   model, freezes the warnings and calls `JobService.submit_njrs` (all or none). `batch_identity` reads the stamp
   back from a record or a stored snapshot [V: `tests/controller/test_pack_model_batch_n5.py`].
 

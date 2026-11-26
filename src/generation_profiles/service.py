@@ -265,10 +265,46 @@ class GenerationProfileService:
         """The operator picked a model: plan the preferred profile onto ``working`` (the caller applies the changes)."""
 
         resolved = self.resolve(model_name)
-        preferred, missing = self.preferred_ref(resolved.identity)
-        profile = self.get(preferred, resolved.identity) if preferred else None
         previous_family = self._last_family
         self._last_family = resolved.identity.family
+        plan, profile = self._plan_preferred(
+            resolved, working, catalogs, vae_options, previous_family
+        )
+        if profile is None:
+            self._selected.pop(resolved.identity.key, None)
+        else:
+            self._selected[resolved.identity.key] = profile.ref
+        merged = {**working, **plan.changes}
+        return plan, self.state_for(model_name, merged)
+
+    def plan_for_model(
+        self,
+        model_name: str,
+        working: Mapping[str, Any],
+        *,
+        catalogs: Mapping[str, Collection[str]] | None = None,
+        vae_options: VaeCatalog | None = None,
+        previous_family: str | None = None,
+    ) -> tuple[ApplicationPlan, GenerationProfile | None]:
+        """What choosing ``model_name`` would apply to ``working``, and the profile it uses, without selecting it.
+
+        The N5 batch builder uses this to give each model its own preferred profile (the one the picker applies).
+        """
+
+        return self._plan_preferred(
+            self.resolve(model_name), working, catalogs, vae_options, previous_family
+        )
+
+    def _plan_preferred(
+        self,
+        resolved: ResolvedModel,
+        working: Mapping[str, Any],
+        catalogs: Mapping[str, Collection[str]] | None,
+        vae_options: VaeCatalog | None,
+        previous_family: str | None,
+    ) -> tuple[ApplicationPlan, GenerationProfile | None]:
+        preferred, missing = self.preferred_ref(resolved.identity)
+        profile = self.get(preferred, resolved.identity) if preferred else None
         if profile is None:
             plan = plan_application(
                 profile=None,
@@ -281,22 +317,19 @@ class GenerationProfileService:
                 current_family=resolved.identity.family,
                 missing_ref=missing,
             )
-            self._selected.pop(resolved.identity.key, None)
-        else:
-            plan = plan_application(
-                profile=profile,
-                match=_profile_match(profile, resolved.identity),
-                working=working,
-                policy=resolved.policy,
-                catalogs=catalogs,
-                vae_options=vae_options,
-                require_verified_vae=True,
-                previous_family=previous_family,
-                current_family=resolved.identity.family,
-            )
-            self._selected[resolved.identity.key] = profile.ref
-        merged = {**working, **plan.changes}
-        return plan, self.state_for(model_name, merged)
+            return plan, None
+        plan = plan_application(
+            profile=profile,
+            match=_profile_match(profile, resolved.identity),
+            working=working,
+            policy=resolved.policy,
+            catalogs=catalogs,
+            vae_options=vae_options,
+            require_verified_vae=True,
+            previous_family=previous_family,
+            current_family=resolved.identity.family,
+        )
+        return plan, profile
 
     def select(
         self,
