@@ -50,6 +50,10 @@ slice is its own work package in a fresh session and worktree.
 - PC → gateway sync port (planned 9443) over the LAN, PC-initiated only: publish media and manifests, list outbox
   records, post acknowledgements. Reachable only from the PC's LAN address (Proxmox firewall) and authenticated with a
   per-installation sync secret (DPAPI on Windows, a 0600 secret file in the container).
+- Bootstrap: installing the gateway generates the sync secret once; the owner enters it in StableNew's desktop pairing
+  settings, which store it with DPAPI. Phone enrollment then works without touching the container: the desktop creates a
+  single-use code, shows it, and pushes only a salted hash as a `pairing_offer`; the gateway enforces expiry and attempt
+  caps and reports enrolled devices back in the next `outbox_page` so the desktop can list and revoke them.
 - Phone → gateway phone port over the tailnet only (`tailscale serve` → localhost). The sync API is never served there.
 - Gateway → Immich on TrueNAS over the LAN, the only outbound application connection.
 - PC → AI worker (D8, RG-145): the existing operator-managed SSH forward gains `-L 127.0.0.1:17860:127.0.0.1:7860`.
