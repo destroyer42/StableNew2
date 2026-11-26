@@ -36,6 +36,10 @@ _INPUT = (
 )
 
 
+#: The restricted input options, shared with the review gateway's mobile transcode (RG-120).
+INPUT_OPTIONS = _INPUT
+
+
 def _media_command(
     command: Sequence[str], stream: BinaryIO, cap: int, cancel: CancelSignal | None
 ) -> bytes:
