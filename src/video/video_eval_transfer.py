@@ -38,6 +38,11 @@ LEVELS = (
     "conditioning",
     "arm",
     "cross_subject",
+    "engine",
+    "representation",
+    "representation_group",
+    "alignment",
+    "generation_length",
 )
 LEVEL_LABELS = {
     "motion_asset": "Motion asset",
@@ -47,6 +52,11 @@ LEVEL_LABELS = {
     "conditioning": "Conditioning configuration",
     "arm": "Evaluation arm",
     "cross_subject": "Cross-subject group (one motion, one arm)",
+    "engine": "Engine and conditioning mechanism",
+    "representation": "Driving representation",
+    "representation_group": "Verified movement group (one movement, several representations)",
+    "alignment": "Alignment intervention",
+    "generation_length": "Generation length",
 }
 
 
@@ -144,6 +154,11 @@ class TransferSummary:
                 "A cell without a review is not rated; it is never counted as a failed action.",
                 "Failed, cancelled and incomplete jobs stay in the planned and completed counts.",
                 "These are decision-support summaries, not a qualification, ranking or recommendation.",
+                "Generation time, cold-versus-warm state and resource headroom are not part of a run manifest; read them "
+                "from job History or qualification telemetry, and never compare timings across different lengths or "
+                "hardware states.",
+                "Engine and representation groups mix cases that differ in more than that one thing unless their "
+                "integrity says otherwise; a faster engine is not thereby a better motion-transfer engine.",
             ],
         }
 
@@ -161,6 +176,11 @@ class _Attempt:
     source_sha: str
     seed: Any
     duplicate: bool = False
+    engine: str = ""
+    representation: str = ""
+    movement_group: str = ""
+    alignment: str = ""
+    length: str = ""
 
     @property
     def completed(self) -> bool:
@@ -188,6 +208,17 @@ def _controls_key(controls: Mapping[str, Any]) -> str:
     )
 
 
+def _engine_label(settings: Mapping[str, Any]) -> str:
+    """``workflow@version`` and what its graph does with the driving clip (from the registered contract)."""
+
+    from src.video.workflow_conditioning import registered_contracts
+
+    key = (str(settings.get("workflow_id") or ""), str(settings.get("workflow_version") or ""))
+    contract = registered_contracts().get(key)
+    base = f"{key[0] or '?'}@{key[1] or '?'}"
+    return f"{base} - {contract.mechanism_label}" if contract is not None else base
+
+
 def _attempts(manifest: Mapping[str, Any], assessment: Assessment) -> list[_Attempt]:
     cases = {str(c.get("case_id")): c for c in manifest.get("cases", []) if isinstance(c, Mapping)}
     found: list[_Attempt] = []
@@ -202,6 +233,7 @@ def _attempts(manifest: Mapping[str, Any], assessment: Assessment) -> list[_Atte
         driving = as_mapping(record.get("driving"))
         library = as_mapping(driving.get("library_asset"))
         notes = as_mapping(record.get("annotations"))
+        rep = as_mapping(library.get("representation"))
         sha = str(settings.get("driver_original_sha256") or driving.get("sha256") or "")
         label = str(library.get("asset_id") or Path(str(driving.get("path") or "driver")).name)
         found.append(
@@ -218,6 +250,11 @@ def _attempts(manifest: Mapping[str, Any], assessment: Assessment) -> list[_Atte
                 else cell.arm_id,
                 source_sha=ctx.source_sha256 or cell.case_id,
                 seed=settings.get("seed"),
+                engine=_engine_label(settings),
+                representation=str(rep.get("representation") or "unverified"),
+                movement_group=str(rep.get("movement_key") or "")[:12] or "none",
+                alignment="aligned" if settings.get("alignment") else "unaligned",
+                length=f"{settings.get('frame_count') or '?'} frames at {settings.get('fps') or '?'} fps",
             )
         )
     return _mark_duplicates(found)
@@ -382,6 +419,11 @@ def summarize_transfer(manifest: Mapping[str, Any], assessment: Assessment) -> T
         "conditioning": lambda a: (a.conditioning, a.conditioning),
         "arm": lambda a: (a.cell.arm_id, a.cell.arm_id),
         "cross_subject": lambda a: (a.cross_subject, a.cross_subject),
+        "engine": lambda a: (a.engine, a.engine),
+        "representation": lambda a: (a.representation, a.representation),
+        "representation_group": lambda a: (a.movement_group, a.movement_group),
+        "alignment": lambda a: (a.alignment, a.alignment),
+        "generation_length": lambda a: (a.length, a.length),
     }
     groups: list[TransferGroup] = []
     for level in LEVELS:

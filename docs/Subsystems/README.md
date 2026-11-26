@@ -29,6 +29,7 @@ folders are historical evidence; where they disagree with the code or a living d
 - Video: [`Video/VIDEO_PIPELINE.md`](Video/VIDEO_PIPELINE.md)
 - Queue, runtime and WebUI: [`Runtime/QUEUE_AND_RUNTIME.md`](Runtime/QUEUE_AND_RUNTIME.md)
 - Learning: [`Learning/LEARNING.md`](Learning/LEARNING.md)
+- Phone review gateway: [`ReviewGateway/REVIEW_GATEWAY.md`](ReviewGateway/REVIEW_GATEWAY.md)
 - PromptPacks and prompting: [`PromptPacks/PROMPTPACKS_AND_PROMPTING.md`](PromptPacks/PROMPTPACKS_AND_PROMPTING.md)
 - Offline AI Assist: [`AiAssist/AI_ASSIST.md`](AiAssist/AI_ASSIST.md)
 - Testing and CI: [`Testing/TESTING_AND_CI.md`](Testing/TESTING_AND_CI.md)

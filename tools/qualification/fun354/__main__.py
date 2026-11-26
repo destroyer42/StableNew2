@@ -22,7 +22,12 @@ from src.video.workflow_asset_integrity import model_folders
 from tools.qualification.eval_plan_output import plan_output
 from tools.qualification.fun354 import q0
 from tools.qualification.fun354.inputs import load_input_set, rebuild_plan
-from tools.qualification.fun354.plan import QualificationPlan, build_plan
+from tools.qualification.fun354.plan import (
+    EXPECTED_STATUS,
+    WORKFLOW_VERSION,
+    QualificationPlan,
+    build_plan,
+)
 
 
 def _pin(path: str | None) -> tuple[str, int]:
@@ -42,7 +47,9 @@ def _outside_repo(out: Path) -> Path:
 
 def _propose(args: argparse.Namespace) -> int:
     if args.inputs_manifest:
-        plan = load_input_set(args.inputs_manifest, args.reference).build_plan()
+        plan = load_input_set(args.inputs_manifest, args.reference).build_plan(
+            args.workflow_version
+        )
     else:
         clip, clip_size = _pin(args.driving_clip)
         ref, ref_size = _pin(args.reference)
@@ -51,6 +58,7 @@ def _propose(args: argparse.Namespace) -> int:
             driving_clip_size=clip_size,
             reference_sha256=ref,
             reference_size=ref_size,
+            workflow_version=args.workflow_version,
         )
     atomic_write_json(
         _outside_repo(Path(args.out)), {**plan.to_record(), "digest": plan.digest}, indent=2
@@ -106,6 +114,12 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     propose = sub.add_parser("propose")
     propose.add_argument("--out")
+    propose.add_argument(
+        "--workflow-version",
+        default=WORKFLOW_VERSION,
+        choices=sorted(EXPECTED_STATUS),
+        help="1.0.0 (default, the blocked published entry) or 1.1.0 (the owner-authorized trial)",
+    )
     check = sub.add_parser("check")
     check.add_argument("--plan", required=True)
     check.add_argument("--out", required=True)

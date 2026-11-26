@@ -26,6 +26,7 @@ from src.queue.single_node_runner import SingleNodeJobRunner
 from src.state.workspace_paths import workspace_paths
 
 if TYPE_CHECKING:
+    from src.app.review_gateway_sync import ReviewGatewaySync
     from src.controller.job_execution_controller import JobExecutionController
     from src.controller.job_history_service import JobHistoryService
     from src.controller.job_service import JobService
@@ -157,3 +158,78 @@ def assemble_runtime_stack(
     if not injected:
         stack.verify()
     return stack
+
+
+def build_review_gateway_sync(
+    app: Any,
+    *,
+    state_dir: Path | None = None,
+    records_path: Path | None = None,
+    settings_store: Any = None,
+    transport_factory: Any = None,
+) -> ReviewGatewaySync:
+    """Compose the phone review gateway sync worker (RG-120) around the running application; nothing starts here.
+
+    The worker reads the Output Library index (never the job database), writes review evidence and archive moves
+    through the native services, and has no path to the queue or the runner: action requests are refused until
+    RG-140. ``app`` is the application controller; Discard refuses (fails closed) when its job queue is unreadable.
+    """
+
+    from src.app.review_gateway_apply import RecordApplier
+    from src.app.review_gateway_publish import GatewayPublisher
+    from src.app.review_gateway_store import GatewaySettingsStore, SyncLedger
+    from src.app.review_gateway_sync import ReviewGatewaySync as Sync
+    from src.app.site_media_files import SiteOutputError
+    from src.app.site_output_library import OutputLibrary
+    from src.learning.learning_paths import get_learning_records_path
+    from src.review.archive import active_input_paths, configured_output_root, job_queue_of
+
+    root = configured_output_root(getattr(app, "_config_manager", None))
+    try:
+        root = root.resolve(strict=True)
+    except OSError:
+        pass  # publishing waits until the Output folder exists; decisions then resolve nothing
+    ledger = SyncLedger(state_dir / "ledger.sqlite3" if state_dir is not None else None)
+    store = settings_store or GatewaySettingsStore(
+        state_dir / "settings.dpapi" if state_dir is not None else None
+    )
+    queue = job_queue_of(app)
+
+    def unreadable() -> set[str]:
+        raise RuntimeError("the job queue is not reachable")
+
+    active = (lambda: active_input_paths(queue)) if queue is not None else unreadable
+    records = records_path or get_learning_records_path(create_parent=False)
+    applier = RecordApplier(ledger, root, records, active_inputs=active)
+
+    def busy() -> bool:
+        runner = getattr(
+            getattr(app, "job_service", None), "runner", None
+        )  # read through: may be replaced
+        return bool(getattr(runner, "current_job_id", None))
+
+    owner: list[Sync] = []
+
+    def require_active() -> None:
+        if owner and owner[0].stopping:
+            raise SiteOutputError("output_folder_not_shared")
+
+    def publisher() -> GatewayPublisher | None:
+        if not root.is_dir():
+            return None
+        library = OutputLibrary(
+            root, "review-gateway", require_active, preview_idle=lambda: not busy()
+        )
+        return GatewayPublisher(library, ledger)
+
+    extra = {"transport_factory": transport_factory} if transport_factory is not None else {}
+    sync = Sync(
+        settings_store=store,
+        ledger=ledger,
+        publisher_factory=publisher,
+        applier=applier,
+        busy=busy,
+        **extra,
+    )
+    owner.append(sync)
+    return sync

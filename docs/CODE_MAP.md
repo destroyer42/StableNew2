@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-1014 of 1014 modules have a docstring.
+1026 of 1026 modules have a docstring.
 
 ## src/
 
@@ -59,6 +59,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
+- `review_gateway_apply.py`: Validate and apply review gateway outbox records on the PC (RG-120)
+- `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
+- `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
+- `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)
+- `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
+- `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
 - `site_desktop_approval.py`: Current-user persistence for the loopback browser's remembered approval
 - `site_library_index.py`: Rebuildable, root-local SQLite projection for Operator Site browsing
@@ -301,6 +307,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_workspace_state.py`: Hold the active Prompt tab pack, selection, and edits and coordinate save and load actions
 - `randomizer_panel_v2.py`: Randomizer panel for GUI v2 - Full plan builder UI
 - `review_batch_dialog.py`: Transient whole-selection review; confirmation admits the exact prepared NJRs
+- `review_gateway_dialog.py`: Desktop settings for the phone review gateway (RG-120): address, pinned certificate, sync secret, pairing, de…
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
 - `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply actions (PR-GUI-UX-520)
 - `sidebar_panel_v2.py`: Present Pipeline working settings, PromptPack selection, base generation values, and run controls
@@ -1013,6 +1020,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `comfy_process_manager.py`: Own managed ComfyUI startup, health checks, launch flag evidence, and child process shutdown
 - `comfy_runtime_setup.py`: Toolkit-neutral facts about how ComfyUI is configured, what this process is running, and what that means (PR-…
 - `comfy_workflow_backend.py`: Execute frozen Comfy video requests and collect artifacts, provenance, and runtime liveness evidence
+- `conditioning_advisories.py`: Advisories for the effective conditioning of a driving clip (PR-VID-MOTION-430)
+- `conditioning_inspection.py`: What the operator should inspect, and which engines a selected motion asset can honestly go to (PR-VID-MOTION…
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: Model continuity packs, their anchors and references, and the links stored with video jobs
 - `depth_map_resolver.py`: Validate supplied depth maps or materialize estimated depth images for conditioned video workflows
@@ -1114,6 +1123,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_catalog_wan_a14b_svi.py`: Experimental Wan2.2 I2V-A14B + SVI 2.0 workflow for multi-segment sequences (VID-A14B-SVI-375)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
 - `workflow_compiler.py`: Compile declared workflow inputs into a backend request by rendering graph templates
+- `workflow_conditioning.py`: What a driving-video workflow actually does with the driving clip (PR-VID-MOTION-430)
 - `workflow_contracts.py`: Define workflow versions, governance, capabilities, bindings, and compiled requests
 - `workflow_controls.py`: Neutral, spec-declared operator controls for workflow-owned generation inputs (PR-VID-192)
 - `workflow_frame_count.py`: Neutral, spec-declared generation-length contract (PR-VID-190)
@@ -1147,6 +1157,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `inventory.py`: Read-only inventory of downloaded motion assets (PR-VID-MOTION-354)
 - `library_bridge.py`: Accept a verified converted clip into the existing Motion Library (PR-VID-MOTION-354)
 - `ports.py`: Calls the Convert Motion dialog needs, supplied by the controller (PR-VID-MOTION-354)
+- `representation.py`: Verified relationships between representations of one movement (PR-VID-MOTION-430)
 - `rig_compat.py`: Bone-name compatibility between an animation's skeleton and a character (PR-VID-MOTION-354)
 - `workbench.py`: The operator-level facade over inventory, Blender conversion, library import and conditioning preview (PR-VID…
 
@@ -1168,6 +1179,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `search.py`: Local search over the catalog (PR-VID-MOTION-LIB-353)
 - `snapshot.py`: A point-in-time, read-only view of the catalog for the browser (PR-VID-MOTION-LIB-353)
 - `store.py`: Versioned local catalog of motion-reference videos (PR-VID-MOTION-LIB-353)
+- `variants.py`: Related representations of one movement in the Motion Library (PR-VID-MOTION-430)
 - `verification.py`: Is the file an asset points at still the file that was imported? (PR-VID-MOTION-LIB-353)
 
 ## src/video/restoration/

@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import src.main as main_module
-from src.gui import site_connection_dialog
+from src.gui import review_gateway_dialog, site_connection_dialog
 
 
 class _LoopRoot:
@@ -58,6 +58,11 @@ def test_main_starts_the_gpu_session_recorder_before_the_loop_and_stops_it_after
     monkeypatch.setattr(
         site_connection_dialog,
         "install_site_connection_control",
+        lambda _root, _controller, _header: None,
+    )
+    monkeypatch.setattr(
+        review_gateway_dialog,
+        "install_review_gateway_control",
         lambda _root, _controller, _header: None,
     )
     monkeypatch.setattr(

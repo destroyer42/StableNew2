@@ -54,6 +54,8 @@ class CaseObservation:
     peak_host_commit_fraction: float | None = None
     min_available_ram_mib: int | None = None
     peak_vram_mib: int | None = None
+    peak_gpu_temperature_c: float | None = None
+    min_vram_headroom_mib: int | None = None
     wall_seconds: float = 0.0
     note: str = ""
 
