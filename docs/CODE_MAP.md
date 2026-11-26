@@ -57,6 +57,8 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
+- `live_update.py`: Update the live checkout to an approved ``origin/main`` commit and restart (LAUNCH-UPDATE-1)
+- `live_update_service.py`: The running app's side of a live update (LAUNCH-UPDATE-1): switch, rate limit, drain, hand-off and receipt
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
 - `review_gateway_apply.py`: Validate and apply review gateway outbox records on the PC (RG-120)
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
@@ -280,6 +282,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `klein_lora_selection_dialog.py`: One batch review of ordered verified candidates, on the Tk thread only
 - `layout_v2.py`: Apply shared Tk grid rules and reversible compact layout adjustments to workspace widgets
 - `learning_state.py`: Define serializable Learning experiment, variant, and image-reference state
+- `live_update_dialog.py`: Desktop control for the live update (LAUNCH-UPDATE-1): Update and restart, the remote-update switch, the rece…
 - `log_trace_panel_v2.py`: Trace and operator log panel for GUI V2
 - `main_window.py`: Expose the GUI entrypoint wrapper used by existing callers and tests
 - `main_window_v2.py`: Compose the V2 Tk window, workspace tabs, runtime wiring, and operator status controls

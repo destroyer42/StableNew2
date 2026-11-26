@@ -1455,6 +1455,12 @@ class MainWindowV2:
         flush = getattr(getattr(self, "pipeline_tab", None), "flush_adetailer_draft", None)
         return not callable(flush) or flush()
 
+    def request_graceful_exit(self, reason: str) -> None:
+        """Close through the normal graceful exit without asking (LAUNCH-UPDATE-1 restart); drafts are saved first."""
+
+        self._flush_adetailer_draft()
+        self._trigger_graceful_exit(reason)
+
     def _trigger_graceful_exit(self, reason: str) -> None:
         if reason == "window-close" and not self._flush_adetailer_draft():
             if not messagebox.askokcancel(

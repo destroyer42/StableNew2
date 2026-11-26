@@ -93,6 +93,10 @@ class JobQueue:
         # lifecycle status: held jobs stay durably QUEUED in their original order, and independent work (native
         # SVD / Comfy video) remains claimable. Distinct from ``_paused`` (the user's whole-queue pause).
         self._webui_hold: dict[str, Any] | None = None
+        # Process-lifetime, in-memory update hold (LAUNCH-UPDATE-1): every QUEUED job stays QUEUED in place while the
+        # running job finishes before a live-update restart. Never persisted, so the restarted process resumes the
+        # queue under the normal startup policy; distinct from ``_paused`` and from the shutdown fence (releasable).
+        self._update_hold: dict[str, Any] | None = None
         # GPU device-loss dispatch quarantine (PR-QUEUE-GPU-180). Unlike the WebUI hold it IS persisted through the
         # repository's settings, so a reboot cannot silently authorize execution; it is still not a lifecycle
         # status, not the user's whole-queue pause and not the auto-run preference.
@@ -207,6 +211,36 @@ class JobQueue:
         with self._lock:
             return self._webui_hold is not None
 
+    def hold_dispatch_for_update(self, *, reason: str) -> bool:
+        """Stop every new claim before a live-update restart; the running job is untouched (LAUNCH-UPDATE-1).
+
+        Returns whether the hold was newly applied; the first reason is kept. Applied under the claim lock, so no claim
+        decided before it can commit after it. In memory only.
+        """
+
+        with self._transition_lock, self._lock:
+            if self._update_hold is not None:
+                return False
+            self._update_hold = {"reason": str(reason or "")}
+        self._notify_state_listeners()
+        return True
+
+    def release_update_hold(self) -> bool:
+        with self._lock:
+            if self._update_hold is None:
+                return False
+            self._update_hold = None
+        self._notify_state_listeners()
+        return True
+
+    def update_hold_info(self) -> dict[str, Any] | None:
+        with self._lock:
+            return dict(self._update_hold) if self._update_hold is not None else None
+
+    def is_update_held(self) -> bool:
+        with self._lock:
+            return self._update_hold is not None
+
     # -- GPU device-loss dispatch quarantine (PR-QUEUE-GPU-180) -------------------------------------------------------
 
     def quarantine_gpu_dispatch(self, incident: Mapping[str, Any]) -> bool:
@@ -286,7 +320,11 @@ class JobQueue:
         return self._gpu_quarantine is not None and self._assessment_locked(job).held_by_gpu_loss
 
     def _is_held_locked(self, job: Job) -> bool:
-        return self._held_by_gpu_loss_locked(job) or self._held_by_webui_locked(job)
+        return (
+            self._update_hold is not None
+            or self._held_by_gpu_loss_locked(job)
+            or self._held_by_webui_locked(job)
+        )
 
     def is_job_held(self, job_id: str) -> bool:
         with self._lock:
@@ -315,6 +353,7 @@ class JobQueue:
                 "queued": len(queued),
                 "held_webui": sum(1 for job in queued if self._held_by_webui_locked(job)),
                 "held_gpu_loss": sum(1 for job in queued if self._held_by_gpu_loss_locked(job)),
+                "held_update": len(queued) if self._update_hold is not None else 0,
                 "held": len(held),
                 "eligible": len(queued) - len(held),
                 "independent": sum(
@@ -368,7 +407,7 @@ class JobQueue:
         """
 
         with self._lock:
-            if self._paused or self._dispatch_fenced.is_set():
+            if self._paused or self._dispatch_fenced.is_set() or self._update_hold is not None:
                 return None
             for item in sorted(self._queue):
                 job = self._jobs.get(item[2])

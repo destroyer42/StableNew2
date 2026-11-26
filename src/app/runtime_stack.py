@@ -237,3 +237,60 @@ def build_review_gateway_sync(
     )
     owner.append(sync)
     return sync
+
+
+def build_live_update_service(
+    app: Any,
+    *,
+    state_dir: Path | None = None,
+    repo_root: Path | None = None,
+    launch_updater: Callable[[Any], None] | None = None,
+) -> Any:
+    """Compose the live update service (LAUNCH-UPDATE-1) around the running application; nothing starts here.
+
+    The checkout is the one this process runs from. The preflight compares ``origin`` with the expected repository and
+    runs the launcher's read-only environment check with this interpreter. The only queue effect is the in-memory
+    update hold; the busy probe counts the runner's current job and any RUNNING job in the queue. Without a queue that
+    supports the hold the service refuses every update (``queue_unavailable``).
+    """
+
+    import sys
+
+    from src.app import live_update as lu
+    from src.app.live_update_service import LiveUpdateService
+    from src.review.archive import job_queue_of
+
+    root = repo_root or lu.REPO_ROOT
+    git = lu.subprocess_git(root)
+    env_check = lu.environment_check(
+        root,
+        python=Path(sys.executable),
+        read_file=lambda sha, path: lu.read_target_file(git, sha, path),
+    )
+
+    def preflight(expected_sha: str | None) -> lu.Preflight:
+        return lu.preflight(
+            git, expected_sha=expected_sha, expected_origin=lu.EXPECTED_ORIGIN, env_check=env_check
+        )
+
+    queue = job_queue_of(app)
+
+    def busy() -> bool:
+        runner = getattr(
+            getattr(app, "job_service", None), "runner", None
+        )  # read through: may be replaced
+        if getattr(runner, "current_job_id", None):
+            return True
+        lister = getattr(queue, "list_jobs", None)
+        return bool(callable(lister) and lister(status_filter=JobStatus.RUNNING))
+
+    hold = queue if callable(getattr(queue, "hold_dispatch_for_update", None)) else None
+    return LiveUpdateService(
+        store=lu.LiveUpdateStore(state_dir or lu.default_state_dir()),
+        preflight=preflight,
+        queue=hold,
+        busy=busy,
+        launch_updater=launch_updater or lu.launch_updater_process,
+        repo_root=root,
+        pid=os.getpid(),
+    )
