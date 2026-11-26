@@ -123,3 +123,19 @@ def test_queue_groups_every_spelling_of_one_checkpoint_together():
     ]
     ordered = [r.tag for r in QueueSubmissionService(job_service=None).sort_jobs_by_model(records)]  # type: ignore[arg-type]
     assert ordered == ["d", "a", "c", "e", "b"]
+
+
+def test_a_warning_the_picker_showed_is_found_for_every_spelling_the_njr_records():
+    from src.image_backends import model_policy_warnings as mpw
+    from src.pipeline.policy_warnings import CODE_IMAGE_MODEL_UNQUALIFIED, PolicyWarning
+
+    warning = PolicyWarning(
+        CODE_IMAGE_MODEL_UNQUALIFIED, "juggernautXL_v9", "Unqualified", "why", "fix"
+    )
+    mpw.publish_shown_warnings({FORGE_TITLE: warning})
+    try:
+        for spelling in (FORGE_TITLE, DISPLAY, A1111_NAME, PICKER_COLLISION_LABEL):
+            assert mpw.shown_warning_for(spelling) is warning
+        assert mpw.shown_warning_for("ponyDiffusion_v6.safetensors") is None
+    finally:
+        mpw.publish_shown_warnings({})
