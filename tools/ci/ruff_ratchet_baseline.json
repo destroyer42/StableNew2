@@ -344,7 +344,6 @@
       "tools/ci/census_summary.py",
       "tools/ci/ci_truth.py",
       "tools/ci/run_collection_gate.py",
-      "tools/ci/run_required_smoke.py",
       "tools/ci/run_sharded_census.py",
       "tools/diagnose_asset_registry_cache.py",
       "tools/diagnostics/correlate_gpu_incidents.py",

@@ -11,6 +11,11 @@ REQUIRED_SMOKE_TARGETS = (
     "tests/system/test_controller_surface_ratchet.py",
     "tests/system/test_pr_gate.py",
     "tests/system/test_runtime_constraints.py",
+    # Static repository guards that otherwise fail only in the hosted census, after a green local gate:
+    # NJR construction sites (#440), the generated code map (#419) and the STATUS contract.
+    "tests/system/test_njr_construction_guard.py",
+    "tests/tools/test_code_map.py",
+    "tests/system/test_status_contract.py",
     "tests/video/test_svd_restoration_readiness.py",
     "tests/safety/test_runtime_state_hygiene.py",
     "tests/state/test_workspace_paths.py",
@@ -65,7 +70,10 @@ def build_command() -> list[str]:
     return [
         "-x",
         "-q",
-        *(repository_test_target(target) for target in (*REQUIRED_SMOKE_TARGETS, *CONTRACT_GATE_TARGETS)),
+        *(
+            repository_test_target(target)
+            for target in (*REQUIRED_SMOKE_TARGETS, *CONTRACT_GATE_TARGETS)
+        ),
     ]
 
 
