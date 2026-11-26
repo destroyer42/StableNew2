@@ -154,6 +154,10 @@ def build_public_media_payload(
     mid_anchor_paths = _string_list(payload.get("mid_anchor_paths"))
     if mid_anchor_paths:
         public_payload["mid_anchor_paths"] = mid_anchor_paths
+    output_role = _first_non_empty_string(payload.get("output_role"))
+    if output_role:
+        # Which of a job's files this is (artifact_contract.OUTPUT_ROLES); read back by the Output Library.
+        public_payload["output_role"] = output_role
     secondary_motion_summary = extract_secondary_motion_summary(payload)
     if secondary_motion_summary:
         public_payload["secondary_motion"] = secondary_motion_summary

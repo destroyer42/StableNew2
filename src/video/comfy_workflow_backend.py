@@ -14,7 +14,11 @@ from typing import Any
 
 from src.api.http_transport import DispatchOutcomeUnknown, HttpTransportError
 from src.controller.runtime_state import CancellationError
-from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.pipeline.artifact_contract import (
+    OUTPUT_ROLE_PRIMARY,
+    OUTPUT_ROLE_RETAINED_SOURCE,
+    artifact_manifest_payload,
+)
 from src.pipeline.secondary_motion_retirement import require_secondary_motion_block_disabled
 from src.services.runtime_transition_service import (
     RUNTIME_COMFY,
@@ -210,6 +214,20 @@ def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
         "required_frontend_version": system.get("required_frontend_version"),
     }
     return {name: str(value) for name, value in fields.items() if value}
+
+
+def _with_output_role(
+    payload: Mapping[str, Any], path: Any, retained_paths: Sequence[str] | None
+) -> Mapping[str, Any]:
+    """``payload`` with this file's ``output_role`` when the job recorded retained outputs, else unchanged."""
+
+    if not retained_paths:
+        return payload
+    retained = {Path(str(item)).resolve() for item in retained_paths}
+    role = (
+        OUTPUT_ROLE_RETAINED_SOURCE if Path(str(path)).resolve() in retained else OUTPUT_ROLE_PRIMARY
+    )
+    return {**payload, "output_role": role}
 
 
 def _expected_frame_count(stage_config: Mapping[str, Any]) -> int | None:
@@ -840,6 +858,7 @@ class ComfyWorkflowVideoBackend:
         smoothing = normalize_interpolation_request(stage_config.get("interpolation"))
         interpolation_record: dict[str, Any] | None = None
         if smoothing is not None and resolved_outputs.get("video_path"):
+            unsmoothed_path = str(resolved_outputs["video_path"])
             if frames_out_record is not None:
                 smoothed = interpolate_frame_files(
                     frame_paths=resolved_outputs["frame_paths"],
@@ -857,9 +876,12 @@ class ComfyWorkflowVideoBackend:
                     request=smoothing,
                     cancel_token=request.cancel_token,
                 )
-            # The smoothed clip leads; Comfy's own file stays on disk and in the lists.
+            # The smoothed clip is the authoritative output. The clip it was made from stays on disk and in the
+            # lists for retention only: it is recorded as retained so it never reaches review, the phone gateway or
+            # Immich (owner decision 2026-11-26).
             resolved_outputs = {
                 **resolved_outputs,
+                "retained_paths": [unsmoothed_path],
                 "primary_path": smoothed.video_path,
                 "output_paths": [smoothed.video_path, *resolved_outputs["output_paths"]],
                 "video_path": smoothed.video_path,
@@ -944,6 +966,7 @@ class ComfyWorkflowVideoBackend:
                 thumbnail_path=resolved_outputs["thumbnail_path"],
                 input_image_path=request.input_image_path,
                 artifact_type="video",
+                retained_paths=resolved_outputs.get("retained_paths"),
             ),
         }
         source_preparation = _mapping_dict(stage_config.get("source_preparation"))
@@ -954,7 +977,12 @@ class ComfyWorkflowVideoBackend:
             *resolved_outputs["video_paths"],
             *resolved_outputs["gif_paths"],
         ]:
-            write_video_container_metadata(candidate_path, metadata_payload)
+            write_video_container_metadata(
+                candidate_path,
+                _with_output_role(
+                    metadata_payload, candidate_path, resolved_outputs.get("retained_paths")
+                ),
+            )
         raw_result = {
             "path": primary_path,
             "output_path": primary_path,
@@ -986,6 +1014,7 @@ class ComfyWorkflowVideoBackend:
                 thumbnail_path=resolved_outputs["thumbnail_path"],
                 input_image_path=request.input_image_path,
                 artifact_type="video",
+                retained_paths=resolved_outputs.get("retained_paths"),
             ),
             "handoff_bundle": build_video_artifact_bundle(
                 stage=request.stage_name,
@@ -1753,6 +1782,7 @@ class ComfyWorkflowVideoBackend:
                 thumbnail_path=resolved_outputs["thumbnail_path"],
                 input_image_path=request.input_image_path,
                 artifact_type="video",
+                retained_paths=resolved_outputs.get("retained_paths"),
             ),
         }
         payload.update(dict(provenance_extra or {}))

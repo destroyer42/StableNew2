@@ -7,6 +7,10 @@ idempotent by SHA-256 (the manifest goes first and the gateway names the bodies 
 holds is not sent again; an unchanged item is skipped from the ledger) and resumable (the ledger records an item only
 once the gateway reports it ready).
 
+Only a job's authoritative outputs are published. A file whose metadata names it ``retained_source`` (the un-smoothed
+clip behind a RIFE result) is kept on the PC and never sent, so it never reaches phone review or Immich. While a job
+runs, a video with no StableNew metadata yet waits: its job may still be about to record its role.
+
 Everything here is blocking file and network work for the sync worker thread, never Tk.
 """
 
@@ -43,6 +47,7 @@ from src.app.review_gateway_store import SyncLedger
 from src.app.site_media_files import SiteOutputError, checked_digest, open_scoped
 from src.app.site_output_library import LibraryItem, OutputLibrary
 from src.app.site_video_playback import VIDEO_LIMIT
+from src.pipeline.artifact_contract import OUTPUT_ROLE_RETAINED_SOURCE
 from src.state.output_routing import ARCHIVE_DIR_NAME
 
 log = logging.getLogger(__name__)
@@ -251,11 +256,17 @@ class GatewayPublisher:
         limit: int,
         cancel: Event,
         allow_transcode: Callable[[], bool] = lambda: True,
+        hold_unlabelled_video: bool = False,
     ) -> PublishResult:
+        """``hold_unlabelled_video`` (a job is running) leaves a video without StableNew metadata pending."""
+
         result = PublishResult()
         for key, item in self.candidates(limit):
             if cancel.is_set():
                 break
+            if hold_unlabelled_video and item.kind == "video" and item.provenance == "unknown":
+                result.pending += 1
+                continue
             try:
                 state = self._publish_one(client, key, item, cancel, allow_transcode)
             except (GatewayConflict, GatewayRejected):
@@ -296,6 +307,8 @@ class GatewayPublisher:
         folder = Path(item.path).parts[0] if Path(item.path).parts else ""
         if folder in _SKIPPED_FOLDERS or item.kind not in ("image", "video"):
             return self._skip(key, item, "skipped")
+        if item.role == OUTPUT_ROLE_RETAINED_SOURCE:
+            return self._skip(key, item, "retained")
         if item.mime not in CONTENT_TYPES:
             return self._skip(key, item, "unsupported")
         size = item.version[2]

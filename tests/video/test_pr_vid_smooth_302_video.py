@@ -17,6 +17,7 @@ from PIL import Image
 
 from src.pipeline.video import resolve_ffmpeg_executable
 from src.video import ComfyWorkflowVideoBackend, VideoExecutionRequest
+from src.video.container_metadata import build_public_media_payload
 from src.video.svd_postprocess import SVDPostprocessRunner
 from src.video.video_export import export_video_mp4
 from src.video.video_interpolation import (
@@ -286,6 +287,57 @@ def test_the_backend_promotes_the_smoothed_clip_and_keeps_comfys_file(
     assert '"interpolation"' in manifest and "clip_smooth.mp4" in manifest
 
 
+def test_the_smoothed_clip_is_the_primary_output_and_comfys_clip_is_retained_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Owner bug 2026-11-26: both clips reached Review, the phone gateway and Immich.
+
+    The handler records the role of each file, in the artifact record and in each file's own container metadata,
+    so the Output Library (which only sees files) can tell the authoritative clip from the retention copy.
+    """
+
+    executable = _rife(tmp_path / "rife")
+    smooth = tmp_path / "clip_smooth.mp4"
+    smooth.write_bytes(b"smooth")
+
+    def _fake_smooth(**kwargs):
+        return VideoInterpolationResult(
+            source_video_path=str(kwargs["video_path"]),
+            video_path=str(smooth),
+            input_frame_count=4,
+            output_frame_count=8,
+            input_fps=int(kwargs["source_fps"]),
+            output_fps=16,
+            multiplier=2,
+        )
+
+    written: dict[str, dict] = {}
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.write_video_container_metadata",
+        lambda path, payload, **_kw: written.__setitem__(str(path), dict(payload)) or True,
+    )
+    _client, video, execute = _comfy_run(
+        tmp_path,
+        monkeypatch,
+        interpolation={"enabled": True, "multiplier": 2, "executable_path": str(executable)},
+        fake_smooth=_fake_smooth,
+    )
+
+    result = execute()
+
+    payload = result.to_variant_payload()
+    assert payload["artifact"]["primary_path"] == str(smooth)
+    assert payload["artifact"]["retained_paths"] == [str(video)]
+    assert written[str(smooth)]["output_role"] == "primary"
+    assert written[str(video)]["output_role"] == "retained_source"
+    assert (
+        build_public_media_payload(written[str(video)], media_type="video", file_path=video)[
+            "output_role"
+        ]
+        == "retained_source"
+    )
+
+
 def test_without_the_block_the_backend_is_unchanged(tmp_path: Path, monkeypatch) -> None:
     def _must_not_run(**_kwargs):
         raise AssertionError("interpolation must not run")
@@ -298,6 +350,7 @@ def test_without_the_block_the_backend_is_unchanged(tmp_path: Path, monkeypatch)
 
     assert result is not None and result.primary_path == str(video)
     assert "interpolation" not in result.to_variant_payload()
+    assert "retained_paths" not in result.to_variant_payload()["artifact"]
 
 
 @pytest.mark.parametrize(

@@ -42,17 +42,22 @@ def _local_state_dir() -> Path:
 
 
 def parse_address(text: str) -> tuple[str, int]:
-    """``host`` or ``host:port`` (an IPv6 literal in brackets). No scheme, path, user or query."""
+    """``host`` or ``host:port`` (an IPv6 literal in brackets), optionally written as the ``https://host:port`` sync
+    URL the gateway installer prints (one trailing ``/`` allowed). No other scheme, no path, user or query."""
 
     value = text.strip()
+    if value[:8].lower() == "https://":
+        value = value[8:]
+        if value.endswith("/"):
+            value = value[:-1]
     if not value or len(value) > 255 or any(char in value for char in "/\\@?#% \t"):
-        raise ValueError("Enter the gateway address as host or host:port.")
+        raise ValueError("Enter the gateway address as host:port or https://host:port.")
     port = DEFAULT_PORT
     if value.startswith("["):
         host, _, rest = value[1:].partition("]")
         if rest:
             if not rest.startswith(":"):
-                raise ValueError("Enter the gateway address as host or host:port.")
+                raise ValueError("Enter the gateway address as host:port or https://host:port.")
             port = _port(rest[1:])
         ipaddress.IPv6Address(host)
         return host, port
@@ -66,7 +71,7 @@ def parse_address(text: str) -> tuple[str, int]:
         pass
     labels = value.rstrip(".").split(".")
     if not all(_HOST_LABEL.fullmatch(label) for label in labels):
-        raise ValueError("Enter the gateway address as host or host:port.")
+        raise ValueError("Enter the gateway address as host:port or https://host:port.")
     return value.rstrip(".").lower(), port
 
 

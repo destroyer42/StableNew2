@@ -29,6 +29,7 @@ from src.app.site_library_query import SOURCES, LibraryQuery, ratio_of, timestam
 from src.app.site_library_reconcile import Reconciliation, key_for, manifest_path, version_of
 from src.app.site_media_files import SiteOutputError, checked_digest, inside, open_scoped
 from src.app.site_rating_sync import edit_stamp, field_conflicts, root_identity, was_applied
+from src.pipeline.artifact_contract import OUTPUT_ROLES
 from src.utils.atomic_io import atomic_write_bytes
 from src.utils.image_metadata import (
     ImageMetadataContractV26,
@@ -105,6 +106,8 @@ class LibraryItem:
     workflow: str | None = None
     duration: float | None = None
     fps: float | None = None
+    #: ``output_role`` from the file's own metadata (``artifact_contract.OUTPUT_ROLES``); ``None`` means primary.
+    role: str | None = None
 
     @property
     def kind(self) -> str:
@@ -600,8 +603,10 @@ class OutputLibrary:
             None,
         )
         tags = payload.get("tags", generation.get("tags"))
+        role = payload.get("output_role")
         return replace(
             basic,
+            role=role if isinstance(role, str) and role in OUTPUT_ROLES else None,
             recorded_at=recorded,
             model=model,
             family=family,

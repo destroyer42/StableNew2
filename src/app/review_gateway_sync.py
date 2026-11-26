@@ -414,6 +414,7 @@ class ReviewGatewaySync:
                 limit=1 if busy else IDLE_PUBLISH_BATCH,
                 cancel=self._stop,
                 allow_transcode=lambda: not self._busy(),
+                hold_unlabelled_video=busy,
             )
         except (SiteOutputError, OSError):
             log.info("Review gateway publishing deferred: the Output index is unavailable")
