@@ -18,7 +18,35 @@ const REASONS = {
   favorite_with_delete: "favorite and delete together",
   archive_failed: "the PC could not move the file",
   admission_refused: "the PC refused the action",
+  summary_changed: "the PC's summary changed",
+  cap_exceeded: "this phone's queue limit for today is reached",
+  action_unavailable: "the PC cannot do this for this image",
+  prepare_required: "the summary expired; ask again",
 };
+// RG-140 phone actions. The PC compiles and decides; the phone shows its summary, warnings and receipts as text.
+const ACTIONS = [
+  ["fix_face", "Fix face"],
+  ["fix_hands", "Fix hands"],
+  ["fix_both", "Fix both"],
+  ["more_like_this", "More like this"],
+];
+const DETAILS = {
+  not_an_image: "only images can be fixed",
+  source_changed: "the image changed on the PC",
+  provenance_unverified: "the PC cannot find the job that made this image",
+  recipe_not_variable: "this image's recipe has more than one stage, so it cannot be varied yet",
+  model_unavailable: "the checkpoint is not available",
+  model_family_refused: "the checkpoint cannot run this fix",
+  adetailer_unavailable: "ADetailer is not available; connect Forge on the PC",
+  detector_unavailable: "Forge lists no detector for this pass",
+  operation_unsupported: "the backend cannot run this",
+  app_busy: "StableNew was busy; try again",
+  app_shutting_down: "StableNew is shutting down",
+  compile_failed: "the PC could not prepare it",
+};
+const ACTION_POLL_MS = 2000;
+const ACTION_WAIT_MS = 10 * 60 * 1000;
+let scopes = null; // the session's grants, read once
 const REFRESH_MS = 20000;
 const QUEUE_KEY = "rg.unsent";
 const REJECTED_KEY = "rg.rejected";
@@ -316,6 +344,7 @@ function showPairing() {
     error.textContent = "";
     try {
       await api("/api/pair", { code: code.value, label: label.value });
+      scopes = null;
       flush();
       route();
     } catch (failure) {
@@ -452,6 +481,7 @@ async function showRun(runId, serial) {
 // --- triage -------------------------------------------------------------------------------------------------------
 
 async function showTriage(runId, libraryId, serial) {
+  await loadScopes();
   const items = await loadRun(runId);
   if (serial !== renderSerial) return;
   const todo = items.filter(needsReview);
@@ -628,6 +658,7 @@ function renderItem() {
       ]),
       stage,
       tags,
+      actionRow(item),
       el("div", { class: "actions" }, [
         previous,
         ...choices,
@@ -639,6 +670,175 @@ function renderItem() {
   for (const ahead of list.slice(index + 1, index + 3)) {
     new Image().src = mediaUrl(ahead, ahead.kind === "image" && ahead.variants.includes("preview") ? "preview" : "thumb");
   }
+}
+
+// --- phone actions (RG-140) ---------------------------------------------------------------------------------------
+// Two steps, both outbox requests: "prepare" asks the PC for a summary of exactly what it would queue; "Queue" sends
+// "confirm" naming that summary. Nothing is queued until the PC admits it, and its receipt is shown.
+
+async function loadScopes() {
+  if (scopes === null) {
+    try {
+      scopes = (await api("/api/session")).scopes || [];
+    } catch {
+      return [];
+    }
+  }
+  return scopes;
+}
+
+const canQueue = () => Array.isArray(scopes) && scopes.includes("queue");
+
+function actionRow(item) {
+  if (item.kind !== "image" || !canQueue()) return null;
+  return el(
+    "div",
+    { class: "fixes", role: "group", "aria-label": "Ask the PC" },
+    ACTIONS.map(([action, text]) =>
+      el("button", { type: "button", text, onclick: () => openAction(item, action) }),
+    ),
+  );
+}
+
+function closeSheet() {
+  const sheet = document.getElementById("sheet");
+  if (sheet) sheet.remove();
+}
+
+function sheet(...nodes) {
+  closeSheet();
+  const node = el("div", { id: "sheet", class: "sheet", role: "dialog", "aria-modal": "true" }, [
+    el("div", { class: "sheet-body" }, nodes),
+  ]);
+  document.body.append(node);
+  return node;
+}
+
+function waitFor(recordId, alive) {
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = async () => {
+      if (!alive()) return resolve(null);
+      try {
+        const answer = await api(`/api/actions/${recordId}`);
+        if (answer.state !== "pending") return resolve(answer);
+      } catch (error) {
+        if (error.status === 401 || error.status === 403 || error.status === 404) return reject(error);
+      }
+      if (Date.now() - started > ACTION_WAIT_MS) return resolve({ state: "pending" });
+      setTimeout(tick, ACTION_POLL_MS);
+    };
+    tick();
+  });
+}
+
+function refusalText(answer) {
+  const reason = REASONS[answer.reason_code] || "no reason given";
+  const detail = answer.receipt && DETAILS[answer.receipt.detail];
+  return detail ? `${reason}: ${detail}.` : `${reason}.`;
+}
+
+function warningBlock(warning) {
+  return el("div", { class: "warning" }, [
+    el("p", { class: "warning-title", text: `⚠ ${warning.title}` }),
+    warning.why ? el("p", { text: warning.why }) : null,
+    warning.fix ? el("p", { class: "muted", text: warning.fix }) : null,
+  ]);
+}
+
+function summaryView(summary) {
+  const where = summary.queue_position === "next" ? "runs next" : "joins the end of the queue";
+  const jobs = `${summary.job_count} job${summary.job_count === 1 ? "" : "s"}, ${where}`;
+  return [
+    el("h2", { text: summary.title }),
+    ...summary.lines.map((line) => el("p", { text: line })),
+    el("p", { class: "muted", text: jobs }),
+    ...summary.warnings.map(warningBlock),
+  ];
+}
+
+// One request at a time per sheet; the same idempotency key is resent until the gateway answers.
+async function sendAction(body) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await api("/api/actions", body);
+    } catch (error) {
+      if (error.status || attempt >= 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+}
+
+async function openAction(item, action) {
+  const label = Object.fromEntries(ACTIONS)[action];
+  const node = sheet(el("h2", { text: label }), el("p", { class: "muted", text: "Asking the PC for a summary…" }));
+  const alive = () => document.getElementById("sheet") === node;
+  const cancel = el("button", { type: "button", text: "Close", onclick: closeSheet });
+  const fail = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel);
+  const body = {
+    library_id: item.library_id,
+    sha256: item.sha256,
+    action,
+    params: action === "more_like_this" ? { step: "prepare", count: 4 } : { step: "prepare" },
+    idempotency_key: idempotencyKey(),
+  };
+  try {
+    const { record_id: recordId } = await sendAction(body);
+    const answer = await waitFor(recordId, alive);
+    if (answer) showAnswer(item, action, recordId, answer, cancel, fail);
+  } catch (error) {
+    fail(error.status === 429 ? "Too many requests from this phone for now." : `Not sent: ${error.code || "no connection"}.`);
+  }
+}
+
+function showAnswer(item, action, recordId, answer, cancel, fail) {
+  const label = Object.fromEntries(ACTIONS)[action];
+  if (answer.state === "pending") return fail("The PC has not answered yet. It may be off; ask again later.");
+  const summary = answer.receipt && answer.receipt.action_summary;
+  if (answer.state === "refused" && !(answer.reason_code === "summary_changed" && summary)) {
+    return fail(`Not possible: ${refusalText(answer)}`);
+  }
+  if (answer.step === "confirm" && answer.state === "applied") {
+    const ids = answer.receipt.job_ids || [];
+    const where = summary && summary.queue_position === "next" ? "It runs next." : "It joins the queue.";
+    return sheet(
+      el("h2", { text: `${label}: queued` }),
+      el("p", { text: `${ids.length} job${ids.length === 1 ? "" : "s"} admitted on the PC. ${where}` }),
+      el("p", { class: "muted", text: "The result appears in the inbox once it is published." }),
+      cancel,
+    );
+  }
+  const node = sheet(
+    answer.state === "refused" ? el("p", { class: "error", text: "The PC's summary changed. Check it again." }) : null,
+    ...summaryView(summary),
+    el("div", { class: "sheet-actions" }, [
+      el("button", { type: "button", text: "Cancel", onclick: closeSheet }),
+      el("button", {
+        type: "button",
+        class: "primary",
+        text: "Queue",
+        onclick: async (event) => {
+          event.currentTarget.disabled = true;
+          const alive = () => document.getElementById("sheet") === node;
+          try {
+            const sent = await sendAction({
+              library_id: item.library_id,
+              sha256: item.sha256,
+              action,
+              params: { step: "confirm", prepared_record: recordId, summary_revision: summary.revision },
+              idempotency_key: idempotencyKey(),
+            });
+            node.querySelector(".sheet-actions").replaceChildren(el("p", { class: "muted", text: "Waiting for the PC…" }));
+            const result = await waitFor(sent.record_id, alive);
+            if (result) showAnswer(item, action, sent.record_id, result, cancel, fail);
+          } catch (error) {
+            fail(`Not sent: ${error.code || "no connection"}.`);
+          }
+        },
+      }),
+    ]),
+  );
+  return node;
 }
 
 function step(direction) {
@@ -675,6 +875,7 @@ async function route() {
   const serial = ++renderSerial;
   const [, page, run, libraryId] = location.hash.split("/");
   triage = null;
+  closeSheet();
   try {
     if (page === "triage" && run) await showTriage(decodeURIComponent(run), libraryId, serial);
     else if (page === "run" && run) await showRun(decodeURIComponent(run), serial);

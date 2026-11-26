@@ -192,6 +192,16 @@ CREATE TABLE IF NOT EXISTS immich (
     asset_id TEXT NOT NULL, album TEXT NOT NULL, favorite INTEGER, error_code TEXT NOT NULL, at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS action_prepares (
+    record_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, library_id TEXT NOT NULL, sha256 TEXT NOT NULL,
+    action TEXT NOT NULL, seeds INTEGER, revision TEXT NOT NULL, at TEXT NOT NULL,
+    admitted_by TEXT, receipt TEXT
+);
+CREATE TABLE IF NOT EXISTS action_log (
+    record_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, step TEXT NOT NULL, jobs INTEGER NOT NULL,
+    at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS action_log_device ON action_log (device_id, at);
 """
 
 
@@ -377,6 +387,58 @@ class SyncLedger:
         with self._transaction() as db:
             db.execute(
                 "DELETE FROM discards WHERE library_id = ? AND sha256 = ?", (library_id, sha256)
+            )
+
+    # -- phone actions (RG-140) ------------------------------------------------------------------------------------
+
+    def action_usage(self, device_id: str, since: str) -> tuple[int, int]:
+        """``(prepares, admitted jobs)`` this device used since ``since`` (UTC text), for the S4 caps."""
+
+        rows = self._read(
+            "SELECT coalesce(sum(step = 'prepare'), 0) AS prepares, coalesce(sum(jobs), 0) AS jobs"
+            " FROM action_log WHERE device_id = ? AND at > ?",
+            (device_id, since),
+        )
+        return int(rows[0]["prepares"]), int(rows[0]["jobs"])
+
+    def log_action(self, record_id: str, device_id: str, step: str, jobs: int, at: str) -> None:
+        with self._transaction() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO action_log VALUES (?,?,?,?,?)",
+                (record_id, device_id, step, jobs, at),
+            )
+
+    def remember_prepare(
+        self,
+        record_id: str,
+        device_id: str,
+        library_id: str,
+        sha256: str,
+        action: str,
+        seeds: int | None,
+        revision: str,
+        at: str,
+    ) -> None:
+        with self._transaction() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO action_prepares VALUES (?,?,?,?,?,?,?,?,NULL,NULL)",
+                (record_id, device_id, library_id, sha256, action, seeds, revision, at),
+            )
+
+    def prepared(self, record_id: str) -> sqlite3.Row | None:
+        rows = self._read("SELECT * FROM action_prepares WHERE record_id = ?", (record_id,))
+        return rows[0] if rows else None
+
+    def mark_prepare_admitted(
+        self, record_id: str, confirm_id: str, receipt: Mapping[str, Any]
+    ) -> None:
+        """One admission per prepare (S8): a later confirm of the same prepare gets this receipt."""
+
+        with self._transaction() as db:
+            db.execute(
+                "UPDATE action_prepares SET admitted_by = ?, receipt = ?"
+                " WHERE record_id = ? AND admitted_by IS NULL",
+                (confirm_id, json.dumps(dict(receipt)), record_id),
             )
 
     # -- pairing and devices ---------------------------------------------------------------------------------------

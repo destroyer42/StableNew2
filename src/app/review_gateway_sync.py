@@ -177,10 +177,16 @@ class ReviewGatewaySync:
             self._settings, self._settings_loaded = None, True
             self._status = replace(self._status, state="not_configured", address="")
 
-    def create_pairing(self, label: str = "") -> str:
-        """Issue a single-use review-only code; returns it for display. Only its salted hash leaves the PC."""
+    def create_pairing(self, label: str = "", *, allow_queue: bool = False) -> str:
+        """Issue a single-use code; returns it for display. Only its salted hash leaves the PC.
 
-        offer = new_pairing_offer(label=label)
+        The phone may review. With ``allow_queue`` it also holds the separate ``queue`` grant (D6, S4) for the
+        RG-140 phone actions; that is chosen here, per phone, and is off unless the owner ticks it.
+        """
+
+        offer = new_pairing_offer(
+            label=label, scopes=("review", "queue") if allow_queue else ("review",)
+        )
         payload = offer.payload()
         self._ledger.add_offer(
             offer.offer_id,

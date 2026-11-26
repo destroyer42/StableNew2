@@ -24,7 +24,7 @@ from src.image_backends.model_policy import EVIDENCE_REGISTRY
 from src.learning.model_capabilities import policy_context, project_learning_capabilities
 from src.learning.model_policy_service import resolve_policy
 from src.pipeline.history_variation_compiler import HistoryVariationDraft, compile_history_variation
-from src.pipeline.job_models_v2 import OutputPlan
+from src.pipeline.job_models_v2 import NormalizedJobRecord, OutputPlan
 from src.pipeline.njr_core_v26 import thaw_json
 from src.queue.job_model import JobStatus
 from src.queue.job_repository import JobRepository
@@ -117,6 +117,35 @@ def _validate_advice(
     )
     if result.suggestion is None:
         raise SiteOutputError("followup_ineligible")
+
+
+def verified_history_source(
+    repository: JobRepository, path: Path, raw: bytes
+) -> tuple[NormalizedJobRecord, str]:
+    """The History job that wrote the image at ``path`` (whose bytes are ``raw``), and its snapshot fingerprint.
+
+    The image's embedded job id and NJR fingerprint must name a History entry whose recorded output is exactly this
+    file and whose recipe Iterate can reproduce; anything else is ``followup_provenance_unverified``. Shared by the
+    hosted relay's follow-ups and the review gateway's "more like this" (RG-140).
+    """
+
+    metadata = read_image_metadata(path, source_bytes=raw)
+    job_id = metadata.get(ImageMetadataContractV26.KEY_JOB_ID)
+    entry = repository.get_job(job_id) if job_id else None
+    assessment = assess_history_iterate(entry, is_file=lambda value: Path(value).absolute() == path)
+    record = assessment.njr
+    if not assessment.pipeline.supported or entry is None or record is None:
+        raise SiteOutputError("followup_provenance_unverified")
+    snapshot = snapshot_fingerprint(entry.snapshot or {})
+    if (
+        Path(assessment.image_path or "").absolute() != path
+        or metadata.get(ImageMetadataContractV26.KEY_NJR_SHA256) != snapshot
+        or type(record.seed) is not int
+        or record.seed < 0
+        or assessment.recorded_seed not in (None, record.seed)
+    ):
+        raise SiteOutputError("followup_provenance_unverified")
+    return record, snapshot
 
 
 @dataclass(frozen=True)
@@ -223,24 +252,7 @@ class PhoneFollowup:
             )
             evidence_revision = rating["revision"]
 
-        metadata = read_image_metadata(path, source_bytes=raw)
-        job_id = metadata.get(ImageMetadataContractV26.KEY_JOB_ID)
-        entry = self._repository.get_job(job_id) if job_id else None
-        assessment = assess_history_iterate(
-            entry, is_file=lambda value: Path(value).absolute() == path
-        )
-        record = assessment.njr
-        if not assessment.pipeline.supported or entry is None or record is None:
-            raise SiteOutputError("followup_provenance_unverified")
-        snapshot = snapshot_fingerprint(entry.snapshot or {})
-        if (
-            Path(assessment.image_path or "").absolute() != path
-            or metadata.get(ImageMetadataContractV26.KEY_NJR_SHA256) != snapshot
-            or type(record.seed) is not int
-            or record.seed < 0
-            or assessment.recorded_seed not in (None, record.seed)
-        ):
-            raise SiteOutputError("followup_provenance_unverified")
+        record, snapshot = verified_history_source(self._repository, path, raw)
         policy = resolve_policy(
             record.base_model, config={"backend_options": record.backend_options}
         )

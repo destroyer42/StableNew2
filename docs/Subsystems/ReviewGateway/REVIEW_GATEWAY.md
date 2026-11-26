@@ -1,8 +1,14 @@
 # Phone review gateway
 
-Status: Living document. The gateway service (RG-110) and its Immich uploader (RG-130, tested against a fake Immich only)
-exist; nothing is deployed. Of the PC sync worker (RG-120) only the Immich receipt pull is described here. Phone actions
-(RG-140) are not built.
+Status: Living document. The following exist and are deployed and in use (proven live 2026-11-26):
+
+- the gateway service (RG-110);
+- the PC sync worker (RG-120);
+- the gateway's Immich uploader (RG-130).
+
+Phone actions (RG-140 slice 1) are built and tested hermetically only, against a fake gateway and a fake compiler.
+They have not been run on the live phone or with a real Forge ADetailer pass. See section 7 and
+[RG-140](../../work_packages/RG-140_phone_actions.md).
 
 Decisions, invariants and security controls: [RG-100](../../work_packages/RG-100_phone_review_gateway.md). Payloads:
 [`stablenew.review-gateway-sync.v1`](../../schemas/stablenew.review-gateway-sync.v1.json). Deploy and operate:
@@ -74,6 +80,10 @@ Rules:
     written. Sending an already stored digest again also shows any item that was left waiting for it.
 11. Decisions a phone made before it was revoked stay in the outbox. A revoked device is absent from
     `enrolled_devices`; the PC decides whether to refuse its records (`revoked_device`).
+12. Action requests (RG-140) are outbox records of kind `action_request`, listed in the same pages. They never become
+    an item's decision. They never change `latest_record_id`, an Immich upload or the decision state, and they are
+    never superseded. Their answer is the ordinary acknowledgement; its `receipt` may carry `action_summary`,
+    `job_ids` and `detail` (section 7).
 
 `immich_receipt` has no place in `outbox_page`, so it has its own route (section 5).
 
@@ -81,7 +91,7 @@ Rules:
 
 - Enrollment sets `rg_session` (`HttpOnly; Secure; SameSite=Strict`); only its SHA-256 is stored. Every request reads the
   device row, so revocation applies to the next request. Every data and media route needs an enrolled device with the
-  `review` scope. Action requests are refused even with a `queue` grant (D6).
+  `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
 - JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata
   is put on screen with `textContent` only. Originals are `private, no-store`; derivatives `private, max-age=3600`.
 - Inbox grouped by run with counts; a run's grid; triage with Keep, Favorite, Delete buttons and swipes (right, up,
@@ -98,7 +108,8 @@ Rules:
 Hourly, and by `review-gateway-admin purge`. An item is purged only when it has no unanswered record and its latest
 record was answered: 48 hours after an applied discard, 14 days after anything else (including a refusal). A kept
 item is purged only after Immich has it: nothing is purged while an upload is owed or failing. Undecided items are never
-purged, so the cache grows until they are decided (and until Immich is configured and reachable). Purging removes cached media only (shared files stay
+purged, so the cache grows until they are decided (and until Immich is configured and reachable). An unanswered
+action request also keeps the item's media. Purging removes cached media only (shared files stay
 while another item needs them); the item row and records remain, so republishing does not bring it back. Abandoned
 partial uploads and unreferenced files older than a day are swept.
 
@@ -158,3 +169,84 @@ are not purged.
 dependencies are exact pins in `requirements-dev.txt` that a test holds equal to the gateway's lock. Immich is a small
 fake HTTP server on loopback (`fake_immich.py`) with the request and reply shapes read from Immich's v2.0.0 and v3.4.2
 sources; no real Immich has been used.
+
+## 7. Phone actions (RG-140 slice 1)
+
+**What.** On an image, a phone with the `queue` grant can ask for one of four actions:
+
+- **Fix face**, **Fix hands** or **Fix both**: the executor's ADetailer face pass, hand pass, or both, on that exact
+  image. The existing Review re-work compile writes the result under `Reprocess` and records the parent artifact.
+- **More like this**: the same prompt, checkpoint and settings with 4 new seeds (1 to 8 if asked), through the History
+  variation compiler. A recipe with more than one stage is refused for now (`recipe_not_variable`).
+
+The other actions in the schema stay reserved and are refused.
+
+**Grant.** The pairing dialog has a checkbox, "Allow queueing from this phone", which is off by default. It adds
+`queue` to the offer's scopes. The gateway takes action requests only from a device enrolled with `queue`. The PC
+checks the scope again from the offer it issued, so the PC stays the authority. To change a paired phone's grant,
+revoke it and pair it again.
+
+**Two steps.** Each step is one outbox record, answered by an acknowledgement.
+
+1. *Prepare* (`params.step = "prepare"`). The PC re-hashes the file and compiles exactly what it would queue, but
+   admits nothing. It answers `applied` with `receipt.action_summary`, which holds:
+   - a title and up to 8 PC-written lines;
+   - the job count;
+   - `queue_position` (`next` for fixes, `last` for "more like this");
+   - every N1 warning, with its why and fix;
+   - `revision`, a fingerprint of everything shown plus the recipe, without job ids or seeds.
+
+   Every warning text and subject is reduced to the last part of any path it names. The phone shows this screen
+   (S12).
+2. *Confirm* (`step = "confirm"`, `prepared_record`, `summary_revision`). The PC compiles again. It admits only if
+   the fresh revision equals the shown one, then answers `applied` with `receipt.job_ids`. If the revision differs,
+   it answers `refused`/`summary_changed` with the new summary. That refused record then counts as a prepare, so the
+   phone can confirm it directly.
+
+**Admission.** Through `admit_phone_records` (`src/app/site_phone_admission.py`), the same derivation the hosted
+relay uses, into `JobService.submit_njrs`. Fixes go through `submit_reprocess_njrs`.
+
+- Job ids are deterministic from the device and the prepare record, so a resent or repeated confirm never admits
+  twice.
+- The shown warnings are frozen in provenance as `accepted_warnings` with `surface: phone`.
+- Fixes are admitted at `JobPriority.HIGH`, the queue's existing durable priority. They run after the current job and
+  before NORMAL work, and never preempt it. "More like this" is NORMAL.
+- Results come back to the phone through ordinary publishing.
+
+**Refusals.**
+
+| Code | When |
+|---|---|
+| `not_granted` | The phone has no `queue` grant. |
+| `revoked_device` | The phone was revoked. |
+| `unknown_item`, `digest_mismatch` | The item is not one the PC published, or its file changed. |
+| `invalid_record` | An action reserved for a later slice. |
+| `cap_exceeded` | A cap below was reached. |
+| `prepare_required` | The confirm names a prepare that is unknown, from another phone, for another item or action, or older than 30 minutes. |
+| `summary_changed` | The summary changed since the phone showed it. |
+| `action_unavailable` | The action cannot be prepared. `receipt.detail` gives a closed code: `adetailer_unavailable`, `detector_unavailable`, `model_family_refused`, `provenance_unverified`, `recipe_not_variable`, `source_changed`, `not_an_image`, `compile_failed` and others. Compiler text never crosses. |
+| `admission_refused` | The job could not be admitted (for example `app_shutting_down`). |
+
+An unexpected compiler error is answered as `compile_failed`, so it never stalls the records behind it.
+
+**Caps (S4).**
+
+- PC, authoritative: one job per fix; at most 8 seeds; per phone in any rolling 24 hours, 64 admitted jobs and 200
+  prepares.
+- Gateway, early refusal: at most 20 unanswered action requests per phone (`too_many_pending`) and 300 per 24 hours
+  (`daily_limit`).
+- Idempotency: the gateway is unique per device and key (a reused key is 409 `idempotency_conflict`), and the PC
+  ledger answers a re-sent record with its first outcome.
+
+**Phone API.**
+
+| Route | Use |
+|---|---|
+| `POST /api/actions` | Body `{library_id, sha256, action, params, idempotency_key}`. Answers `{record_id, state}`, or 404 `unknown_item` or 422 `not_an_image`. |
+| `GET /api/actions/{record_id}` | The phone's own request and the PC's answer (`state`, `reason_code`, `receipt`). |
+| `GET /api/actions?library_id=&sha256=` | The phone's last 20 requests for one item. |
+
+The phone polls every 2 s while the summary sheet is open.
+
+**Store migration.** A gateway database made before RG-140 gains `outbox.kind` (existing rows are `decision`) and
+`outbox.created_at` the first time it is opened.

@@ -203,3 +203,30 @@ button {
 .actions .keep { background: var(--keep); border-color: var(--keep); }
 .actions .favorite { background: var(--favorite); border-color: var(--favorite); color: #1b1500; }
 .actions button:disabled { opacity: 0.35; }
+
+/* RG-140 phone actions: a row of requests and the PC's one-screen summary. */
+.fixes { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; padding: 0 0.5rem; }
+.fixes button { font-size: 0.85rem; padding: 0.35rem 0.7rem; }
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(0 0 0 / 60%);
+}
+.sheet-body {
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  border-radius: 0.8rem 0.8rem 0 0;
+  overflow-wrap: anywhere;
+}
+.sheet-body h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.sheet-body p { margin: 0.35rem 0; }
+.sheet-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.8rem; }
+.warning { margin: 0.6rem 0; padding: 0.5rem 0.6rem; border-left: 3px solid var(--favorite); background: var(--bg); }
+.warning-title { font-weight: 600; color: var(--favorite); }

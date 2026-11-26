@@ -228,31 +228,209 @@
         }
       }
     },
+    "action_name": {
+      "enum": [
+        "fix_face",
+        "fix_hands",
+        "fix_both",
+        "more_like_this",
+        "another_model",
+        "aspect_ratio",
+        "prompt_tweak",
+        "make_video",
+        "rerun_clip",
+        "continue_clip"
+      ]
+    },
     "action_request": {
-      "description": "Reserved for RG-140. The RG-110 gateway refuses to create these (D6); the RG-120 PC refuses them until RG-140 enables the grant.",
+      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this.",
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "action"
+        "action",
+        "params"
       ],
       "properties": {
         "action": {
-          "enum": [
-            "fix_face",
-            "fix_hands",
-            "more_like_this",
-            "another_model",
-            "aspect_ratio",
-            "prompt_tweak",
-            "make_video",
-            "rerun_clip",
-            "continue_clip"
-          ]
+          "$ref": "#/$defs/action_name"
         },
         "params": {
-          "description": "Typed per action in RG-140; validated on the PC against the catalogs.",
           "type": "object",
-          "maxProperties": 16
+          "additionalProperties": false,
+          "required": [
+            "step"
+          ],
+          "properties": {
+            "step": {
+              "enum": [
+                "prepare",
+                "confirm"
+              ]
+            },
+            "count": {
+              "description": "more_like_this only, on prepare: how many new seeds.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "prepared_record": {
+              "$ref": "#/$defs/uuid"
+            },
+            "summary_revision": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "step": {
+                    "const": "confirm"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "prepared_record",
+                  "summary_revision"
+                ],
+                "not": {
+                  "required": [
+                    "count"
+                  ]
+                }
+              },
+              "else": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "prepared_record"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "summary_revision"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "not": {
+                  "const": "more_like_this"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "not": {
+                  "required": [
+                    "count"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "action_warning": {
+      "description": "One N1 policy warning as the PC shows it (S12): PC-authored text, scrubbed of paths, rendered as text only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "subject",
+        "title"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]{1,64}$"
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "why": {
+          "type": "string",
+          "maxLength": 800
+        },
+        "fix": {
+          "type": "string",
+          "maxLength": 800
+        }
+      }
+    },
+    "action_summary": {
+      "description": "PC to gateway, inside an acknowledgement receipt: the one-screen summary of what an action would queue (RG-140). The phone shows it before Queue; 'revision' fingerprints everything shown plus the compiled recipe without ids and seeds.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "revision",
+        "title",
+        "lines",
+        "job_count",
+        "queue_position",
+        "warnings",
+        "expires_at"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/action_name"
+        },
+        "revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "lines": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "job_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "queue_position": {
+          "enum": [
+            "next",
+            "last"
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/action_warning"
+          }
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
         }
       }
     },
@@ -438,7 +616,11 @@
             "invalid_record",
             "favorite_with_delete",
             "archive_failed",
-            "admission_refused"
+            "admission_refused",
+            "summary_changed",
+            "cap_exceeded",
+            "action_unavailable",
+            "prepare_required"
           ]
         },
         "receipt": {
@@ -459,6 +641,26 @@
                 "type": "string",
                 "maxLength": 64
               }
+            },
+            "action_summary": {
+              "$ref": "#/$defs/action_summary"
+            },
+            "detail": {
+              "description": "Why an action could not be prepared or admitted, as a closed code (never compiler text, which can name paths).",
+              "enum": [
+                "not_an_image",
+                "source_changed",
+                "provenance_unverified",
+                "recipe_not_variable",
+                "model_unavailable",
+                "model_family_refused",
+                "adetailer_unavailable",
+                "detector_unavailable",
+                "operation_unsupported",
+                "app_busy",
+                "app_shutting_down",
+                "compile_failed"
+              ]
             }
           }
         },

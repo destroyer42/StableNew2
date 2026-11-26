@@ -12,8 +12,11 @@ services only:
 * **Delete** is a phone Discard: a Discard disposition, then a move into ``<output root>/_archive/`` through
   ``src/review/archive.py`` (links refused, the digest re-checked immediately before the move, never a delete,
   undoable with Restore).
-* **Action requests** are refused (``not_granted``) until RG-140 adds the queue grant. Nothing here can create a job:
-  this module has no reference to the queue, the runner or ``JobService`` (RG-100 invariant 6).
+* **Action requests** (RG-140) need the device's separate ``queue`` scope; the target is resolved and re-hashed
+  exactly as for a decision, then handed to the injected ``GatewayActions`` (``src/app/review_gateway_actions.py``),
+  which prepares a summary or admits through the phone admission service. Without one they are refused
+  (``not_granted``). This module itself still has no reference to the queue, the runner or ``JobService`` (RG-100
+  invariant 6).
 
 Each outcome is written to the ledger before it is acknowledged, so a re-sent record gets the same answer and is never
 applied twice.
@@ -25,7 +28,7 @@ import logging
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.app.review_gateway_protocol import (
     ARCHIVE_FAILED,
@@ -54,6 +57,9 @@ from src.review.review_evidence import (
     build_disposition_with_prior_settings,
     image_source_job,
 )
+
+if TYPE_CHECKING:
+    from src.app.review_gateway_actions import GatewayActions
 
 log = logging.getLogger(__name__)
 
@@ -87,11 +93,13 @@ class RecordApplier:
         records_path: Path,
         *,
         active_inputs: Callable[[], Collection[str]] | None,
+        actions: GatewayActions | None = None,
     ) -> None:
         self._ledger = ledger
         self._root = output_root
         self._records_path = records_path
         self._active_inputs = active_inputs
+        self._actions = actions
 
     def handle(self, raw: Any) -> Applied | None:
         """The outcome for one raw outbox record; ``None`` when it has no acknowledgeable record id.
@@ -109,8 +117,11 @@ class RecordApplier:
         try:
             record = parse_record(raw)
             key = record.idempotency_key
-            if self._ledger.outcome_for_key(key) is not None:
-                result = Applied(record_id, "duplicate")
+            first = self._ledger.outcome_for_key(key)
+            if first is not None:
+                # An action's duplicate repeats the first receipt, so the phone still sees its job ids (S8).
+                receipt = first.receipt if record.kind == "action_request" else {}
+                result = Applied(record_id, "duplicate", receipt=receipt)
                 key = None  # the key already names the first record
             else:
                 result = self._apply(record)
@@ -164,8 +175,7 @@ class RecordApplier:
 
     def _apply(self, record: OutboxRecord) -> Applied:
         if record.kind == "action_request":
-            self._authorize(record, "queue")
-            raise _Refused(NOT_GRANTED)  # RG-140 adds admission through PhoneQueueAdmission
+            return self._action(record)
         decision = record.decision
         assert decision is not None
         self._authorize(record, "review")
@@ -177,6 +187,19 @@ class RecordApplier:
         if decision.verdict == "keep":
             return self._keep(record, path)
         return self._discard(record, path, rel_path)
+
+    def _action(self, record: OutboxRecord) -> Applied:
+        self._authorize(record, "queue")
+        if self._actions is None:
+            raise _Refused(NOT_GRANTED)
+        path, _rel_path = self._resolve(record)
+        current = self._current_digest(path)
+        if current is None:
+            raise _Refused(UNKNOWN_ITEM)
+        if current != record.target.sha256:
+            raise _Refused(DIGEST_MISMATCH)
+        result = self._actions.handle(record, path)
+        return Applied(record.record_id, result.outcome, result.reason, dict(result.receipt))
 
     def _keep(self, record: OutboxRecord, path: Path) -> Applied:
         target = record.target

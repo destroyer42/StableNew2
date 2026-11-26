@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -91,11 +92,127 @@ def test_forged_records_are_refused(changes):
 
 def test_unknown_action_is_refused_and_known_action_parses():
     request = {**_forged(kind="action_request", decision=KeyError)}
-    request["action_request"] = {"action": "rm_rf"}
+    request["action_request"] = {"action": "rm_rf", "params": {"step": "prepare"}}
     with pytest.raises(ProtocolError):
         parse_record(request)
-    request["action_request"] = {"action": "fix_face", "params": {"strength": 1}}
-    assert parse_record(request).action_request is not None
+    request["action_request"] = {"action": "fix_face", "params": {"step": "prepare"}}
+    assert parse_record(request).action_request == protocol.ActionRequest("fix_face", "prepare")
+
+
+PREPARED = "7d0e4b3e-2f0a-4c55-9a62-0b8a7f1c2d3e"
+
+
+@pytest.mark.parametrize(
+    "action_request",
+    [
+        {"action": "fix_face"},  # params are required (RG-140)
+        {"action": "fix_face", "params": {}},
+        {"action": "fix_face", "params": {"step": "prepare", "strength": 1}},
+        {"action": "fix_face", "params": {"step": "run"}},
+        {"action": "fix_face", "params": {"step": "prepare", "count": 2}},
+        {"action": "more_like_this", "params": {"step": "prepare", "count": 0}},
+        {"action": "more_like_this", "params": {"step": "prepare", "count": 9}},
+        {"action": "fix_face", "params": {"step": "confirm", "prepared_record": PREPARED}},
+        {"action": "fix_face", "params": {"step": "prepare", "prepared_record": PREPARED}},
+        {
+            "action": "more_like_this",
+            "params": {
+                "step": "confirm",
+                "count": 2,
+                "prepared_record": PREPARED,
+                "summary_revision": DIGEST,
+            },
+        },
+        {
+            "action": "fix_face",
+            "params": {"step": "confirm", "prepared_record": "x", "summary_revision": DIGEST},
+        },
+    ],
+)
+def test_action_params_are_typed_per_step(action_request):
+    request = {
+        **_forged(kind="action_request", decision=KeyError),
+        "action_request": action_request,
+    }
+    with pytest.raises(ProtocolError):
+        parse_record(request)
+    with pytest.raises(SchemaViolation):
+        validate_def(request, "outbox_record")
+
+
+def test_a_boolean_is_not_a_seed_count():
+    request = {
+        **_forged(kind="action_request", decision=KeyError),
+        "action_request": {"action": "more_like_this", "params": {"step": "prepare", "count": True}},
+    }
+    with pytest.raises(ProtocolError):
+        parse_record(request)
+
+
+def test_typed_action_params_parse():
+    base = _forged(kind="action_request", decision=KeyError)
+    more = {
+        **base,
+        "action_request": {"action": "more_like_this", "params": {"step": "prepare", "count": 3}},
+    }
+    validate_def(more, "outbox_record")
+    assert parse_record(more).action_request.count == 3
+    confirm = {
+        **base,
+        "action_request": {
+            "action": "fix_both",
+            "params": {"step": "confirm", "prepared_record": PREPARED, "summary_revision": DIGEST},
+        },
+    }
+    validate_def(confirm, "outbox_record")
+    parsed = parse_record(confirm).action_request
+    assert (parsed.step, parsed.prepared_record, parsed.summary_revision) == (
+        "confirm",
+        PREPARED,
+        DIGEST,
+    )
+
+
+def test_an_action_summary_carries_no_path_and_matches_the_schema():
+    warning = protocol.SummaryWarning(
+        "image_model_unqualified",
+        "C:\\Users\\rob\\Forge\\models\\Stable-diffusion\\flux1-dev.safetensors",
+        "flux1-dev.safetensors is not qualified.",
+        "It needs a VAE.",
+        "A VAE goes in C:\\Users\\rob\\Forge\\models\\VAE. Or /home/rob/forge/models/VAE/ae.safetensors works.",
+    )
+    summary = protocol.ActionSummary(
+        "fix_face",
+        DIGEST,
+        "Fix face",
+        ("Checkpoint \\\\nas\\share\\juggernaut.safetensors.", "txt2img/img2img and/or upscale"),
+        1,
+        "next",
+        (warning,),
+        datetime(2026, 11, 26, 12, 0, tzinfo=UTC),
+    )
+    body = summary.payload()
+    validate_def(body, "action_summary")
+    text = json.dumps(body)
+    for private in ("Users", "rob", "nas", "home", "Forge"):
+        assert private not in text, private
+    assert body["warnings"][0]["subject"] == "flux1-dev.safetensors"
+    assert body["warnings"][0]["fix"] == "A VAE goes in VAE. Or ae.safetensors works."
+    assert body["lines"] == [
+        "Checkpoint juggernaut.safetensors.",
+        "txt2img/img2img and/or upscale",
+    ]
+    ack = acknowledgement(
+        RECORD["record_id"], "applied", receipt={"action_summary": body, "job_ids": ["a" * 32]}
+    )
+    validate_def(ack, "acknowledgement")
+    with pytest.raises(ProtocolError):
+        acknowledgement(
+            RECORD["record_id"],
+            "refused",
+            reason_code="action_unavailable",
+            receipt={"detail": "C:/x"},
+        )
 
 
 def test_duplicate_json_keys_and_oversized_bodies_are_refused():
@@ -186,7 +303,15 @@ def test_closed_lists_match_the_schema():
     assert set(defs["acknowledgement"]["properties"]["outcome"]["enum"]) == protocol.OUTCOMES
     assert set(defs["decision"]["properties"]["tags"]["items"]["enum"]) == protocol.TAGS
     assert set(defs["decision"]["properties"]["verdict"]["enum"]) == protocol.VERDICTS
-    assert set(defs["action_request"]["properties"]["action"]["enum"]) == protocol.ACTIONS
+    assert set(defs["action_name"]["enum"]) == protocol.ACTIONS
+    assert protocol.SLICE_ONE_ACTIONS <= protocol.ACTIONS
+    receipt = defs["acknowledgement"]["properties"]["receipt"]["properties"]
+    assert set(receipt["detail"]["enum"]) == protocol.DETAILS
+    positions = defs["action_summary"]["properties"]["queue_position"]["enum"]
+    assert set(positions) == protocol.QUEUE_POSITIONS
+    params = defs["action_request"]["properties"]["params"]["properties"]
+    assert set(params["step"]["enum"]) == protocol.STEPS
+    assert params["count"]["maximum"] == protocol.MAX_SEEDS
     assert set(defs["outbox_record"]["properties"]["kind"]["enum"]) == protocol.RECORD_KINDS
     assert (
         set(defs["media_variant"]["properties"]["content_type"]["enum"]) == protocol.CONTENT_TYPES

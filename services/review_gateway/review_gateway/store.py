@@ -34,6 +34,12 @@ DISCARD_UNDO = timedelta(hours=48)
 KEEP_AFTER_ANSWER = timedelta(days=14)
 STALE_FILE_S = 24 * 3600
 _SEEN_RESOLUTION = timedelta(hours=1)
+#: RG-140 (S4): early refusals on the gateway; the PC's caps are the authoritative ones.
+MAX_PENDING_ACTIONS = 20
+MAX_DAILY_ACTIONS = 300
+ACTION_WINDOW = timedelta(hours=24)
+#: RG-140 slice 1. The schema reserves the others for later slices; the PC refuses anything it does not implement.
+SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
 
 _TABLES = """
 CREATE TABLE IF NOT EXISTS item (
@@ -55,6 +61,7 @@ CREATE TABLE IF NOT EXISTS outbox (
     library_id TEXT NOT NULL, sha256 TEXT NOT NULL, record TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('pending','applied','refused','duplicate','superseded')),
     delivered_at TEXT, answered_at TEXT, acknowledgement TEXT,
+    kind TEXT NOT NULL DEFAULT 'decision', created_at TEXT,
     UNIQUE (device_id, idempotency_key)
 );
 CREATE INDEX IF NOT EXISTS outbox_pending ON outbox (status, seq);
@@ -132,6 +139,7 @@ class Store:
         self.clock = clock
         with self.connection() as db:
             db.executescript(_TABLES)
+            _migrate(db)
             upload_queue.initialize(db)
 
     @contextmanager
@@ -366,7 +374,7 @@ class Store:
             ).fetchone()
             if previous is not None:
                 sent = json.loads(previous["record"])
-                if sent["target"] != target or sent["decision"] != decision:
+                if sent["target"] != target or sent.get("decision") != decision:
                     raise GatewayError(409, "idempotency_conflict")
                 status = previous["status"]
                 if status == "superseded":  # report what replaced it
@@ -392,8 +400,16 @@ class Store:
             )
             db.execute(
                 "INSERT INTO outbox (record_id, idempotency_key, device_id, library_id, sha256,"
-                " record, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')",
-                (record["record_id"], idempotency_key, device_id, *key, json.dumps(record)),
+                " record, status, kind, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, 'pending', 'decision', ?)",
+                (
+                    record["record_id"],
+                    idempotency_key,
+                    device_id,
+                    *key,
+                    json.dumps(record),
+                    record["created_at"],
+                ),
             )
             db.execute(
                 "UPDATE item SET latest_record_id = ? WHERE library_id = ? AND sha256 = ?",
@@ -401,6 +417,113 @@ class Store:
             )
             self._reconcile_upload(db, key)
         return record["record_id"], "pending"
+
+    # --- action requests (RG-140) --------------------------------------------------------------------------------
+
+    def request_action(
+        self,
+        device_id: str,
+        target: dict[str, str],
+        action_request: dict[str, Any],
+        idempotency_key: str,
+    ) -> tuple[str, str]:
+        """Record a phone action request (prepare or confirm). Returns ``(record_id, state)``.
+
+        It is only a request: it never becomes the item's decision and never touches Immich. The PC compiles,
+        decides and answers it (invariants 2 and 4).
+        """
+
+        now = self.clock()
+        record = {
+            "record_id": str(uuid.uuid4()),
+            "idempotency_key": idempotency_key,
+            "device_id": device_id,
+            "created_at": stamp(now),
+            "target": target,
+            "kind": "action_request",
+            "action_request": action_request,
+        }
+        try:
+            self.contract.validate("outbox_record", record)
+        except ContractError as error:
+            raise GatewayError(422, "invalid_record") from error
+        if action_request["action"] not in SLICE_ONE_ACTIONS:
+            raise GatewayError(422, "invalid_record")
+        key = (target["library_id"], target["sha256"])
+        with self.write() as db:
+            # Checked inside the write: the body may have arrived after a revocation or a re-pair (S11).
+            device = db.execute(
+                "SELECT scopes FROM device WHERE device_id = ? AND revoked_at IS NULL", (device_id,)
+            ).fetchone()
+            if device is None:
+                raise GatewayError(401, "not_enrolled")
+            if "queue" not in json.loads(device["scopes"]):
+                raise GatewayError(403, "not_granted")
+            previous = db.execute(
+                "SELECT record_id, record, status FROM outbox"
+                " WHERE device_id = ? AND idempotency_key = ?",
+                (device_id, idempotency_key),
+            ).fetchone()
+            if previous is not None:
+                sent = json.loads(previous["record"])
+                if sent["target"] != target or sent.get("action_request") != action_request:
+                    raise GatewayError(409, "idempotency_conflict")
+                return previous["record_id"], _state(previous["status"])
+            item = db.execute(
+                "SELECT kind FROM item WHERE library_id = ? AND sha256 = ?"
+                " AND ready_at IS NOT NULL AND purged_at IS NULL",
+                key,
+            ).fetchone()
+            if item is None:
+                raise GatewayError(404, "unknown_item")
+            if item["kind"] != "image":
+                raise GatewayError(422, "not_an_image")
+            pending, recent = db.execute(
+                "SELECT coalesce(sum(status = 'pending'), 0), coalesce(sum(created_at > ?), 0)"
+                " FROM outbox WHERE device_id = ? AND kind = 'action_request'",
+                (stamp(now - ACTION_WINDOW), device_id),
+            ).fetchone()
+            if pending >= MAX_PENDING_ACTIONS:
+                raise GatewayError(429, "too_many_pending")
+            if recent >= MAX_DAILY_ACTIONS:
+                raise GatewayError(429, "daily_limit")
+            db.execute(
+                "INSERT INTO outbox (record_id, idempotency_key, device_id, library_id, sha256,"
+                " record, status, kind, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, 'pending', 'action_request', ?)",
+                (
+                    record["record_id"],
+                    idempotency_key,
+                    device_id,
+                    *key,
+                    json.dumps(record),
+                    record["created_at"],
+                ),
+            )
+        return record["record_id"], "pending"
+
+    def action_record(self, device_id: str, record_id: str) -> dict[str, Any] | None:
+        """One of this device's action requests with the PC's answer; ``None`` for anyone else's."""
+
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT record, status, acknowledgement FROM outbox WHERE record_id = ?"
+                " AND device_id = ? AND kind = 'action_request'",
+                (record_id, device_id),
+            ).fetchone()
+        return _action_view(row) if row is not None else None
+
+    def item_actions(self, device_id: str, target: dict[str, str]) -> list[dict[str, Any]]:
+        """This device's recent action requests for one item, newest first."""
+
+        with self.connection() as db:
+            rows = db.execute(
+                "SELECT record, status, acknowledgement FROM outbox WHERE device_id = ?"
+                " AND library_id = ? AND sha256 = ? AND kind = 'action_request'"
+                " ORDER BY seq DESC LIMIT 20",
+                (device_id, target["library_id"], target["sha256"]),
+            ).fetchall()
+        return [_action_view(row) for row in rows]
 
     def outbox_page(self, after: int, limit: int) -> dict[str, Any]:
         with self.write() as db:
@@ -652,6 +775,34 @@ class Store:
             removed = self.media.delete(released)
             removed += self.media.sweep(referenced, STALE_FILE_S, now.timestamp())
         return {"items_purged": len(expired), "files_removed": removed}
+
+
+def _migrate(db: sqlite3.Connection) -> None:
+    """Add what RG-140 needs to an outbox made before it; every earlier record was a decision."""
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(outbox)")}
+    if "kind" not in columns:
+        db.execute("ALTER TABLE outbox ADD COLUMN kind TEXT NOT NULL DEFAULT 'decision'")
+    if "created_at" not in columns:
+        db.execute("ALTER TABLE outbox ADD COLUMN created_at TEXT")
+    db.execute("CREATE INDEX IF NOT EXISTS outbox_device_kind ON outbox (device_id, kind, seq)")
+
+
+def _action_view(row: sqlite3.Row) -> dict[str, Any]:
+    record = json.loads(row["record"])
+    answer = json.loads(row["acknowledgement"]) if row["acknowledgement"] else {}
+    request = record["action_request"]
+    return {
+        "record_id": record["record_id"],
+        "library_id": record["target"]["library_id"],
+        "sha256": record["target"]["sha256"],
+        "action": request["action"],
+        "step": request["params"]["step"],
+        "created_at": record["created_at"],
+        "state": _state(row["status"]),
+        "reason_code": answer.get("reason_code") if row["status"] == "refused" else None,
+        "receipt": answer.get("receipt"),
+    }
 
 
 def _state(status: str) -> str:

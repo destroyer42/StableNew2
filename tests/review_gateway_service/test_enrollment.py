@@ -198,11 +198,11 @@ def test_a_device_without_the_review_scope_cannot_see_or_decide(rig) -> None:
     assert rig.phone.get(f"/media/{item['library_id']}/{item['sha256']}/thumb").status_code == 403
 
 
-def test_even_a_queue_grant_cannot_create_an_action_request_yet(rig) -> None:
-    """D6: queueing arrives in RG-140."""
+def test_a_review_only_grant_cannot_create_an_action_request(rig) -> None:
+    """D6: queueing is a separate grant (RG-140); the decision route never takes an action either."""
 
     item = rig.publish()
-    rig.pair(scopes=("review", "queue"))
+    rig.pair()
     request = {**item, "action": "fix_face", "idempotency_key": "k" * 20}
 
     for path in ("/api/actions", "/api/decisions"):
