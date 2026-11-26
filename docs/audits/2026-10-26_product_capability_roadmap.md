@@ -6,7 +6,7 @@
 
 ## Executive decision
 
-StableNew is beyond its initial MVP. The best next work is to demonstrate complete, reliable value from the large recent investment in model profiles, PromptPacks, History, Learning, GUI, editing and video. The current primary package is [WF-740 model/profile/Learning round-trip](../work_packages/WF-740_model_profile_learning_roundtrip.md). The existing [#223](https://github.com/destroyer42/StableNew2/pull/223) owns the aesthetic syntax repair; [IMG-EMBED-730](../work_packages/IMG-EMBED-730_conditional_post_720_fidelity.md) is a conditional follow-up only for a distinct reproduced gap after #223.
+StableNew is beyond its initial MVP. The best next work is to demonstrate complete, reliable value from the large recent investment in model profiles, PromptPacks, History, Learning, GUI, editing and video. The current primary package is [WF-740 model/profile/Learning round-trip](../archive/work_packages/WF-740_model_profile_learning_roundtrip.md). The existing [#223](https://github.com/destroyer42/StableNew2/pull/223) owns the aesthetic syntax repair; [IMG-EMBED-730](../work_packages/IMG-EMBED-730_conditional_post_720_fidelity.md) is a conditional follow-up only for a distinct reproduced gap after #223.
 
 The 2026-10-16 [repository audit](2026-10-16_repo_audit_and_roadmap.md) remains historical baseline and structural inventory, not today's open-task log. Current source/SHA, [AGENTS.md](../../AGENTS.md) and [STATUS.md](../../STATUS.md) remain above this dated decision report. The owner-accepted video roadmap (2026-10-20) and GUI audit (2026-10-22) remain specialist evidence, rechecked before every new package.
 
@@ -66,7 +66,7 @@ Safety-gating read-only GPU/device-loss analysis runs alongside discretionary wo
 
 | Order | Work package | Outcome / dependency |
 | --- | --- | --- |
-| 1 | **WF-740** | Verify and narrowly repair model -> working settings -> Preview/NJR -> queue -> controlled Learning -> explicit profile reuse; [full contract](../work_packages/WF-740_model_profile_learning_roundtrip.md) |
+| 1 | **WF-740** | Verify and narrowly repair model -> working settings -> Preview/NJR -> queue -> controlled Learning -> explicit profile reuse; [full contract](../archive/work_packages/WF-740_model_profile_learning_roundtrip.md) |
 | Conditional | **IMG-EMBED-730** | Only a separately proven post-720 mismatch in Preview or actual TI evidence; [NO-GO/conditional contract](../work_packages/IMG-EMBED-730_conditional_post_720_fidelity.md) |
 | 2 | TEST-HERMETIC-750 | Test-only production branches and ambient retries/endpoint dependencies, selected by fresh reproduction |
 | 3 | VID-STORYBOARD-350 | Persistent ordered shot plans, selective rerender, anchored shot boundaries using existing one-job sequence authority |
