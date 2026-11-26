@@ -21,6 +21,7 @@ SYNC_ROUTES = (
     ("GET", "/sync/v1/immich-receipts"),
     ("POST", "/sync/v1/deploy-requests"),
     ("GET", "/sync/v1/deploy-status"),
+    ("PUT", "/sync/v1/pc-status"),
 )
 
 

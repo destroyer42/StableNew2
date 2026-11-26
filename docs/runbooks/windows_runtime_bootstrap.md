@@ -229,8 +229,23 @@ owner decisions D1–D10: `docs/work_packages/LAUNCH-UPDATE_remote_restart.md`.
   4. if the new version does not start (the launcher exits, for example with 11 for a drifted `.venv`), moves local
      `main` back with `git reset --keep <old commit>` and starts the old version again. `origin` is never changed.
 - The dialog shows the last result: old and new commit, or the reason it was refused or rolled back.
-- **Allow remote update** (off by default) is the PC-side switch for phone requests, which arrive with LAUNCH-UPDATE-2.
+- **Allow remote update** (off by default) is the PC-side switch for phone requests (LAUNCH-UPDATE-2, below).
   Update and restart from the desktop works with the switch off.
+
+### From the phone (LAUNCH-UPDATE-2)
+
+One-time setup at the desk, after the gateway release with LAUNCH-UPDATE-2 is installed:
+
+1. **Update** dialog: tick **Allow remote update**.
+2. **Phone Review** dialog: **Pair for remote update**, confirm, and enter the code on the phone within five minutes.
+   This replaces the phone's earlier pairing; revoke the old entry in the list.
+
+Then, away from the desk, the phone's inbox shows **Update the PC…**. The screen shows the PC's commit, `origin/main`
+(fetched by the PC at most every 15 minutes), how many commits that is, and the queue. **Update to `<sha>`** asks for
+confirmation and sends exactly that commit. The PC refuses `target_moved` if `origin/main` has moved, then runs the
+same preflight, wait, update, restart and rollback as the desktop button. The phone shows the result, including
+"health unconfirmed" when StableNew was started but did not report in within 180 s. Untick **Allow remote update** or
+revoke the phone to turn it off.
 
 State lives in `%LOCALAPPDATA%\StableNew\live-update` (`intent.json`, `result.json`, `started.json`,
 `last_result.json`, `settings.json`, and the copy of the updater that ran), outside the checkout. Output, logs, packs,
