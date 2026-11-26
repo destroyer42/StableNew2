@@ -7,6 +7,7 @@ Video Workflow primary actions and the collapsible Advanced Conditioning section
 from __future__ import annotations
 
 import logging
+import time
 import tkinter as tk
 from pathlib import Path
 from types import SimpleNamespace
@@ -39,6 +40,20 @@ def _settle(root: tk.Tk, ms: int = 160) -> None:
     # work has run, which leaves widgets 1x1 and unmapped. Finishing the pending geometry work makes
     # mapped-state checks independent of load.
     root.update_idletasks()
+
+
+def _settle_until_idle(root: tk.Tk, pending, ms: int, timeout_s: float = 10.0) -> None:
+    """Settle, then keep settling while a coalesced job is still pending (``pending()`` is true).
+
+    Under load the layout can finish only after the first timed loop. The ``<Configure>`` it raises then schedules a
+    fresh coalesced job that a single fixed settle would never let run.
+    """
+
+    _settle(root, ms)
+    deadline = time.monotonic() + timeout_s
+    while pending():
+        assert time.monotonic() < deadline, "a coalesced job was still pending after the settle timeout"
+        _settle(root, 50)
 
 
 def _is_under(widget: tk.Misc, ancestor: tk.Misc) -> bool:
@@ -333,7 +348,7 @@ def test_review_preview_and_metadata_stay_inside_the_viewport_at_laptop_and_incr
         try:
             tab._set_selected_images(images)
             tab._show_image(images[0])
-            _settle(laptop_root, 400)
+            _settle_until_idle(laptop_root, lambda preview=tab.preview: preview._resize_id is not None, 400)
             viewport = _rect(tab._workspace_scroll._canvas)
             for widget in (tab.preview, tab.meta_label):
                 _left, _top, right, _bottom = _rect(widget)
