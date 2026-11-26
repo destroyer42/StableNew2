@@ -12,6 +12,7 @@ from PIL import Image
 
 from src.gui.tooltip import attach_tooltip, install_full_value_tooltips
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
+from tests.helpers.hidden_test_windows import show_test_root
 
 SPAWN = "src.utils.thread_registry.ThreadRegistry.spawn"
 
@@ -19,12 +20,15 @@ SPAWN = "src.utils.thread_registry.ThreadRegistry.spawn"
 def _settle(root: tk.Tk, ms: int = 120) -> None:
     root.after(ms, root.quit)
     root.mainloop()
+    # The timed loop lets coalesced `after` jobs fire. Beside other test processes it can end before Tk's idle
+    # work has run, which leaves widgets 1x1 and unmapped. Finishing the pending geometry work makes
+    # mapped-state checks independent of load.
+    root.update_idletasks()
 
 
 @pytest.fixture
 def shown_root(tk_root: tk.Tk):
-    tk_root.geometry("900x600+0+0")
-    tk_root.deiconify()
+    show_test_root(tk_root, 900, 600)
     yield tk_root
     tk_root.withdraw()
 

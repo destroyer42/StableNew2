@@ -27,6 +27,7 @@ from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.utils import InMemoryLogHandler
+from tests.helpers.hidden_test_windows import show_test_root
 
 
 def _settle(root: tk.Tk, ms: int = 160) -> None:
@@ -34,6 +35,10 @@ def _settle(root: tk.Tk, ms: int = 160) -> None:
 
     root.after(ms, root.quit)
     root.mainloop()
+    # The timed loop lets coalesced `after` jobs fire. Beside other test processes it can end before Tk's idle
+    # work has run, which leaves widgets 1x1 and unmapped. Finishing the pending geometry work makes
+    # mapped-state checks independent of load.
+    root.update_idletasks()
 
 
 def _is_under(widget: tk.Misc, ancestor: tk.Misc) -> bool:
@@ -57,8 +62,7 @@ def _rect(widget: tk.Misc) -> tuple[int, int, int, int]:
 @pytest.fixture
 def laptop_root(tk_root: tk.Tk):
     layout = compute_window_layout(1366, 768)
-    tk_root.geometry(f"{layout.width}x{layout.height}+0+0")
-    tk_root.deiconify()
+    show_test_root(tk_root, layout.width, layout.height)
     yield tk_root
     tk_root.withdraw()
 

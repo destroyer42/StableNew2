@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import checkout_write_guard
+from tests.helpers import checkout_write_guard, hidden_test_windows
 
 
 # --- Quiet local runs (PR-DEVEX-QUIET-LOCAL-TESTS) ----------------------------------------
@@ -33,6 +33,13 @@ def _load_quiet_run():
 
 
 _QUIET_RUN = _load_quiet_run()
+
+# --- Test windows never show on screen (PR-TEST-HIDDEN-WINDOWS) ------------------------------------
+# Every tk.Tk/tk.Toplevel a test creates is fully transparent on Windows: still mapped for
+# visibility assertions, never visible or flickering, even outside the private desktop above.
+# Installed at import so module-level and app-built windows are covered too. See the helper's
+# docstring for the opt-outs (STABLENEW_TESTS_VISIBLE=1, the physical desktop lane).
+hidden_test_windows.install()
 
 
 @pytest.hookimpl(tryfirst=True)
