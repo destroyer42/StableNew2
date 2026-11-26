@@ -97,6 +97,18 @@ def _instant(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def new_device_id() -> str:
+    """A random device id that never starts with ``-``.
+
+    ``secrets.token_urlsafe`` can start with ``-`` (about 1 in 64), which the admin command ``revoke <id>`` would read
+    as an option. Every id still matches the schema's ``^[A-Za-z0-9_-]{8,64}$``.
+    """
+    while True:
+        candidate = secrets.token_urlsafe(12)
+        if not candidate.startswith("-"):
+            return candidate
+
+
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -498,7 +510,7 @@ class Store:
                 raise GatewayError(403, "device_limit")
             token = secrets.token_urlsafe(32)
             device = Device(
-                secrets.token_urlsafe(12),
+                new_device_id(),
                 match["label"] or label,
                 tuple(json.loads(match["scopes"])),
             )

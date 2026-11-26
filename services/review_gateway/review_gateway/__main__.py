@@ -29,7 +29,10 @@ def _parser() -> argparse.ArgumentParser:
         ("purge", "run retention now"),
     ):
         commands.add_parser(name, help=text)
-    revoke = commands.add_parser("revoke", help="refuse a phone from its next request")
+    revoke = commands.add_parser(
+        "revoke",
+        help="refuse a phone from its next request (for an id starting with '-', use: revoke -- ID)",
+    )
     revoke.add_argument("device_id")
     return parser
 
