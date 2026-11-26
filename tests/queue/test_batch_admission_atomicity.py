@@ -484,18 +484,18 @@ def test_queue_reorder_notifies_listeners_after_releasing_mutation_locks(tmp_pat
 
     def listener() -> None:
         outcome = []
-        for lock in (stack.queue._admission_lock, stack.queue._lock):
+        for lock in (stack.queue._admission_lock, stack.queue._transition_lock, stack.queue._lock):
             acquired = lock.acquire(blocking=False)
             if acquired:
                 lock.release()
             outcome.append(acquired)
-        free_when_notified.append((outcome[0], outcome[1]))
+        free_when_notified.append(tuple(outcome))
 
     stack.queue.register_state_listener(listener)
 
     assert getattr(stack.queue, operation)(target) is True
 
-    assert free_when_notified == [(True, True)]  # listeners never run under queue locks
+    assert free_when_notified == [(True, True, True)]  # listeners never run under queue locks
 
 
 @pytest.mark.parametrize('startup', ['auto', 'continuous', 'immediate'])

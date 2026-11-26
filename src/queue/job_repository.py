@@ -82,6 +82,22 @@ _ALLOWED_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
 }
 
 
+def _newest_status_clause(statuses: Sequence[JobStatus]) -> str:
+    """``WHERE`` text for a newest-first job-id list filtered to ``statuses`` (one ``?`` per status).
+
+    Terminal rows are almost the whole table. Filtered through an index whose leading column is ``status``, SQLite
+    must then sort every matching row by ``created_at``, and reading ``created_at`` walks each row's ``njr_snapshot``
+    overflow chain: about 1.4 s warm and 19 s cold on the 4.9 GB workstation repository, under the shared lock, on
+    every History refresh. ``+status`` keeps that index out of the plan, so the query walks ``idx_jobs_created_at``
+    newest first and stops after ``LIMIT`` matches. Non-terminal filters (QUEUED, RUNNING) match few rows, so the
+    status index stays the better plan for them.
+    """
+
+    marks = ",".join("?" for _ in statuses)
+    column = "+status" if all(status in _TERMINAL_STATUSES for status in statuses) else "status"
+    return f" WHERE {column} IN ({marks})"
+
+
 class JobRepositoryError(RuntimeError):
     """Base error for durable repository operations."""
 
@@ -849,7 +865,7 @@ class JobRepository(JobHistoryStore):
         # row's large ``njr_snapshot`` through the sort of the whole table.
         newest = "SELECT job_id FROM jobs"
         if status is not None:
-            newest += " WHERE status = ?"
+            newest += _newest_status_clause((status,))
             parameters.append(status.value)
         newest += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
         parameters.extend([max(0, int(limit)), max(0, int(offset))])
@@ -862,11 +878,12 @@ class JobRepository(JobHistoryStore):
         self, *, statuses: set[JobStatus] | None = None, limit: int = 50,
         stop: threading.Event | None = None,
     ) -> list[JobHistoryEntry]:
-        wanted = tuple(status.value for status in statuses or ())
+        selected = tuple(sorted(statuses or (), key=lambda status: status.value))
+        wanted = tuple(status.value for status in selected)
         parameters: list[Any] = []
         newest = "SELECT job_id FROM jobs"
         if wanted:
-            newest += f" WHERE status IN ({','.join('?' for _ in wanted)})"
+            newest += _newest_status_clause(selected)
             parameters.extend(wanted)
         newest += " ORDER BY created_at DESC LIMIT ?"
         parameters.append(max(0, int(limit)))
