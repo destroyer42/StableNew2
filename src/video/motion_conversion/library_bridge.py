@@ -24,6 +24,7 @@ from src.video.motion_conversion.conversion_service import (
     read_provenance,
     verify_published,
 )
+from src.video.motion_conversion.representation import movement_key_of_record
 from src.video.motion_library.importer import ImportOutcome, Inspector, import_video
 from src.video.motion_library.models import (
     FRAMING_FULL_BODY,
@@ -62,6 +63,7 @@ def derivation_from_record(record: dict[str, Any], provenance_path: str) -> Deri
         blender_version=str(tools["blender"].get("version", "")),
         script_version=str(tools.get("script_version", "")),
         character_mode=str(record["character"].get("mode", "")),
+        movement_key=movement_key_of_record(record),
     )
 
 

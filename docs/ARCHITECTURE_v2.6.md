@@ -626,6 +626,17 @@ and selection generation. A pending receipt can be reconciled only under the own
 the native queue and repository still resolve admission. See the
 [Operator Site runbook](runbooks/stablenew_operator_site.md)
 
+Approved design, not yet built (owner decisions D1–D9, 2026-11-25): a self-hosted **phone review gateway** replaces
+the hosted relay for phone review. It is a separate deployable (`services/review_gateway/`) in its own Proxmox
+container with no GPU, reached by the phone only over Tailscale. It is a projection and outbox, never an authority. The
+PC syncs to it outbound only: a sync worker publishes items from the Output Library index by library id and SHA-256, and
+pulls Keep, Delete, Favorite and later action requests, which it validates and applies through the native review,
+archive and `PhoneQueueAdmission` → `JobService.submit_njrs` paths. The gateway uploads keepers to Immich. A later
+touch-up lane (D8) dispatches compiled jobs from the one queue to Forge on the AI worker through the PC's SSH forward;
+it changes queue concurrency and needs owner approval of the amended invariant text first. Contract, decisions and
+security controls: [RG-100](work_packages/RG-100_phone_review_gateway.md); sync payloads:
+[`stablenew.review-gateway-sync.v1`](schemas/stablenew.review-gateway-sync.v1.json).
+
 The queue stack is constructed in one place: `src/app/runtime_stack.py` builds the
 `JobRepository`, `JobQueue`, `SingleNodeJobRunner` and `JobService`, called from
 `JobExecutionController` and `PipelineController` in their existing order. The frozen

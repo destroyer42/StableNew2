@@ -64,7 +64,7 @@ def gpu_state() -> dict[str, Any]:
         "vram_used_mib": int(used),
         "vram_free_mib": int(free),
         "utilization_pct": int(util),
-        "temperature_c": int(temp),
+        "temperature_c": float(temp),
     }
 
 

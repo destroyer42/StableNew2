@@ -1,7 +1,7 @@
 # Controlled Motion Generation roadmap
 
 Status: **official development direction** for the controlled-motion part of StableNew's video capability. Phases 1
-(PR-VID-MOTION-400) and 2 (PR-VID-MOTION-410) are implemented; every later phase is a planning identifier only and needs
+(PR-VID-MOTION-400), 2 (PR-VID-MOTION-410), 3 (PR-VID-MOTION-420) and 4 (PR-VID-MOTION-430, offline) are implemented; every later phase is a planning identifier only and needs
 its own work package, contract check and, where it says so, an owner decision.
 
 This document supplements `docs/audits/2026-10-20_video_experience_roadmap.md`. It does not replace broader video
@@ -105,6 +105,16 @@ interchangeable.
 
 Exit criterion: candidate workflows have clearly characterized capability, resource and motion-fidelity evidence.
 Promotion remains an explicit owner decision.
+
+Status: implemented offline (CPU, deterministic tests; no physical run). Delivered: a conditioning contract derived from each registered graph
+(`src/video/workflow_conditioning.py`), related character / silhouette / skeleton variants with verified movement identity, effective-driver
+conditioning inspection with a graph-order preview whose edge detector matches the pinned Canny on recorded vectors (still labelled approximate),
+engine compatibility in the readiness details, multi-engine and representation comparison kinds with engine and representation summaries, a Fun
+Control 1.1.0 qualification proposal (unpinned) beside the unchanged 1.0.0 plan, four unexecuted staged campaign templates (30 jobs before reuse)
+and a conditional assessment of three alternative approaches. The Phase 2 and 3 evidence it builds on is mostly unrated, and no Phase 4 physical
+evidence exists, so the exit criterion (characterized motion-fidelity and resource evidence) is **not** met. Record:
+`PR-VID-MOTION-430_Conditioning_and_Engine_Evaluation.md`; guide: `docs/runbooks/motion_conditioning_and_engine_evaluation.md`; assessment:
+`docs/assessments/2026-11-25_vid_motion_430_alternative_conditioning_candidates.md`.
 
 ### Phase 5 - PR-VID-MOTION-440: Reusable Motion Recipes
 

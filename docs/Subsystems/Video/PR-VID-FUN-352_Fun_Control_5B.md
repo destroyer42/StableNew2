@@ -24,6 +24,9 @@ and hosted CI require separate authorization.
 
 ## Registered contract
 
+> Version note (PR-VID-MOTION-430): this section describes **1.0.0**, which stays immutable and blocked. The current admission policy is the 1.1.0 owner trial below; living docs and
+> `src/video/workflow_conditioning.py` state the per-version truth.
+
 `wan22_fun_control_5b_canny_i2v_v1@1.0.0`, backend `comfy`, **experimental**.
 It uses a reference image for appearance and the ordered Canny edges of an accepted driving
 clip for movement. It does not guarantee identity, exact first-frame pixels, end anchors,

@@ -25,8 +25,9 @@ from src.video.video_eval_integrity import (
     PairIntegrity,
     classify_group,
     classify_pair,
+    classify_representation_group,
 )
-from src.video.video_eval_motion import record_identity
+from src.video.video_eval_motion import as_mapping, record_identity
 from src.video.video_eval_motion_evidence import MotionCellContext
 from src.video.video_eval_rubric import (
     ACTION_KEYS,
@@ -521,6 +522,22 @@ class CrossSubjectGroup:
 
 
 @dataclass(frozen=True)
+class RepresentationGroupResult:
+    """Cases that share a source image, arm and motion category but use different drivers (PR-VID-MOTION-430).
+
+    Controlled only when every driver is a verified representation of one movement; otherwise the integrity class says the
+    comparison is exploratory (for example unrelated footage against a skeleton render)."""
+
+    source_sha256: str
+    arm_id: str
+    category: str
+    case_ids: tuple[str, ...]
+    representations: tuple[str, ...]
+    integrity: GroupIntegrity
+    kind: ComparisonKind = ComparisonKind.REPRESENTATION
+
+
+@dataclass(frozen=True)
 class Assessment:
     cells: tuple[CellAssessment, ...] = ()
     comparisons: tuple[PairComparison, ...] = ()
@@ -529,6 +546,7 @@ class Assessment:
     readiness_reasons: tuple[str, ...] = ()
     baseline_arm: str = ""
     cross_subject: tuple[CrossSubjectGroup, ...] = ()
+    representation_groups: tuple[RepresentationGroupResult, ...] = ()
 
     def cell(self, case_id: str, arm_id: str) -> CellAssessment | None:
         return next((c for c in self.cells if (c.case_id, c.arm_id) == (case_id, arm_id)), None)
@@ -568,6 +586,62 @@ def _cross_subject_groups(
         )
         groups.append(
             CrossSubjectGroup(identity, arm_id, tuple(m.case_id for m in members), integrity)
+        )
+    return tuple(groups)
+
+
+def _representation_groups(
+    manifest: Mapping[str, Any], assessed: Sequence[CellAssessment]
+) -> tuple[RepresentationGroupResult, ...]:
+    """Group motion cells by (source image, arm, category) when they bind more than one distinct driver."""
+
+    cases = {str(c.get("case_id")): c for c in manifest.get("cases", []) if isinstance(c, Mapping)}
+    grouped: dict[tuple[str, str, str], list[CellAssessment]] = {}
+    for cell in assessed:
+        record = cases.get(cell.case_id, {}).get("motion")
+        if cell.motion is None or not isinstance(record, Mapping):
+            continue
+        key = (
+            cell.motion.source_sha256 or cell.case_id,
+            cell.arm_id,
+            str(record.get("category") or ""),
+        )
+        grouped.setdefault(key, []).append(cell)
+    groups: list[RepresentationGroupResult] = []
+    for (source, arm_id, category), members in grouped.items():
+        drivers = {m.motion.settings.get("driver_original_sha256") for m in members if m.motion}
+        if len(drivers) < 2:
+            continue
+        blocks: dict[str, Mapping[str, Any] | None] = {}
+        for m in members:
+            record = cases.get(m.case_id, {}).get("motion")
+            library = as_mapping(as_mapping(as_mapping(record).get("driving")).get("library_asset"))
+            block = library.get("representation")
+            blocks[m.case_id] = block if isinstance(block, Mapping) else None
+        problems = [m.integrity for m in members if m.integrity and not m.integrity.comparable]
+        reasons = [
+            r
+            for m in members
+            for r in m.integrity_reasons
+            if m.integrity and not m.integrity.comparable
+        ]
+        integrity = classify_representation_group(
+            {m.case_id: m.motion.settings for m in members if m.motion is not None},
+            blocks,
+            {m.case_id: m.motion.source_sha256 for m in members if m.motion is not None},
+            cell_problems=[p for p in problems if p is not None],
+            problem_reasons=reasons,
+        )
+        kinds = sorted({str(b.get("representation")) for b in blocks.values() if b})
+        groups.append(
+            RepresentationGroupResult(
+                source,
+                arm_id,
+                category,
+                tuple(m.case_id for m in members),
+                tuple(kinds),
+                integrity,
+            )
         )
     return tuple(groups)
 
@@ -723,6 +797,7 @@ def project_assessment(
         readiness_reasons=reasons,
         baseline_arm=baseline_arm,
         cross_subject=_cross_subject_groups(manifest, assessed),
+        representation_groups=_representation_groups(manifest, assessed),
     )
 
 
@@ -778,6 +853,10 @@ def assessment_payload(assessment: Assessment) -> dict[str, Any]:
     }
     if assessment.cross_subject:
         payload["cross_subject_groups"] = [_plain(asdict(g)) for g in assessment.cross_subject]
+    if assessment.representation_groups:
+        payload["representation_groups"] = [
+            _plain(asdict(g)) for g in assessment.representation_groups
+        ]
     return payload
 
 
