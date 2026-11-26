@@ -9,7 +9,14 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .app import Gateway
-from .config import ConfigError, certificate_fingerprint, create_secret, load_settings
+from .config import (
+    ConfigError,
+    Settings,
+    certificate_fingerprint,
+    create_secret,
+    load_settings,
+)
+from .immich import MINIMUM_MAJOR, PERMISSIONS, ImmichClient, ImmichError, read_key
 from .server import serve
 
 DEFAULT_CONFIG = "/etc/review-gateway/config.toml"
@@ -27,11 +34,50 @@ def _parser() -> argparse.ArgumentParser:
         ("devices", "list enrolled phones"),
         ("status", "counts and cache size"),
         ("purge", "run retention now"),
+        ("immich-check", "check the Immich address, key and permissions; changes nothing"),
     ):
         commands.add_parser(name, help=text)
-    revoke = commands.add_parser("revoke", help="refuse a phone from its next request")
+    revoke = commands.add_parser(
+        "revoke",
+        help="refuse a phone from its next request (for an id starting with '-', use: revoke -- ID)",
+    )
     revoke.add_argument("device_id")
     return parser
+
+
+def _immich_check(settings: Settings) -> int:
+    path = settings.immich_key_path
+    try:
+        key = read_key(path)
+    except (OSError, ValueError) as error:
+        print(f"Immich key not usable: {error}")
+        return 1
+    if not settings.immich_url or key is None:
+        print(f"Immich is not configured: set immich_url and put the API key in {path}")
+        return 1
+    try:
+        client = ImmichClient(settings.immich_url, key)
+        version = client.version()
+        print(f"Immich {'.'.join(map(str, version))}")
+        if version[0] < MINIMUM_MAJOR:
+            print(f"version {MINIMUM_MAJOR} or newer is required")
+            return 1
+        granted = set(client.key_permissions())
+    except ImmichError as error:
+        print(f"Immich check failed: {error.code}")
+        return 1
+    needed = ", ".join(PERMISSIONS)
+    if "all" in granted:
+        print(f"the key has all permissions; replace it with one that has only: {needed}")
+        return 1
+    missing, extra = sorted(set(PERMISSIONS) - granted), sorted(granted - set(PERMISSIONS))
+    if missing:
+        print(f"missing: {', '.join(missing)}")
+    if extra:
+        print(f"not needed: {', '.join(extra)}")
+    if not (missing or extra):
+        print(f"the key has exactly the needed permissions: {needed}")
+    return 1 if missing or extra else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -50,6 +96,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{'created' if created else 'kept the existing'} sync secret: {settings.secret_file}"
             )
             return 0
+        if args.command == "immich-check":
+            return _immich_check(settings)
         if args.command == "fingerprint":
             print(certificate_fingerprint(settings.sync_tls_cert))
             return 0

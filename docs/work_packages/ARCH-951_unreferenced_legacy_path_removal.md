@@ -1,6 +1,6 @@
 # ARCH-951 — Remove unreferenced legacy execution and submission paths
 
-Status: **Tier A IMPLEMENTED (pull request open, merge pending); tier B DEFERRED to ARCH-951B under a revised
+Status: **Tier A IMPLEMENTED and merged (PR #284); tier B DEFERRED to ARCH-951B under a revised
 acceptance contract (below).** Produced by the design package ARCH-DESIGN-950
 ([assessment](../assessments/2026-11-10_arch_design_950_coordination_hotspot_decomposition.md),
 [symbol inventory](../assessments/evidence/arch_design_950/STRUCTURAL_INVENTORY.md)). Tier A authorized by the owner on

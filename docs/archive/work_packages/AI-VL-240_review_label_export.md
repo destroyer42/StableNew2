@@ -5,8 +5,8 @@
 - Outcome: a read-only exporter, `python -m tools.qualification.vl240`, that turns the operator's existing human Review
   evidence into one real-image evaluation export (schema `stablenew.vl240.review_export/1`) with a hash manifest, plus an
   operator guide (`docs/runbooks/ai_visual_real_set.md`). The set is the human-labelled real-image evidence that the
-  [visual evaluation contract](../Subsystems/AiAssist/PR-AI-VL-220_Visual_Evaluation_Contract.md) and the
-  [roadmap](../Subsystems/AiAssist/INTELLIGENT_IMAGE_REVIEW_ROADMAP.md) require before any visual candidate can be judged.
+  [visual evaluation contract](../../Subsystems/AiAssist/PR-AI-VL-220_Visual_Evaluation_Contract.md) and the
+  [roadmap](../../Subsystems/AiAssist/INTELLIGENT_IMAGE_REVIEW_ROADMAP.md) require before any visual candidate can be judged.
 - In scope: `tools/qualification/vl240/`, `tests/tools/test_ai_vl240_export.py`, this document, the runbook, one line each in
   `STATUS.md` and `docs/CODEX_MAP.md`.
 - Explicit exclusions: any change under `src/`; any write to Review, Learning, History or queue state; running a model, the
@@ -133,7 +133,7 @@ measures, 1-5 ratings and path-only records are never exported.
 None of these was added to `src/` by this package. Each needs its own authorization (a Review behavior change that stores a
 new kind of operator evidence). One change, "Save inspection", closes the first four together.
 
-**Status (2026-11-17): the first four rows are closed by AI-VL-243** (`docs/work_packages/AI-VL-243_save_inspection.md`, owner
+**Status (2026-11-17): the first four rows are closed by AI-VL-243** (`docs/archive/work_packages/AI-VL-243_save_inspection.md`, owner
 decision D25). The record that was implemented differs from the sketch below: it is a Review evidence kind `review_inspection`
 (source `review_tab_inspection`, `src/review/review_evidence.py`) written through the same `LearningRecordWriter` by Inspect &
 Improve's **Save inspection** / **No defect seen**, with `verdict`, `findings[]` of category, region, certainty and optional

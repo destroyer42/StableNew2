@@ -18,6 +18,7 @@ SYNC_ROUTES = (
     ("POST", "/sync/v1/acknowledgements"),
     ("POST", "/sync/v1/pairing-offers"),
     ("POST", "/sync/v1/device-revocations"),
+    ("GET", "/sync/v1/immich-receipts"),
 )
 
 
