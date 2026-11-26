@@ -1,7 +1,9 @@
 # DEPLOY-PROXMOX — Reproducible deploys to the Proxmox containers: design, threat model and owner decisions
 
-Status: **design proposed, owner decisions open.** Nothing in this package changes Proxmox, a firewall, an SSH key or a
-container. Every step that does is an owner-run step with exact commands, listed per slice.
+Status: **design accepted, not built.** The owner answered on 2026-11-26: "2. Remote-deploy: switch on by default. All
+others approved." Decisions 1 and 3–9 stand as recommended; decision 2 is changed (the switch is on by default). Nothing
+in this package changes Proxmox, a firewall, an SSH key or a container. Every step that does is an owner-run step with
+exact commands, listed per slice.
 
 ## Objective
 
@@ -115,9 +117,10 @@ Exit codes are fixed per outcome, so the PC tool and scripts can tell them apart
 
 ### The remote trigger for CT 120 (option C)
 
-- **Switch.** `/etc/review-gateway/remote-deploy`, root-owned 0644, `enabled` or absent. Only
-  `review-gateway-deploy remote on|off` at the console changes it; off by default. Neither the service user nor the PC
-  can turn it on. It mirrors LAUNCH-UPDATE's PC-local "Allow remote update".
+- **Switch.** `/etc/review-gateway/remote-deploy`, root-owned 0644, holding `enabled` or `disabled`. Only
+  `review-gateway-deploy remote on|off` at the console changes it. **On by default (decision 2):** the installer writes
+  `enabled` when the file does not exist and never overwrites it, so `remote off` survives every upgrade. A missing or
+  unreadable file after install counts as off. Neither the service user nor the PC can change it.
 - **Route.** `POST /sync/v1/deploy-requests` `{request_id, target_sha}` and `GET /sync/v1/deploy-status`, on the sync
   listener only (same secret, same pinned certificate). The schema gains `deploy_request` and `deploy_status`
   (additive, no version bump; coordinated with LAUNCH-UPDATE-2's bump). The service refuses with
@@ -170,7 +173,7 @@ commits); a process running as the owner on the PC (holds the sync secret); an a
 | T1 | Installing code that never went through `main` (fork SHA, typo) | Steps 2–3 and 5 against GitHub; fixed URLs; the SHA is the only input | GitHub itself is trusted (as today). |
 | T2 | Downgrade to an older, vulnerable `main` commit by a remote requester | Step 4 refuses anything that is not a descendant of the deployed commit; downgrades only at the console | None remote. |
 | T3 | Command or path injection through the request | The request holds two fields; only a validated 40-hex SHA is used, never as a ref name, path, option or shell string; argument-list process calls; `install.sh` takes no request values | None. |
-| T4 | Service user abuses the request file to attack root (symlink, huge file, race) | Root-owned inbox directory, `O_NOFOLLOW`, regular file, 512-byte cap, delete after read, root never writes there; the switch is re-read by root | With service-user code execution and the switch on, an attacker can make the gateway update to the current `main` and restart. Accepted (decision 2). |
+| T4 | Service user abuses the request file to attack root (symlink, huge file, race) | Root-owned inbox directory, `O_NOFOLLOW`, regular file, 512-byte cap, delete after read, root never writes there; the switch is re-read by root | With service-user code execution and the switch on (the default), an attacker can make the gateway update to the current, signed `main` and restart, never to other code. Accepted by the owner (decision 2). |
 | T5 | A process on the PC requests deploys | Same as T4: forward-only merged `main`, switch on the console | Availability (a restart, at most seconds). |
 | T6 | Malicious archive content | `tarfile` member allowlist (F5); extraction into a new root-only staging directory | Content is whatever `main` holds; equal to the manual route. |
 | T7 | A broken release leaves the phone without a gateway | Health check of both listeners and the schema; automatic rollback with database restore when tables changed | A release that passes the checks and fails later stays live; `review-gateway-deploy rollback` at the console. |
@@ -181,24 +184,26 @@ commits); a process running as the owner on the PC (holds the sync secret); an a
 
 ## Owner decisions
 
-| # | Decision | Recommendation |
+Answered by the owner on 2026-11-26, in his words: "2. Remote-deploy: switch on by default. All others approved."
+
+| # | Decision | Answer |
 |---|---|---|
-| 1 | CT 120 route. | The console command (A) as the base, and the sync-channel trigger (C) for the PC. Not SSH into CT 120 (B). |
-| 2 | The remote-deploy switch for CT 120. | A root-owned switch only the console can change, off by default. You turn it on once with `review-gateway-deploy remote on`. Accept the residual that, with the switch on, the PC or a compromised gateway service can make the gateway update to the current `main` and restart, never to other code. |
-| 3 | Which commits. | Only commits on `main`. Remote requests forward only; downgrades and redeploys of older commits only at the console. |
-| 4 | Require GitHub's merge signature on the target commit. | Yes. Every merge through a PR has it, so it costs nothing and shuts out commits pushed straight to `main`. |
-| 5 | Automatic rollback. | Yes, after a failed health check, restoring the pre-deploy database backup only when the tables changed (risk T8). |
-| 6 | When sessions may deploy the gateway. | A standing OK: while the switch is on, a session may deploy each merged gateway change and reports the outcome to you. Alternative: ask you in chat each time. |
-| 7 | Schema changes. | Warn, don't block: the deploy goes ahead and says the PC app needs the same update. |
-| 8 | CT 110 now. | A manifest of Ollama's version, limits and model digests in the repository, and a read-only PC check through the existing tunnel. No deployer and no new key until Forge (RG-145); Forge's trigger is decided there. |
-| 9 | CT 110's firewall is off (F6). | A separate small package: a `110.fw` allowing SSH from the PC only, with the tunnel check after it. |
+| 1 | CT 120 route. | **Approved:** the console command (A) as the base, and the sync-channel trigger (C) for the PC. Not SSH into CT 120 (B). |
+| 2 | The remote-deploy switch for CT 120. | **Changed by the owner: on by default.** The root-owned switch still exists and only the console changes it (`review-gateway-deploy remote off` turns it off, and an upgrade never turns it back on). **Residual accepted:** with it on, the PC or a compromised gateway service can make the gateway update to the current, signed `main` and restart, never to other code. (Recommended was off by default.) |
+| 3 | Which commits. | **Approved:** only commits on `main`. Remote requests forward only; downgrades and redeploys of older commits only at the console. |
+| 4 | Require GitHub's merge signature on the target commit. | **Approved:** yes, verified and committed by GitHub. |
+| 5 | Automatic rollback. | **Approved:** after a failed health check, restoring the pre-deploy database backup only when the tables changed (risk T8). |
+| 6 | When sessions may deploy the gateway. | **Approved:** a standing OK. While the switch is on, a session may deploy each merged gateway change without asking each time, and reports each outcome to the owner. |
+| 7 | Schema changes. | **Approved:** warn, don't block; the deploy goes ahead and says the PC app needs the same update. |
+| 8 | CT 110 now. | **Approved:** a manifest of Ollama's version, limits and model digests in the repository, and a read-only PC check through the existing tunnel. No deployer and no new key until Forge (RG-145); Forge's trigger is decided there. |
+| 9 | CT 110's firewall is off (F6). | **Approved:** a separate small package, a `110.fw` allowing SSH from the PC only, with the tunnel check after it. |
 
 ## Delivery slices
 
 | Slice | Scope | Owner-run steps |
 |---|---|---|
 | DEPLOY-1 | `services/deploy/stablenew_deploy.py` (console commands, steps 1–11), `install.sh` records `source.json` and installs the wrapper, the runbook section, tests. | Once: the manual archive install of the DEPLOY-1 merge (today's section 9 lines), then `review-gateway-deploy status`. From then on: `pct exec 120 -- /usr/local/sbin/review-gateway-deploy <sha>`. |
-| DEPLOY-2 | Sync routes and schema, the inbox and path unit (installed by `install.sh`, disabled until the switch is on), the PC tool, tests. After LAUNCH-UPDATE-2's schema change or coordinated with it. | `pct exec 120 -- /usr/local/sbin/review-gateway-deploy <DEPLOY-2 sha>`, then `... remote on`. |
+| DEPLOY-2 | Sync routes and schema, the inbox and path unit (installed by `install.sh`), the PC tool, tests. After LAUNCH-UPDATE-2's schema change, sequenced by the orchestrator. | `pct exec 120 -- /usr/local/sbin/review-gateway-deploy <DEPLOY-2 sha>`. The switch is already on (decision 2); `... remote off` turns it off. |
 | DEPLOY-3 | `services/ai_worker/manifest.json`, `tools/ai_worker_check.py`, runbook, tests. | Read the digests and limits on CT 110 once; a PR records them. |
 
 ## Implementation acceptance contract
