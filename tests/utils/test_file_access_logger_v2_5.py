@@ -20,3 +20,10 @@ def test_file_access_logger_writes_entry(tmp_path: Path) -> None:
     entry = json.loads(lines[0])
     assert entry["path"] == str(target.resolve())
     assert entry["reason"] == "scan"
+
+
+def test_constructing_the_logger_creates_no_folder(tmp_path: Path) -> None:
+    # N11: the module-level logger points at ``logs/`` relative to the working directory; importing must not create it.
+    log_path = tmp_path / "logs" / "file.log"
+    FileAccessLogger(log_path)
+    assert not log_path.parent.exists()

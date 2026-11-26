@@ -1,6 +1,6 @@
 """Fail a test that writes into or deletes from the checkout's own runtime folders.
 
-In the owner's checkout ``output/`` is the live Output folder, and a relative path in a test (or a ``Mock`` used as a
+In the owner's checkout ``output/`` is the live Output folder and ``logs/`` the live log, and a relative path in a test (or a ``Mock`` used as a
 path) resolves against the checkout. The guard is a Python audit hook, so it sees only the pytest process: an app
 running from the same checkout cannot trip it, and neither can a child process a test starts.
 
@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-GUARDED_FOLDERS = ("output", "outdir", "test_output", "MagicMock")
+# ``logs`` is the live app log (N11): ``logs/stablenew.log.jsonl`` and the per-launch WebUI and Comfy logs.
+GUARDED_FOLDERS = ("output", "outdir", "test_output", "MagicMock", "logs")
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT
 # event -> (position of a path it changes, position of the ``dir_fd`` that path is relative to)
 _CHANGED_PATHS: dict[str, tuple[tuple[int, int | None], ...]] = {

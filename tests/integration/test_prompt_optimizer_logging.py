@@ -16,7 +16,7 @@ def test_prompt_optimizer_logs_before_after(caplog) -> None:
         }
     }
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         result, _, analysis = pipeline._run_prompt_optimizer(
             positive_prompt="masterpiece, beautiful woman",
             negative_prompt="watermark, blurry",
@@ -27,5 +27,9 @@ def test_prompt_optimizer_logs_before_after(caplog) -> None:
     assert result.positive.optimized_prompt == "beautiful woman, masterpiece"
     assert analysis.mode == "recommend_only_v1"
     assert "PROMPT OPTIMIZER ENABLED" in caplog.text
-    assert "ORIGINAL POSITIVE:" in caplog.text
-    assert "OPTIMIZED NEGATIVE:" in caplog.text
+    # N11: the before/after prompt text is DEBUG only, so it never reaches the INFO JSONL log.
+    debug = [r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG]
+    assert any("ORIGINAL POSITIVE:" in message for message in debug)
+    assert any("OPTIMIZED NEGATIVE:" in message for message in debug)
+    visible = [r.getMessage() for r in caplog.records if r.levelno >= logging.INFO]
+    assert not any("beautiful woman" in message or "watermark" in message for message in visible)

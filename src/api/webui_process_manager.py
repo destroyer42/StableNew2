@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.api.process_exit_cause import describe_exit_cause
 from src.api.webui_runtime_identity import (
     FORGE_WEBUI_IDENTITY,
     explicit_webui_base_url,
@@ -168,6 +169,13 @@ class WebUIProcessManager:
         self._owns_process = False
         self._launch_session_command: tuple[str, ...] | None = None
         self._last_exit_code: int | None = None
+        # N11: why the last owned process ended on its own (None after a deliberate stop or while it runs), and the
+        # structured record of that exit; reported once per process.
+        self._last_exit_cause: str | None = None
+        self._unexpected_exit: dict[str, Any] | None = None
+        self._exit_reported_pid: int | None = None
+        # True while stop_webui is ending the process, so its exit is a stop and not a crash.
+        self._stopping = False
         # Counts stop_webui calls that terminated a live owned process, so a startup wait can tell a deliberate
         # release (e.g. a runtime transition ahead of a ComfyUI job) from a crash or a slow boot.
         self._deliberate_stop_count = 0
@@ -279,12 +287,72 @@ class WebUIProcessManager:
         return {
             "pid": getattr(process, "pid", None),
             "exit_code": exit_code,
+            "exit_cause": describe_exit_cause(
+                exit_code,
+                stderr_tail=str(tails.get("stderr_tail") or ""),
+                stdout_tail=str(tails.get("stdout_tail") or ""),
+            ),
             "runtime_identity": self.runtime_identity,
             "launch_profile": self.get_launch_profile(),
             "endpoint": self._configured_base_url(),
             "stdout_tail": str(tails.get("stdout_tail") or "")[-STARTUP_DIAGNOSTIC_TAIL_CHARS:],
             "stderr_tail": str(tails.get("stderr_tail") or "")[-STARTUP_DIAGNOSTIC_TAIL_CHARS:],
         }
+
+    def observe_unexpected_exit(self) -> dict[str, Any] | None:
+        """Record, once, why the owned process ended on its own; ``None`` while it runs or when StableNew stopped it.
+
+        The record goes to the log at ERROR as a structured ``webui_process_exited`` event, and stays readable through
+        ``get_status()["last_exit_cause"]`` and ``unexpected_exit_since`` until the next launch.
+        """
+
+        process = self._process
+        if process is None or self._stopping or not self._owns_process:
+            return None
+        try:
+            exit_code = process.poll()
+        except OSError:
+            return None
+        if exit_code is None:
+            return None
+        pid = getattr(process, "pid", None)
+        if self._exit_reported_pid == pid and self._unexpected_exit is not None:
+            return self._unexpected_exit
+        tails = self.get_recent_output_tail(max_lines=STARTUP_DIAGNOSTIC_TAIL_LINES)
+        cause = describe_exit_cause(
+            exit_code,
+            stderr_tail=str(tails.get("stderr_tail") or ""),
+            stdout_tail=str(tails.get("stdout_tail") or ""),
+        )
+        record = {
+            "pid": pid,
+            "exit_code": exit_code,
+            "exit_cause": cause,
+            "runtime_identity": self.runtime_identity,
+            "launch_profile": self.get_launch_profile(),
+            "observed_at_monotonic": time.monotonic(),
+            "stderr_log_path": str(self._stderr_log_path) if self._stderr_log_path else "",
+        }
+        self._exit_reported_pid = pid
+        self._unexpected_exit = record
+        self._last_exit_cause = cause
+        log_with_ctx(
+            logger,
+            logging.ERROR,
+            f"Managed WebUI process exited unexpectedly (pid {pid}): {cause}",
+            ctx=LogContext(subsystem="webui_process"),
+            extra_fields={"event": "webui_process_exited", **record},
+        )
+        return record
+
+    def unexpected_exit_since(self, started_monotonic: float) -> dict[str, Any] | None:
+        """The unexpected exit observed at or after ``started_monotonic`` (a job's start), if any."""
+
+        self.observe_unexpected_exit()
+        record = self._unexpected_exit
+        if record is None or float(record.get("observed_at_monotonic", 0.0)) < started_monotonic:
+            return None
+        return record
 
     def _build_launch_container(self, *, required: bool) -> ProcessContainer:
         """A fresh, anonymous container for exactly one launch.
@@ -799,6 +867,8 @@ class WebUIProcessManager:
         Anything still alive inside that launch's job object is this manager's own descendant and is terminated with
         it; a later launch can never inherit, capture or be killed through the old container."""
         process = self._process
+        if process is not None and process.poll() is not None:
+            self.observe_unexpected_exit()
         self._teardown_process_container(terminate_owned=True)
         if process is not None and process.poll() is not None:
             self._stop_output_capture()
@@ -957,6 +1027,7 @@ class WebUIProcessManager:
             process.terminated = False
         if process.poll() is not None:
             logger.info("stop_webui called but process already exited")
+            self.observe_unexpected_exit()
             self._teardown_process_container(terminate_owned=True)
             self._stop_output_capture()
             self._finalize_process(process)
@@ -967,7 +1038,16 @@ class WebUIProcessManager:
 
         owned_descendants = self._owned_descendants(pid)
         self._deliberate_stop_count += 1
+        self._stopping = True
+        try:
+            return self._stop_live_process(process, pid, owned_descendants, grace_seconds)
+        finally:
+            self._stopping = False
 
+    def _stop_live_process(
+        self, process: subprocess.Popen, pid: int | None, owned_descendants: list[Any], grace_seconds: float
+    ) -> bool:
+        """The deliberate part of stop_webui: terminate, wait, kill, release; its exit is logged as a stop."""
         # Try graceful termination first
         try:
             process.terminate()
@@ -1255,7 +1335,11 @@ class WebUIProcessManager:
         except Exception:
             self._last_exit_code = None
         finally:
-            self._log_process_crash_tail(self._last_exit_code)
+            if self._stopping:
+                self._last_exit_cause = None
+                logger.info("WebUI process stopped by StableNew (exit code %s)", self._last_exit_code)
+            else:
+                self._log_process_crash_tail(self._last_exit_code)
             self._process = None
             self._pid = None
             self._owns_process = False
@@ -1273,6 +1357,7 @@ class WebUIProcessManager:
             "command": list(self._config.command),
             "working_dir": self._config.working_dir,
             "last_startup_failure": self._last_startup_failure,
+            "last_exit_cause": self._last_exit_cause,
         }
 
     def _configured_base_url(self) -> str:
@@ -1324,9 +1409,13 @@ class WebUIProcessManager:
         stdout_tail = "\n".join(self._stdout_tail) if self._stdout_tail else "<empty>"
         stderr_tail = "\n".join(self._stderr_tail) if self._stderr_tail else "<empty>"
         log_fn = logger.error if exit_code != 0 else logger.info
+        cause = self._last_exit_cause or describe_exit_cause(
+            exit_code, stderr_tail=stderr_tail, stdout_tail=stdout_tail
+        )
         log_fn(
-            "WebUI process exited (code=%s). Recent stdout:\n%s\nRecent stderr:\n%s",
+            "WebUI process exited (code=%s; %s). Recent stdout:\n%s\nRecent stderr:\n%s",
             exit_code,
+            cause,
             stdout_tail,
             stderr_tail,
         )
@@ -1441,9 +1530,8 @@ class WebUIProcessManager:
 
                 # Check 2: WebUI process still running?
                 if not self.is_running():
-                    logger.debug(
-                        "[Orphan Monitor] WebUI process has exited naturally, stopping monitor"
-                    )
+                    self.observe_unexpected_exit()
+                    logger.debug("[Orphan Monitor] WebUI process has exited, stopping monitor")
                     break
 
             except Exception as exc:
@@ -1767,6 +1855,8 @@ def describe_startup_exit(diagnostics: Mapping[str, Any]) -> str:
         f"exit code {diagnostics.get('exit_code')}, runtime {diagnostics.get('runtime_identity')}, "
         f"launch profile {diagnostics.get('launch_profile')}, endpoint {diagnostics.get('endpoint')})"
     ]
+    if diagnostics.get("exit_cause"):
+        parts.append(f"cause: {diagnostics.get('exit_cause')}")
     for label, key in (("stderr", "stderr_tail"), ("stdout", "stdout_tail")):
         tail = str(diagnostics.get(key) or "").strip()
         if tail:

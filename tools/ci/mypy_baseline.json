@@ -5,7 +5,7 @@
     "src/api/healthcheck.py": 1,
     "src/api/webui_failure_evidence.py": 7,
     "src/api/webui_identity_attestation.py": 3,
-    "src/api/webui_process_manager.py": 27,
+    "src/api/webui_process_manager.py": 21,
     "src/api/webui_resource_service.py": 1,
     "src/assets/cache_lock.py": 4,
     "src/cli.py": 2,

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.api.client import SDWebUIClient
+from src.api.webui_process_manager import get_global_webui_process_manager
 from src.controller.runtime_state import CancellationError
 from src.image_backends import (
     ImageBackendRegistry,
@@ -40,6 +41,7 @@ from src.pipeline.image_performance import (
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.njr_core_v26 import thaw_json
+from src.pipeline.no_output_reason import fallback_reason
 from src.pipeline.result_contract_v26 import (
     build_diagnostics_descriptor,
     build_replay_descriptor,
@@ -871,6 +873,7 @@ class PipelineRunner:
         )
         if hasattr(self._pipeline, "_begin_run_metrics"):
             self._pipeline._begin_run_metrics()
+        run_started_monotonic = time.monotonic()
         trace = getattr(self._pipeline, "_image_performance", None)
         trace = trace if isinstance(trace, ImagePerformanceTrace) else None
         self._cleanup_at_job_start(trace, image_backend_id)
@@ -924,7 +927,7 @@ class PipelineRunner:
             # A pipeline only succeeds if the final enabled stage produced durable outputs.
             success = bool(stage_ctx.paths)
             if not success:
-                error = self._no_output_reason()
+                error = self._no_output_reason(stage_ctx.current_stage_name)
             self._finalize_adaptive_refinement(metadata, stage_ctx.paths)
         except CancellationError:
             terminal_outcome = "cancelled"
@@ -959,6 +962,8 @@ class PipelineRunner:
             self._pipeline._current_job_id = None
             self._pipeline._current_njr_sha256 = None
 
+        if not success:
+            error = self._with_backend_exit_cause(error, run_started_monotonic)
         result = self._build_run_result(
             njr=njr,
             plan=plan,
@@ -1000,12 +1005,38 @@ class PipelineRunner:
             return True
         return family == RUNTIME_FAMILY_WEBUI
 
-    def _no_output_reason(self) -> str:
-        """Why a run produced nothing: a verified checkpoint mismatch if the executor recorded one, else the generic text."""
+    @staticmethod
+    def _with_backend_exit_cause(error: str | None, run_started_monotonic: float) -> str | None:
+        """Append how the managed WebUI process died, when it died during this job (N11).
 
-        take = getattr(self._pipeline, "take_model_sync_failure", None)
-        reason = take() if callable(take) else None  # only swaps an attribute; a stand-in pipeline may return anything
-        return reason if isinstance(reason, str) and reason.strip() else "No images were generated successfully"
+        A dead managed runtime surfaces as a refused connection or an empty answer; the exit code and last error line
+        say why.
+        """
+
+        if not error:
+            return error
+        try:
+            manager = get_global_webui_process_manager()
+            probe = getattr(manager, "unexpected_exit_since", None)
+            record = probe(run_started_monotonic) if callable(probe) else None
+        except Exception:  # noqa: BLE001 - enrichment must never replace the job's own failure
+            logger.debug("Could not read the managed WebUI exit record", exc_info=True)
+            return error
+        cause = record.get("exit_cause") if isinstance(record, Mapping) else None
+        if not isinstance(cause, str) or not cause.strip() or cause in error:
+            return error
+        return f"{error} (the managed WebUI process exited during this job: {cause})"
+
+    def _no_output_reason(self, stage_name: str | None = None) -> str:
+        """Why a run produced nothing (N11): the reason the executor recorded (a verified checkpoint mismatch first,
+        then the first stage that produced nothing), else a fallback that still names the stage."""
+
+        for name in ("take_no_output_reason", "take_model_sync_failure"):
+            take = getattr(self._pipeline, name, None)
+            reason = take() if callable(take) else None  # only swaps an attribute; a stand-in may return anything
+            if isinstance(reason, str) and reason.strip():
+                return reason
+        return fallback_reason(stage_name)
 
     def _execute_stage_plan(
         self,

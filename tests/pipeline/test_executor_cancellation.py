@@ -12,6 +12,7 @@ from src.pipeline.job_models_v2 import StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.logger import StructuredLogger
 from tests.helpers.njr_factory import make_pipeline_njr
+from tests.helpers.runtime_isolation import isolated_image_backends
 
 
 class ToggleToken:
@@ -78,8 +79,12 @@ def test_run_txt2img_stage_raises_when_cancelled_before_start(tmp_path):
 
 def test_runner_honors_cancellation_between_stages(tmp_path):
     token = ToggleToken()
+    # Hermetic runtime: a live local WebUI on the configured endpoint must not decide this test's outcome.
     runner = PipelineRunner(
-        Mock(), _fake_structured_logger(tmp_path), runs_base_dir=str(tmp_path / "runs")
+        Mock(),
+        _fake_structured_logger(tmp_path),
+        runs_base_dir=str(tmp_path / "runs"),
+        image_backend_registry=isolated_image_backends(),
     )
 
     class _FakePipeline:
@@ -146,5 +151,7 @@ def test_runner_honors_cancellation_between_stages(tmp_path):
     result = runner.run_njr(record, cancel_token=token)
 
     assert result.success is False
-    assert result.error == "No images were generated successfully"
+    # N11: the fallback names the stage that produced nothing (this stand-in pipeline records no reason).
+    assert result.error.startswith("No images were generated successfully")
+    assert "upscale" in result.error
     assert fake_pipeline.upscale_saw_cancelled_token is True

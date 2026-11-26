@@ -16,7 +16,7 @@ from tests.helpers.checkout_write_guard import CheckoutWriteGuard
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize("folder", ["output", "outdir", "test_output", "MagicMock"])
+@pytest.mark.parametrize("folder", ["output", "outdir", "test_output", "MagicMock", "logs"])
 def test_a_write_into_a_guarded_folder_is_recorded_without_interrupting_the_writer(
     tmp_path: Path, folder: str
 ) -> None:

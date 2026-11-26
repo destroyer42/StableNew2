@@ -19,6 +19,7 @@ from src.api.webui_process_manager import get_global_webui_process_manager
 from src.config.app_config import get_jsonl_log_config
 from src.queue.job_repository import JobRepository
 from src.state.workspace_paths import workspace_paths
+from src.utils.diagnostic_redaction import redact
 from src.utils.image_metadata import decode_payload, read_image_metadata
 from src.utils.logger import InMemoryLogHandler
 from src.utils.process_inspector_v2 import (
@@ -278,7 +279,7 @@ def build_crash_bundle(
                 zf.writestr("metadata/info.json", json.dumps(_anonymize(metadata), indent=2))
 
                 # PR-HB-003: Always write thread dumps, even if capture failed
-                zf.writestr("metadata/thread_dump.txt", thread_dump_text)
+                zf.writestr("metadata/thread_dump.txt", _anonymize(thread_dump_text))
                 zf.writestr(
                     "metadata/thread_dump.json", json.dumps(_anonymize(thread_dump_json), indent=2)
                 )
@@ -310,7 +311,9 @@ def build_crash_bundle(
                                     json.dumps(_anonymize(dict(curation_descriptor)), indent=2),
                                 )
                 if inspector_lines and effective_include_process_state:
-                    zf.writestr("metadata/process_inspector.txt", "\n".join(inspector_lines))
+                    zf.writestr(
+                        "metadata/process_inspector.txt", _anonymize("\n".join(inspector_lines))
+                    )
                 if gpu_snapshot:
                     zf.writestr(
                         "metadata/gpu_snapshot.json", json.dumps(_anonymize(gpu_snapshot), indent=2)
@@ -354,10 +357,33 @@ def _include_jsonl_logs(zf: zipfile.ZipFile) -> None:
                 log_files.append(candidate)
     for log_path in log_files:
         try:
-            arcname = Path("logs") / log_path.name
-            zf.write(log_path, arcname)
+            zf.writestr(f"logs/{log_path.name}", _redacted_log_tail(log_path))
         except Exception:
             logger.debug("Failed to include JSONL log %s in bundle", log_path)
+
+
+# The newest part of each log is what a bundle is for; a file that failed to rotate (148 MB before N11) is cut.
+_LOG_TAIL_BYTES = 20 * 1024 * 1024
+
+
+def _redacted_log_tail(log_path: Path, limit: int = _LOG_TAIL_BYTES) -> str:
+    """The last ``limit`` bytes of a JSONL log, line by line redacted (lines before N11 carry prompt text at INFO)."""
+
+    with open(log_path, "rb") as source:
+        size = source.seek(0, os.SEEK_END)
+        start = max(0, size - limit)
+        source.seek(start)
+        data = source.read()
+    if start:
+        data = data.split(b"\n", 1)[1] if b"\n" in data else b""  # drop the partial first line
+    lines = [_redacted_log_line(line) for line in data.decode("utf-8", "replace").splitlines()]
+    if start:
+        notice = {
+            "message": f"diagnostics bundle copy starts {start} bytes into this log",
+            "event": "bundle_log_cut",
+        }
+        lines.insert(0, json.dumps(notice, sort_keys=True))
+    return "".join(line + "\n" for line in lines)
 
 
 def _include_image_metadata(zf: zipfile.ZipFile, image_roots: list[Path] | None) -> None:
@@ -382,7 +408,8 @@ def _include_image_metadata(zf: zipfile.ZipFile, image_roots: list[Path] | None)
                 }
                 zf.writestr(
                     f"artifacts/image_metadata/{meta_name}.meta.json",
-                    json.dumps(_anonymize(payload), indent=2),
+                    # ``parameters`` is A1111 infotext: the prompt on its first line, unlabelled.
+                    json.dumps(_anonymize(payload, extra_keys=frozenset({"parameters"})), indent=2),
                 )
             else:
                 note = f"metadata missing or invalid: {payload_result.status}"
@@ -544,13 +571,32 @@ def _sanitize_filename(token: str) -> str:
     return safe[:128]
 
 
-def _anonymize(value: Any) -> Any:
+def _anonymize(value: Any, *, extra_keys: frozenset[str] = frozenset()) -> Any:
+    """Everything written into a bundle: prompts and secrets redacted (N11), home and repository paths masked."""
+
+    return _strip_paths(redact(value, extra_keys=extra_keys))
+
+
+def _strip_paths(value: Any) -> Any:
     if isinstance(value, str):
         return value.replace(str(HOME), "<USER_HOME>").replace(str(ROOT), "<REPO_ROOT>")
     if isinstance(value, Mapping):
-        return {str(k): _anonymize(v) for k, v in value.items()}
+        return {str(k): _strip_paths(v) for k, v in value.items()}
     if isinstance(value, list):
-        return [_anonymize(v) for v in value]
+        return [_strip_paths(v) for v in value]
     if isinstance(value, tuple):
-        return tuple(_anonymize(v) for v in value)
+        return tuple(_strip_paths(v) for v in value)
     return value
+
+
+def _redacted_log_line(line: str) -> str:
+    """One JSONL log line with prompt and secret values redacted; a line that is not JSON is scrubbed as text."""
+
+    stripped = line.rstrip("\r\n")
+    try:
+        record = json.loads(stripped)
+    except ValueError:
+        return str(_anonymize(stripped))
+    if not isinstance(record, dict):
+        return str(_anonymize(stripped))
+    return json.dumps(_anonymize(record), sort_keys=True, ensure_ascii=False)
