@@ -12,12 +12,16 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
+import pytest
+
 from src.pipeline.pipeline_runner import (
     DEFAULT_JOB_TIMEOUT_SEC,
     PipelineJobTimeoutError,
     PipelineRunner,
 )
 from src.utils import StructuredLogger
+
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
 
 
 class TestJobTimeoutConstant(unittest.TestCase):

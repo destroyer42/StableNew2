@@ -20,6 +20,8 @@ from src.utils.error_envelope_v2 import get_attached_envelope
 from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
 from src.video.svd_native_backend import SVDNativeVideoBackend
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 
 @pytest.fixture(autouse=True)
 def isolated_runtime_endpoints(monkeypatch):

@@ -8,6 +8,8 @@ from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 from tests.helpers.pipeline_fakes import FakePipeline
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 
 class DummyClient:
     pass

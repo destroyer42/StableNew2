@@ -10,7 +10,6 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import patch
 
 from src.api.client import SDWebUIClient
@@ -41,7 +40,7 @@ class TestNIterFilenames:
     @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_n_iter_creates_unique_filenames(
-        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save, tmp_path
     ):
         """
         Test that n_iter > 1 with batch_size = 1 creates unique filenames.
@@ -64,7 +63,7 @@ class TestNIterFilenames:
             }
         }
 
-        output_dir = Path("test_output/txt2img")
+        output_dir = tmp_path / "txt2img"
         _ = self.pipeline.run_txt2img_stage(
             prompt="test prompt",
             negative_prompt="test negative",
@@ -93,7 +92,7 @@ class TestNIterFilenames:
     @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_batch_size_creates_unique_filenames(
-        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save, tmp_path
     ):
         """Test that batch_size > 1 creates unique filenames."""
         # Setup: batch_size=3, n_iter=1 → WebUI returns 3 images
@@ -111,7 +110,7 @@ class TestNIterFilenames:
             }
         }
 
-        output_dir = Path("test_output/txt2img")
+        output_dir = tmp_path / "txt2img"
         _ = self.pipeline.run_txt2img_stage(
             prompt="test prompt",
             negative_prompt="test negative",
@@ -140,7 +139,7 @@ class TestNIterFilenames:
     @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_single_image_no_suffix(
-        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save, tmp_path
     ):
         """Test that single image doesn't add _batch suffix."""
         # Setup: batch_size=1, n_iter=1 → WebUI returns 1 image
@@ -158,7 +157,7 @@ class TestNIterFilenames:
             }
         }
 
-        output_dir = Path("test_output/txt2img")
+        output_dir = tmp_path / "txt2img"
         _ = self.pipeline.run_txt2img_stage(
             prompt="test prompt",
             negative_prompt="test negative",
@@ -181,7 +180,7 @@ class TestNIterFilenames:
     @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_n_iter_and_batch_size_combined(
-        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save, tmp_path
     ):
         """Test combined n_iter and batch_size creates unique filenames."""
         # Setup: batch_size=2, n_iter=2 → WebUI returns 4 images
@@ -199,7 +198,7 @@ class TestNIterFilenames:
             }
         }
 
-        output_dir = Path("test_output/txt2img")
+        output_dir = tmp_path / "txt2img"
         _ = self.pipeline.run_txt2img_stage(
             prompt="test prompt",
             negative_prompt="test negative",
@@ -234,7 +233,7 @@ class TestNIterRegression:
     @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_regression_n_iter_file_clobbering_prevented(
-        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save, tmp_path
     ):
         """
         REGRESSION TEST: Prevent file clobbering when n_iter > 1.
@@ -264,7 +263,7 @@ class TestNIterRegression:
             }
         }
 
-        output_dir = Path("test_output/txt2img")
+        output_dir = tmp_path / "txt2img"
         _ = self.pipeline.run_txt2img_stage(
             prompt="test prompt",
             negative_prompt="test negative",

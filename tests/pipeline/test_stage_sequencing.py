@@ -28,6 +28,8 @@ from src.pipeline.stage_sequencer import (
 )
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 # -----------------------------------------------------------------------------
 # Fixtures
 # -----------------------------------------------------------------------------

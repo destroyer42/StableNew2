@@ -60,6 +60,8 @@ from tests.helpers.comfy_image_fakes import (
     system_stats,
 )
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 
 def options(profile=BASE) -> dict[str, Any]:
     return {"image": {"backend_id": "comfyui", "model_profile": profile.reference()}}

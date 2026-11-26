@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers import checkout_write_guard
+
 
 # --- Quiet local runs (PR-DEVEX-QUIET-LOCAL-TESTS) ----------------------------------------
 # A command-line pytest session on a local Windows machine re-runs itself through
@@ -37,6 +39,43 @@ _QUIET_RUN = _load_quiet_run()
 def pytest_configure(config):
     if _QUIET_RUN is not None:
         _QUIET_RUN.relaunch_pytest_session()
+    checkout_write_guard.install(Path(__file__).resolve().parents[1])
+
+
+# --- Tests never write into the checkout's runtime folders ----------------------------------------
+def _refused_checkout_writes() -> str:
+    guard = checkout_write_guard.session_guard()
+    writes = guard.take() if guard is not None else []
+    if not writes:
+        return ""
+    return (
+        "tests wrote into the checkout (use tmp_path or the isolated_cwd fixture):\n  "
+        + "\n  ".join(sorted(set(writes)))
+    )
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Writes made after the last test's teardown, or during collection only."""
+
+    message = _refused_checkout_writes()
+    if message:
+        print(f"\n{message}", file=sys.stderr)
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+@pytest.fixture
+def isolated_cwd(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
+    """For tests whose subject resolves a relative path (``output/...``) against the working directory."""
+
+    from src.services import persistence_worker
+
+    cwd = tmp_path_factory.mktemp("cwd")
+    monkeypatch.chdir(cwd)
+    yield cwd
+    # ``run_metadata.json`` is written by a background thread: finish it while the relative path still points here.
+    worker = persistence_worker._global_worker
+    if worker is not None and worker.active_thread() is not None:
+        worker._queue.join()
 
 
 # --- Garbage collection only on the main thread ---------------------------------------
@@ -61,9 +100,14 @@ gc.disable()
 gc.collect = _main_thread_only_collect
 
 
+@pytest.hookimpl(wrapper=True)
 def pytest_runtest_teardown(item, nextitem):
+    yield  # every fixture finalizer runs here, so writes made during teardown are counted too
     if nextitem is None or nextitem.path != item.path:
         _REAL_GC_COLLECT()
+    message = _refused_checkout_writes()
+    if message:
+        pytest.fail(message, pytrace=False)
 
 
 def pytest_unconfigure(config):

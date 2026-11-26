@@ -11,6 +11,7 @@ This module tests:
 from __future__ import annotations
 
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 from unittest.mock import MagicMock
 
@@ -206,7 +207,7 @@ def test_pipeline_tab_columns_have_content() -> None:
 
 
 @pytest.mark.gui
-def test_pipeline_tab_never_resizes_the_root_window() -> None:
+def test_pipeline_tab_never_resizes_the_root_window(tmp_path: Path) -> None:
     """The shared screen-aware window layout is the only root-size authority; Pipeline no longer forces a width."""
     try:
         root = tk.Tk()
@@ -221,7 +222,9 @@ def test_pipeline_tab_never_resizes_the_root_window() -> None:
 
         assert not hasattr(PipelineTabFrame, "MIN_WINDOW_WIDTH")
         assert not hasattr(PipelineTabFrame, "_ensure_minimum_window_width")
-        pipeline_tab = PipelineTabFrame(root, app_state=AppStateV2(), pipeline_controller=MagicMock())
+        # The sidebar scans the controller's ``_packs_dir``; a bare mock there becomes a ``MagicMock/`` folder.
+        controller = MagicMock(_packs_dir=tmp_path / "packs")
+        pipeline_tab = PipelineTabFrame(root, app_state=AppStateV2(), pipeline_controller=controller)
         pipeline_tab.pack(fill="both", expand=True)
         root.update()
         pipeline_tab._on_first_map()

@@ -11,6 +11,7 @@ import pytest
 from PIL import Image
 
 import src.image_backends.forge_webui_backend as forge_backend_module
+import src.pipeline.pipeline_runner as pipeline_runner_module
 import tools.acceptance.img_116_klein_acceptance as driver
 from src.api.forge_client import ForgeWebUIClient
 from src.image_backends.forge_klein_profile import latest_klein_profile
@@ -91,7 +92,16 @@ def test_physical_execution_needs_the_approved_digest(tmp_path: Path) -> None:
 
 
 @pytest.mark.usefixtures("canonical_context")
-def test_smoke_a_then_b_complete_end_to_end_with_fakes_one_dispatch_each(tmp_path: Path) -> None:
+def test_smoke_a_then_b_complete_end_to_end_with_fakes_one_dispatch_each(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Smoke B's Review handler leaves the NJR on the relative "output" root, and this test must stay in the checkout.
+    route_root = pipeline_runner_module.get_output_route_root
+    monkeypatch.setattr(
+        pipeline_runner_module,
+        "get_output_route_root",
+        lambda base, route, **kwargs: route_root(tmp_path / base, route, **kwargs),
+    )
     client, transport = _client()
     dry = _args(tmp_path, "A", tag="dry")
     driver.run(dry, driver.InjectedRuntime())

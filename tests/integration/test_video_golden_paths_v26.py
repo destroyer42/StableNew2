@@ -22,6 +22,8 @@ from src.video.video_backend_types import (
 )
 from tests.helpers.njr_factory import make_pipeline_njr
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 _TINY_PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRX0AAAAASUVORK5CYII="
 )
