@@ -1,0 +1,25 @@
+[Unit]
+Description=StableNew phone review gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=review-gateway
+Group=review-gateway
+WorkingDirectory=/opt/review-gateway/current/app
+ExecStart=/opt/review-gateway/current/venv/bin/python -m review_gateway --config /etc/review-gateway/config.toml serve
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+# Only restrictions that need no mount namespace, so the unit also starts in an unprivileged LXC without nesting.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

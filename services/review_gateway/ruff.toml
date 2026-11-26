@@ -1,0 +1,4 @@
+# The gateway deploys to the container's Debian Python, not StableNew's 3.14: do not let lint or format
+# introduce newer syntax (ruff format would, for example, drop the parentheses in "except (A, B):").
+extend = "../../pyproject.toml"
+target-version = "py311"

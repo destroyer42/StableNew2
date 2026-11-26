@@ -1,0 +1,6 @@
+# Direct runtime dependencies of the review gateway. This is the whole set on purpose (RG-100 S10).
+# Regenerate the hash-pinned lock after any change:
+#   uv pip compile requirements.in --universal --python-version 3.11 --generate-hashes -o requirements.txt
+starlette==1.10.0
+uvicorn==0.54.0
+jsonschema==4.26.0
