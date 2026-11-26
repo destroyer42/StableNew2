@@ -207,7 +207,8 @@ SHA=<origin/main commit>
 cd /root && curl -fsSL -o stablenew-$SHA.tar.gz https://codeload.github.com/destroyer42/StableNew2/tar.gz/$SHA
 rm -rf /root/review-gateway-src && mkdir -p /root/review-gateway-src
 tar -xzf stablenew-$SHA.tar.gz -C /root/review-gateway-src --strip-components=1 \
-  StableNew2-$SHA/services/review_gateway StableNew2-$SHA/docs/schemas/stablenew.review-gateway-sync.v1.json
+  StableNew2-$SHA/services/review_gateway StableNew2-$SHA/services/deploy \
+  StableNew2-$SHA/docs/schemas/stablenew.review-gateway-sync.v1.json
 # First install only:
 SYNC_HOST=<gateway-ip> MEDIA_DIR=/srv/review-cache/media bash /root/review-gateway-src/services/review_gateway/install.sh
 # Upgrades:
@@ -218,6 +219,14 @@ bash /root/review-gateway-src/services/review_gateway/install.sh
 |---|---|---|
 | First (RG-110) | `f5f82b035de5b19c4d45d77b986162a3c2a5fa7b` | `20261126T052204Z-9851` |
 | Upgrade with Immich (RG-130, device-id fix) | `8c7642a646cdecab5375a7758495c917297f5e36` | `20261126T113149Z-496` |
+
+A commit from before DEPLOY-1 has no `services/deploy`, so drop it from the `tar` line for such a commit. Install a
+commit that has it this way once. After that, each later commit needs one line in the Proxmox host's shell, which runs
+the checks, the health check and automatic rollback (see [Deploy a commit](review_gateway.md#deploy-a-commit)):
+
+```bash
+pct exec 120 -- /usr/local/sbin/review-gateway-deploy <merge sha>
+```
 
 Then the phone app was published and the placeholder removed:
 
