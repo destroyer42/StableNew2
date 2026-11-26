@@ -192,7 +192,7 @@ class VaeCatalog:
 
 def picker_entry(entries: Iterable[Any], name: str) -> Any | None:
     """Match an internal value or an unambiguous display alias."""
-    from src.image_backends.model_readiness_probe import checkpoint_key
+    from src.utils.checkpoint_identity import checkpoint_key
 
     entries = tuple(entries)
     exact = [entry for entry in entries if getattr(entry, "name", entry) == name]

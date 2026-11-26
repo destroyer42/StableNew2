@@ -23,24 +23,12 @@ from src.image_backends.model_readiness import (
     ReadinessStatus,
     assess_model_readiness,
 )
+from src.utils.checkpoint_identity import checkpoint_key
 
 logger = logging.getLogger(__name__)
 
 #: ``filename -> evidence`` reader; ``None`` when the file cannot be stat-ed. The backend injects a fingerprint cache.
 EvidenceReader = Callable[[str], "ComponentEvidence | None"]
-
-
-def checkpoint_key(name: Any) -> str:
-    """Name identity of a checkpoint title/model_name/file (no directory, no ``[hash]`` suffix, no extension)."""
-
-    base = str(name or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
-    if base.endswith("]") and " [" in base:
-        base = base[: base.rindex(" [")]
-    lowered = base.strip().lower()
-    for ext in (".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".gguf"):
-        if lowered.endswith(ext):
-            return lowered[: -len(ext)]
-    return lowered
 
 
 def _default_reader(filename: str) -> ComponentEvidence | None:
@@ -128,4 +116,4 @@ def probe_model_readiness(
     return assess_model_readiness(name, checkpoint=checkpoint, catalog=catalog, selected=selected)
 
 
-__all__ = ["checkpoint_key", "probe_model_readiness", "served_checkpoint_files"]
+__all__ = ["probe_model_readiness", "served_checkpoint_files"]

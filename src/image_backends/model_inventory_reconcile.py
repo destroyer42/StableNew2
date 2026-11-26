@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from src.api.webui_runtime_identity import classify_client_runtime
-from src.image_backends.model_readiness_probe import checkpoint_key
+from src.utils.checkpoint_identity import checkpoint_key
 
 
 def _safe(call: Any) -> Any:

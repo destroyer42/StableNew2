@@ -278,7 +278,7 @@ def _sample(row: Mapping[str, Any], target: ResolvedModel) -> _Sample:
     ):
         raise ProfileError("Frozen model policy is incompatible with the current target.")
     # Names corroborate the frozen byte binding; current registry data never backfills an old snapshot.
-    from src.image_backends.model_readiness_probe import checkpoint_key
+    from src.utils.checkpoint_identity import checkpoint_key
 
     names = (
         selected_model(snapshot["baseline_config"], "txt2img"),

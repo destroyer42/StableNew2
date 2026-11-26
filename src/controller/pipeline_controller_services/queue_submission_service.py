@@ -10,6 +10,7 @@ from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.image_backends.model_policy_warnings import shown_model_warnings
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.policy_warnings import SURFACE_DESKTOP, pending_warnings, with_accepted_warnings
+from src.utils.checkpoint_identity import checkpoint_key
 
 
 class QueueSubmissionService:
@@ -57,7 +58,8 @@ class QueueSubmissionService:
                 txt2img = config.get("txt2img", {})
                 if isinstance(txt2img, dict):
                     vae = txt2img.get("vae") or txt2img.get("sd_vae") or ""
-            model_key = str(model).strip().lower()
+            # N12: every spelling of one checkpoint groups together.
+            model_key = checkpoint_key(model)
             vae_key = str(vae).strip().lower()
             if vae_key in {"", "automatic", "none"}:
                 vae_key = "automatic"

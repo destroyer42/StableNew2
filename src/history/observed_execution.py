@@ -4,9 +4,10 @@ The owner's rule (2026-11-25): "Experimental evidence should trump anecdotal or 
 works." A completed job in the SQLite ``JobRepository`` for the same checkpoint, with the same operation on the same
 backend, counts as verified for that operation (``src/image_backends/sdxl_target.py``).
 
-* **Exact model.** Matched by checkpoint name (``checkpoint_key``: no directory, ``[hash]`` suffix or extension). Where a
-  job recorded the checkpoint's SHA-256 (Learning Model Comparison and Prompt x Model Matrix arms do; ordinary Forge
-  and A1111 jobs record none) and the registry knows the current file's SHA-256, a different hash does not count.
+* **Exact model.** Matched by the canonical checkpoint key (N12 ``src/utils/checkpoint_identity.py``: no directory,
+  ``[hash]`` suffix, picker collision wrapper, extension or case). Where a job recorded the checkpoint's SHA-256
+  (Learning Model Comparison and Prompt x Model Matrix arms do; ordinary Forge and A1111 jobs record none) and the
+  registry knows the current file's SHA-256, a different hash does not count.
 * **Operation** is capability level (``OPERATIONS`` in ``sdxl_target``, ControlNet per modality; owner decision Q2,
   2026-11-26), derived from the stored NJR only.
 * **Bounded, read-only, off the Tk thread.** ``ObservedExecutionIndex.runs`` never touches the repository: it answers
@@ -27,7 +28,6 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from src.image_backends.image_backend_types import resolve_image_backend_id
-from src.image_backends.model_readiness_probe import checkpoint_key
 from src.image_backends.sdxl_target import (
     OP_ADETAILER,
     OP_IMG2IMG,
@@ -38,6 +38,7 @@ from src.image_backends.sdxl_target import (
     OP_TXT2IMG_LORA,
     controlnet_operation,
 )
+from src.utils.checkpoint_identity import checkpoint_key, checkpoint_stem
 
 MAX_ROWS_EXAMINED = 20_000
 MAX_MATCHED_JOBS = 200
@@ -157,17 +158,13 @@ def runs_in_snapshot(snapshot: Mapping[str, Any]) -> tuple[ObservedRun, ...]:
 
 
 def needle_for(model_name: str) -> str:
-    """The substring every stored NJR naming this checkpoint contains (JSON ``ensure_ascii`` escaped)."""
+    """The substring every stored NJR naming this checkpoint contains (JSON ``ensure_ascii`` escaped).
 
-    base = str(model_name or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
-    if base.endswith("]") and " [" in base:
-        base = base[: base.rindex(" [")]
-    stem = base.strip()
-    for ext in (".safetensors", ".sft", ".ckpt", ".pt", ".pth", ".gguf"):
-        if stem.lower().endswith(ext):
-            stem = stem[: -len(ext)]
-            break
-    return json.dumps(stem, ensure_ascii=True)[1:-1]
+    Built from the canonical checkpoint stem (N12), so a picker collision label searches for its internal file; the
+    repository matches it ASCII case-insensitively, like the key itself.
+    """
+
+    return json.dumps(checkpoint_stem(model_name), ensure_ascii=True)[1:-1]
 
 
 @dataclass

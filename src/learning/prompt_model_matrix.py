@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
@@ -39,6 +38,7 @@ from src.learning.prompt_slot_experiment import (
     slots_in,
     validate_design,
 )
+from src.utils.checkpoint_identity import checkpoint_key
 from src.utils.prompt_pack_utils import normalize_matrix_slot_name
 
 CONTRACT = "learning_prompt_model_matrix/1"
@@ -727,12 +727,6 @@ def materialize_njr(
 # --------------------------------------------------------------------------------------------------------------------
 # Evidence
 # --------------------------------------------------------------------------------------------------------------------
-def _model_key(name: str) -> str:
-    base = os.path.basename(str(name).replace("\\", "/")).strip()
-    base = re.sub(r"\s*\[[0-9a-fA-F]+\]\s*$", "", base)
-    return re.sub(r"\.(safetensors|ckpt|pt)$", "", base, flags=re.IGNORECASE).casefold()
-
-
 def model_readback(variant_payload: Mapping[str, Any], metadata: Mapping[str, Any]) -> str:
     """The model the executor reports it requested for this job ('' when no readback exists)."""
     for source in (variant_payload, metadata):
@@ -784,7 +778,7 @@ def readback_reason(
         observed = model_readback(variant_payload or {}, metadata or {})
         if not observed:
             return "matrix_model_readback_unavailable"
-        if _model_key(observed) != _model_key(arm["effective_config"]["txt2img"]["model"]):
+        if checkpoint_key(observed) != checkpoint_key(arm["effective_config"]["txt2img"]["model"]):
             return "matrix_model_readback_mismatch"
     except (KeyError, TypeError, ValueError):
         return "matrix_frozen_evidence_invalid"
@@ -798,7 +792,7 @@ def execution_evidence(
     if snapshot.get("study_type") != STUDY_TYPE:
         return {}
     observed = model_readback(variant_payload, metadata)
-    return {"runtime_model_readback": _model_key(observed) if observed else ""}
+    return {"runtime_model_readback": checkpoint_key(observed) if observed else ""}
 
 
 def rating_classification(

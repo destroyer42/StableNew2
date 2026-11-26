@@ -156,7 +156,7 @@ def verify_zimage_assets(profile: Any, *, client: Any) -> dict[str, Any]:
     Hash the exact paths the endpoint serves, including reference-home files, never a
     same-named installed copy that the runtime might not load. Catalog ambiguity refuses.
     """
-    from src.image_backends.model_readiness_probe import checkpoint_key
+    from src.utils.checkpoint_identity import checkpoint_key
     from src.utils.managed_forge_runtime import verify_pinned_launch
 
     manager = _active_manager()
@@ -186,7 +186,7 @@ def verify_zimage_assets(profile: Any, *, client: Any) -> dict[str, Any]:
 
 
 def _served_path(entries: list[Any], name: str, label: str) -> Path:
-    from src.image_backends.model_readiness_probe import checkpoint_key
+    from src.utils.checkpoint_identity import checkpoint_key
 
     paths = {
         str(item.get("filename") or "") for item in entries if isinstance(item, dict)

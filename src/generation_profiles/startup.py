@@ -28,7 +28,7 @@ from src.generation_profiles.contract import (
 )
 from src.generation_profiles.identity import MATCH_CONFLICT, MATCH_OTHER_MODEL, match_identity
 from src.image_backends.model_policy import ModelPolicy
-from src.image_backends.model_readiness_probe import checkpoint_key
+from src.utils.checkpoint_identity import checkpoint_key
 
 STARTUP_SCHEMA = 1
 STAGE_NAMES = ("txt2img", "img2img", "adetailer", "upscale")

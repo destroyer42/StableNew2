@@ -27,7 +27,7 @@ from src.image_backends.model_policy import (
     RegistryFamilyLookup,
     resolve_model_policy,
 )
-from src.image_backends.model_readiness_probe import checkpoint_key
+from src.utils.checkpoint_identity import checkpoint_key
 
 #: model name -> SHA-256 already recorded by the registry snapshot, or ``None`` (unknown or ambiguous).
 ShaLookup = Callable[[str], str | None]
