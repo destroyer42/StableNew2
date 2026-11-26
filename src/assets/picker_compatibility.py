@@ -63,6 +63,8 @@ class PickerEvidence:
     excluded: bool = False
     refusal: str = ""
     path: Path | None = None
+    #: N1: ``refusal`` is a policy warning (the model still runs), not a real block such as missing files.
+    warning: bool = False
 
     @property
     def recognized(self) -> bool:

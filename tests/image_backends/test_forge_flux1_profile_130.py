@@ -119,9 +119,9 @@ def test_other_flux_layouts_are_labelled_and_refused(architecture, family, phras
     assert policy.refusal and phrase in policy.refusal and policy.profile_ref is None
     assert policy.stages == () and policy.modes == ()
     projection = project_model_controls(policy, "forge_webui")
-    assert (
-        projection.blocking == policy.refusal
-    )  # shown even on the right backend; never auto-fixed
+    # N1: shown even on the right backend and never auto-fixed, but as a warning: Queue still runs it.
+    assert projection.blocking == ""
+    assert policy.refusal in projection.note and "Queue still runs it" in projection.note
 
 
 @pytest.mark.parametrize(

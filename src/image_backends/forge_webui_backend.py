@@ -124,10 +124,12 @@ from src.image_backends.image_backend_types import (
     ImageExecutionResult,
     resolve_image_backend_id,
 )
+from src.image_backends.model_policy_warnings import unqualified_model_warning
 from src.image_backends.model_readiness import ModelReadiness
 from src.image_backends.model_readiness_probe import probe_model_readiness
 from src.image_backends.webui_family_backend import WebUIFamilyImageBackend
 from src.pipeline.image_performance import ImagePerformanceTrace
+from src.pipeline.policy_warnings import PolicyWarning, is_accepted
 from src.services.runtime_transition_service import (
     RUNTIME_FORGE_WEBUI,
     RuntimeTransitionCoordinator,
@@ -251,6 +253,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         self._identity: dict[str | None, dict[str, Any]] = {}
         self._verified_source: dict[str | None, dict[str, Any]] = {}
         self._module_baseline: dict[str | None, dict[str, Any]] = {}
+        self._policy_warnings: dict[str | None, dict[str, Any]] = {}
         #: (path, size, mtime_ns) -> header evidence; a replaced file is re-read, an unchanged one is not.
         self._component_cache: dict[tuple[str, int, int], ComponentEvidence] = {}
 
@@ -566,13 +569,18 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     def _controlnet_root(self) -> Path | None:
         if self._controlnet_root_override is not None:
             return Path(self._controlnet_root_override)
+        webui_root = self._webui_root()
+        return None if webui_root is None else webui_root / "models" / "ControlNet"
+
+    @staticmethod
+    def _webui_root() -> Path | None:
         try:
             from src.assets import AssetRegistry
 
             webui_root = AssetRegistry().webui_root
         except Exception:  # noqa: BLE001 - an unreadable configuration only means "unverified", never a crash
             return None
-        return None if webui_root is None else Path(webui_root) / "models" / "ControlNet"
+        return None if webui_root is None else Path(webui_root)
 
     def _admit_openpose(self, pipeline: Any, request: ImageExecutionRequest) -> OpenPoseAdmission | UnitsAdmission:
         """Read-only admission against the running Forge (the executor re-verifies the bytes at the wire)."""
@@ -712,8 +720,12 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             cached = self._component_cache[key] = inspect_component_file(path)
         return cached
 
-    def _dependency_gate(self, pipeline: Any, request: ImageExecutionRequest) -> None:
-        """Refuse a positively identified, unqualified multi-component checkpoint before anything is written.
+    def _dependency_gate(self, pipeline: Any, request: ImageExecutionRequest) -> PolicyWarning | None:
+        """Classify the selected checkpoint before anything is written (PR-IMG-MODELS-150, N1).
+
+        A file that is positively a text encoder or VAE is still refused. A positively identified, unqualified
+        multi-component checkpoint is no longer refused (owner decision N1, "warn, don't block"): its warning is
+        returned, recorded on the result, and the caller leaves Forge's module selection exactly as it is.
 
         Read-only (``probe_model_readiness``: GET /sd-models, a bounded safetensors header and, only when a refusal is
         certain, GET /sd-modules and GET /options). It runs before the module baseline normalization (which would
@@ -724,7 +736,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
 
         model_name = str(request.selected_model or "").strip()
         if not model_name or is_klein_transformer_name(model_name):
-            return
+            return None
         readiness = probe_model_readiness(
             getattr(pipeline, "client", None), model_name, evidence=self._component_evidence
         )
@@ -733,7 +745,10 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 "Forge lists multiple files for the requested ADetailer checkpoint. "
                 "Choose a uniquely named checkpoint in a fresh job."
             )
-        if readiness.blocks_dispatch:
+        if not readiness.blocks_dispatch:
+            return None
+        warning = unqualified_model_warning(readiness, webui_root=self._webui_root())
+        if warning is None:
             logger.warning(
                 "[forge/dependency-gate] job=%s stage=%s refused before any module write or generation POST: %s (%s)",
                 request.job_id,
@@ -742,6 +757,22 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 readiness.reason_code,
             )
             raise ForgeUnqualifiedModelError(readiness)
+        logger.warning(
+            "[forge/dependency-gate] job=%s stage=%s runs an unqualified model with Forge's modules left as they are: "
+            "%s (%s)",
+            request.job_id,
+            request.stage_name,
+            readiness.label,
+            readiness.reason_code,
+        )
+        self._policy_warnings[request.job_id] = {
+            **warning.as_dict(),
+            "accepted": is_accepted(
+                (request.context_metadata or {}).get("provenance"), warning.code, warning.subject
+            ),
+            "readiness": readiness.as_dict(),
+        }
+        return warning
 
     def _before_dispatch(self, pipeline: Any, request: ImageExecutionRequest) -> None:
         if request.stage_name == "txt2img" and (openpose_declared(request.execution_config) or request.execution_config.get("controlnet_units") is not None):
@@ -754,10 +785,19 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         profile = self._profile_for(request.backend_options)
         if profile is None:
             if request.stage_name in self.capabilities.stage_types:
-                self._dependency_gate(pipeline, request)
-                self._module_baseline[request.job_id] = self._normalize_module_baseline(
-                    pipeline, request
-                )
+                if self._dependency_gate(pipeline, request) is None:
+                    self._module_baseline[request.job_id] = self._normalize_module_baseline(
+                        pipeline, request
+                    )
+                else:
+                    # N1 option (a): the modules this model needs are whatever the operator selected in Forge.
+                    self._module_baseline[request.job_id] = {
+                        "stage": request.stage_name,
+                        "job_id": request.job_id,
+                        "applied": False,
+                        "left_as_is": True,
+                        "reason": "unqualified_model_warning",
+                    }
             return
         self._readiness[request.job_id] = check_klein_host_memory(
             profile, probe=self._memory_probe or read_host_memory
@@ -926,6 +966,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 self._identity,
                 self._verified_source,
                 self._module_baseline,
+                self._policy_warnings,
                 self._lora_evidence,
                 self._openpose,
                 self._controlnet_units,
@@ -942,6 +983,9 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         baseline = self._module_baseline.pop(request.job_id, None)
         if profile is None and result is not None and baseline is not None:
             result.backend_metadata["forge_module_baseline"] = baseline
+        policy_warning = self._policy_warnings.pop(request.job_id, None)
+        if result is not None and policy_warning is not None:
+            result.backend_metadata["policy_warning"] = policy_warning
         readiness = self._readiness.pop(request.job_id, None)
         identity = self._identity.pop(request.job_id, None)
         verified_source = self._verified_source.pop(request.job_id, None)

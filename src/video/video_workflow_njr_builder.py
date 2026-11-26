@@ -23,6 +23,7 @@ from typing import Any
 
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.pipeline.job_models_v2 import LearningJobContext, NormalizedJobRecord
+from src.pipeline.policy_warnings import SURFACE_DESKTOP, merge_accepted_warnings
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import (
     OUTPUT_ROUTE_MOVIE_CLIPS,
@@ -43,6 +44,7 @@ from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
 from src.video.video_interpolation import normalize_interpolation_request
 from src.video.video_workflow_intent import (
     EXPERIMENTAL_OPT_IN_FIELD,
+    WARNING_SURFACE_FIELD,
     build_video_execution_block,
     capability_errors,
     default_negative_prompt,
@@ -64,6 +66,7 @@ from src.video.workflow_source_preparation import (
     passthrough_declared_workflow_source,
     prepare_declared_workflow_source,
 )
+from src.video.workflow_warnings import experimental_workflow_warning
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 # Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
@@ -827,6 +830,11 @@ class VideoWorkflowNjrBuilder:
             }
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
+        warning = experimental_workflow_warning(spec)
+        if warning is not None and extra_metadata["video_workflow"]["experimental_opt_in"] is True:
+            # N1: the job's opt-in is the operator's Queue on a summary that showed this warning.
+            surface = str(form_data.get(WARNING_SURFACE_FIELD) or SURFACE_DESKTOP)
+            extra_metadata = merge_accepted_warnings(extra_metadata, (warning,), surface=surface)
         trusted_lineage = {
             key: str((lineage or {}).get(key) or "").strip()
             for key in ("source_job_id", "source_artifact_id")

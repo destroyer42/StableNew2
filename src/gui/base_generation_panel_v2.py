@@ -608,7 +608,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 display = strip_webui_resource_suffix(getattr(entry, "display_name", internal))
                 if evidence is not None:
                     if evidence.refusal:
-                        display += " (unsupported)"
+                        # N1: an unqualified model runs with a warning; only a real block says it cannot run.
+                        display += " (unqualified)" if evidence.warning else " (unsupported)"
                     elif not evidence.recognized:
                         display += " (unverified)"
                 if display in mapping and mapping[display] != internal:

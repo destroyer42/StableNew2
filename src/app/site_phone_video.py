@@ -15,6 +15,7 @@ from src.app.site_phone_admission import PhonePreviewInput
 from src.controller.job_service import JobService
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.policy_warnings import SURFACE_PHONE
 from src.video.video_eval_run import (
     EVAL_OUTPUT_FOLDER,
     BuiltEvalJob,
@@ -28,7 +29,7 @@ from src.video.video_eval_suite import (
     EvalCase,
     EvalSuite,
 )
-from src.video.video_workflow_intent import default_negative_prompt
+from src.video.video_workflow_intent import WARNING_SURFACE_FIELD, default_negative_prompt
 from src.video.video_workflow_njr_builder import FrozenVideoInputs, VideoWorkflowNjrBuilder
 from src.video.workflow_contracts import WorkflowSpec
 from src.video.workflow_frame_count import frame_count_policy, legal_frame_counts, parse_frame_count
@@ -378,7 +379,8 @@ class PhoneVideo:
                     f"arm-{number}",
                     f"{spec.display_name} {spec.workflow_version}",
                     ARM_BACKEND_WORKFLOW,
-                    {**arm, "frame_count": frames},
+                    # N1: a phone Queue records its accepted warnings as accepted on the phone.
+                    {**arm, "frame_count": frames, WARNING_SURFACE_FIELD: SURFACE_PHONE},
                 )
             )
         return selected

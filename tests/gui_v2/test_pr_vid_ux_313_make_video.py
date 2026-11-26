@@ -232,11 +232,11 @@ def test_make_video_keeps_an_approved_choice_and_never_carries_an_opt_in(env) ->
     env.tab._on_workflow_selected(None)
     route_image_to_video_workflow(main_window=env.window, image_path=path)
     assert env.tab.workflow_var.get() == RECOMMENDED_ID
-    assert env.tab._experimental_selection_confirmed() is False
+    assert "experimental" not in env.tab.queue_block_reason_var.get().lower()
     assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is False
 
 
-def test_an_experimental_workflow_stays_selectable_and_needs_its_own_opt_in(env) -> None:
+def test_an_experimental_workflow_warns_and_queue_on_the_warning_is_its_opt_in(env) -> None:
     # PR-VID-UX-360: the picker offers the engines for the selected task; driving-clip engines are
     # offered under "Follow a driving clip".
     assert env.tab.select_task("follow_clip")
@@ -246,16 +246,17 @@ def test_an_experimental_workflow_stays_selectable_and_needs_its_own_opt_in(env)
     env.tab.workflow_label_var.set(experimental_label)  # programmatic label write
     assert env.tab.workflow_var.get() == ANIMATE2_ID
 
-    assert "Choose this experimental workflow" in env.tab._queue_block_reason()
-    assert str(env.tab.queue_workflow_button.cget("state")) == "disabled"
-    assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is False
-
-    env.tab._on_workflow_selected(None)
+    # N1: a programmatic (restored, handed-off) selection is not a gate; the header warns beside Queue.
     assert env.tab._queue_block_reason() == ""
+    assert "experimental" in env.tab.queue_block_reason_var.get().lower()
+    assert "Queue runs it anyway" in env.tab.queue_block_reason_var.get()
     assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is True
 
-    env.tab.workflow_var.set(TI2V_ID)  # leaving the experimental workflow drops the authorisation
-    assert env.tab._experimental_selection_confirmed() is False
+    env.tab.workflow_var.set(
+        TI2V_ID
+    )  # leaving the experimental workflow drops the warning and the opt-in
+    assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is False
+    assert "experimental" not in env.tab.queue_block_reason_var.get().lower()
 
 
 # ------------------------------------------------------------------ friendly names, persisted state
@@ -406,10 +407,7 @@ def test_explicit_experimental_selection_and_queue_freeze_consent(env) -> None:
     tab = env.tab
     workflow_id = "wan_animate2_prompt_i2v_v1"
     tab.workflow_var.set(workflow_id)
-    tab.queue_workflow_button.invoke()
-    assert env.service.calls == []
-
-    tab._on_workflow_selected(None)
+    assert "experimental" in tab.queue_block_reason_var.get().lower()  # N1: shown, not a gate
     tab.queue_workflow_button.invoke()
 
     [(records, _policy)] = env.service.calls
@@ -417,6 +415,8 @@ def test_explicit_experimental_selection_and_queue_freeze_consent(env) -> None:
     block = record.config["video_workflow"]
     assert block["workflow_id"] == workflow_id
     assert block["video_execution"]["experimental_opt_in"] is True
+    accepted = record.extra_metadata["accepted_warnings"]
+    assert [item["code"] for item in accepted] == ["video_experimental_workflow"]
     assert "experimental_opt_in" not in tab.get_video_workflow_state()
 
 

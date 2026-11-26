@@ -717,12 +717,10 @@ def test_a_declined_source_preview_never_blocks_queueing_the_same_source(
     assert view is not None and view.source_state == STATE_ERROR
     shown = panel.source_text_var.get()
     assert shown.startswith("Source preview unavailable:") and "prepared normally" in shown
-    # Wan-Animate-2 is still experimental, so Queue waits for the job's opt-in (PR-VID-GOV-316)
-    # and for nothing else: the declined preview disables nothing.
-    assert str(tab.queue_workflow_button.cget("state")) == "disabled"
-    assert "Choose this experimental workflow" in tab.queue_block_reason_var.get()
-    tab._on_workflow_selected(None)
+    # Wan-Animate-2 is still experimental, so Queue shows its warning (N1) and nothing else: the declined preview
+    # disables nothing.
     assert str(tab.queue_workflow_button.cget("state")) == "normal"
+    assert "experimental" in tab.queue_block_reason_var.get().lower()
 
     tab.pose_video_var.set(str(clip))
     tab._set_text_value(tab.prompt_text, "A person in a studio")

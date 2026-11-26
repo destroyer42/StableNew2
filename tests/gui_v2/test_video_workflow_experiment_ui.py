@@ -331,13 +331,8 @@ def test_tab_preview_queue_and_invalidation_flow(tk_root, tmp_path):
     tab._invalidate_experiment_preview()
     assert str(panel.queue_button.cget("state")) == "disabled"
 
+    # N1: re-selecting the same experimental workflow changes no previewed input (its opt-in is the Queue itself).
     tab._set_text_value(tab.prompt_text, "a woman in a navy top")
-    panel._on_preview()
-    runner.drain()
-    tab.workflow_var.set(tab.workflow_var.get())  # opt-in is part of the previewed inputs
-    assert str(panel.queue_button.cget("state")) == "disabled"
-    tab._on_workflow_selected(None)
-
     panel._on_preview()
     runner.drain()
     panel._on_queue()
@@ -345,9 +340,8 @@ def test_tab_preview_queue_and_invalidation_flow(tk_root, tmp_path):
     assert len(service.calls) == 1 and len(service.calls[0]) == 2
     assert "Queued 2 experiment jobs" in tab.status_var.get()
     assert app.syncs == [threading.get_ident()]  # queue-state refresh ran on the Tk thread
-    assert (
-        tab._experimental_selection_confirmed() is True
-    )  # never silently enabled or cleared by it
+    # N1: the experimental workflow's opt-in is the Queue itself, and queueing does not clear it.
+    assert tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is True
 
 
 @pytest.mark.gui

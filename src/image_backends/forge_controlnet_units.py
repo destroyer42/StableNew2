@@ -30,7 +30,11 @@ from src.image_backends.forge_controlnet import (
     build_unit,
     resolve_advertised_model,
 )
-from src.image_backends.model_policy import EVIDENCE_REGISTRY, resolve_model_policy
+from src.image_backends.model_policy import (
+    EVIDENCE_REGISTRY,
+    RegistryFamilyLookup,
+    resolve_model_policy,
+)
 from src.image_backends.openpose_capability import assess_openpose_target
 
 RUNTIME_KEY = "controlnet_units_runtime"
@@ -62,7 +66,9 @@ def validate_intent(
 def validate_target(model: str, backend_id: str, backend_options: Any) -> None:
     from src.image_backends.exact_model_profile import resolve_model_profile
 
-    policy = resolve_model_policy(model)
+    # N1 / W8: without the registry's persisted family lookup every ordinary checkpoint resolved to "no evidence"
+    # here, so ordered ControlNet units were refused at dispatch for every model the compiler had admitted.
+    policy = resolve_model_policy(model, family_lookup=RegistryFamilyLookup())
     if (
         resolve_model_profile(backend_options) is not None
         or policy.evidence != EVIDENCE_REGISTRY

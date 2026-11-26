@@ -611,6 +611,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `model_inventory_reconcile.py`: Explicit, GET-only reconciliation of the offline inventory with one already-running WebUI endpoint (PR-IMG-MO…
 - `model_policy.py`: Model-family capability / operator-policy registry (PR-IMG-130A)
 - `model_policy_lora.py`: One LoRA-selection assessment against a model policy (PR-IMG-130B; extracted from the PR-IMG-130A projection)
+- `model_policy_warnings.py`: The N1 warning for a checkpoint StableNew has no qualified profile for (``src/pipeline/policy_warnings.py``)
 - `model_readiness.py`: Installed-model readiness projection (PR-IMG-MODELS-150): discovered and installed is not executable
 - `model_readiness_probe.py`: Read-only evidence gathering for one selected checkpoint (PR-IMG-MODELS-150)
 - `openpose_capability.py`: Target eligibility for OpenPose ControlNet conditioning (PR-IMG-CNET-210)
@@ -767,6 +768,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `global_prompt_policy.py`: Freeze and read the operator-selected global prompt policy
 - `history_variation_compiler.py`: Pure compiler for "Regenerate with Changes" from a persisted history job (PR-HISTORY-610A)
 - `history_variation_marker.py`: The persisted marker of an edited history variation (PR-HISTORY-610A); dependency-free so projections can rea…
+- `image_admission.py`: Deterministic image-plan checks shared by Queue admission and dispatch (N1, "warn, don't block")
 - `image_edit_inputs.py`: Bounded, content-addressed image-edit inputs in existing mutable state, like OpenPose snapshots
 - `image_performance.py`: Bounded, per-run observations at the image executor's controlled boundaries
 - `intent_artifact_contract.py`: Canonicalize and hash the saved intent artifact used for provenance and replay
@@ -782,6 +784,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `openpose_compile.py`: PromptPack OpenPose conditioning compilation (PR-IMG-CNET-210)
 - `outpaint_canvas.py`: Toolkit-neutral outpainting canvas preparation and original-pixel preservation
 - `pipeline_runner.py`: Production pipeline runner integration
+- `policy_warnings.py`: Policy warnings (N1 "warn, don't block"): typed, surface-neutral records of a policy status
 - `prompt_pack_job_builder.py`: Builder pipeline that converts PromptPack entries into NormalizedJobRecords
 - `prompt_pack_parser.py`: Parse PromptPack text blocks into rows with negative prompts and inline resource references
 - `replay_engine.py`: Validate and hydrate replay inputs and invoke the canonical NJR runner
@@ -1105,6 +1108,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_registry.py`: Resolve exact workflow versions and list offerable entries under the catalog's governance rules
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
 - `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
+- `workflow_warnings.py`: The N1 warning for an experimental Comfy video workflow (``src/pipeline/policy_warnings.py``)
 
 ## src/video/motion/
 

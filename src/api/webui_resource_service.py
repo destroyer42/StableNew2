@@ -26,7 +26,12 @@ from src.image_backends.comfy_image_readiness import check_installation
 from src.image_backends.comfy_qwen_image_profile import QwenImageProfile
 from src.image_backends.forge_flux1_profile import Flux1Profile
 from src.image_backends.model_policy import resolve_model_policy, resolve_model_profile_for_policy
+from src.image_backends.model_policy_warnings import (
+    publish_shown_warnings,
+    unqualified_model_warning,
+)
 from src.image_backends.model_readiness import assess_model_readiness
+from src.pipeline.policy_warnings import PolicyWarning
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +112,7 @@ class WebUIResourceService(BaseWebUIResourceService):
         root = self.root_path / "models" / ("VAE" if vae else "Stable-diffusion")
         registry = AssetRegistry(self.root_path)
         result = []
+        shown: dict[str, PolicyWarning] = {}
         for entry in list_resources():
             if not isinstance(entry, WebUIResource):
                 result.append(entry)
@@ -157,31 +163,46 @@ class WebUIResourceService(BaseWebUIResourceService):
                     selected=None,
                     profile_available=policy.qualified,
                 )
-                refusal = policy.refusal or (
-                    " ".join(readiness.reasons) if readiness.blocks_dispatch else ""
-                )
+                # N1: a model without a qualified profile is a warning that says why and what makes it work.
+                warning = unqualified_model_warning(readiness, webui_root=self.root_path)
+                refusal = warning.text() if warning is not None else policy.refusal
+                is_warning = bool(refusal)
+                if warning is not None:
+                    shown[entry.name] = warning
                 profile = resolve_model_profile_for_policy(policy)
                 if isinstance(profile, QwenImageProfile) and profile.structural_transformer:
                     installation = check_installation(profile, model_name=entry.name)
                     if not installation.ready:
-                        refusal = installation.summary
+                        refusal, is_warning = installation.summary, False
                 elif isinstance(profile, Flux1Profile) and variant is not None:
                     if variant.precision not in profile.transformer_precisions:
-                        refusal = (
-                            f"{profile.display_name} cannot use {variant.precision} precision. "
-                            f"Select a transformer in one of: {', '.join(profile.transformer_precisions)}."
+                        refusal, is_warning = (
+                            (
+                                f"{profile.display_name} cannot use {variant.precision} precision. "
+                                f"Select a transformer in one of: {', '.join(profile.transformer_precisions)}."
+                            ),
+                            False,
                         )
                     missing = [
-                        asset.filename
+                        f"{asset.filename} (in {self.root_path / 'models' / asset.models_subdir})"
                         for asset in profile.modules
                         if not (
                             self.root_path / "models" / asset.models_subdir / asset.filename
                         ).is_file()
                     ]
                     if missing and not refusal:
-                        refusal = f"{profile.display_name} needs {', '.join(missing)} in the Forge model folders."
-                evidence = replace(evidence, refusal=refusal)
+                        # N1: a real block (missing files) still says exactly what is missing and where it goes.
+                        refusal, is_warning = (
+                            f"{profile.display_name} needs {', '.join(missing)}. Put each file in that folder and "
+                            "refresh the model list; you can ask Claude to find and download them there.",
+                            False,
+                        )
+                evidence = replace(evidence, refusal=refusal, warning=is_warning)
             result.append(replace(entry, picker=replace(evidence, path=path)))
+        if not vae:
+            publish_shown_warnings(
+                shown
+            )  # N1: what the picker showed, so Queue can record what was accepted
         return result
 
     def _fetch_samplers(self) -> list[str]:

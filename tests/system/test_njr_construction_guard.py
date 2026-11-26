@@ -76,6 +76,11 @@ REPLACE_ALLOWED: dict[str, tuple[int, str]] = {
         1,
         "Learning: attaches the declared embeddings to a record materialize_njr just built; same identity, no new job",
     ),
+    "src/pipeline/policy_warnings.py": (
+        1,
+        "N1: freezes the warnings the operator accepted at Queue into the provenance of a record Preview built, just "
+        "before submit_njrs; same identity, no new job",
+    ),
     "tools/acceptance/img_116_klein_acceptance.py": (
         1,
         "operator-only acceptance tool: redirects the record's output directory to its report folder",

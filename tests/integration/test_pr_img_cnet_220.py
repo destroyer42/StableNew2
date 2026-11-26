@@ -70,7 +70,9 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setattr(
         adapter,
         "resolve_model_policy",
-        lambda model: model_policy.resolve_model_policy(model, family_lookup=family_lookup),
+        lambda model, **_kwargs: model_policy.resolve_model_policy(
+            model, family_lookup=family_lookup
+        ),
     )
     for model in MODELS:
         write_controlnet_weights(
