@@ -1,7 +1,7 @@
 # Runbook: phone review gateway
 
-Behavior and the sync contract: [Review Gateway](../Subsystems/ReviewGateway/REVIEW_GATEWAY.md). The installer has not
-yet been run on a real container; treat the first install as its test.
+Behavior and the sync contract: [Review Gateway](../Subsystems/ReviewGateway/REVIEW_GATEWAY.md). The owner's first
+real install, on Proxmox, is recorded in [Proxmox preparation](proxmox_review_gateway_setup.md).
 
 ## Prerequisites
 
