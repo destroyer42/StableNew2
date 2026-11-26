@@ -134,7 +134,7 @@
     "src/pipeline/variant_planner.py": 1,
     "src/pipeline/video.py": 1,
     "src/promptpacks/storage.py": 1,
-    "src/queue/job_queue.py": 6,
+    "src/queue/job_queue.py": 4,
     "src/queue/single_node_runner.py": 7,
     "src/queue/stub_runner.py": 1,
     "src/randomizer/randomizer_engine_v2.py": 2,
@@ -171,5 +171,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1367
+  "total": 1365
 }
