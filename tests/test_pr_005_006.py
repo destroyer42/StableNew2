@@ -1,7 +1,6 @@
 """Test PR-005 (Preview Thumbnail & ETA) and PR-006 (Lifecycle Log Formatting)."""
 
 import sys
-from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,10 +8,8 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.gui.app_state_v2 import AppStateV2
-from src.gui.panels_v2.debug_log_panel_v2 import DebugLogPanelV2
-from src.gui.panels_v2.preview_panel_v2 import PreviewPanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
-from src.pipeline.job_models_v2 import JobLifecycleLogEvent
+from src.gui.preview_panel_v2 import PreviewPanelV2
 
 
 def test_pr_005_thumbnail_loading(tk_root):
@@ -72,116 +69,6 @@ def test_pr_005_eta_formatting(tk_root):
         panel.destroy()
 
 
-def test_pr_006_log_formatting(tk_root):
-    """Test PR-006: Enhanced lifecycle log formatting."""
-    print("\n=== Testing PR-006: Lifecycle Log Formatting ===")
-
-    try:
-        app_state = AppStateV2()
-        panel = DebugLogPanelV2(tk_root, app_state=app_state)
-
-        # Create test events
-        test_events = [
-            JobLifecycleLogEvent(
-                timestamp=datetime.now(),
-                source="queue",
-                event_type="job_created",
-                job_id="abc123def456",
-                bundle_id=None,
-                draft_size=None,
-                message="Created from draft",
-            ),
-            JobLifecycleLogEvent(
-                timestamp=datetime.now(),
-                source="executor",
-                event_type="job_started",
-                job_id="abc123def456",
-                bundle_id=None,
-                draft_size=None,
-                message="Starting txt2img",
-            ),
-            JobLifecycleLogEvent(
-                timestamp=datetime.now(),
-                source="executor",
-                event_type="stage_completed",
-                job_id="abc123def456",
-                bundle_id=None,
-                draft_size=None,
-                message="Completed txt2img",
-            ),
-            JobLifecycleLogEvent(
-                timestamp=datetime.now(),
-                source="executor",
-                event_type="job_completed",
-                job_id="abc123def456",
-                bundle_id=None,
-                draft_size=None,
-                message="All stages done",
-            ),
-            JobLifecycleLogEvent(
-                timestamp=datetime.now(),
-                source="executor",
-                event_type="job_failed",
-                job_id="def789ghi012",
-                bundle_id=None,
-                draft_size=None,
-                message="Model not found",
-            ),
-            JobLifecycleLogEvent(
-                timestamp=datetime.now(),
-                source="queue",
-                event_type="draft_submitted",
-                job_id=None,
-                bundle_id="bundle_xyz",
-                draft_size=4,
-                message="Batch submission",
-            ),
-        ]
-
-        # Format each event and check
-        for event in test_events:
-            formatted = panel._format_event(event)
-
-            # Check timestamp present
-            assert ":" in formatted.split("|")[0], "Missing timestamp"
-
-            # Check event-specific formatting
-            if event.event_type == "job_created":
-                assert "created" in formatted.lower(), "Missing 'created' message"
-                assert event.job_id[:8] in formatted, "Missing short job ID"
-
-            elif event.event_type == "job_started":
-                assert "started" in formatted.lower(), "Missing 'started' message"
-
-            elif event.event_type == "stage_completed":
-                assert "✓" in formatted, "Missing success checkmark"
-                assert "completed" in formatted.lower(), "Missing 'completed'"
-
-            elif event.event_type == "job_completed":
-                assert "✓" in formatted, "Missing success checkmark"
-                assert "completed" in formatted.lower(), "Missing 'completed'"
-
-            elif event.event_type == "job_failed":
-                assert "✗" in formatted, "Missing failure X"
-                assert "failed" in formatted.lower(), "Missing 'failed'"
-                assert event.message in formatted, "Missing error reason"
-
-            elif event.event_type == "draft_submitted":
-                assert str(event.draft_size) in formatted, "Missing draft size"
-                assert "batch" in formatted.lower(), "Missing 'batch' message"
-
-            formatted_ascii = formatted.encode("unicode_escape").decode("ascii")
-            print(f"[OK] Formatted: {formatted_ascii}")
-
-        print("[OK] All event types format correctly")
-        print("[OK] Timestamps included")
-        print("[OK] Visual indicators ([OK] [FAIL]) present")
-        print("[OK] Job IDs shortened to 8 chars")
-
-    finally:
-        panel.destroy()
-
-
 def main():
     """Run all tests for PR-005 and PR-006."""
     print("=" * 60)
@@ -191,7 +78,6 @@ def main():
     try:
         test_pr_005_thumbnail_loading()
         test_pr_005_eta_formatting()
-        test_pr_006_log_formatting()
 
         print("\n" + "=" * 60)
         print("[OK] ALL TESTS PASSED")

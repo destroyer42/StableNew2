@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta
 
-from src.history.duration_stats import DurationStats
-from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
 from src.queue.job_repository import JobRepository
 from tests.helpers.njr_factory import make_queue_job
@@ -37,37 +35,6 @@ def test_end_to_end_job_timing_flow(tmp_path):
     assert entry.completed_at is not None
     assert entry.duration_ms is not None
     assert 2900 <= entry.duration_ms <= 3100  # ~3000ms
-
-    # Verify duration stats can calculate from history
-    stats = DurationStats()
-    stats.load_history(entries)
-    avg = stats.get_average_duration_ms()
-    assert avg is not None
-    assert 2900 <= avg <= 3100
-
-
-def test_duration_stats_handles_large_history():
-    """Test that DurationStats handles large history files efficiently."""
-    stats = DurationStats()
-
-    # Create 1000 mock history entries
-    large_history = [
-        JobHistoryEntry(
-            job_id=f"job-{i}",
-            created_at=datetime.utcnow(),
-            status=JobStatus.COMPLETED,
-            duration_ms=1000 + (i % 100),  # Vary durations 1000-1099ms
-        )
-        for i in range(1000)
-    ]
-
-    stats.load_history(large_history)
-
-    # Should filter to only entries with duration
-    avg = stats.get_average_duration_ms()
-    assert avg is not None
-    # Average should be around middle of range (1000-1099)
-    assert 1040 <= avg <= 1060
 
 
 def test_job_timing_edge_case_very_fast_completion(tmp_path):
@@ -114,8 +81,9 @@ def test_job_timing_edge_case_long_running(tmp_path):
     assert abs(entry.duration_ms - expected_ms) < 1000  # Within 1 second tolerance
 
     # Test formatting
-    stats = DurationStats()
-    formatted = stats.format_duration_ms(entry.duration_ms)
+    from src.gui.job_history_panel_v2 import JobHistoryPanelV2
+
+    formatted = JobHistoryPanelV2._format_duration_ms(entry.duration_ms)
     assert "51h" in formatted  # 51 hours + 15 minutes
 
 

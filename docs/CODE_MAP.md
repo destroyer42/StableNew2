@@ -167,7 +167,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `job_service_dispatch.py`: Request one queued dispatch with auto-run off or start the worker with auto-run on
 - `job_service_outage.py`: WebUI outage and GPU device-loss containment owned at the JobService boundary (PR-QUEUE-WEBUI-171, PR-QUEUE-G…
 - `job_service_shutdown.py`: Shutdown admission fence and runner quiescence owned at the JobService boundary (PR-RUNTIME-SHUTDOWN-140)
-- `learning_execution_controller.py`: Controller wrapper for learning execution (non-GUI)
 - `masked_edit_service.py`: Prepare one masked Review edit with the existing builder and reprocess admission boundary
 - `movie_clips_submission_service.py`: Movie Clips admission (PR-VID-ASM-332): the tab's request becomes one queued assembly job
 - `outpaint_edit_service.py`: Prepare one frozen Review outpainting job with the existing masked-edit builder and reprocess admission bound…
@@ -266,7 +265,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `base_generation_panel_v2.py`: Base generation panel for GUI V2
 - `batch_operations_panel_v2.py`: Tk "Batches" view inside the Queue/History operator workflow (PR-BATCH-OPS-201)
 - `batch_retry_dialog.py`: Modal review of a selected retry (PR-BATCH-OPS-201)
-- `controller.py`: GUI compatibility export for the controller-owned base pipeline controller
 - `design_system_v2.py`: Tk/ttk style registration and primitive helpers for the StableNew V2 GUI
 - `dropdown_loader_v2.py`: Normalize WebUI resources and populate Pipeline dropdowns across the stage cards and sidebar
 - `engine_settings_dialog.py`: Modern engine settings dialog for GUI V2
@@ -281,7 +279,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `job_history_panel_v2.py`: Compact job history renderer for the Pipeline tab
 - `klein_lora_selection_dialog.py`: One batch review of ordered verified candidates, on the Tk thread only
 - `layout_v2.py`: Apply shared Tk grid rules and reversible compact layout adjustments to workspace widgets
-- `learning_review_dialog_v2.py`: Simple dialog for reviewing recent learning runs
 - `learning_state.py`: Define serializable Learning experiment, variant, and image-reference state
 - `log_trace_panel_v2.py`: Trace and operator log panel for GUI V2
 - `main_window.py`: Expose the GUI entrypoint wrapper used by existing callers and tests
@@ -335,16 +332,9 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `qualification_review.py`: Worker-only qualification follow-up validation through existing catalog/compiler seams
 - `video_workspace_handoff.py`: Route selected media and provenance between Review, Photo Optimize, Video Workflow, and Movie Clips
 
-## src/gui/dialogs/
-
-- `__init__.py`: GUI Dialogs
-- `multi_folder_selector.py`: Multi-Folder Selection Dialog
-
 ## src/gui/help_text/
 
 - `__init__.py`: Help text package for GUI tooltips and inline documentation
-- `adetailer_help.py`: Help text definitions for ADetailer configuration options
-- `inpaint_help.py`: Help text definitions for Img2Img inpaint configuration options
 - `stage_setting_help_v2.py`: Centralized operator help text for stage-card and video setting tooltips
 - `workflow_guidance_v2.py`: Build operator guidance for Review, staged queue actions, SVD, Video Workflow, and Movie Clips
 
@@ -359,19 +349,13 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `api_failure_visualizer_v2.py`: API Failure Visualizer for the Debug Hub
 - `asset_readiness_tab_v2.py`: Read-only asset readiness tab for the Debug Hub (PR-ASSET-130)
 - `debug_hub_panel_v2.py`: Unified Debug Hub panel for StableNew V2
-- `debug_log_panel_v2.py`: Simple debug log console for job lifecycle events
 - `history_variation_panel.py`: Pipeline-tab editor for a "Regenerate with Changes" variation (PR-HISTORY-610A)
 - `job_explanation_panel_v2.py`: Job Explanation panel for the Debug Hub
 - `layout_manager_v2.py`: Optional layout manager to compose V2 panels
 - `operator_readiness_panel_v2.py`: Compact operator readiness and first-run guidance surface
-- `pipeline_panel_v2.py`: Re-export of PipelinePanelV2 for modular layout use
-- `preview_panel_v2.py`: Re-export of PreviewPanelV2 for modular layout use
 - `queue_panel_v2.py`: V2 Queue Panel (PR-CORE1-A3: NJR-only display)
-- `randomizer_panel_v2.py`: Re-export of RandomizerPanelV2 for modular layout use
 - `reprocess_panel_v2.py`: Minimal sidebar launcher for the canonical Review-tab reprocess workflow
 - `running_job_panel_v2.py`: V2 Running Job Panel - displays active job with progress, ETA, and controls
-- `sidebar_panel_v2.py`: Re-export of SidebarPanelV2 for modular layout use
-- `status_bar_v2.py`: Re-export of StatusBarV2 for modular layout use
 
 ## src/gui/panels_v2/widgets/
 
@@ -399,8 +383,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `batch_operations_contract.py`: Toolkit-neutral session for the Queue/History "Batches" view (PR-BATCH-OPS-201)
 - `config_source_contract.py`: Truthful wording for the Pipeline's settings sources, actions and empty states (PR-GUI-UX-500, PR-GUI-UX-520,…
 - `edit_work_runner.py`: Keyed, latest-wins background work for the Edit workspaces (Review and Photo Optimize), PR-GUI-UX-580
-- `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
-- `form_section_contract.py`: Form section contract independent of widget framework
 - `history_artifact_contract.py`: Select a recorded History artifact by media type, not by its poster image
 - `history_comparison_artifact.py`: Bounded verification of the one recorded still image per job (PR-HISTORY-610B); no thumbnail or directory fal…
 - `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
@@ -419,7 +401,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `queue_status_contract.py`: Queue status display contract independent of toolkit
 - `review_selection_contract.py`: Toolkit-neutral revision bookkeeping for Review's asynchronous selection (PR-GUI-UX-580)
 - `review_workspace_contract.py`: Toolkit-neutral session for the task-first Review workspace (PR-REVIEW-LIFECYCLE-621)
-- `selection_list_contract.py`: Selection list contract for deterministic list + selection behavior
 - `stale_pack_contract.py`: Toolkit-neutral rules for adding a PromptPack that has unsaved Prompt-tab edits (GUI-TRUTH-912)
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
 - `storyboard_contract.py`: Toolkit-neutral capture and dirty-state for the existing sequence editor; no executable state
@@ -526,7 +507,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `embedding_picker_panel.py`: Embedding picker panel with per-embedding weight controls
 - `expander_v2.py`: Unified expander button used by Pipeline Tab cards
 - `flow_row_v2.py`: Wrapping row of controls (GUI-COMPLETE-760)
-- `image_thumbnail.py`: Reusable image thumbnail widget for Tkinter
 - `lora_browser_dialog.py`: Paged local LoRA browser
 - `lora_keyword_dialog.py`: Dialog for displaying and copying LoRA keywords
 - `lora_picker_panel.py`: Authored LoRA controls and local browser; all discovery is off Tk
@@ -546,7 +526,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `submission_notice_v2.py`: Inline, non-modal submission feedback (PR-VID-UX-313)
 - `tab_overview_panel_v2.py`: Render workspace overviews with optional expanded help for each major tab
 - `task_navigation_bar_v2.py`: Task-first navigation bar for the main window (PR-GUI-410)
-- `thumbnail_widget_v2.py`: Thumbnail display widget for GUI V2
 - `video_preview_widget_v2.py`: Looping in-app video preview (PR-VID-UX-314)
 
 ## src/gui_v2/
@@ -593,7 +572,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 ## src/history/
 
-- `duration_stats.py`: Calculate job duration statistics for time estimates
 - `history_record.py`: Represent immutable persisted NJR history and hydrate snapshots for replay
 - `history_schema_v26.py`: Validate persisted v2.6 job history entries against required fields and allowed schema
 
@@ -649,7 +627,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `baseline_exclusions.py`: Settings a controlled Learning study refuses, detected in and cleared from the Learning baseline draft only
 - `compatibility_probe.py`: Compatibility probe design (MEC-901): "does this checkpoint run here, and what kind of model is it?"
 - `controlled_study_display.py`: Presentation dispatch for the controlled single-position studies (Prompt Slot, LoRA Composition, Embedding)
-- `dataset_builder.py`: Dataset aggregation utilities for learning groundwork
 - `design_estimate.py`: How much work a design would create, before any Preview is built
 - `discovered_grouping.py`: Grouping engine for discovered-review candidate selection
 - `discovered_review_models.py`: Discovered-review group and item models
@@ -673,7 +650,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `experiment_outcome.py`: The derived outcome of a Learning experiment, and the operator's closure of it
 - `experiment_reconciliation.py`: Exact admitted Learning identity and repository evidence projections; never dispatches
 - `experiment_store.py`: Persist Learning sessions and their index while preserving closure decisions and batch associations
-- `feedback_manager.py`: Feedback capture helpers for pipeline runs
 - `feedback_save.py`: Post-append projections cannot change the authoritative feedback save outcome
 - `grid_contact_sheet.py`: Labeled PNG contact sheet for a Two-Axis Grid, rendered only from recorded artifacts
 - `grid_results.py`: Toolkit-neutral projection of a Two-Axis Grid experiment: cell coordinates, exact artifacts, placeholders
@@ -684,8 +660,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `learning_adapter.py`: Learning adapter helpers
 - `learning_analytics.py`: Analytics engine for learning experiments
 - `learning_contract.py`: Stable stub contract for future learning consumers
-- `learning_execution.py`: Learning execution orchestrator (GUI/Tk free)
-- `learning_feedback.py`: Feedback models for learning runs
 - `learning_njr.py`: The one assembly of an immutable Learning txt2img NJR from an already frozen, validated configuration
 - `learning_paths.py`: Canonical paths for learning data artifacts
 - `learning_plan.py`: Learning-mode plan data structures
@@ -806,11 +780,9 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `njr_core_v26.py`: Immutable eight-part Normalized Job Record contract for StableNew v2.6
 - `openpose_compile.py`: PromptPack OpenPose conditioning compilation (PR-IMG-CNET-210)
 - `outpaint_canvas.py`: Toolkit-neutral outpainting canvas preparation and original-pixel preservation
-- `payload_builder.py`: Canonical payload builder for SDXL pipeline stages
 - `pipeline_runner.py`: Production pipeline runner integration
 - `prompt_pack_job_builder.py`: Builder pipeline that converts PromptPack entries into NormalizedJobRecords
 - `prompt_pack_parser.py`: Parse PromptPack text blocks into rows with negative prompts and inline resource references
-- `randomizer_v2.py`: Adapt pipeline settings to randomization plans and expand or count configuration variants
 - `replay_engine.py`: Validate and hydrate replay inputs and invoke the canonical NJR runner
 - `replay_input_verification.py`: Verify that the files a persisted NJR froze are still present and unchanged before it is replayed
 - `replay_njr_compiler.py`: Pure history-replay compiler for canonical NJRs
@@ -933,7 +905,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 ## src/services/
 
-- `config_service.py`: Read and write PromptPack configuration and named pack lists as JSON
 - `diagnostics_service_v2.py`: Coordinate diagnostic bundle creation and track asynchronous work through shutdown
 - `duration_stats_service.py`: Duration statistics service for queue ETA estimation
 - `operator_readiness_service.py`: Read-only operator readiness projection built from existing authorities
@@ -1028,7 +999,6 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
 - `history_media_projection.py`: Read-only media-selection decisions over existing Job History entries
-- `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
 - `managed_comfy_runtime.py`: Read-only production view of the StableNew-managed ComfyUI runtime contract
 - `motion_alignment.py`: Typed spatial alignment of a driving clip to a source image (PR-VID-MOTION-420)
