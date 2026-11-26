@@ -21,6 +21,12 @@
     },
     {
       "$ref": "#/$defs/pairing_offer"
+    },
+    {
+      "$ref": "#/$defs/deploy_request"
+    },
+    {
+      "$ref": "#/$defs/deploy_status"
     }
   ],
   "$defs": {
@@ -815,6 +821,200 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 10
+        }
+      }
+    },
+    "commit_sha": {
+      "description": "A full Git commit id of StableNew's repository, lowercase.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "deploy_request": {
+      "description": "PC to gateway (DEPLOY-2): deploy this commit of main to the gateway. The gateway only hands the commit id to its root deployer, which checks with GitHub that it is a signed merge on main and newer than the deployed commit. Refused while the console switch is off.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "request_id",
+        "target_sha",
+        "requested_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "deploy_request"
+        },
+        "request_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "target_sha": {
+          "$ref": "#/$defs/commit_sha"
+        },
+        "requested_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "deploy_status": {
+      "description": "Gateway to PC (DEPLOY-2): the console switch, the deployed commit, a request still waiting for the deployer, and the deployer's last result (outcome running while it works).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "remote_deploy",
+        "deployed_commit",
+        "pending",
+        "last"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "deploy_status"
+        },
+        "remote_deploy": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        },
+        "deployed_commit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/commit_sha"
+            }
+          ]
+        },
+        "pending": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "request_id",
+                "target_sha"
+              ],
+              "properties": {
+                "request_id": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "target_sha": {
+                  "$ref": "#/$defs/commit_sha"
+                }
+              }
+            }
+          ]
+        },
+        "last": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "request_id",
+                "target",
+                "old_commit",
+                "new_commit",
+                "outcome",
+                "schema_changed",
+                "finished_at"
+              ],
+              "properties": {
+                "action": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "enum": [
+                        "deploy",
+                        "rollback"
+                      ]
+                    }
+                  ]
+                },
+                "request_id": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/uuid"
+                    }
+                  ]
+                },
+                "target": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/commit_sha"
+                    }
+                  ]
+                },
+                "old_commit": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/commit_sha"
+                    }
+                  ]
+                },
+                "new_commit": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/commit_sha"
+                    }
+                  ]
+                },
+                "outcome": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[a-z_]{1,40}$"
+                    }
+                  ]
+                },
+                "schema_changed": {
+                  "type": "boolean"
+                },
+                "finished_at": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/timestamp"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         }
       }
     }

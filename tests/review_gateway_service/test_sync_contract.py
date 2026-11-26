@@ -64,6 +64,26 @@ def sample(kind: str) -> dict:
             "scopes": ["review"],
             "expires_at": NOW,
         },
+        "deploy_request": {
+            "request_id": str(uuid.uuid4()),
+            "target_sha": "c" * 40,
+            "requested_at": NOW,
+        },
+        "deploy_status": {
+            "remote_deploy": "enabled",
+            "deployed_commit": "c" * 40,
+            "pending": None,
+            "last": {
+                "action": "deploy",
+                "request_id": None,
+                "target": "c" * 40,
+                "old_commit": None,
+                "new_commit": "c" * 40,
+                "outcome": "deployed",
+                "schema_changed": False,
+                "finished_at": NOW,
+            },
+        },
     }
     return {"schema_version": SCHEMA_VERSION, "type": kind, **payloads[kind]}
 
@@ -75,6 +95,8 @@ KINDS = (
     "immich_receipt",
     "device_revocation",
     "pairing_offer",
+    "deploy_request",
+    "deploy_status",
 )
 
 
@@ -123,6 +145,9 @@ def test_unknown_fields_and_a_foreign_version_are_refused(contract: Contract, ki
         ("item_manifest", {"item": {"library_id": "lib-00000001", "sha256": DIGEST + "\n"}}),
         ("item_manifest", {"run_id": "../../etc"}),
         ("acknowledgement", {"outcome": "refused", "reason_code": "because"}),
+        ("deploy_request", {"target_sha": "main"}),
+        ("deploy_request", {"target_sha": "c" * 40 + "\n"}),
+        ("deploy_status", {"remote_deploy": "maybe"}),
     ],
 )
 def test_malformed_values_are_refused(contract: Contract, kind: str, change: dict) -> None:

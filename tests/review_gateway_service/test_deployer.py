@@ -261,14 +261,19 @@ def make_release(
 
 @pytest.fixture
 def rig(tmp_path: Path) -> tuple[deploy.Layout, FakeSystem]:
+    return make_rig(tmp_path)
+
+
+def make_rig(tmp_path: Path) -> tuple[deploy.Layout, FakeSystem]:
     layout = deploy.Layout(
         prefix=tmp_path / "opt",
         config=tmp_path / "etc" / "config.toml",
         state=tmp_path / "state",
         admin=tmp_path / "bin" / "review-gateway-admin",
         unit_file=tmp_path / "systemd" / "review-gateway.service",
+        switch=tmp_path / "etc" / "remote-deploy",
     )
-    (tmp_path / "etc").mkdir()
+    (tmp_path / "etc").mkdir(parents=True)
     (tmp_path / "systemd").mkdir()
     data = tmp_path / "data"
     data.mkdir()
@@ -712,6 +717,7 @@ def test_every_outcome_has_its_own_exit_code() -> None:
         "already_current",
         "reverted",
         "status",
+        "no_request",
     }
 
 
@@ -798,7 +804,7 @@ def test_the_installer_writes_an_isolated_root_deploy_command() -> None:
 
     assert "/usr/local/sbin/review-gateway-deploy" in script
     assert r'-I $PREFIX/current/app/deploy/stablenew_deploy.py "\$@"' in script
-    assert 'install -d -m 0700 "$DEPLOY_STATE"' in script
+    assert 'install -d -m 0700 "$DEPLOY_STATE/backups"' in script
 
 
 def test_the_installer_keeps_only_the_backups_of_the_releases_it_keeps() -> None:

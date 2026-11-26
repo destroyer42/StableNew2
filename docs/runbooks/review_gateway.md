@@ -51,6 +51,23 @@ tailscale serve --bg --https=443 http://127.0.0.1:8443
 
 Never serve port 9443 through Tailscale or any proxy.
 
+## Turn on deploys from the PC (one paste, once)
+
+An existing gateway needs one console install of a commit that has DEPLOY-2. After that, the PC deploys every later
+commit and the console is only the fallback. In the Proxmox host's web shell, set `S` to the full merge commit and paste
+both lines:
+
+```bash
+S=<merge sha>
+pct exec 120 -- sh -c "set -e; mkdir -p /root/gw-$S; curl -fsSL https://codeload.github.com/destroyer42/StableNew2/tar.gz/$S | tar -xz -C /root/gw-$S --strip-components=1 StableNew2-$S/services StableNew2-$S/docs/schemas; SOURCE_COMMIT=$S bash /root/gw-$S/services/review_gateway/install.sh; /usr/local/sbin/review-gateway-deploy $S"
+```
+
+The installer keeps the settings, the secrets, the certificate and the data, takes a database copy before switching,
+turns remote deploy on (owner decision 2), and enables `review-gateway-deploy.path`. The last command must end with
+`outcome: already_current`: that shows the deployer reaches GitHub from the container, finds the commit on `main` and
+signed by GitHub, and sees it recorded as deployed. These two lines trust the SHA you paste, like every manual install,
+so take it from the merged pull request. The checks apply from then on.
+
 ## Deploy a commit
 
 Once `review-gateway-deploy` is installed, one line in the Proxmox host's shell deploys a commit of `main`. Use the
@@ -98,6 +115,34 @@ review-gateway-deploy status                         # deployed commit, previous
 review-gateway-deploy rollback                       # back to the previous release; the database is kept
 review-gateway-deploy rollback --restore-database    # also restore the copy taken before the current release
 ```
+
+### From the PC
+
+With remote deploy on, a session or the owner deploys from any StableNew checkout on the PC (PowerShell):
+
+```powershell
+python -m tools.review_gateway_deploy request <merge sha>
+```
+
+```powershell
+python -m tools.review_gateway_deploy status
+```
+
+The tool uses the address, pinned certificate and sync secret saved in StableNew's Phone review gateway dialog for this
+Windows user, and nothing else on the PC. It sends only the commit id over the sync port. The gateway writes it to
+`/var/lib/review-gateway-deploy/inbox/request.json`, the only place the service may write for the deployer. The root
+path unit `review-gateway-deploy.path` then runs `review-gateway-deploy from-request`. That command reads the file
+without following links, deletes it, re-reads the switch, and runs the same checks as the console. A request can never
+downgrade. The tool waits for the result and prints the same outcome (exit 0 deployed or already current, 1 refused or
+rolled back, 3 still running after the time limit, 4 unreachable).
+
+The console switch decides whether the PC may do this:
+
+```bash
+pct exec 120 -- /usr/local/sbin/review-gateway-deploy remote off    # or: remote on
+```
+
+An upgrade never turns it back on. While it is off, the gateway answers `remote_deploy_disabled` and writes nothing.
 
 After `rollback`, keep the database unless the older release fails on it. Restoring it drops every decision made since
 the current release started. The container needs `api.github.com` and `codeload.github.com` on TCP 443, which CT 120's

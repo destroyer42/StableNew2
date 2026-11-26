@@ -1,0 +1,10 @@
+[Unit]
+Description=StableNew review gateway: a deploy request from the PC is waiting (DEPLOY-2)
+
+[Path]
+# The gateway service writes only this file; the root deployer re-checks everything in it.
+PathExists=/var/lib/review-gateway-deploy/inbox/request.json
+Unit=review-gateway-deploy.service
+
+[Install]
+WantedBy=multi-user.target

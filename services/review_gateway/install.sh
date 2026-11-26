@@ -71,7 +71,11 @@ fi
 install -d -m 0755 "$PREFIX" "$PREFIX/releases"
 install -d -m 0750 -o root -g "$SERVICE_USER" "$ETC"
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$STATE"
-install -d -m 0700 "$DEPLOY_STATE" "$DEPLOY_STATE/backups"
+# The deployer's state: readable by the service for the PC's deploy status (no secrets in it), backups root-only.
+install -d -m 0755 "$DEPLOY_STATE"
+install -d -m 0700 "$DEPLOY_STATE/backups"
+# DEPLOY-2: the one place the service writes for the deployer. Root reads it without following links.
+install -d -m 0770 -o root -g "$SERVICE_USER" "$DEPLOY_STATE/inbox"
 
 # Build the new version beside the running one; nothing live changes until it has been checked.
 RELEASE="$PREFIX/releases/$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -84,6 +88,7 @@ install -m 0644 "$SOURCE"/review_gateway/*.py "$APP/review_gateway/"
 install -m 0644 "$SOURCE"/review_gateway/static/* "$APP/review_gateway/static/"
 install -m 0644 "$SOURCE/requirements.txt" "$APP/requirements.txt"
 install -m 0644 "$SOURCE/review-gateway.service" "$APP/review-gateway.service"
+install -m 0644 "$SOURCE/review-gateway-deploy.path" "$SOURCE/review-gateway-deploy.service" "$APP/"
 install -m 0644 "$SCHEMA" "$APP/schema/$SCHEMA_NAME"
 install -m 0644 "$DEPLOYER" "$APP/deploy/stablenew_deploy.py"
 json_or_null() { if [ -n "$1" ]; then printf '"%s"' "$1"; else printf 'null'; fi; }
@@ -123,6 +128,12 @@ fi
 
 setting() { python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))[sys.argv[2]])' "$CONFIG" "$1"; }
 gateway() { (cd "$APP" && "$VENV/bin/python" -B -m review_gateway --config "$CONFIG" "$@"); }
+
+# DEPLOY-2 (owner decision 2): the PC may start deploys unless the console turned it off with
+# review-gateway-deploy remote off. Written only when missing, so an upgrade never turns it back on.
+[ -e "$ETC/remote-deploy" ] || printf 'enabled\n' > "$ETC/remote-deploy"
+chown root:root "$ETC/remote-deploy"
+chmod 0644 "$ETC/remote-deploy"
 
 gateway init-secret
 chown "$SERVICE_USER":"$SERVICE_USER" "$SECRET_FILE"
@@ -190,11 +201,14 @@ EOF
 chmod 0755 /usr/local/sbin/review-gateway-deploy
 
 install -m 0644 "$APP/review-gateway.service" /etc/systemd/system/review-gateway.service
+install -m 0644 "$APP/review-gateway-deploy.path" /etc/systemd/system/review-gateway-deploy.path
+install -m 0644 "$APP/review-gateway-deploy.service" /etc/systemd/system/review-gateway-deploy.service
 install -d -m 0755 /etc/systemd/system/review-gateway.service.d
 # If the media mount is missing, do not start and fill the root disk instead.
 printf '[Unit]\nRequiresMountsFor="%s"\n' "$MEDIA_DIR" > /etc/systemd/system/review-gateway.service.d/media.conf
 systemctl daemon-reload
 systemctl enable review-gateway
+systemctl enable --now review-gateway-deploy.path
 systemctl restart review-gateway
 
 # Keep the new release and the one before it, and the database backups taken for them.
@@ -227,4 +241,5 @@ echo "                  album.create and albumAsset.create into $KEY_PATH"
 echo "               3. systemctl restart review-gateway && review-gateway-admin immich-check"
 echo "  admin:       review-gateway-admin fingerprint | devices | revoke <id> | status | purge | immich-check"
 echo "  release:     $RELEASE (commit ${SOURCE_COMMIT:-not recorded})"
-echo "  deploy:      review-gateway-deploy <sha> | status | rollback"
+echo "  deploy:      review-gateway-deploy <sha> | status | rollback | remote on|off"
+echo "  from the PC: remote deploy is $(cat "$ETC/remote-deploy") (python -m tools.review_gateway_deploy request <sha>)"

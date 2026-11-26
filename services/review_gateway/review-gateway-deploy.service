@@ -1,0 +1,11 @@
+[Unit]
+Description=StableNew review gateway: run the deploy request from the PC (DEPLOY-2)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Root, because installing a release needs it. The command takes no arguments from the request: it reads the
+# request file itself, deletes it, re-reads the console switch and checks the commit with GitHub.
+Type=oneshot
+ExecStart=/usr/local/sbin/review-gateway-deploy from-request
+TimeoutStartSec=30min
