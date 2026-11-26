@@ -140,8 +140,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 - The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 5,010 lines (ceiling in `tools/ci/controller_surface_baseline.json`) and the executor,
   model-family branches in generic code, untyped stage configuration).
 - 11 modules under `src/` have no production path after the 2026-11-25 cleanup (kept for operator tools, test doubles,
-  stored-record readers and documented seams); the retained qualification harnesses (inventory in
-  `tools/qualification/README.md`) remain the bulk of `tools/`.
+  stored-record readers and documented seams); the retained qualification harnesses (inventory in `tools/qualification/README.md`) remain the bulk of `tools/`.
 - Two Tcl callback-noise messages appear after an otherwise clean shutdown; no thread error or leak was observed.
 
 ## Keeping this file true
