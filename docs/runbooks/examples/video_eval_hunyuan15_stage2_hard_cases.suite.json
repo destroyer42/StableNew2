@@ -1,0 +1,120 @@
+{
+ "schema": "stablenew.video-eval-suite.v1",
+ "suite_id": "vidcand382-stage2-hy8",
+ "description": "VID-CAND-382 stage 2: eight harder full-body cases (seed 372) under A14B 1.0.0 and Hunyuan 8-step, for the blind pairwise preference.",
+ "seed": 372,
+ "baseline_arm": "a14b_base",
+ "cases": [
+  {
+   "case_id": "walk_toward",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image walks slowly toward the camera, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "hard",
+    "walk_toward"
+   ]
+  },
+  {
+   "case_id": "turn_in_place",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image turns around slowly in place, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "hard",
+    "turn_in_place"
+   ]
+  },
+  {
+   "case_id": "hands_interact",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image clasps their hands together at their waist, then raises both hands to adjust their hair, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "hard",
+    "hands_interact"
+   ]
+  },
+  {
+   "case_id": "two_step",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image takes two steps forward, stops, then turns their head to look over their shoulder, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "hard",
+    "two_step"
+   ]
+  },
+  {
+   "case_id": "wave",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image raises their right hand and waves, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "hard",
+    "wave"
+   ]
+  },
+  {
+   "case_id": "fast_turn",
+   "image": "images/synthetic_fullbody_landscape.png",
+   "prompt": "The person in the image turns quickly all the way around in place, then faces the camera again, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "hard",
+    "fast_turn"
+   ]
+  },
+  {
+   "case_id": "weight_shift",
+   "image": "images/synthetic_fullbody_portrait.png",
+   "prompt": "The person in the image shifts their weight from one foot to the other, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "hard",
+    "weight_shift"
+   ]
+  },
+  {
+   "case_id": "walk_aside_glance",
+   "image": "images/synthetic_fullbody_landscape.png",
+   "prompt": "The person in the image walks slowly to the side, then glances back at the camera, smooth continuous motion at a steady natural pace. Static locked-off camera with no camera shake, no zoom, no pan. Same person, same face, same clothing and same background throughout, sharp consistent detail.",
+   "negative_prompt": "camera shake, handheld, jitter, flicker, shaky footage, blurry, low quality, distorted face, deformed hands, extra limbs, morphing, changing clothes, watermark, text",
+   "tags": [
+    "structured",
+    "hard",
+    "walk_aside_glance"
+   ]
+  }
+ ],
+ "arms": [
+  {
+   "arm_id": "a14b_base",
+   "label": "I2V-A14B 4-step 1.0.0 (approved baseline)",
+   "backend": "video_workflow",
+   "form": {
+    "workflow_id": "wan22_i2v_a14b_4step_v1",
+    "workflow_version": "1.0.0",
+    "frame_count": 81
+   }
+  },
+  {
+   "arm_id": "hy15_8step",
+   "label": "HunyuanVideo 1.5 480p I2V 8-step (experimental)",
+   "backend": "video_workflow",
+   "form": {
+    "workflow_id": "hunyuan_video15_i2v_480p_8step_v1",
+    "workflow_version": "1.0.0",
+    "frame_count": 121,
+    "experimental_opt_in": true
+   }
+  }
+ ]
+}

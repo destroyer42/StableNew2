@@ -489,3 +489,20 @@ numbers in the templates are placeholders, different per subject on purpose), va
 aligned clips on the CPU and queues nothing), and ask the owner to authorize the exact stage. The authorization names the suite
 and its SHA-256, every bound image and driver hash, the workflow and version, the stage and budget, the resource constraints and
 the stop conditions (`docs/Subsystems/Video/PR-VID-MOTION-420_Subject_Alignment_and_Compatibility.md` section 8).
+
+## 11. HunyuanVideo 1.5 against A14B (VID-CAND-382)
+
+`docs/runbooks/examples/video_eval_hunyuan15_stage0_smoke.suite.json` (2 jobs), `..._stage1_head_to_head.suite.json` (8 cases x
+A14B 1.0.0 baseline, Hunyuan 8-step and Hunyuan 12-step = 24 jobs) and `..._stage2_hard_cases.suite.json` (8 cases x A14B and one
+Hunyuan arm = 16 jobs) are synthetic templates of the frozen design in
+`docs/Subsystems/Video/PR-VID-CAND-382_HunyuanVideo15_Candidate_Eval.md`. The real suites use the owner's private images and are
+built outside the repository by `python -m tools.qualification.vid_cand382 build`, which writes them to the canonical video plan
+folder and a frozen plan (fairness rules, thresholds, stop rules, budget, digest) to a private folder.
+
+* The Hunyuan arms are experimental (`"experimental_opt_in": true`) and need the five model files, which are **not** installed;
+  without them every Hunyuan job is refused before dispatch. Licence acceptance and the download are owner gates.
+* Frame counts differ by arm on purpose: A14B 81 frames at 16 fps and Hunyuan 121 frames at 24 fps are both about 5 s. Smoothing is
+  off for every arm.
+* Arms run arm-major: the first job of each arm is a cold start. `tools.qualification.vid_cand382 verify` splits wall time cold/warm
+  from the job repository and applies the written thresholds; ratings and the blind pairwise sheet stay the owner's.
+* This only builds and measures. It authorizes no run.

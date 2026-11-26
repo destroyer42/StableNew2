@@ -25,6 +25,8 @@ def test_default_workflow_registry_holds_only_real_evidence_backed_workflows() -
     registry = build_default_workflow_registry()
 
     assert registry.list_workflow_ids() == [
+        "hunyuan_video15_i2v_480p_12step_v1",
+        "hunyuan_video15_i2v_480p_8step_v1",
         "wan22_fun_control_5b_canny_i2v_v1",
         "wan22_i2v_a14b_4step_ck_v1",
         "wan22_i2v_a14b_4step_v1",
@@ -45,6 +47,8 @@ def test_default_workflow_registry_holds_only_real_evidence_backed_workflows() -
         (spec.workflow_id, spec.workflow_version)
         for spec in registry.list_offerable_specs("comfy")
     ] == [
+        ("hunyuan_video15_i2v_480p_12step_v1", "1.0.0"),  # VID-CAND-382 experimental candidates
+        ("hunyuan_video15_i2v_480p_8step_v1", "1.0.0"),
         ("wan22_fun_control_5b_canny_i2v_v1", "1.0.0"),
         ("wan22_fun_control_5b_canny_i2v_v1", "1.1.0"),
         ("wan22_i2v_a14b_4step_ck_v1", "1.0.0"),
