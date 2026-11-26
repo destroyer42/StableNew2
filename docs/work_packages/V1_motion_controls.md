@@ -1,7 +1,8 @@
 # V1: direct the shot (task-first motion controls)
 
-Decision record and work package. Status: **design pass, proposed; awaiting owner decisions D1-D8** (section 9). No
-product code is changed by this record. Way Forward item V1 (owner-accepted 2026-11-25), paired with N8 (phone video
+Decision record and work package. Status: **accepted**. The owner accepted all eight recommendations D1-D8 on
+2026-11-26 ("I accept all", relayed by the orchestrator session `local_ecb8e9b1-c2ce-4303-95cf-308e8cc92d9e`; section 9).
+Next slice: V1-1. No product code is changed by this record. Way Forward item V1 (owner-accepted 2026-11-25), paired with N8 (phone video
 actions) and governed by the N7 focus policy (no new engines; no motion evaluation layers that do not feed V1).
 
 ## 1. Problem and decision
@@ -354,7 +355,10 @@ call these functions once they exist rather than reconstruct jobs itself (hand-o
 
 ## 9. Owner decisions
 
-| # | Decision | Recommendation |
+**Accepted 2026-11-26.** The owner accepted every recommendation below as written ("I accept all"; the owner's only
+exceptions in that exchange concerned RG-140, not V1). Each slice implements the recommended option.
+
+| # | Decision | Accepted (the recommendation) |
 |---|---|---|
 | D1 | Start-pose matching: apply the best match automatically (one-click *Use clip start*), or only suggest it? | Apply automatically when it beats the clip start by a clear margin; always shown, recorded and reversible. Evidence is ambiguous (C3), so the strip says its effect is unproven. |
 | D2 | Presets may use observed-once values beyond catalog defaults (pose 2.0, reference 0.5, from 410 C1), labelled "observed once, not qualified". This relaxes VID-UX-360's "no new tuning numbers". | Yes (N1 / N7: warn and let it run). |
