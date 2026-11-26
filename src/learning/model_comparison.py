@@ -147,11 +147,12 @@ def candidate_ineligibility(policy: Any) -> str | None:
         EVIDENCE_PROFILE,
         EVIDENCE_REGISTRY,
         QUALIFIED_REGISTRY_POLICY_IDS,
+        SDXL_RUN_EVIDENCE,
     )
 
     if not (
         (policy.evidence == EVIDENCE_PROFILE and policy.exact_identity_authority)
-        or policy.evidence == EVIDENCE_REGISTRY
+        or policy.evidence in SDXL_RUN_EVIDENCE
     ):
         return (
             "Model Comparison requires an exact qualified profile or a registry-evidenced model with an explicit "
@@ -167,6 +168,59 @@ def candidate_ineligibility(policy: Any) -> str | None:
     if "txt2img" not in policy.stages:
         return "Candidate does not support txt2img Model Comparison"
     return None
+
+
+def candidate_target(policy: Any, *, model: str, backend_id: str) -> Any:
+    """The N1b verdict for one compared model (``SdxlTarget``); ``.require()`` raises for a real block.
+
+    An eligible canonical policy (an exact qualified profile, registry SDXL) is returned unchanged. Otherwise the SDXL
+    target rule decides: an unclassified model runs as SDXL with a warning, observed runs outrank the registry, and a
+    model positively of another family stays refused with the existing reason.
+    """
+    from src.history.observed_execution import observed_runs_lookup
+    from src.image_backends.sdxl_target import (
+        OP_TXT2IMG,
+        SdxlTarget,
+        TargetStatus,
+        assess_sdxl_target,
+    )
+
+    if candidate_ineligibility(policy) is None and (
+        policy.profile_ref is not None or policy.evidence == "registry_evidence"
+    ):
+        target = assess_sdxl_target(
+            policy, model=model, operation=OP_TXT2IMG, backend_id=backend_id,
+            feature="Model Comparison", observed=observed_runs_lookup(),
+        ) if policy.profile_ref is None else None  # fmt: skip
+        return target or SdxlTarget(TargetStatus.REGISTRY, policy, OP_TXT2IMG, model)
+    target = assess_sdxl_target(
+        policy, model=model, operation=OP_TXT2IMG, backend_id=backend_id,
+        feature="Model Comparison", observed=observed_runs_lookup(),
+    )  # fmt: skip
+    if target.allowed and candidate_ineligibility(target.policy) is None:
+        return target
+    reason = candidate_ineligibility(policy) or target.block
+    return SdxlTarget(TargetStatus.BLOCKED, policy, OP_TXT2IMG, model, block=reason)
+
+
+def candidate_target_check(policy: Any, baseline: Any = None) -> Any:
+    """``study_eligibility``'s Model Comparison check of the baseline's model (raises for a real block)."""
+    from src.learning.model_policy_service import selected_model
+    from src.learning.sdxl_study_target import baseline_backend
+
+    baseline = dict(baseline or {})
+    return candidate_target(
+        policy, model=selected_model(baseline, "txt2img"), backend_id=baseline_backend(baseline)
+    ).require()
+
+
+def arm_policy(policy: Any, model: str, backend: str, targets: list[Any]) -> Any:
+    """The policy one arm runs with (N1b); appends its target so the snapshot can freeze its warnings."""
+    target = candidate_target(policy, model=model, backend_id=backend)
+    if not target.allowed:
+        return policy  # ``prepare_arm_envelope`` refuses it with the arm's name
+    targets.append(target)
+    return target.policy
 
 
 def _require_candidate(policy: Any) -> None:
@@ -464,8 +518,10 @@ def build_comparison_snapshot(
     )
     shared_positive = shared_global_positive(baseline)
     arms = []
+    targets: list[Any] = []
     for index, model in enumerate(models):
         policy = policy_resolver(model) if policy_resolver else evidence.policy_for(model)
+        policy = arm_policy(policy, model, backend, targets)
         config, positive_mode, offered_positive = prepare_arm_envelope(
             baseline, model, policy, index=index, backend=backend, geometry=geometry,
             options=options, shared_positive=shared_positive,
@@ -509,6 +565,10 @@ def build_comparison_snapshot(
         "prompt_source": source,
         "input_image_path": "",
     }
+    from src.learning.sdxl_study_target import SNAPSHOT_WARNINGS_KEY, warning_records
+
+    if warning_records(targets):  # N1b: Preview shows these; Queue records them as accepted
+        snapshot[SNAPSHOT_WARNINGS_KEY] = warning_records(targets)
     frozen_arm(snapshot, models[0])
     verify_arms_admissible(snapshot)
     return snapshot
@@ -623,6 +683,7 @@ def verify_arm(
     of the source intent this particular arm must carry.
     """
     from src.image_backends.model_policy import (
+        SDXL_RUN_EVIDENCE,
         ControlMode,
         Support,
         policy_for_model_profile_reference,
@@ -656,7 +717,7 @@ def verify_arm(
                 raise ValueError("Frozen checkpoint profile evidence mismatch; rebuild preview")
         elif authority == "asset_registry":
             sha = checkpoint.get("sha256", "")
-            if context.get("evidence") != "registry_evidence" or not isinstance(sha, str) or len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+            if context.get("evidence") not in SDXL_RUN_EVIDENCE or not isinstance(sha, str) or len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
                 raise ValueError("Frozen checkpoint identity evidence is invalid; rebuild preview")
         else:
             raise ValueError("Frozen checkpoint identity authority is unknown; rebuild preview")
@@ -872,7 +933,7 @@ def arm_njr(
         variable_under_test=variable,
         variant_value=variant.param_value,
     )
-    return assemble_txt2img_njr(
+    record = assemble_txt2img_njr(
         job_id=job_id or f"learning_{snapshot['experiment_id']}_{uuid.uuid4().hex}",
         display_name=snapshot["display_name"],
         positive=arm["executor_base_positive_prompt"],
@@ -891,6 +952,9 @@ def arm_njr(
         lora_tags=arm["effective_lora_tags"],
         mismatch_message=mismatch_message,
     )
+    from src.learning.sdxl_study_target import accept_frozen_warnings
+
+    return accept_frozen_warnings(record, snapshot)  # N1b: Queue on the Preview accepted them
 
 
 def materialize_njr(

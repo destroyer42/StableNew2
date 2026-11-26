@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.conditioning.controlnet import FrozenControlNet, FrozenUnit, parse_units
-from src.image_backends.model_policy import EVIDENCE_REGISTRY
 from src.image_backends.openpose_capability import assess_openpose_target
-from src.pipeline.openpose_compile import OpenPoseCompileError
+from src.pipeline.openpose_compile import (
+    OpenPoseCompileError,
+    controlnet_sdxl_target,
+    family_source,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,12 +31,20 @@ def compile_units(
         raise OpenPoseCompileError(
             f"{kwargs['label']}: ControlNet requires the base txt2img stage."
         )
-    policy = kwargs["policy_for"](kwargs["model_name"])
+    # N1b: an unclassified checkpoint is a warning (shown at Preview, accepted on Queue); observed runs outrank the
+    # registry; a positively identified other family and a non-Forge backend stay real blocks.
+    sdxl = controlnet_sdxl_target(
+        kwargs["policy_for"](kwargs["model_name"]),
+        kwargs["model_name"],
+        kwargs["backend_id"],
+        tuple(unit.modality for unit in active),
+    )
+    if not sdxl.allowed:
+        raise OpenPoseCompileError(f"{kwargs['label']}: {sdxl.block}")
+    policy = sdxl.policy
     target = assess_openpose_target(policy, kwargs["backend_id"])
-    if policy.evidence != EVIDENCE_REGISTRY or not target.executable:
-        raise OpenPoseCompileError(
-            f"{kwargs['label']}: ControlNet requires a registry-verified SDXL checkpoint on Forge. {target.message}"
-        )
+    if not target.executable:
+        raise OpenPoseCompileError(f"{kwargs['label']}: {target.message}")
     units = []
     for index, unit in enumerate(active):
         compiled = build.compile_slot(
@@ -49,8 +60,13 @@ def compile_units(
         frozen=FrozenControlNet(tuple(units)),
         target={
             "family": policy.family,
-            "family_source": "registry_snapshot",
+            "family_source": family_source(policy),
             "backend_id": kwargs["backend_id"],
             "stage": "txt2img",
+            **(
+                {"policy_warnings": [item.as_dict() for item in sdxl.warnings]}
+                if sdxl.warnings
+                else {}
+            ),
         },
     )

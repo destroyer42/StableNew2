@@ -15,6 +15,7 @@ from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.image_backends.masked_inpaint import validate_frozen_mask_target
 from src.image_backends.operation_compatibility import require_njr_operation
 from src.pipeline.image_edit_inputs import KEY, verified_inputs
+from src.pipeline.policy_warnings import SURFACE_DESKTOP, pending_warnings, with_accepted_warnings
 
 
 def submit_reprocess_njrs(job_service: Any, njrs: list[Any]) -> int:
@@ -36,4 +37,8 @@ def submit_reprocess_njrs(job_service: Any, njrs: list[Any]) -> int:
                 if tuple(njr.stage_chain_labels) != ("img2img",) or len(njr.input_image_paths) != 1:
                     raise ValueError("Frozen mask edits require exactly one img2img source")
                 verified_inputs(edit, njr.input_image_paths[0], check_original=True)
+    # N1b: Queue on a Preview that showed warnings is the operator's acceptance; freeze them in provenance.
+    njrs = [
+        with_accepted_warnings(njr, pending_warnings(njr), surface=SURFACE_DESKTOP) for njr in njrs
+    ]
     return len(job_service.submit_njrs(njrs, SubmissionPolicy()))

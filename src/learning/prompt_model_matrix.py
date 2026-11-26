@@ -25,6 +25,7 @@ from typing import Any
 from src.learning.baseline_exclusions import hires_requested, refiner_requested
 from src.learning.model_comparison import (
     arm_njr,
+    arm_policy,
     build_arm,
     candidate_models,
     digest,
@@ -389,8 +390,10 @@ def build_matrix_snapshot(
 
     model_records: list[dict[str, Any]] = []
     envelopes: list[tuple[Any, dict[str, Any], str, str]] = []
+    targets: list[Any] = []
     for col, model in enumerate(selected_models):
         policy = policy_resolver(model) if policy_resolver else evidence.policy_for(model)
+        policy = arm_policy(policy, model, backend, targets)
         try:
             config, positive_mode, offered = prepare_arm_envelope(
                 baseline,
@@ -529,6 +532,10 @@ def build_matrix_snapshot(
         "prompt_source": dict(source or {"kind": "custom"}),
         "input_image_path": "",
     }
+    from src.learning.sdxl_study_target import SNAPSHOT_WARNINGS_KEY, warning_records
+
+    if warning_records(targets):  # N1b: Preview shows these; Queue records them as accepted
+        snapshot[SNAPSHOT_WARNINGS_KEY] = warning_records(targets)
     snapshot = json.loads(json.dumps(snapshot, allow_nan=False))
     _verify_study(snapshot, sealed=False)
     # Compile every cell through the exact Run boundary so one incompatible cell refuses the whole study at Preview.

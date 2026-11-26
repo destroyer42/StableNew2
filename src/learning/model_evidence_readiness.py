@@ -23,7 +23,7 @@ def _model_label(model: str, index: int, show_names: bool) -> str:
 
 def _require_supported_record(
     model: str, record: AssetRecord | CheckpointInspection, label: str
-) -> ModelPolicy:
+) -> ModelPolicy | None:
     """Explain unusable family evidence precisely, then let the canonical ``ModelPolicy`` decide eligibility.
 
     The branches below only diagnose *why* a header/sidecar yields no resolved family (conflict, unreadable, refiner or
@@ -41,7 +41,19 @@ def _require_supported_record(
     from src.learning.model_comparison import candidate_ineligibility
 
     profile = record.compatibility
-    assert profile is not None
+    if profile is None:
+        return None  # N1b: no classification is a warning (``model_comparison.candidate_target``), never a refusal
+    if not profile.structural_error and (
+        profile.status is not CompatibilityStatus.RESOLVED
+        or profile.checkpoint_architecture in ("sdxl_refiner", "sdxl_inpaint")
+        or not any(
+            item.confidence in (EvidenceConfidence.METADATA, EvidenceConfidence.STRUCTURAL)
+            for item in profile.evidence
+        )
+    ):
+        # N1b: an unclassified or conflicting family is a warning shown at Preview, never a refusal. A damaged
+        # (truncated or malformed) safetensors header stays a block below: the backend cannot load that file.
+        return None
     if profile.status is CompatibilityStatus.CONFLICTING:
         reason = "conflicting family metadata/structural evidence; correct the conflicting evidence or select another checkpoint"
     elif profile.structural_error:
@@ -148,8 +160,12 @@ def prepare_comparison_evidence(
     """
     from src.assets import AssetKind, AssetRegistry
     from src.image_backends.forge_klein_lora import RegistryLoraResolver
-    from src.image_backends.model_policy import RegistryFamilyLookup, resolve_model_policy
-    from src.learning.model_comparison import candidate_ineligibility, candidate_models
+    from src.image_backends.model_policy import (
+        RegistryFamilyLookup,
+        resolve_model_policy,
+        unclassified_policy,
+    )
+    from src.learning.model_comparison import candidate_models
     from src.pipeline.compile_evidence import CompileEvidence
 
     models = candidate_models(models)
@@ -256,14 +272,14 @@ def prepare_comparison_evidence(
             raise ValueError(
                 f"{label}: WebUI hash disagrees with local checkpoint; refresh WebUI resources and verify the served file"
             )
-        _require_supported_record(model, record, label)
-        ineligible = candidate_ineligibility(policy)
-        if ineligible is not None or policy.evidence != "registry_evidence":
-            raise ValueError(f"{label}: canonical target policy is unverified; rebuild Preview")
-        assert record.compatibility is not None
+        if _require_supported_record(model, record, label) is None:
+            # A name hint or an unclassified header is not family evidence: the arm runs with a warning (N1b).
+            if policy.evidence == "registry_evidence":
+                policy = unclassified_policy()
+                evidence.pin_policy(model, policy)
         provenance = [
             {"source": item.source, "confidence": item.confidence.value}
-            for item in record.compatibility.evidence
+            for item in (record.compatibility.evidence if record.compatibility is not None else ())
             if item.confidence.value != "filename_hint"
         ]
         identities[model] = {
@@ -274,6 +290,10 @@ def prepare_comparison_evidence(
         }
         if progress:
             sources = ", ".join(dict.fromkeys(item["source"] for item in provenance))
-            progress(f"{label}: ready; {policy.family.upper()} evidence from {sources}")
+            progress(
+                f"{label}: ready; {policy.family.upper()} evidence from {sources}"
+                if sources
+                else f"{label}: ready; family not classified (Preview shows the warning)"
+            )
     evidence.model_identities = identities
     return evidence

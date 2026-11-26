@@ -575,6 +575,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `history_record.py`: Represent immutable persisted NJR history and hydrate snapshots for replay
 - `history_schema_v26.py`: Validate persisted v2.6 job history entries against required fields and allowed schema
+- `observed_execution.py`: N1b observed-execution evidence: has this exact checkpoint completed this operation on this backend here?
 
 ## src/image_backends/
 
@@ -617,6 +618,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `openpose_capability.py`: Target eligibility for OpenPose ControlNet conditioning (PR-IMG-CNET-210)
 - `openpose_output.py`: Classify pinned Forge generated images before any artifact write (PR-IMG-CNET-211)
 - `operation_compatibility.py`: PR-IMG-MODELS-158: one pure, read-only "can this requested operation run on that resolved target?" projection
+- `sdxl_target.py`: N1b: may this checkpoint run an SDXL-only operation here, and with which warning? (``AGENTS.md`` section 2, N…
 - `sdxl_turbo_recipe.py`: Shared SDXL Turbo recipe for compatibility probes and advisory Research
 - `webui_family_backend.py`: Shared WebUI-family image backend: one StableNew stage translation for A1111 and Forge
 
@@ -703,6 +705,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `resource_access.py`: Canonical projected WebUI resource access for Learning surfaces
 - `review_workspace.py`: Pure experiment-wide review projection and navigation rules
 - `run_metadata.py`: Helpers for run metadata capture
+- `sdxl_study_target.py`: N1b target verdict for the SDXL-only Learning studies (Embedding, LoRA Composition, Prompt Slot, Two-Axis Gri…
 - `setting_evidence.py`: Frozen Research -> selection -> compiled -> dispatch -> reported comparison
 - `stage_capabilities.py`: Declare which stages and variables Learning experiment design can offer
 - `staged_recommendations.py`: Non-mutating recommendation patches for staged-curation derived jobs

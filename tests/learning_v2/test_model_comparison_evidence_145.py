@@ -138,9 +138,13 @@ def test_evidenced_sdxl_derivatives_are_admitted_through_the_sdxl_policy(
 def test_a_filename_alone_never_manufactures_family_evidence(world: World, name: str) -> None:
     named_only = checkpoint(world.folder / f"{name}.safetensors", metadata={}, payload=b"opaque")
     peer = world.sdxl("peer.safetensors", payload=b"peer")
-    with pytest.raises(ValueError, match=r"Model 1: .*(structure unrecognized|metadata missing)"):
-        world.prepare({name: named_only, "peer": peer})
-    assert not world.cache.exists()  # rejected on its header, before any byte identity was paid for
+    evidence, _ = world.prepare({name: named_only, "peer": peer})
+    # The name never becomes evidence: the canonical policy stays unclassified. N1b makes that a frozen warning
+    # (run as SDXL, accepted on Queue) instead of a refusal; the file still gets its exact byte identity.
+    assert evidence.policy_for(name).evidence != "registry_evidence"
+    assert evidence.model_identities[name]["sha256"] == hashlib.sha256(named_only.read_bytes()).hexdigest()
+    snapshot = build_comparison_snapshot(study(world.tmp_path, models=[name, "peer"]), shared_baseline(), evidence=evidence)
+    assert [item["subject"] for item in snapshot["policy_warnings"]] == [name]
 
 
 def test_derivative_and_standard_sdxl_plan_one_study_with_their_own_frozen_identities(world: World) -> None:
@@ -187,11 +191,29 @@ def test_a_structurally_evidenced_non_sdxl_layout_is_rejected_by_policy_not_by_a
         world.prepare({"sd1": sd1, "peer": peer})
 
 
-@pytest.mark.parametrize(
-    "case",
-    ["refiner", "inpaint", "conflict", "truncated", "malformed", "unknown_label"],
-)
-def test_unknown_conflicting_or_malformed_candidates_fail_closed(world: World, case: str) -> None:
+@pytest.mark.parametrize("case", ["refiner", "inpaint", "conflict", "unknown_label"])
+def test_unknown_or_conflicting_candidates_warn_instead_of_failing(world: World, case: str) -> None:
+    """N1b: an unclassified family is a warning frozen into the study, never a refusal."""
+    peer = world.sdxl("peer.safetensors", payload=b"peer")
+    path = world.folder / "candidate.safetensors"
+    if case == "refiner":
+        tensor_checkpoint(path, architecture="refiner")
+    elif case == "inpaint":
+        tensor_checkpoint(path, architecture="inpaint")
+    elif case == "conflict":
+        checkpoint(path, metadata={"ss_base_model_version": "sdxl_base", "modelspec.architecture": "sd_v1"})
+    else:
+        checkpoint(path, metadata={"ss_base_model_version": "my_custom_label"})
+    evidence, _ = world.prepare({"candidate": path, "peer": peer})
+    snapshot = build_comparison_snapshot(
+        study(world.tmp_path, models=["candidate", "peer"]), shared_baseline(), evidence=evidence
+    )
+    (warning,) = snapshot["policy_warnings"]
+    assert warning["subject"] == "candidate" and warning["why"] and warning["fix"]
+
+
+@pytest.mark.parametrize("case", ["truncated", "malformed"])
+def test_damaged_candidates_fail_closed(world: World, case: str) -> None:
     peer = world.sdxl("peer.safetensors", payload=b"peer")
     path = world.folder / "candidate.safetensors"
     if case == "refiner":

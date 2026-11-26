@@ -261,12 +261,23 @@ def test_refusals_are_visible_and_nothing_is_queued(make_dialog, setup, message)
 
 @pytest.mark.gui
 def test_unsupported_target_is_stated_and_refuses_preview(make_dialog):
-    dialog, controller = make_dialog.build(model="unknown")
-    assert "require Forge" in dialog.support.get()
+    dialog, controller = make_dialog.build(model="flux-2-klein-4b-fp8.safetensors")
+    assert "Only SDXL checkpoints" in dialog.support.get()
     margins(dialog)
     dialog.preview_button.invoke()
-    assert dialog._preview is None and "require Forge" in dialog.status.get()
+    assert dialog._preview is None and "Only SDXL checkpoints" in dialog.status.get()
     assert not inputs.default_snapshot_root().exists()
+
+
+@pytest.mark.gui
+def test_unclassified_target_is_a_warning_shown_before_and_in_preview(make_dialog):
+    """N1b: an unclassified checkpoint states its warning and still previews; the summary repeats it."""
+    dialog, controller = make_dialog.build(model="unknown")
+    assert dialog.support.get().startswith("Warning: unknown is not confirmed as SDXL.")
+    margins(dialog)
+    dialog.preview_button.invoke()
+    assert dialog._preview is not None
+    assert "not confirmed as SDXL" in dialog.details.get("1.0", "end")
 
 
 @pytest.mark.gui

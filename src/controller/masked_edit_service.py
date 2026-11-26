@@ -17,8 +17,10 @@ from src.image_backends.image_backend_types import (
 from src.image_backends.masked_inpaint import require_mask_target
 from src.image_backends.model_policy import FamilyLookup
 from src.image_backends.operation_compatibility import require_njr_operation
+from src.image_backends.sdxl_target import OP_MASKED_INPAINT, OP_OUTPAINT
 from src.pipeline.image_edit_inputs import EDIT_OPERATION_KEY, KEY, freeze_inputs, verified_inputs
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.policy_warnings import PENDING_WARNINGS_KEY
 from src.pipeline.reprocess_builder import ImageEditSpec, ReprocessJobBuilder, ReprocessSourceItem
 from src.review.correction_advice import GuidedReprocess, resolve_target
 from src.review.findings import CORRECTION_KEY, Action, correction_context
@@ -190,7 +192,12 @@ def build_frozen_edit_preview(
         or ""
     )
     options = normalize_image_backend_options(config.get("backend_options"), model_name=model)
-    require_mask_target(model, options, family_lookup=family_lookup)
+    target = require_mask_target(
+        model,
+        options,
+        family_lookup=family_lookup,
+        operation=OP_OUTPAINT if operation == "outpaint" else OP_MASKED_INPAINT,
+    )
     steps = config.get("img2img", {}).get("steps")
     frozen = freeze(steps if type(steps) is int and steps > 0 else 20)
     source, mask = frozen["source"], frozen["mask"]
@@ -243,6 +250,12 @@ def build_frozen_edit_preview(
             "parent_job_id": baseline.get("job_id"),
             "parent_artifact_id": artifact_id,
             KEY: deepcopy(frozen),
+            # N1b: shown in the Preview summary; Queue records them as accepted (``submit_reprocess_njrs``).
+            **(
+                {PENDING_WARNINGS_KEY: [item.as_dict() for item in target.warnings]}
+                if target.warnings
+                else {}
+            ),
             **(
                 {
                     CORRECTION_KEY: correction_context(

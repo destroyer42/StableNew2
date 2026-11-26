@@ -390,9 +390,10 @@ def test_global_positive_never_relaxes_exact_profile_restrictions(tmp_path, chan
         build(tmp_path, models=[SDXL, ZIMAGE], text=PROSE, config=config)
 
 
-def test_unknown_target_still_refuses_with_global_positive(tmp_path):
-    with pytest.raises(ValueError, match="unavailable or conflicting"):
-        build(tmp_path, models=[SDXL, "unknown"], text=PROSE, config=global_baseline())
+def test_unknown_target_warns_with_global_positive(tmp_path):
+    """N1b: the unclassified arm builds with its frozen warning instead of being refused."""
+    _, snapshot = build(tmp_path, models=[SDXL, "unknown"], text=PROSE, config=global_baseline())
+    assert [item["subject"] for item in snapshot["policy_warnings"]] == ["unknown"]
 
 
 def test_global_positive_that_adapts_to_nothing_is_refused_for_the_arm(tmp_path):

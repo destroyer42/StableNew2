@@ -60,22 +60,32 @@ def test_selected_only_warm_has_no_scan_or_rehash(local, monkeypatch):
     assert prepare(local).policy_for("first").family == "sdxl"
 
 
+def test_a_positively_identified_other_family_is_rejected_specifically(local):
+    _root, _cache, paths, _entries = local
+    checkpoint(paths[0], metadata={"ss_base_model_version": "sd_v1.5"})
+    with pytest.raises(ValueError, match="Model 1: .*not qualified"):
+        prepare(local)
+
+
 @pytest.mark.parametrize(
-    "metadata, sidecar, phrase",
+    "metadata, sidecar",
     [
-        ({}, None, "metadata missing"),
-        ({"modelspec.architecture": "unknown derivative"}, None, "unclassified"),
-        ({"ss_base_model_version": "sdxl"}, '{"baseModel":"SD 1.5"}', "conflicting"),
-        ({"ss_base_model_version": "sd_v1.5"}, None, "not qualified"),
+        ({}, None),
+        ({"modelspec.architecture": "unknown derivative"}, None),
+        ({"ss_base_model_version": "sdxl"}, '{"baseModel":"SD 1.5"}'),
     ],
 )
-def test_metadata_rejections_are_specific(local, metadata, sidecar, phrase):
+def test_missing_unclassified_or_conflicting_metadata_is_admitted_unverified(
+    local, metadata, sidecar
+):
+    """N1b: no usable family evidence is a Preview warning, never a readiness refusal; it is never SDXL evidence."""
     _root, _cache, paths, _entries = local
     checkpoint(paths[0], metadata=metadata)
     if sidecar:
         paths[0].with_suffix(".civitai.info").write_text(sidecar)
-    with pytest.raises(ValueError, match=f"Model 1: .*{phrase}"):
-        prepare(local)
+    evidence = prepare(local)
+    assert evidence.policy_for("first").evidence != "registry_evidence"
+    assert len(evidence.model_identities["first"]["sha256"]) == 64
 
 
 @pytest.mark.parametrize(
@@ -141,8 +151,8 @@ def test_sidecar_freshness_does_not_rehash_checkpoint(local, monkeypatch):
     monkeypatch.setattr(
         "src.assets.registry.hashlib.sha256", lambda: pytest.fail("unchanged model rehash")
     )
-    with pytest.raises(ValueError, match="conflicting"):
-        prepare(local)
+    # N1b: the conflict now warns at Preview instead of refusing; the unchanged file is still not rehashed.
+    assert prepare(local).policy_for("first").evidence == "conflicting_evidence"
 
 
 def test_overlapping_old_instances_preserve_both_refreshes(local):

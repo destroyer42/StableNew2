@@ -312,12 +312,23 @@ def test_preview_to_queue_submits_the_same_frozen_multi_unit_njr(harness):
     assert thaw_json(controller._job_service.submitted[0].config) == original
 
 
-@pytest.mark.parametrize(
-    "model", ["mystery.safetensors", "sd15_model.safetensors", "flux-2-klein-4b-fp8.safetensors"]
-)
-def test_compile_refuses_unknown_other_family_and_exact_profiles(harness, model):
-    with pytest.raises(ValueError):
+@pytest.mark.parametrize("model", ["sd15_model.safetensors", "flux-2-klein-4b-fp8.safetensors"])
+def test_compile_refuses_other_family_and_exact_profiles(harness, model):
+    with pytest.raises(ValueError, match="Only SDXL checkpoints"):
         harness.build([_slot(0, "a portrait", controlnet_units=declaration("canny"))], model=model)
+
+
+def test_compile_warns_for_an_unclassified_checkpoint(harness):
+    """N1b: ordered units on an unclassified checkpoint compile with a frozen warning (accepted on Queue)."""
+    (record,) = harness.build(
+        [_slot(0, "a portrait", controlnet_units=declaration("canny"))], model="mystery.safetensors"
+    )
+    metadata = thaw_json(record.provenance.metadata)
+    assert [item["subject"] for item in metadata["policy_warnings"]] == ["mystery.safetensors"]
+    assert (
+        metadata["conditioning"]["controlnet_units"]["target"]["family_source"]
+        == "accepted_unverified"
+    )
 
 
 def test_second_source_missing_aborts_build_and_a_new_build_reads_sources_again(harness):

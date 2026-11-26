@@ -107,7 +107,11 @@ enabled flag, strength, guidance interval, control mode and resize mode. It cann
 The published `openpose.v1` declaration and its replay behavior retain their original meaning and admission rules.
 
 `src/conditioning/controlnet.py` owns the new declaration and frozen envelope. `src/pipeline/controlnet_compile.py` is an
-adapter called only by the existing PromptPack builder: it requires registry-verified SDXL on Forge, reuses the existing
+adapter called only by the existing PromptPack builder: it requires an SDXL target on Forge by the N1b verdict
+(`src/image_backends/sdxl_target.py`: registry SDXL, or observed runs of the checkpoint on Forge with the same
+ControlNet modality, are verified;
+an unclassified checkpoint compiles with a warning frozen in `provenance.metadata.policy_warnings` that Queue records as
+accepted and dispatch never refuses; a positively identified other family or an exact profile is refused), reuses the existing
 bounded image reader and content-addressed snapshot writer, and finishes all units before any NJR exists. Reference maps
 share the existing `models/OpenPose` library and snapshot home; the directory name does not imply automatic pose detection.
 Enabled units are frozen in authored order with independent settings, SHA-256, size, image facts and snapshot identity.
@@ -186,8 +190,9 @@ Missing Canny/Depth weights remain an executable-capability refusal; the feature
 ### 3.2 Frozen masked img2img from Review
 
 Review's mask editor compiles one still image through the existing reprocess/image-edit builder and admission boundary.
-The initial target is a registry-resolved SDXL base checkpoint on Forge (`src/image_backends/masked_inpaint.py`, projecting
-ModelPolicy); exact profiles, other backends and unverified families are refused, never substituted or silently unmasked.
+The initial target is an SDXL checkpoint on Forge (`src/image_backends/masked_inpaint.py`, projecting ModelPolicy through
+the N1b SDXL verdict); an unclassified family previews with a warning that Queue records as accepted, while exact profiles,
+other backends and positively identified other families are refused, never substituted or silently unmasked.
 
 `src/pipeline/image_edit_inputs.py` reuses bounded image validation and the OpenPose snapshot writer under the existing
 mutable state home, `state/image_edit_inputs`. `config.img2img.image_edit_inputs` (`stablenew.image_edit.inputs.v1`) records

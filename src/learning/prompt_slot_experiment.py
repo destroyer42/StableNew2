@@ -10,7 +10,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.image_backends.model_policy import EVIDENCE_REGISTRY, ModelPolicy
+from src.image_backends.model_policy import ModelPolicy
+from src.image_backends.sdxl_target import OP_TXT2IMG, SdxlTarget
+from src.learning.sdxl_study_target import study_target
 from src.pipeline.prompt_pack_parser import PackRow
 from src.pipeline.resolution_layer import (
     MATRIX_TOKEN_RE,
@@ -119,14 +121,13 @@ def validate_design(design: PromptSlotDesign, *, embedding_names: Sequence[str] 
 
 def require_target(
     policy: ModelPolicy, baseline: Mapping[str, Any], stage: str = "txt2img"
-) -> None:
-    if (
-        stage != "txt2img"
-        or "txt2img" not in policy.stages
-        or policy.family != "sdxl"
-        or policy.evidence != EVIDENCE_REGISTRY
-    ):
-        raise ValueError("Prompt Slot currently requires registry-verified SDXL txt2img.")
+) -> SdxlTarget:
+    """Raise for a real block; return the N1b target (run with ``target.policy``, freeze ``target.warnings``)."""
+    if stage != "txt2img":
+        raise ValueError("Prompt Slot supports SDXL txt2img only.")
+    target = study_target(policy, baseline, operation=OP_TXT2IMG, feature="Prompt Slot").require()
+    if "txt2img" not in target.policy.stages:
+        raise ValueError("Prompt Slot supports SDXL txt2img only.")
     if any(
         bool((section.get("prompt_optimizer") or {}).get("enabled"))
         for section in (baseline, baseline.get("txt2img") or {})
@@ -134,6 +135,7 @@ def require_target(
         raise ValueError(
             "Disable the prompt optimizer in the independent Learning baseline before Preview."
         )
+    return target
 
 
 def freeze_candidates(
@@ -146,7 +148,7 @@ def freeze_candidates(
     source: Mapping[str, Any] | None = None,
     embedding_names: Sequence[str] = (),
 ) -> dict[str, Any]:
-    require_target(policy, baseline)
+    policy = require_target(policy, baseline).policy  # N1b: run with the target policy
     validate_design(design, embedding_names=embedding_names)
     if slots_in(negative):
         raise ValueError("The fixed negative prompt may not contain unresolved Matrix slots.")

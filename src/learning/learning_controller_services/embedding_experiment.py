@@ -23,6 +23,11 @@ from src.learning.ordinary_prompt_freeze import (
 )
 from src.learning.ordinary_snapshot import authored_fields, ordinary_snapshot
 from src.learning.prompt_slot_experiment import digest
+from src.learning.sdxl_study_target import (
+    SNAPSHOT_WARNINGS_KEY,
+    accept_frozen_warnings,
+    warning_records,
+)
 from src.pipeline.njr_core_v26 import NormalizedJobRecord
 from src.pipeline.resolution_layer import pack_prompt_intent_from_dict
 from src.utils.embedding_prompt_utils import render_embedding_invocation
@@ -180,7 +185,8 @@ def build_plan(controller: Any, experiment: Any) -> None:
     baseline = freeze_preview_global_policy(baseline)
     model = selected_model(baseline, "txt2img")
     policy = resolve_policy(model, controller, baseline)
-    ee.require_target(policy, baseline, design.channel)
+    target = ee.require_target(policy, baseline, design.channel)
+    policy = target.policy  # N1b: the SDXL policy carrying its evidence tier
     problems = authoring.baseline_problems(baseline, "txt2img")
     if problems:
         raise ValueError("The Learning baseline is incomplete: " + "; ".join(problems))
@@ -231,6 +237,8 @@ def build_plan(controller: Any, experiment: Any) -> None:
         ),
     )
     snapshot.update(study_type=ee.STUDY_TYPE, **{ee.STUDY_TYPE: frozen})
+    if target.warnings:  # N1b: Preview shows these; Queue records them as accepted
+        snapshot[SNAPSHOT_WARNINGS_KEY] = warning_records([target])
     from src.generation_profiles.identity import ModelIdentityResolver
 
     snapshot["model_identity"] = (
@@ -281,7 +289,7 @@ def build_variant(controller: Any, experiment: Any, variant: Any) -> NormalizedJ
     baseline = snapshot["baseline_config"]
     model = selected_model(baseline, "txt2img")
     policy = resolve_policy(model, controller, baseline)
-    ee.require_target(policy, baseline, section["channel"])
+    policy = ee.require_target(policy, baseline, section["channel"]).policy
     if not compatible_context(
         snapshot["model_policy_context"], policy_context(policy, model, "txt2img")
     ):
@@ -310,4 +318,4 @@ def build_variant(controller: Any, experiment: Any, variant: Any) -> NormalizedJ
         raise ValueError(
             "Embedding experiment NJR differs from the frozen Preview. No variants were admitted."
         )
-    return record
+    return accept_frozen_warnings(record, snapshot)

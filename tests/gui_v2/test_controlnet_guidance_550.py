@@ -22,9 +22,19 @@ DEPTH_MODEL = "diffusers_xl_depth_full"
 
 
 class _Target:
-    def __init__(self, executable: bool = True, evidence: str = EVIDENCE_REGISTRY) -> None:
+    def __init__(
+        self,
+        executable: bool = True,
+        evidence: str = EVIDENCE_REGISTRY,
+        status: str = "supported",
+        reason: str = "supported",
+        message: str = "",
+    ) -> None:
         self.executable = executable
         self.evidence = evidence
+        self.status = status
+        self.reason = reason
+        self.message = message
 
 
 def _model(name: str, status: str = "sdxl", detail: str = "header") -> ControlNetModelOption:
@@ -168,14 +178,33 @@ def test_a_disabled_unit_is_not_presented_as_active():
             {"models": [_model(POSE_MODEL, "not_sdxl", "text-context width 768")]},
             "is not an SDXL ControlNet",
         ),
-        ({"target": None}, "registry-verified SDXL checkpoint"),
-        ({"target": _Target(executable=False)}, "registry-verified SDXL checkpoint"),
+        ({"target": None}, "Select an SDXL checkpoint on Forge"),
+        (
+            {
+                "target": _Target(
+                    False, status="unsupported", reason="family", message="SD1 is not SDXL."
+                )
+            },
+            "SD1 is not SDXL.",
+        ),
     ],
 )
 def test_definite_refusals_are_labelled_cannot_execute(kwargs, needle):
     report = _ready(_raw(_unit()), **kwargs)
     assert report.state == g.STATE_BLOCKED
     assert report.text.count("Cannot execute") == 1 and needle in report.text
+
+
+@pytest.mark.parametrize(
+    "status,reason", [("unverified", "unverified_family"), ("unsupported", "conflicting_evidence")]
+)
+def test_an_unclassified_checkpoint_is_a_warning_not_a_refusal(status, reason):
+    """N1b: an unclassified or conflicting checkpoint warns in the editor; Preview freezes why and the fix."""
+    report = _ready(
+        _raw(_unit()), target=_Target(False, "no_evidence", status, reason, "unverified")
+    )
+    assert report.state != g.STATE_BLOCKED and "Cannot execute" not in report.text
+    assert "Warning: StableNew has not confirmed this checkpoint as SDXL" in report.text
 
 
 def test_unverified_header_is_uncertainty_not_incompatibility():

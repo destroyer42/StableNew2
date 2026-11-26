@@ -19,13 +19,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.image_backends.forge_klein_lora import extract_lora_tags
-from src.image_backends.model_policy import EVIDENCE_REGISTRY, ModelPolicy
+from src.image_backends.model_policy import ModelPolicy
 from src.image_backends.model_policy_lora import assess_lora_selection
+from src.image_backends.sdxl_target import OP_TXT2IMG_LORA, SdxlTarget
 from src.learning.prompt_slot_experiment import (
     digest,
     expected_execution_prompts,
     slots_in,
 )
+from src.learning.sdxl_study_target import study_target
 from src.pipeline.prompt_pack_parser import PackRow
 from src.pipeline.resolution_layer import (
     adapt_pack_intent,
@@ -208,14 +210,15 @@ def validation_error(spec: Mapping[str, Any], prompt: str, images: int) -> str:
 
 def require_target(
     policy: ModelPolicy, baseline: Mapping[str, Any], stage: str = "txt2img"
-) -> None:
-    if (
-        stage != "txt2img"
-        or "txt2img" not in policy.stages
-        or policy.family != "sdxl"
-        or policy.evidence != EVIDENCE_REGISTRY
-    ):
-        raise ValueError("LoRA Composition currently requires registry-verified SDXL txt2img.")
+) -> SdxlTarget:
+    """Raise for a real block; return the N1b target (run with ``target.policy``, freeze ``target.warnings``)."""
+    if stage != "txt2img":
+        raise ValueError("LoRA Composition supports SDXL txt2img only.")
+    target = study_target(
+        policy, baseline, operation=OP_TXT2IMG_LORA, feature="LoRA Composition"
+    ).require()
+    if "txt2img" not in target.policy.stages:
+        raise ValueError("LoRA Composition supports SDXL txt2img only.")
     if any(
         bool((section.get("prompt_optimizer") or {}).get("enabled"))
         for section in (baseline, baseline.get("txt2img") or {})
@@ -233,6 +236,7 @@ def require_target(
             "Style Consistency is enabled in the Learning baseline; its LoRA ownership is not part of "
             "this controlled composition. Disable it before Preview."
         )
+    return target
 
 
 @dataclass(frozen=True)
@@ -389,7 +393,7 @@ def freeze_candidates(
     row: PackRow | None = None,
     source: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    require_target(policy, baseline)
+    policy = require_target(policy, baseline).policy  # N1b: run with the target policy
     validate_bounds(design)
     if slots_in(negative):
         raise ValueError("The fixed negative prompt may not contain unresolved Matrix slots.")

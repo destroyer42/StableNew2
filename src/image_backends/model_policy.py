@@ -105,6 +105,17 @@ EVIDENCE_CONFLICTING = "conflicting_evidence"
 #: A family profile admitted by the checkpoint's structural layout (PR-IMG-FLUX-130): a real profile, but never an
 #: exact-identity authority (Model Comparison and other exact-identity consumers keep refusing it).
 EVIDENCE_STRUCTURAL = "structural_profile"
+#: N1b: this exact checkpoint has completed the operation on this backend through the queue here (observed execution
+#: outranks registry classification; owner rule 2026-11-25). Only ``src/image_backends/sdxl_target.py`` assigns it.
+EVIDENCE_OBSERVED = "observed_execution"
+#: N1b: the registry could not classify the checkpoint (no snapshot, unknown or conflicting), and the operator ran an
+#: SDXL-only feature on it after a ``PolicyWarning``. Only ``src/image_backends/sdxl_target.py`` assigns it.
+EVIDENCE_ACCEPTED_UNVERIFIED = "accepted_unverified"
+#: Evidence tiers an SDXL-only feature (Learning studies, ControlNet, Review edits) runs as SDXL. Registry-verified is
+#: one of them, never the only one (N1b).
+SDXL_RUN_EVIDENCE: frozenset[str] = frozenset(
+    {EVIDENCE_REGISTRY, EVIDENCE_OBSERVED, EVIDENCE_ACCEPTED_UNVERIFIED}
+)
 
 POLICY_ID_SDXL = "sdxl"
 POLICY_ID_UNVERIFIED = "unverified_generic"
@@ -566,6 +577,23 @@ def _sdxl_policy(evidence: str) -> ModelPolicy:
     )
 
 
+def sdxl_policy_with_evidence(evidence: str) -> ModelPolicy:
+    """The ordinary SDXL policy carrying ``evidence`` (N1b: observed execution or an accepted unverified family).
+
+    The capability contract is exactly the registry SDXL one; only the evidence tier differs.
+    """
+
+    if evidence not in SDXL_RUN_EVIDENCE:
+        raise ValueError(f"'{evidence}' is not an SDXL run evidence tier")
+    return _sdxl_policy(evidence)
+
+
+def unclassified_policy(evidence: str = EVIDENCE_UNKNOWN) -> ModelPolicy:
+    """The conservative projection for a checkpoint whose family evidence does not count (for example a name hint)."""
+
+    return _unverified_policy(FAMILY_UNKNOWN, evidence)
+
+
 def _unverified_policy(family: str, evidence: str) -> ModelPolicy:
     """Conservative projection: generic WebUI usability exactly as before, no capability claims, no family guess."""
 
@@ -1007,8 +1035,10 @@ __all__ = [
     "CONTROL_VAE",
     "ControlMode",
     "ControlPolicy",
+    "EVIDENCE_ACCEPTED_UNVERIFIED",
     "EVIDENCE_CONFLICTING",
     "EVIDENCE_NONE",
+    "EVIDENCE_OBSERVED",
     "EVIDENCE_PROFILE",
     "EVIDENCE_REGISTRY",
     "EVIDENCE_STRUCTURAL",
@@ -1025,6 +1055,7 @@ __all__ = [
     "ModelPolicy",
     "ModelPolicyResult",
     "RegistryFamilyLookup",
+    "SDXL_RUN_EVIDENCE",
     "Support",
     "VALUE_CONTROLS",
     "apply_model_compile_policy",
@@ -1036,4 +1067,6 @@ __all__ = [
     "registry_variant_lookup",
     "resolve_model_policy",
     "resolve_model_profile_for_policy",
+    "sdxl_policy_with_evidence",
+    "unclassified_policy",
 ]

@@ -28,7 +28,18 @@ def test_a_registry_verified_sdxl_checkpoint_passes_the_dispatch_check(registry_
     units.validate_target(SDXL, "forge_webui", {"image": {"backend_id": "forge_webui"}})
 
 
-def test_a_registry_sd1_checkpoint_and_an_unknown_one_are_still_refused(registry_lookup) -> None:
-    for model in (OLD, "mystery.safetensors"):
-        with pytest.raises(OpenPoseDispatchError, match="registry-verified SDXL"):
-            units.validate_target(model, "forge_webui", {"image": {"backend_id": "forge_webui"}})
+def test_a_registry_sd1_checkpoint_is_still_refused(registry_lookup) -> None:
+    with pytest.raises(OpenPoseDispatchError, match="Only SDXL checkpoints"):
+        units.validate_target(OLD, "forge_webui", {"image": {"backend_id": "forge_webui"}})
+
+
+def test_an_unclassified_checkpoint_is_not_refused_at_dispatch(registry_lookup) -> None:
+    """N1b: the operator accepted the unclassified-family warning on Queue; dispatch never refuses for policy."""
+    units.validate_target(
+        "mystery.safetensors", "forge_webui", {"image": {"backend_id": "forge_webui"}}
+    )
+
+
+def test_a1111_is_still_refused_for_controlnet(registry_lookup) -> None:
+    with pytest.raises(OpenPoseDispatchError, match="Forge"):
+        units.validate_target(SDXL, "a1111_webui", {"image": {"backend_id": "a1111_webui"}})

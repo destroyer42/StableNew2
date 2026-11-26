@@ -69,6 +69,10 @@ class CompileEvidence:
             self.lora_evidence = prepare_selection_evidence(self._registry._get(), cancelled=cancelled)
         self._selection_prepared = True
 
+    def pin_policy(self, model_name: str | None, policy: ModelPolicy) -> None:
+        """Fix the policy ``policy_for`` answers for ``model_name`` (readiness evidence that outranks the lookup)."""
+        self._policies[str(model_name or "").strip()] = policy
+
     def policy_for(self, model_name: str | None) -> ModelPolicy:
         key = str(model_name or "").strip()
         policy = self._policies.get(key)

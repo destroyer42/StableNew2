@@ -149,10 +149,8 @@ def test_multi_unit_order_weights_and_the_two_unit_limit_hold_for_created_maps(h
         harness.build([_slot(0, "p", controlnet_units=declared, controlnet_openpose=POSE_A)])
 
 
-@pytest.mark.parametrize(
-    "model", ["mystery.safetensors", "sd15_model.safetensors", "flux-2-klein-4b-fp8.safetensors"]
-)
-def test_non_sdxl_and_unknown_targets_refuse_a_created_map_at_compile(harness, created, model):
+@pytest.mark.parametrize("model", ["sd15_model.safetensors", "flux-2-klein-4b-fp8.safetensors"])
+def test_non_sdxl_targets_refuse_a_created_map_at_compile(harness, created, model):
     with pytest.raises(ValueError):
         harness.build(
             [_slot(0, "a portrait", controlnet_units=_units(created, "canny"))], model=model

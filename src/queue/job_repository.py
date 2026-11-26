@@ -1037,6 +1037,45 @@ class JobRepository(JobHistoryStore):
             exhausted=low <= 0,
         )
 
+    def read_completed_snapshots_mentioning(
+        self, needle: str, *, before_cursor: int | None = None, window: int = 2000
+    ) -> tuple[tuple[str, ...], int, bool]:
+        """NJR snapshots of *completed* jobs whose snapshot text contains ``needle``, in one bounded rowid window.
+
+        N1b observed-execution evidence (``src/history/observed_execution.py``). Newest rowids first; returns
+        ``(snapshots, next_cursor, exhausted)``. A file-backed repository reads on its own short-lived read-only
+        connection without the shared lock (a WAL reader never blocks the writer), as
+        ``count_jobs_with_last_control_action`` does. Callers on the Tk thread must run it on a worker.
+        """
+
+        size = max(1, int(window))
+        sql = (
+            "SELECT njr_snapshot FROM jobs WHERE rowid > ? AND rowid <= ? AND status = 'completed' "
+            "AND instr(njr_snapshot, ?) > 0 ORDER BY rowid DESC"
+        )
+
+        def read(connection: sqlite3.Connection) -> tuple[tuple[str, ...], int]:
+            if before_cursor is None:
+                top = int(connection.execute("SELECT COALESCE(MAX(rowid), 0) FROM jobs").fetchone()[0])
+            else:
+                top = int(before_cursor)
+            low = max(0, top - size)
+            rows = connection.execute(sql, (low, top, str(needle))).fetchall()
+            return tuple(str(row[0] or "") for row in rows), low
+
+        if self.path is None:
+            with self._lock:
+                snapshots, low = read(self._connection)
+        else:
+            connection = sqlite3.connect(
+                f"file:{self.path.resolve().as_posix()}?mode=ro", uri=True, timeout=10.0
+            )
+            try:
+                snapshots, low = read(connection)
+            finally:
+                connection.close()
+        return snapshots, low, low <= 0
+
     def list_replay_child_rows(self, parent_job_ids: Sequence[str]) -> list[ReplayChildRow]:
         """Jobs compiled as an *unchanged* history replay of any of ``parent_job_ids`` (read-only; a retry is a child).
 

@@ -16,6 +16,7 @@ from src.image_backends.model_policy import (
     _unverified_policy,
     resolve_model_policy,
 )
+from src.image_backends.sdxl_target import SdxlTarget
 from src.learning import study_catalog
 from src.learning.compatibility_probe import suggest_recipes
 from src.learning.embedding_experiment import POSITIVE
@@ -23,7 +24,7 @@ from src.learning.embedding_experiment import require_target as embedding_target
 from src.learning.learning_controller_services.compatibility_probe import require_probe_target
 from src.learning.lora_composition import require_target as lora_target
 from src.learning.model_capabilities import project_learning_capabilities
-from src.learning.model_comparison import candidate_ineligibility
+from src.learning.model_comparison import candidate_target_check
 from src.learning.prompt_model_matrix import require_matrix_baseline
 from src.learning.prompt_slot_experiment import require_target as slot_target
 from src.learning.study_eligibility import describe, eligible_studies
@@ -50,6 +51,8 @@ def _raised(check) -> str:
         outcome = check()
     except ValueError as exc:
         return str(exc)
+    if isinstance(outcome, SdxlTarget):  # N1b: a passing SDXL target (possibly with a warning)
+        return ""
     return str(outcome or "")
 
 
@@ -62,13 +65,13 @@ def _own_verdict(slug: str, policy, config) -> str:
     if slug == "embedding_experiment":
         return _raised(lambda: embedding_target(policy, config, POSITIVE))
     if slug == "model_comparison":
-        return _raised(lambda: candidate_ineligibility(policy))
+        return _raised(lambda: candidate_target_check(policy, config))
     if slug == "prompt_model_matrix":
-        return _raised(lambda: candidate_ineligibility(policy)) or _raised(
+        return _raised(lambda: candidate_target_check(policy, config)) or _raised(
             lambda: require_matrix_baseline(config)
         )
     if slug == "two_axis_grid":
-        return _raised(lambda: grid_policy_check(policy)) or _raised(
+        return _raised(lambda: grid_policy_check(policy, config)) or _raised(
             lambda: require_plain_txt2img(config)
         )
     if slug == "compatibility_probe":
@@ -131,7 +134,11 @@ def test_the_four_policy_shapes_land_where_the_engines_put_them():
     assert exact.get("model_comparison").available
     unknown = eligible_studies(POLICIES["unknown_family"], config, {})
     assert unknown.get("compatibility_probe").available
-    assert "registry-verified SDXL" in unknown.get("prompt_slot").reason
+    # N1b: an unclassified checkpoint is available with the warning Preview will show.
+    slot = unknown.get("prompt_slot")
+    assert slot.available and slot.note.startswith(
+        "Warning: ordinary.safetensors is not confirmed as SDXL."
+    )
 
 
 def test_a_baseline_the_study_refuses_is_reported_with_the_studys_own_text():
@@ -219,9 +226,12 @@ def test_describe_lists_every_study_under_its_objective_with_the_reason():
     for objective in study_catalog.OBJECTIVES:
         assert objective.label + ":" in text
     assert "Compatibility Probe: available" in text
+    # N1b: the unclassified model no longer refuses; the shared fixture's prompt optimizer is what refuses here.
+    assert "Prompt Slot: not available - Disable the prompt optimizer" in text
+    config["prompt_optimizer"] = {"enabled": False}
+    text = "\n".join(describe(eligible_studies(POLICIES["unknown_family"], config, {})))
     assert (
-        "Prompt Slot: not available - Prompt Slot currently requires registry-verified SDXL txt2img."
-        in text
+        "Prompt Slot: available - Warning: ordinary.safetensors is not confirmed as SDXL." in text
     )
 
 

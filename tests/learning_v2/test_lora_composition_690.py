@@ -309,8 +309,10 @@ def test_l07_policy_limit_applies_to_the_whole_effective_set():
 
 
 def test_unsupported_targets_optimizer_and_stage_loras_refuse():
-    with pytest.raises(ValueError, match="registry-verified SDXL"):
-        freeze(add_design(), pol=resolve_model_policy("unknown"))
+    # N1b: a positively identified other family refuses; an unclassified one runs as SDXL with a warning.
+    with pytest.raises(ValueError, match="Only SDXL checkpoints"):
+        freeze(add_design(), pol=_registry_family_policy("sd1"))
+    freeze(add_design(), pol=resolve_model_policy("unknown"))
     base = baseline()
     base["prompt_optimizer"] = {"enabled": True}
     with pytest.raises(ValueError, match="optimizer"):
@@ -976,3 +978,14 @@ def lc_conf(value):
     from src.assets.compatibility import EvidenceConfidence
 
     return EvidenceConfidence(value)
+
+
+def _registry_family_policy(family: str):
+    """A policy the registry positively classified as ``family`` (N1b: a real block for SDXL-only features)."""
+    from types import SimpleNamespace
+
+    compat = SimpleNamespace(
+        status=SimpleNamespace(value="resolved"), family=SimpleNamespace(value=family),
+        structural_error=None, checkpoint_architecture=None,
+    )  # fmt: skip
+    return resolve_model_policy("other-family.safetensors", family_lookup=lambda _name: compat)

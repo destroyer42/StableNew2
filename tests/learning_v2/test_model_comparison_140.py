@@ -159,13 +159,20 @@ def test_qualified_shared_source_and_geometry(tmp_path, models, width):
     assert "red dress" not in preview_summary(snapshot)
 
 
-@pytest.mark.parametrize(
-    "models",
-    [[SDXL, "unknown"], [SDXL, "conflict"], [SDXL, "sd1"], [SDXL], [SDXL, SDXL], [SDXL, None]],
-)
+@pytest.mark.parametrize("models", [[SDXL, "sd1"], [SDXL], [SDXL, SDXL], [SDXL, None]])
 def test_candidate_gates(tmp_path, models):
     with pytest.raises(ValueError):
         plan(tmp_path, models=models)
+
+
+@pytest.mark.parametrize("other", ["unknown", "conflict"])
+def test_unclassified_candidates_warn_and_run_as_sdxl(tmp_path, other):
+    """N1b: an unclassified or conflicting candidate is a frozen warning (why and fix), never a refusal."""
+    _exp, snapshot, _evidence = plan(tmp_path, models=[SDXL, other])
+    (warning,) = snapshot["policy_warnings"]
+    assert warning["code"] == "image_model_family_unverified" and other in warning["subject"]
+    arm = next(arm for arm in snapshot["model_comparison"]["arms"] if arm["selected_model"] == other)
+    assert arm["model_policy_context"]["evidence"] == "accepted_unverified"
 
 
 @pytest.mark.parametrize(

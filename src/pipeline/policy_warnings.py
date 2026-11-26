@@ -21,6 +21,9 @@ from typing import Any
 
 CONTRACT = "policy_warning/1"
 ACCEPTED_WARNINGS_KEY = "accepted_warnings"
+#: N1b: warnings a compiler attached to an NJR for Preview (``provenance.metadata["policy_warnings"]``). Queue moves
+#: them to ``accepted_warnings``; they never decide whether a job runs.
+PENDING_WARNINGS_KEY = "policy_warnings"
 SURFACE_DESKTOP = "desktop"
 SURFACE_PHONE = "phone"
 KNOWN_SURFACES = frozenset({SURFACE_DESKTOP, SURFACE_PHONE})
@@ -29,6 +32,8 @@ KNOWN_SURFACES = frozenset({SURFACE_DESKTOP, SURFACE_PHONE})
 CODE_VIDEO_EXPERIMENTAL = "video_experimental_workflow"
 #: A checkpoint StableNew has no qualified profile for (for example a FLUX layout without a profile).
 CODE_IMAGE_MODEL_UNQUALIFIED = "image_model_unqualified"
+#: N1b: an SDXL-only feature on a checkpoint the registry could not classify (``src/image_backends/sdxl_target.py``).
+CODE_IMAGE_MODEL_FAMILY_UNVERIFIED = "image_model_family_unverified"
 
 
 @dataclass(frozen=True)
@@ -139,7 +144,38 @@ def with_accepted_warnings(record: Any, warnings: Iterable[PolicyWarning], *, su
     if not pending:
         return record
     metadata = merge_accepted_warnings(record.extra_metadata, pending, surface=surface)
+    return _with_provenance_metadata(record, metadata)
+
+
+def _with_provenance_metadata(record: Any, metadata: Mapping[str, Any]) -> Any:
+    """``record`` re-frozen with new provenance metadata only; the job's identity and plan are unchanged."""
+
     return replace(record, provenance=replace(record.provenance, metadata=metadata))
+
+
+def pending_warnings(record: Any) -> tuple[PolicyWarning, ...]:
+    """The warnings a compiler attached to ``record`` for Preview (N1b), as ``PolicyWarning`` values."""
+
+    raw = (getattr(record, "extra_metadata", None) or {}).get(PENDING_WARNINGS_KEY)
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    return tuple(PolicyWarning.from_dict(item) for item in raw if isinstance(item, Mapping))
+
+
+def with_pending_warnings(record: Any, warnings: Iterable[PolicyWarning]) -> Any:
+    """``record`` re-frozen with ``warnings`` attached for Preview (N1b); unchanged when there are none."""
+
+    items = list(warnings)
+    if not items:
+        return record
+    metadata = dict(record.extra_metadata or {})
+    records = [
+        dict(item) for item in metadata.get(PENDING_WARNINGS_KEY) or () if isinstance(item, Mapping)
+    ]
+    seen = {(str(item.get("code") or ""), str(item.get("subject") or "")) for item in records}
+    records.extend(item.as_dict() for item in items if item.key not in seen)
+    metadata[PENDING_WARNINGS_KEY] = records
+    return _with_provenance_metadata(record, metadata)
 
 
 def unaccepted(
@@ -151,10 +187,12 @@ def unaccepted(
 
 __all__ = [
     "ACCEPTED_WARNINGS_KEY",
+    "CODE_IMAGE_MODEL_FAMILY_UNVERIFIED",
     "CODE_IMAGE_MODEL_UNQUALIFIED",
     "CODE_VIDEO_EXPERIMENTAL",
     "CONTRACT",
     "KNOWN_SURFACES",
+    "PENDING_WARNINGS_KEY",
     "PolicyWarning",
     "SURFACE_DESKTOP",
     "SURFACE_PHONE",
@@ -163,6 +201,8 @@ __all__ = [
     "accepted_warning_records",
     "is_accepted",
     "merge_accepted_warnings",
+    "pending_warnings",
     "unaccepted",
     "with_accepted_warnings",
+    "with_pending_warnings",
 ]

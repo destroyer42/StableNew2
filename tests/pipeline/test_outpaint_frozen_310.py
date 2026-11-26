@@ -172,18 +172,17 @@ def test_preview_summary_is_bounded_and_states_policy_and_identity(prepared):
 
 
 @pytest.mark.parametrize(
-    "backend,model",
+    "backend,model,message",
     [
-        ("a1111", "sdxl"),
-        ("comfy", "sdxl"),
-        ("forge_webui", "unknown"),
-        ("forge_webui", "flux-2-klein-4b-fp8.safetensors"),
+        ("a1111", "sdxl", "require Forge"),
+        ("comfy", "sdxl", "require Forge"),
+        ("forge_webui", "flux-2-klein-4b-fp8.safetensors", "Only SDXL checkpoints"),
     ],
 )
-def test_unsupported_targets_are_refused_without_freezing(prepared, backend, model):
+def test_unsupported_targets_are_refused_without_freezing(prepared, backend, model, message):
     config = deepcopy(prepared.config)
     config["backend_options"]["image"]["backend_id"] = backend
-    with pytest.raises(ValueError, match="require Forge"):
+    with pytest.raises(ValueError, match=message):
         prepared.prepare(fallback_config=config, baseline={"model": model})
     assert not inputs.default_snapshot_root().exists()
 
@@ -387,9 +386,14 @@ def test_original_snapshot_path_cannot_escape_owned_state(prepared):
 
 def test_model_or_backend_change_after_preview_refuses_admission(prepared, monkeypatch):
     preview = prepared.prepare()
-    monkeypatch.setattr(capability, "RegistryFamilyLookup", lambda: (lambda _name: None))
+    # The checkpoint is now positively identified as another family (N1b: lost evidence alone only warns).
+    sd1 = SimpleNamespace(
+        status=SimpleNamespace(value="resolved"), family=SimpleNamespace(value="sd1"),
+        structural_error=None, checkpoint_architecture=None,
+    )  # fmt: skip
+    monkeypatch.setattr(capability, "RegistryFamilyLookup", lambda: (lambda _name: sd1))
     admission = SimpleNamespace(submit_njrs=Mock())
-    with pytest.raises(ValueError, match="require Forge"):
+    with pytest.raises(ValueError, match="Only SDXL checkpoints"):
         preview.submit(admission)
     admission.submit_njrs.assert_not_called()
 

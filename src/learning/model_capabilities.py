@@ -6,7 +6,12 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from src.image_backends.model_policy import EVIDENCE_REGISTRY, ControlMode, ModelPolicy
+from src.image_backends.model_policy import (
+    EVIDENCE_REGISTRY,
+    SDXL_RUN_EVIDENCE,
+    ControlMode,
+    ModelPolicy,
+)
 from src.image_backends.model_policy_lora import assess_lora_selection
 from src.learning.stage_capabilities import STAGE_CAPABILITIES
 from src.learning.variable_metadata import (
@@ -61,16 +66,30 @@ def policy_context(policy: ModelPolicy, model: str, stage: str) -> dict[str, Any
 
 
 def compatible_context(left: dict, right: dict) -> bool:
-    """Control shape alone cannot upgrade unknown evidence to policy compatibility."""
+    """Control shape alone cannot upgrade unknown evidence to policy compatibility.
+
+    N1b: the SDXL run evidence tiers (registry, observed execution, accepted unverified) carry the identical SDXL
+    contract, so a study frozen on one stays compatible when the same model later gains another (for example its own
+    first completed run turns an accepted warning into observed execution).
+    """
     if not left or not right:
         return False
-    if not left.get("profile_ref") and (
-        left.get("evidence") != EVIDENCE_REGISTRY or right.get("evidence") != EVIDENCE_REGISTRY
+    sdxl_tiers = (
+        not left.get("profile_ref")
+        and left.get("evidence") in SDXL_RUN_EVIDENCE
+        and right.get("evidence") in SDXL_RUN_EVIDENCE
+    )
+    if (
+        not left.get("profile_ref")
+        and not sdxl_tiers
+        and (
+            left.get("evidence") != EVIDENCE_REGISTRY or right.get("evidence") != EVIDENCE_REGISTRY
+        )
     ):
         return False
-    return all(
-        left.get(key) == right.get(key)
-        for key in ("policy_id", "family", "evidence", "profile_ref", "stage", "contract")
+    keys = ("policy_id", "family", "profile_ref", "stage", "contract")
+    return all(left.get(key) == right.get(key) for key in keys) and (
+        sdxl_tiers or left.get("evidence") == right.get("evidence")
     )
 
 

@@ -262,19 +262,19 @@ def require_plain_txt2img(config: Mapping[str, Any]) -> None:
             )
 
 
-def _eligible(policy: Any) -> None:
-    from src.image_backends.model_policy import EVIDENCE_REGISTRY, QUALIFIED_REGISTRY_POLICY_IDS
+def _eligible(
+    policy: Any, baseline: Mapping[str, Any] | None = None, *, model: str | None = None
+) -> Any:
+    """Raise for a real block; return the N1b ``SdxlTarget`` (run with ``target.policy``, freeze its warnings)."""
+    from src.image_backends.sdxl_target import OP_TXT2IMG
+    from src.learning.sdxl_study_target import study_target
 
-    if (
-        policy.evidence != EVIDENCE_REGISTRY
-        or policy.policy_id not in QUALIFIED_REGISTRY_POLICY_IDS
-    ):
-        raise ValueError(
-            "Two-Axis Grid supports registry-verified SDXL checkpoints in this release; the selected model has no "
-            "such evidence"
-        )
-    if "txt2img" not in policy.stages:
+    target = study_target(
+        policy, baseline or {}, operation=OP_TXT2IMG, feature="Two-Axis Grid", model=model
+    ).require()
+    if "txt2img" not in target.policy.stages:
         raise ValueError("The selected model does not support txt2img")
+    return target
 
 
 def build_grid_snapshot(
@@ -287,9 +287,11 @@ def build_grid_snapshot(
     """Freeze axes, prompt, seeds, model context and every cell's effective configuration; all-or-nothing."""
     from src.image_backends.image_backend_types import normalize_image_backend_options
     from src.learning.experiment_freeze import freeze_seed_policy
+    from src.learning.model_capabilities import policy_context
     from src.learning.model_comparison import require_envelope
-    from src.learning.model_policy_service import policy_from_context
+    from src.learning.model_policy_service import policy_from_context, selected_model
     from src.learning.ordinary_prompt_freeze import freeze_ordinary_prompt_source
+    from src.learning.sdxl_study_target import SNAPSHOT_WARNINGS_KEY, warning_records
 
     if experiment.stage != "txt2img" or experiment.input_image_path:
         raise ValueError("Two-Axis Grid supports image txt2img only")
@@ -330,7 +332,10 @@ def build_grid_snapshot(
         raise ValueError("The two axes resolved conflicting model policies")
     context = contexts[0]
     policy = policy_from_context(context)
-    _eligible(policy)
+    target = _eligible(policy, baseline, model=selected_model(baseline, "txt2img"))
+    if target.policy.evidence != policy.evidence:  # N1b: run as SDXL, carrying the evidence tier
+        policy = target.policy
+        context = policy_context(policy, str(context.get("selected_model") or ""), "txt2img")
     section = baseline.get("txt2img") or {}
     try:
         geometry = {name: int(section[name]) for name in ("width", "height")}
@@ -388,6 +393,8 @@ def build_grid_snapshot(
         "model_policy_context": context,
         "two_axis_grid": grid,
     }
+    if target.warnings:  # N1b: Preview shows these; Queue records them as accepted
+        snapshot[SNAPSHOT_WARNINGS_KEY] = warning_records([target])
     snapshot = cast(dict[str, Any], json.loads(json.dumps(snapshot, allow_nan=False)))
     for cell in snapshot["two_axis_grid"]["cells"]:
         cell["effective"] = _compile_cell(snapshot, _coordinate(snapshot, cell)).effective
@@ -586,7 +593,7 @@ def materialize_njr(
         metadata[key] = section.get(key, 0)
     variant.executed_config = copy.deepcopy(config)
     grid_size = snapshot["two_axis_grid"]["total_cells"]
-    return assemble_txt2img_njr(
+    record = assemble_txt2img_njr(
         job_id=f"learning_{snapshot['experiment_id']}_{variant.variant_id or cell['index']}_{uuid.uuid4().hex[:8]}",
         display_name=snapshot["display_name"],
         positive=compiled.positive,
@@ -609,6 +616,9 @@ def materialize_njr(
         lora_tags=compiled.lora_tags,
         mismatch_message="Two-Axis Grid NJR does not match frozen execution",
     )
+    from src.learning.sdxl_study_target import accept_frozen_warnings
+
+    return accept_frozen_warnings(record, snapshot)  # N1b: Queue on the Preview accepted them
 
 
 def cell_identity(snapshot: Mapping[str, Any], value: Any) -> dict[str, Any]:
