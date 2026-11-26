@@ -292,7 +292,7 @@ legacy failures remain non-blocking.
 
 **Developer-experience enabling track (owner-approved direction, not an active
 production dependency):** [agent context and AI-worker research roadmap](work_packages/DEVEX-CONTEXT_AI_WORKER_ROADMAP.md).
-Its first implementable package is [PR-DEVEX-CONTEXT-100](work_packages/PR-DEVEX-CONTEXT-100.md):
+Its first implementable package is [PR-DEVEX-CONTEXT-100](archive/work_packages/PR-DEVEX-CONTEXT-100.md):
 deterministic task routing, static dependency index, compact context capsules,
 and module-docstring completion. Follow-on [AI-WORKER-110](work_packages/AI-WORKER-110.md)
 is a separately authorized Proxmox/model measurement gate;

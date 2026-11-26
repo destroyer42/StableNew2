@@ -13,7 +13,7 @@ This report is a decision aid. It changes no code, authorizes no package and doe
 | HEAD | `67e0e559d1998321d567e78f9b4e16cf4e6d9807` (merge of PR #288) |
 | Remote `main` | `67e0e559d1998321d567e78f9b4e16cf4e6d9807` (`git ls-remote origin refs/heads/main`), identical to HEAD |
 | Diff | one unrelated user change, `presets/settings.json` (3 insertions, 3 deletions); untouched, identical at closeout |
-| Files written by this package | none during the research. Afterwards, at the owner's request, this report and `docs/work_packages/P3-2A_runtime_stack_consolidation.md` were committed on `research/p3-2-runtime-composition-root`; the trace plugin was not committed |
+| Files written by this package | none during the research. Afterwards, at the owner's request, this report and `docs/archive/work_packages/P3-2A_runtime_stack_consolidation.md` were committed on `research/p3-2-runtime-composition-root`; the trace plugin was not committed |
 | Owner decision | 2026-11-12: stage A authorized with amendments, recorded in the work package, which supersedes section 10 below where they differ |
 
 Evidence labels: **[S]** read in source at the locked SHA; **[T]** observed at runtime in the instrumented hermetic test

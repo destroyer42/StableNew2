@@ -2,7 +2,7 @@
 
 Status: **IMPLEMENTED (stage A only), 2026-11-12/13.** Completion report below; hosted CI is the integration verdict.
 Produced by the P3-2 decision report
-([assessment](../assessments/2026-11-12_p3_2_runtime_composition_root_decision.md), measured at
+([assessment](../../assessments/2026-11-12_p3_2_runtime_composition_root_decision.md), measured at
 `67e0e559d1998321d567e78f9b4e16cf4e6d9807`). This file is the copy-paste prompt for a fresh implementation session and
 follows `docs/CODEX_WORK_PACKAGE_TEMPLATE.md`. Do not repeat the architecture discovery that remains valid; do verify the
 start state. Where this file and section 10 of the assessment differ, this file wins (it carries the owner's amendments).

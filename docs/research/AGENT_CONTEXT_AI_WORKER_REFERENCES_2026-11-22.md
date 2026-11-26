@@ -108,6 +108,6 @@ No external model documentation, model-card benchmark or example command grants 
 
 ## Boundaries and next gate
 
-The [CONTEXT-100 implementation package](../work_packages/PR-DEVEX-CONTEXT-100.md) is the first implementation objective. [AI-WORKER-110](../work_packages/AI-WORKER-110.md) is a separately authorized qualification; [CONTEXT-120](../work_packages/PR-DEVEX-CONTEXT-120.md) is conditional integration. Image-analysis work remains an independent later product/qualification decision.
+The [CONTEXT-100 implementation package](../archive/work_packages/PR-DEVEX-CONTEXT-100.md) is the first implementation objective. [AI-WORKER-110](../work_packages/AI-WORKER-110.md) is a separately authorized qualification; [CONTEXT-120](../work_packages/PR-DEVEX-CONTEXT-120.md) is conditional integration. Image-analysis work remains an independent later product/qualification decision.
 
 Do not modify `STATUS.md` merely to narrate this research. Adopted runtime/architecture changes belong in their current living docs and must pass the current owner decision and validation process.
