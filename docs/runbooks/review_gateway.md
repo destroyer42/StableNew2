@@ -13,12 +13,14 @@ real install, on Proxmox, is recorded in [Proxmox preparation](proxmox_review_ga
 - Immich 2.0 or newer, reachable from the container.
 - Proxmox firewall: TCP 9443 from the PC's LAN address only; no other inbound LAN port is needed.
 
-## Install or upgrade
+## First install
 
-From a checkout on the PC, copy only what the installer needs:
+The first install (and the one-time install of a version that brings `review-gateway-deploy`) copies the source by
+hand. Later versions use [Deploy a commit](#deploy-a-commit). From a checkout on the PC, copy only what the installer
+needs:
 
 ```powershell
-git archive --format=tar -o review-gateway.tar HEAD services/review_gateway docs/schemas/stablenew.review-gateway-sync.v1.json
+git archive --format=tar -o review-gateway.tar HEAD services/review_gateway services/deploy docs/schemas/stablenew.review-gateway-sync.v1.json
 ```
 
 ```powershell
@@ -37,8 +39,9 @@ service downloads nothing. `SYNC_HOST`, `MEDIA_DIR` and `IMMICH_URL` apply only 
 `/etc/review-gateway/config.toml` is first written.
 Each install builds a new directory under `/opt/review-gateway/releases/` with its own virtual environment, checks it,
 and only then points `/opt/review-gateway/current` at it; a failed build leaves the running version alone. Upgrades keep
-the settings, the sync secret, the certificate and the data. The previous release is kept: to go back, point `current`
-at it and `systemctl restart review-gateway`.
+the settings, the sync secret, the certificate and the data. The previous release is kept, with a copy of the database
+taken just before the switch (`/var/lib/review-gateway-deploy/backups/`). The installer requires `services/deploy/`
+beside the service and installs `/usr/local/sbin/review-gateway-deploy`.
 
 Publish the phone app on the tailnet (HTTPS name and certificate come from Tailscale):
 
@@ -47,6 +50,58 @@ tailscale serve --bg --https=443 http://127.0.0.1:8443
 ```
 
 Never serve port 9443 through Tailscale or any proxy.
+
+## Deploy a commit
+
+Once `review-gateway-deploy` is installed, one line in the Proxmox host's shell deploys a commit of `main`. Use the
+merge commit's full SHA (40 characters):
+
+```bash
+pct exec 120 -- /usr/local/sbin/review-gateway-deploy <sha>
+```
+
+Inside the container (`pct enter 120`) the same command works without `pct exec 120 --`. In order, it:
+
+1. checks with GitHub that the commit is on `main`, is newer than the deployed one and is a merge GitHub signed. A SHA
+   alone proves none of this: GitHub serves commits that exist only in a fork under this repository's addresses. A
+   commit on `main` that is not the merge itself (a commit from inside a PR branch) is refused;
+2. downloads that commit's archive and extracts only `services/review_gateway/`, `services/deploy/` and the sync schema,
+   refusing links, devices and paths that leave the archive;
+3. runs that commit's `install.sh`, which records the commit in the release's `source.json`;
+4. checks the result for up to 45 seconds: the service is active; the sync API answers on the LAN address with the
+   pinned certificate and the schema version of the new release; the phone app answers on loopback;
+   `review-gateway-admin status` works;
+5. if a check fails, switches back to the previous release. It restores the database copy only when the new release
+   changed the tables.
+
+Every attempt is a line in `/var/lib/review-gateway-deploy/history.jsonl`. The last line ends with `outcome: <code>`,
+and the exit code names it:
+
+| Outcome | Exit | Meaning |
+|---|---|---|
+| `deployed` | 0 | The new release is live and healthy. A line says if the sync schema changed: update StableNew on the PC to the same commit. |
+| `already_current` | 0 | That commit is already deployed. |
+| `bad_sha` | 3 | Not 40 lowercase hexadecimal characters. |
+| `deploy_in_progress` | 4 | Another deploy is running. |
+| `github_unavailable` | 5 | GitHub did not answer (network, rate limit). Nothing changed. |
+| `not_on_main` | 6 | The commit is not on `main` (a fork, a typo or an unmerged PR). |
+| `downgrade` | 7 | Older than the deployed commit. At the console: `review-gateway-deploy deploy --allow-downgrade <sha>`. |
+| `not_github_signed` | 8 | Not a merge GitHub signed. Use the merge commit. |
+| `download_failed` / `bad_archive` | 9 / 10 | The archive could not be fetched, or failed a check. A commit from before the deployer existed is refused as `bad_archive`. |
+| `install_failed` | 11 | The installer stopped before switching. The old release runs. |
+| `rolled_back` | 12 | The new release failed a check; the previous one is live again. |
+| `rollback_failed` | 13 | The previous release failed its check as well: `journalctl -u review-gateway`. |
+| `not_installed` | 15 | No current release or settings: do a first install. |
+
+```bash
+review-gateway-deploy status                         # deployed commit, previous release, last outcome
+review-gateway-deploy rollback                       # back to the previous release; the database is kept
+review-gateway-deploy rollback --restore-database    # also restore the copy taken before the current release
+```
+
+After `rollback`, keep the database unless the older release fails on it. Restoring it drops every decision made since
+the current release started. The container needs `api.github.com` and `codeload.github.com` on TCP 443, which CT 120's
+firewall already allows.
 
 ## Sync secret and certificate
 

@@ -9,12 +9,15 @@
 #
 # SYNC_HOST (the container's LAN address), MEDIA_DIR and IMMICH_URL apply only when the settings file is first
 # written. The Immich API key is never given to the installer: paste it into the file named at the end.
+# After the first install, deploy later commits with review-gateway-deploy <sha>, which runs this script with
+# SOURCE_COMMIT and SOURCE_ARCHIVE_SHA256 set (docs/work_packages/DEPLOY-PROXMOX_containers.md).
 set -euo pipefail
 umask 022
 
 SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCHEMA_NAME="stablenew.review-gateway-sync.v1.json"
 SCHEMA="$SOURCE/../../docs/schemas/$SCHEMA_NAME"
+DEPLOYER="$SOURCE/../deploy/stablenew_deploy.py"
 SERVICE_USER="review-gateway"
 PREFIX="/opt/review-gateway"
 ETC="/etc/review-gateway"
@@ -22,11 +25,24 @@ CONFIG="$ETC/config.toml"
 SECRET_FILE="$ETC/sync_secret"
 IMMICH_KEY_FILE="$ETC/immich_api_key"
 STATE="/var/lib/review-gateway"
+DEPLOY_STATE="/var/lib/review-gateway-deploy"
 
 fail() { echo "install: $*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ -f "$SCHEMA" ] || fail "missing $SCHEMA (copy docs/schemas/ with the service)"
+[ -f "$DEPLOYER" ] || fail "missing $DEPLOYER (copy services/deploy/ with the service)"
+# Set by review-gateway-deploy; written into the release's source.json, so only lowercase hexadecimal is accepted.
+case "${SOURCE_COMMIT:-}" in
+    "") ;;
+    *[!0-9a-f]*) fail "SOURCE_COMMIT must be 40 lowercase hexadecimal characters" ;;
+    *) [ "${#SOURCE_COMMIT}" -eq 40 ] || fail "SOURCE_COMMIT must be 40 lowercase hexadecimal characters" ;;
+esac
+case "${SOURCE_ARCHIVE_SHA256:-}" in
+    "") ;;
+    *[!0-9a-f]*) fail "SOURCE_ARCHIVE_SHA256 must be 64 lowercase hexadecimal characters" ;;
+    *) [ "${#SOURCE_ARCHIVE_SHA256}" -eq 64 ] || fail "SOURCE_ARCHIVE_SHA256 must be 64 lowercase hexadecimal characters" ;;
+esac
 command -v python3 >/dev/null || fail "python3 is required"
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' || fail "Python 3.11 or newer is required"
 if [ -n "${MEDIA_DIR:-}" ]; then
@@ -55,6 +71,7 @@ fi
 install -d -m 0755 "$PREFIX" "$PREFIX/releases"
 install -d -m 0750 -o root -g "$SERVICE_USER" "$ETC"
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$STATE"
+install -d -m 0700 "$DEPLOY_STATE" "$DEPLOY_STATE/backups"
 
 # Build the new version beside the running one; nothing live changes until it has been checked.
 RELEASE="$PREFIX/releases/$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -62,12 +79,16 @@ APP="$RELEASE/app"
 VENV="$RELEASE/venv"
 SWITCHED=0
 trap '[ "$SWITCHED" -eq 1 ] || rm -rf "$RELEASE"' EXIT
-install -d -m 0755 "$RELEASE" "$APP" "$APP/schema" "$APP/review_gateway" "$APP/review_gateway/static"
+install -d -m 0755 "$RELEASE" "$APP" "$APP/schema" "$APP/review_gateway" "$APP/review_gateway/static" "$APP/deploy"
 install -m 0644 "$SOURCE"/review_gateway/*.py "$APP/review_gateway/"
 install -m 0644 "$SOURCE"/review_gateway/static/* "$APP/review_gateway/static/"
 install -m 0644 "$SOURCE/requirements.txt" "$APP/requirements.txt"
 install -m 0644 "$SOURCE/review-gateway.service" "$APP/review-gateway.service"
 install -m 0644 "$SCHEMA" "$APP/schema/$SCHEMA_NAME"
+install -m 0644 "$DEPLOYER" "$APP/deploy/stablenew_deploy.py"
+json_or_null() { if [ -n "$1" ]; then printf '"%s"' "$1"; else printf 'null'; fi; }
+printf '{"commit": %s, "archive_sha256": %s, "installed_at": "%s"}\n' "$(json_or_null "${SOURCE_COMMIT:-}")" \
+    "$(json_or_null "${SOURCE_ARCHIVE_SHA256:-}")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RELEASE/source.json"
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install --require-hashes --only-binary :all: --no-input --disable-pip-version-check -r "$APP/requirements.txt"
 find "$APP" -name '*.py' -print0 | xargs -0 "$VENV/bin/python" -m py_compile
@@ -141,6 +162,13 @@ for directory in "$DATA_DIR" "$MEDIA_DIR"; do
 done
 install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$DATA_DIR" "$MEDIA_DIR"
 
+# A consistent copy of the database from before this release first opens it, so a rollback after a migration can
+# restore it (review-gateway-deploy). The service is stopped here, so nothing is written after the copy.
+if [ -f "$DATA_DIR/gateway.sqlite3" ]; then
+    (umask 077 && "$VENV/bin/python" -I -c 'import sqlite3, sys; s = sqlite3.connect(sys.argv[1]); d = sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' \
+        "$DATA_DIR/gateway.sqlite3" "$DEPLOY_STATE/backups/$(basename "$RELEASE").sqlite3")
+fi
+
 PREVIOUS=""
 if [ -L "$PREFIX/current" ]; then PREVIOUS="$(readlink -f "$PREFIX/current")"; fi
 ln -sfn "$RELEASE" "$PREFIX/current"
@@ -153,6 +181,14 @@ cd $PREFIX/current/app && exec runuser -u $SERVICE_USER -- $PREFIX/current/venv/
 EOF
 chmod 0755 /usr/local/bin/review-gateway-admin
 
+# Deploy later commits of main: root, the container's own Python, isolated from the current directory.
+cat > /usr/local/sbin/review-gateway-deploy <<EOF
+#!/bin/sh
+# Deploy a commit of StableNew's main to this gateway: review-gateway-deploy <sha> | status | rollback
+exec $(command -v python3) -I $PREFIX/current/app/deploy/stablenew_deploy.py "\$@"
+EOF
+chmod 0755 /usr/local/sbin/review-gateway-deploy
+
 install -m 0644 "$APP/review-gateway.service" /etc/systemd/system/review-gateway.service
 install -d -m 0755 /etc/systemd/system/review-gateway.service.d
 # If the media mount is missing, do not start and fill the root disk instead.
@@ -161,10 +197,17 @@ systemctl daemon-reload
 systemctl enable review-gateway
 systemctl restart review-gateway
 
-# Keep the new release and the one before it.
+# Keep the new release and the one before it, and the database backups taken for them.
 for old in "$PREFIX"/releases/*; do
     if [ "$old" != "$RELEASE" ] && [ "$old" != "$PREVIOUS" ]; then
         rm -rf "$old"
+    fi
+done
+for backup in "$DEPLOY_STATE"/backups/*.sqlite3; do
+    [ -e "$backup" ] || continue
+    kept="$PREFIX/releases/$(basename "$backup" .sqlite3)"
+    if [ "$kept" != "$RELEASE" ] && [ "$kept" != "$PREVIOUS" ]; then
+        rm -f "$backup"
     fi
 done
 
@@ -183,3 +226,5 @@ echo "               2. paste an API key with only asset.upload, asset.update, a
 echo "                  album.create and albumAsset.create into $KEY_PATH"
 echo "               3. systemctl restart review-gateway && review-gateway-admin immich-check"
 echo "  admin:       review-gateway-admin fingerprint | devices | revoke <id> | status | purge | immich-check"
+echo "  release:     $RELEASE (commit ${SOURCE_COMMIT:-not recorded})"
+echo "  deploy:      review-gateway-deploy <sha> | status | rollback"
