@@ -15,6 +15,7 @@ from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .contract import SCHEMA_VERSION, Contract, ContractError
+from .deploy_inbox import DeployInbox
 from .errors import GatewayError
 from .media import is_digest
 from .store import Store
@@ -53,7 +54,9 @@ async def _drain(stream: AsyncIterator[bytes]) -> None:
         pass
 
 
-def build_sync_app(store: Store, contract: Contract, secret: bytes) -> Starlette:
+def build_sync_app(
+    store: Store, contract: Contract, secret: bytes, deploys: DeployInbox | None = None
+) -> Starlette:
     async def payload(request: Request, name: str) -> dict:
         body = await read_json(request)
         try:
@@ -138,6 +141,23 @@ def build_sync_app(store: Store, contract: Contract, secret: bytes) -> Starlette
         cursor = request.query_params.get("cursor", "")
         return JSONResponse(await run_in_threadpool(store.immich_receipts, cursor))
 
+    def deploy_inbox() -> DeployInbox:
+        if deploys is None:
+            raise GatewayError(404, "not_found")
+        return deploys
+
+    async def deploy_requests(request: Request) -> Response:
+        inbox = deploy_inbox()
+        body = await payload(request, "deploy_request")
+        status = await run_in_threadpool(inbox.submit, body)
+        _LOG.info(
+            "deploy request accepted"
+        )  # never the commit or request id: the deployer's history has them
+        return JSONResponse({"status": status, "request_id": body["request_id"]}, status_code=202)
+
+    async def deploy_status(_request: Request) -> Response:
+        return JSONResponse(await run_in_threadpool(deploy_inbox().status))
+
     return Starlette(
         routes=[
             Route("/sync/v1/health", health, methods=["GET"]),
@@ -148,6 +168,8 @@ def build_sync_app(store: Store, contract: Contract, secret: bytes) -> Starlette
             Route("/sync/v1/pairing-offers", pairing_offers, methods=["POST"]),
             Route("/sync/v1/device-revocations", device_revocations, methods=["POST"]),
             Route("/sync/v1/immich-receipts", immich_receipts, methods=["GET"]),
+            Route("/sync/v1/deploy-requests", deploy_requests, methods=["POST"]),
+            Route("/sync/v1/deploy-status", deploy_status, methods=["GET"]),
         ],
         middleware=[Middleware(_SyncSecret, secret=secret)],
         exception_handlers=EXCEPTION_HANDLERS,

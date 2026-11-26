@@ -220,13 +220,20 @@ bash /root/review-gateway-src/services/review_gateway/install.sh
 | First (RG-110) | `f5f82b035de5b19c4d45d77b986162a3c2a5fa7b` | `20261126T052204Z-9851` |
 | Upgrade with Immich (RG-130, device-id fix) | `8c7642a646cdecab5375a7758495c917297f5e36` | `20261126T113149Z-496` |
 
-A commit from before DEPLOY-1 has no `services/deploy`, so drop it from the `tar` line for such a commit. Install a
-commit that has it this way once. After that, each later commit needs one line in the Proxmox host's shell, which runs
-the checks, the health check and automatic rollback (see [Deploy a commit](review_gateway.md#deploy-a-commit)):
+A commit from before DEPLOY-1 has no `services/deploy`, so drop it from the `tar` line above for such a commit.
+
+The last console visit: one paste in the Proxmox host's web shell, at a merge commit that has DEPLOY-2, turns on deploys
+from the PC ([Turn on deploys from the PC](review_gateway.md#turn-on-deploys-from-the-pc-one-paste-once)):
 
 ```bash
-pct exec 120 -- /usr/local/sbin/review-gateway-deploy <merge sha>
+S=<merge sha>
+pct exec 120 -- sh -c "set -e; mkdir -p /root/gw-$S; curl -fsSL https://codeload.github.com/destroyer42/StableNew2/tar.gz/$S | tar -xz -C /root/gw-$S --strip-components=1 StableNew2-$S/services StableNew2-$S/docs/schemas; SOURCE_COMMIT=$S bash /root/gw-$S/services/review_gateway/install.sh; /usr/local/sbin/review-gateway-deploy $S"
 ```
+
+From then on, a session deploys each merged gateway change from the PC with
+`python -m tools.review_gateway_deploy request <merge sha>` (owner decision 6). The console line
+`pct exec 120 -- /usr/local/sbin/review-gateway-deploy <merge sha>` stays the fallback, and
+`pct exec 120 -- /usr/local/sbin/review-gateway-deploy remote off` turns the PC route off.
 
 Then the phone app was published and the placeholder removed:
 

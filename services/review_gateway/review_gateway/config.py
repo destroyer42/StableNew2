@@ -29,6 +29,9 @@ _PATH_SETTINGS = (
     "schema_file",
     "sync_tls_cert",
     "sync_tls_key",
+    "deploy_switch_file",
+    "deploy_dir",
+    "release_dir",
     "immich_key_file",
 )
 
@@ -61,6 +64,12 @@ class Settings:
     #: Empty until the owner enters the Immich address; keepers wait in the queue meanwhile.
     immich_url: str = ""
     immich_key_file: Path | None = None
+    #: DEPLOY-2. The console's remote-deploy switch (root-owned; "enabled" or anything else for off).
+    deploy_switch_file: Path = Path("/etc/review-gateway/remote-deploy")
+    #: The root deployer's state: ``inbox/`` (the only place this service writes) and its ``last.json``.
+    deploy_dir: Path = Path("/var/lib/review-gateway-deploy")
+    #: The release this code runs from (its ``source.json`` names the commit); None for the one around this package.
+    release_dir: Path | None = None
 
     @property
     def immich_key_path(self) -> Path:
@@ -92,6 +101,12 @@ def _address(name: str, value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Add
         return ipaddress.ip_address(value)
     except ValueError:
         raise ConfigError(f"{name} must be an IP address, got {value!r}") from None
+
+
+def running_release() -> Path:
+    """The release directory this code was installed into (``/opt/review-gateway/releases/<stamp>``)."""
+
+    return _PACKAGE_ROOT.parent
 
 
 def load_settings(path: Path) -> Settings:

@@ -8,6 +8,8 @@ writes: ``/usr/local/sbin/review-gateway-deploy``. Design, threat model and owne
     review-gateway-deploy deploy --allow-downgrade <sha>
     review-gateway-deploy status
     review-gateway-deploy rollback [--restore-database]
+    review-gateway-deploy remote on|off              the PC's sync-channel trigger (on by default)
+    review-gateway-deploy from-request               run by review-gateway-deploy.path, not by hand
 
 The commit SHA is the only input that reaches the network, and only as part of fixed GitHub URLs. Before anything live
 changes the deployer checks that the commit is on ``main`` (a SHA alone does not prove that: GitHub serves fork commits
@@ -28,6 +30,7 @@ import re
 import shutil
 import sqlite3
 import ssl
+import stat
 import subprocess
 import sys
 import tarfile
@@ -35,6 +38,7 @@ import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -57,6 +61,8 @@ INSTALL_TIMEOUT = 900.0
 COMMAND_TIMEOUT = 60.0
 INSTALL_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 USER_AGENT = "stablenew-deploy"
+REQUEST_LIMIT = 512
+REQUEST_KEYS = frozenset({"request_id", "target_sha", "requested_at"})
 
 SHA = re.compile(r"[0-9a-f]{40}")
 
@@ -80,6 +86,9 @@ EXIT_CODES = {
     "rollback_failed": 13,
     "no_previous_release": 14,
     "not_installed": 15,
+    "remote_deploy_disabled": 16,
+    "bad_request": 17,
+    "no_request": 0,
 }
 
 
@@ -101,6 +110,7 @@ class Layout:
     state: Path = Path("/var/lib/review-gateway-deploy")
     admin: Path = Path("/usr/local/bin/review-gateway-admin")
     unit_file: Path = Path("/etc/systemd/system/review-gateway.service")
+    switch: Path = Path("/etc/review-gateway/remote-deploy")
 
     @property
     def current(self) -> Path:
@@ -121,6 +131,10 @@ class Layout:
     @property
     def last(self) -> Path:
         return self.state / "last.json"
+
+    @property
+    def inbox(self) -> Path:
+        return self.state / "inbox"
 
     @property
     def staging(self) -> Path:
@@ -507,14 +521,28 @@ def _stamp(system: System) -> str:
     return system.now().astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _write_last(layout: Layout, line: str) -> None:
+    """``last.json`` is read by the gateway service (DEPLOY-2 status), so it is world-readable; it holds no secret."""
+
+    layout.state.mkdir(mode=0o755, parents=True, exist_ok=True)
+    temporary = layout.last.with_name(layout.last.name + ".tmp")
+    temporary.write_text(line + "\n", encoding="utf-8")
+    temporary.chmod(0o644)
+    os.replace(temporary, layout.last)
+
+
 def _record(layout: Layout, record: dict[str, Any]) -> None:
-    layout.state.mkdir(mode=0o700, parents=True, exist_ok=True)
+    layout.state.mkdir(mode=0o755, parents=True, exist_ok=True)
     line = json.dumps(record, sort_keys=True)
     with layout.history.open("a", encoding="utf-8") as history:
         history.write(line + "\n")
-    temporary = layout.last.with_name(layout.last.name + ".tmp")
-    temporary.write_text(line + "\n", encoding="utf-8")
-    os.replace(temporary, layout.last)
+    _write_last(layout, line)
+
+
+def _mark_running(layout: Layout, record: dict[str, Any]) -> None:
+    _write_last(
+        layout, json.dumps({**record, "outcome": "running", "finished_at": None}, sort_keys=True)
+    )
 
 
 # --- commands ------------------------------------------------------------------------------------------------------------
@@ -527,10 +555,12 @@ def deploy(
     layout: Layout = Layout(),
     allow_downgrade: bool = False,
     trigger: str = "console",
+    request_id: str | None = None,
 ) -> Outcome:
     record: dict[str, Any] = {
         "action": "deploy",
         "trigger": trigger,
+        "request_id": request_id,
         "target": target if SHA.fullmatch(target) else None,
         "allow_downgrade": allow_downgrade,
         "old_commit": None,
@@ -577,6 +607,7 @@ def _deploy_locked(
         )
     deployed = release_commit(old)
     record.update(old_release=old.name, old_commit=deployed)
+    _mark_running(layout, record)
     if deployed is None:
         outcome.lines.append(
             f"note: {old.name} has no recorded commit; the forward-only check is skipped once"
@@ -711,6 +742,99 @@ def rollback(
     return outcome
 
 
+def remote_enabled(layout: Layout) -> bool:
+    """The console switch for DEPLOY-2; anything but ``enabled`` (or no file) is off."""
+
+    try:
+        with layout.switch.open("rb") as source:
+            return source.read(64).strip() == b"enabled"
+    except OSError:
+        return False
+
+
+def set_remote(layout: Layout, enabled: bool) -> None:
+    layout.switch.parent.mkdir(parents=True, exist_ok=True)
+    temporary = layout.switch.with_name(layout.switch.name + ".tmp")
+    temporary.write_text("enabled\n" if enabled else "disabled\n", encoding="utf-8")
+    temporary.chmod(0o644)
+    os.replace(temporary, layout.switch)
+
+
+def read_request(path: Path) -> tuple[str, str]:
+    """The request the gateway service wrote. Never follows a link; always deleted, readable or not."""
+
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        if (
+            path.is_symlink()
+        ):  # O_NOFOLLOW does the same on Linux; this also covers Windows test runs
+            raise DeployFailure("bad_request", "the request is a symbolic link")
+        try:
+            descriptor = os.open(path, flags)
+        except OSError as error:
+            raise DeployFailure("bad_request", f"the request cannot be opened: {error}") from error
+        with os.fdopen(descriptor, "rb") as source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise DeployFailure("bad_request", "the request is not a regular file")
+            raw = source.read(REQUEST_LIMIT + 1)
+    finally:
+        with contextlib.suppress(OSError):
+            path.unlink()
+    if len(raw) > REQUEST_LIMIT:
+        raise DeployFailure("bad_request", "the request is too large")
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as error:
+        raise DeployFailure("bad_request", "the request is not JSON") from error
+    if not isinstance(value, dict) or set(value) != REQUEST_KEYS:
+        raise DeployFailure("bad_request", "the request has other fields")
+    request_id, target = value["request_id"], value["target_sha"]
+    try:
+        valid_id = isinstance(request_id, str) and str(uuid.UUID(request_id)) == request_id
+    except ValueError:
+        valid_id = False
+    if not valid_id or not isinstance(target, str) or not SHA.fullmatch(target):
+        raise DeployFailure("bad_request", "the request id or commit is malformed")
+    return request_id, target
+
+
+def from_request(*, system: System, layout: Layout = Layout()) -> Outcome:
+    """Run the one waiting request from the PC (DEPLOY-2): the same checks as the console, never a downgrade."""
+
+    path = layout.inbox / "request.json"
+    if not path.exists() and not path.is_symlink():
+        return Outcome("no_request", ["no deploy request is waiting"])
+    try:
+        request_id, target = read_request(path)
+    except DeployFailure as failure:
+        record = {
+            "action": "deploy",
+            "trigger": "remote",
+            "request_id": None,
+            "reason": failure.message,
+        }
+        record.update(started_at=_stamp(system), finished_at=_stamp(system), outcome=failure.code)
+        _record(layout, record)
+        return Outcome(failure.code, [f"refused: {failure.message}"], record)
+    if not remote_enabled(layout):
+        record = {
+            "action": "deploy",
+            "trigger": "remote",
+            "request_id": request_id,
+            "target": target,
+        }
+        record.update(
+            started_at=_stamp(system), finished_at=_stamp(system), outcome="remote_deploy_disabled"
+        )
+        _record(layout, record)
+        return Outcome(
+            "remote_deploy_disabled",
+            ["refused: remote deploy is off; at the console: review-gateway-deploy remote on"],
+            record,
+        )
+    return deploy(target, system=system, layout=layout, trigger="remote", request_id=request_id)
+
+
 def status(*, system: System, layout: Layout = Layout()) -> list[str]:
     current = system.read_link(layout.current)
     previous = _previous_release(layout, current)
@@ -728,6 +852,7 @@ def status(*, system: System, layout: Layout = Layout()) -> list[str]:
         )
     except (OSError, ValueError):
         lines.append("last:     (no deploy recorded)")
+    lines.append(f"remote:   {'enabled' if remote_enabled(layout) else 'disabled'}")
     return lines
 
 
@@ -848,6 +973,13 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also restore the database backup taken before this release",
     )
+    switch = commands.add_parser(
+        "remote", help="turn the PC's deploy trigger on or off (console only)"
+    )
+    switch.add_argument("state", choices=("on", "off"))
+    commands.add_parser(
+        "from-request", help="run the waiting request from the PC (the path unit runs this)"
+    )
     return parser
 
 
@@ -857,7 +989,7 @@ def main(
     arguments = list(sys.argv[1:] if argv is None else argv)
     if (
         arguments
-        and arguments[0] not in ("deploy", "status", "rollback")
+        and arguments[0] not in ("deploy", "status", "rollback", "remote", "from-request")
         and not arguments[0].startswith("-")
     ):
         arguments.insert(0, "deploy")
@@ -869,7 +1001,13 @@ def main(
     if args.command == "status":
         print("\n".join(status(system=system, layout=layout)))
         return 0
-    if args.command == "rollback":
+    if args.command == "remote":
+        set_remote(layout, args.state == "on")
+        print(f"remote deploy from the PC is {'on' if args.state == 'on' else 'off'}")
+        return 0
+    if args.command == "from-request":
+        outcome = from_request(system=system, layout=layout)
+    elif args.command == "rollback":
         outcome = rollback(system=system, layout=layout, restore_database=args.restore_database)
     else:
         outcome = deploy(

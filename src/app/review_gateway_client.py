@@ -40,7 +40,11 @@ ROUTES = {
     "pairing_offers": "/sync/v1/pairing-offers",
     "device_revocations": "/sync/v1/device-revocations",
     "immich_receipts": "/sync/v1/immich-receipts",
+    "deploy_requests": "/sync/v1/deploy-requests",
+    "deploy_status": "/sync/v1/deploy-status",
 }
+#: The gateway's refusal codes for a deploy request (DEPLOY-2) that the operator tool explains.
+DEPLOY_REFUSALS = frozenset({"remote_deploy_disabled", "deploy_pending"})
 CONNECT_TIMEOUT = 5.0
 IO_TIMEOUT = 15.0
 UPLOAD_TIMEOUT = 120.0
@@ -285,3 +289,33 @@ class GatewayClient:
 
     def send_revocation(self, payload: Mapping[str, Any]) -> None:
         self._require(self._post("device_revocations", payload), 200, 201)
+
+    # -- deploy (DEPLOY-2, operator tool only; the sync worker never calls these) ----------------------------------
+
+    def request_deploy(self, payload: Mapping[str, Any]) -> str:
+        """``accepted``, or why not: a code in ``DEPLOY_REFUSALS``, ``not_supported`` or ``invalid_request``."""
+
+        response = self._post("deploy_requests", payload)
+        if response.status == 404:
+            return "not_supported"
+        if response.status == 422:
+            return "invalid_request"
+        if response.status == 409:
+            reply = self._json(response)
+            code = reply.get("error") if isinstance(reply, dict) else None
+            return code if code in DEPLOY_REFUSALS else "conflict"
+        reply = self._json(self._require(response, 202))
+        if not isinstance(reply, dict) or reply.get("status") != "accepted":
+            raise GatewayError("invalid_gateway_response")
+        return "accepted"
+
+    def deploy_status(self) -> dict[str, Any] | None:
+        """The gateway's ``deploy_status``; ``None`` while the gateway does not offer remote deploy."""
+
+        response = self._call("GET", ROUTES["deploy_status"])
+        if response.status == 404:
+            return None
+        reply = self._json(self._require(response, 200))
+        if not isinstance(reply, dict) or reply.get("type") != "deploy_status":
+            raise GatewayError("invalid_gateway_response")
+        return reply

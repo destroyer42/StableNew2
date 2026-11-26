@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from starlette.applications import Starlette
 
-from .config import Settings, read_secret
+from .config import Settings, read_secret, running_release
 from .contract import Contract
+from .deploy_inbox import DeployInbox
 from .media import MediaStore
 from .phone_app import build_phone_app
 from .store import Clock, Store, utc_now
@@ -29,7 +30,14 @@ class Gateway:
         return build_phone_app(self.store, self.clock)
 
     def sync_app(self) -> Starlette:
-        return build_sync_app(self.store, self.contract, read_secret(self.settings.secret_file))
+        deploys = DeployInbox(
+            self.settings.deploy_switch_file,
+            self.settings.deploy_dir,
+            self.settings.release_dir or running_release(),
+        )
+        return build_sync_app(
+            self.store, self.contract, read_secret(self.settings.secret_file), deploys
+        )
 
     def uploader(self) -> Uploader:
         return Uploader(self.store, self.settings.immich_url, self.settings.immich_key_path)
