@@ -129,3 +129,6 @@ data/job_history.jsonl
 # Saved Global Positive/Negative prompt text is per-user state (see src/prompting/global_prompt_paths.py).
 /presets/global_positive.txt
 /presets/global_negative.txt
+
+# Directory a leaking test creates when a MagicMock is used as a path
+/MagicMock/
