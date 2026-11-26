@@ -144,6 +144,12 @@ def with_accepted_warnings(record: Any, warnings: Iterable[PolicyWarning], *, su
     if not pending:
         return record
     metadata = merge_accepted_warnings(record.extra_metadata, pending, surface=surface)
+    return _with_provenance_metadata(record, metadata)
+
+
+def _with_provenance_metadata(record: Any, metadata: Mapping[str, Any]) -> Any:
+    """``record`` re-frozen with new provenance metadata only; the job's identity and plan are unchanged."""
+
     return replace(record, provenance=replace(record.provenance, metadata=metadata))
 
 
@@ -169,7 +175,7 @@ def with_pending_warnings(record: Any, warnings: Iterable[PolicyWarning]) -> Any
     seen = {(str(item.get("code") or ""), str(item.get("subject") or "")) for item in records}
     records.extend(item.as_dict() for item in items if item.key not in seen)
     metadata[PENDING_WARNINGS_KEY] = records
-    return replace(record, provenance=replace(record.provenance, metadata=metadata))
+    return _with_provenance_metadata(record, metadata)
 
 
 def unaccepted(
