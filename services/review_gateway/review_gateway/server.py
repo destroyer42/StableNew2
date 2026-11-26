@@ -1,4 +1,4 @@
-"""Serve the two listeners in one process, with retention running beside them."""
+"""Serve the two listeners in one process, with retention and the Immich uploader beside them."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import contextlib
 import logging
 import signal
 import sqlite3
+import threading
 from collections.abc import Iterator
 
 import uvicorn
@@ -81,12 +82,20 @@ async def _run(gateway: Gateway, configs: tuple[uvicorn.Config, ...]) -> int:
         except NotImplementedError:  # Windows, used only for local trials
             signal.signal(number, lambda *_: loop.call_soon_threadsafe(stop))
     retention = asyncio.create_task(_retention(gateway))
+    # Its own thread, so a slow Immich never delays a request. Uploads are safe to cut off and repeat.
+    finished = threading.Event()
+    uploads = threading.Thread(
+        target=gateway.uploader().run, args=(finished,), name="immich-uploader", daemon=True
+    )
+    uploads.start()
     tasks = [asyncio.create_task(server.serve()) for server in servers]
     # One listener ending (or failing to bind) ends the service so systemd restarts both.
     await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     stop()
     await asyncio.gather(*tasks)
     retention.cancel()
+    finished.set()
+    await asyncio.to_thread(uploads.join, 5)
     return 0 if all(server.started for server in servers) else 1
 
 

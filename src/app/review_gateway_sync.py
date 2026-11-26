@@ -343,9 +343,21 @@ class ReviewGatewaySync:
                 return
 
     def _pull_immich(self, client: GatewayClient) -> None:
-        page = client.immich_receipts(None)
+        """Read the receipts added since last time; the cursor is kept once a page is stored."""
+
+        cursor = self._ledger.get_meta("immich_cursor") or None
+        for _ in range(MAX_PAGES_PER_CYCLE):
+            if self._stop.is_set():
+                return
+            next_cursor = self._store_immich_page(client.immich_receipts(cursor))
+            if next_cursor is None or next_cursor == cursor:
+                return
+            cursor = next_cursor
+            self._ledger.set_meta({"immich_cursor": cursor})
+
+    def _store_immich_page(self, page: Any) -> str | None:
         if page is None:
-            return
+            return None
         if (
             not isinstance(page, dict)
             or set(page) - {"schema_version", "type", "receipts", "next_cursor"}
@@ -374,6 +386,12 @@ class ReviewGatewaySync:
                 receipt.error_code,
                 utc_text(receipt.at),
             )
+        next_cursor = page.get("next_cursor")
+        if next_cursor is not None and (
+            not isinstance(next_cursor, str) or not 0 < len(next_cursor) <= 256
+        ):
+            raise ProtocolError("invalid_record")
+        return next_cursor
 
     def _publish(self, client: GatewayClient) -> None:
         if self._publisher is None:

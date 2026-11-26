@@ -147,3 +147,30 @@ def test_the_root_installer_does_not_follow_paths_the_service_could_replace() ->
     assert check < position(script, 'install -d -m 0700 -o "$SERVICE_USER"')
     assert position(script, "umask 022") < position(script, "install -d")
     assert "MEDIA_DIR must be an absolute path" in script
+
+
+def test_the_installer_leaves_an_empty_owner_only_place_for_the_immich_key() -> None:
+    script = read("install.sh")
+
+    assert 'immich_key_file = "$IMMICH_KEY_FILE"' in script
+    assert 'immich_url = "${IMMICH_URL:-}"' in script
+    placeholder = 'install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" /dev/null "$KEY_PATH"'
+    assert placeholder in script
+    assert position(script, 'if [ ! -e "$KEY_PATH" ]; then') < position(script, placeholder)
+    assert 'chmod 0600 "$KEY_PATH"' in script
+    # The key is typed into the file on the gateway: never passed in, echoed or read by the installer.
+    assert "IMMICH_API_KEY" not in script and 'cat "$KEY_PATH' not in script
+    assert "immich-check" in script
+
+
+def test_the_installer_refuses_an_immich_address_it_could_not_correct_later() -> None:
+    script = read("install.sh")
+
+    assert '"" | http://* | https://*) ;;' in script
+    assert position(script, "IMMICH_URL must start with") < position(script, 'cat > "$CONFIG"')
+
+
+def test_the_installer_and_the_service_agree_where_the_key_is() -> None:
+    script = read("install.sh")
+
+    assert 'os.path.join(os.path.dirname(c["secret_file"]), "immich_api_key")' in script

@@ -153,6 +153,7 @@ class FakeGateway:
         self.offers: list[dict[str, Any]] = []
         self.revocations: list[dict[str, Any]] = []
         self.immich_page: dict[str, Any] | None = None
+        self.immich_pages: dict[str, dict[str, Any]] = {}  # by the cursor asked for
         self.calls: list[tuple[str, str]] = []
         self.uploads: list[str] = []
         self.fail_next: int | None = None
@@ -252,9 +253,10 @@ class FakeGateway:
             self.enrolled = [d for d in self.enrolled if d["device_id"] != revocation["device_id"]]
             return Response(200, b'{"status":"revoked"}')
         if route == "/sync/v1/immich-receipts" and method == "GET":
-            if self.immich_page is None:
+            page = self.immich_pages.get(query.get("cursor", [""])[0], self.immich_page)
+            if page is None:
                 return Response(404, b"")
-            return Response(200, json.dumps(self.immich_page).encode())
+            return Response(200, json.dumps(page).encode())
         return Response(404, b"")
 
     # -- phone-side helpers --------------------------------------------------------------------------------------

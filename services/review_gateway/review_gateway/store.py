@@ -1,7 +1,8 @@
-"""Gateway state in SQLite: published items, the decision outbox, pairing offers and devices.
+"""Gateway state in SQLite: items, the decision outbox, pairing offers, devices and owed Immich uploads.
 
 Everything here is a projection or a request (RG-100 invariants 2 and 4). It is WAL with ``synchronous=FULL`` (S9),
-and retention only ever removes cached media for items whose latest decision the PC has answered.
+and retention only ever removes cached media for items whose latest decision the PC has answered, and never a kept
+item's before Immich has it.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from . import upload_queue
 from .contract import SCHEMA_VERSION, Contract, ContractError
 from .errors import GatewayError
 from .media import MediaStore, MediaWriter
@@ -130,6 +132,7 @@ class Store:
         self.clock = clock
         with self.connection() as db:
             db.executescript(_TABLES)
+            upload_queue.initialize(db)
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -141,7 +144,7 @@ class Store:
             yield db
 
     @contextmanager
-    def _write(self) -> Iterator[sqlite3.Connection]:
+    def write(self) -> Iterator[sqlite3.Connection]:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
@@ -163,7 +166,7 @@ class Store:
         display = dict(manifest.get("display", {}))
         if "seed" in display:
             display["seed"] = str(int(display["seed"]))  # beyond JavaScript's exact integers
-        with self._write() as db:
+        with self.write() as db:
             row = db.execute(
                 "SELECT purged_at FROM item WHERE library_id = ? AND sha256 = ?", key
             ).fetchone()
@@ -225,7 +228,7 @@ class Store:
     def stored(self, digest: str) -> None:
         """Show every item that was waiting only for ``digest``."""
 
-        with self._write() as db:
+        with self.write() as db:
             waiting = db.execute(
                 "SELECT DISTINCT library_id, sha256 FROM item_media JOIN item USING (library_id, sha256)"
                 " WHERE item_media.digest = ? AND item.purged_at IS NULL AND item.ready_at IS NULL",
@@ -347,7 +350,7 @@ class Store:
             if "needs_fix" in decision.get("tags", []):
                 raise GatewayError(422, "invalid_record")
         key = (target["library_id"], target["sha256"])
-        with self._write() as db:
+        with self.write() as db:
             # Checked again here: the request body may have arrived after a revocation (S11).
             if (
                 db.execute(
@@ -396,10 +399,11 @@ class Store:
                 "UPDATE item SET latest_record_id = ? WHERE library_id = ? AND sha256 = ?",
                 (record["record_id"], *key),
             )
+            self._reconcile_upload(db, key)
         return record["record_id"], "pending"
 
     def outbox_page(self, after: int, limit: int) -> dict[str, Any]:
-        with self._write() as db:
+        with self.write() as db:
             rows = db.execute(
                 "SELECT seq, record FROM outbox WHERE status = 'pending' AND seq > ?"
                 " ORDER BY seq LIMIT ?",
@@ -427,9 +431,9 @@ class Store:
 
     def acknowledge(self, acknowledgement: dict[str, Any]) -> str:
         record_id = acknowledgement["record_id"].lower()
-        with self._write() as db:
+        with self.write() as db:
             row = db.execute(
-                "SELECT status FROM outbox WHERE record_id = ?", (record_id,)
+                "SELECT library_id, sha256, status FROM outbox WHERE record_id = ?", (record_id,)
             ).fetchone()
             if row is None:
                 raise GatewayError(404, "unknown_record")
@@ -445,7 +449,17 @@ class Store:
                     record_id,
                 ),
             )
+            self._reconcile_upload(db, (row["library_id"], row["sha256"]))
         return "recorded"
+
+    # --- Immich (D3) --------------------------------------------------------------------------------------------
+
+    def _reconcile_upload(self, db: sqlite3.Connection, key: tuple[str, str]) -> None:
+        upload_queue.reconcile(db, key, stamp(self.clock() + upload_queue.SETTLE))
+
+    def immich_receipts(self, cursor: str) -> dict[str, Any]:
+        with self.connection() as db:
+            return upload_queue.receipt_page(db, cursor)
 
     # --- enrollment ---------------------------------------------------------------------------------------------
 
@@ -453,7 +467,7 @@ class Store:
         offer_id = offer["offer_id"].lower()
         payload = _hash(json.dumps(offer, sort_keys=True))
         now = self.clock()
-        with self._write() as db:
+        with self.write() as db:
             row = db.execute(
                 "SELECT payload_sha256 FROM offer WHERE offer_id = ?", (offer_id,)
             ).fetchone()
@@ -484,7 +498,7 @@ class Store:
 
         normalized = normalize_code(code)
         now = stamp(self.clock())
-        with self._write() as db:
+        with self.write() as db:
             live = db.execute(
                 "SELECT * FROM offer WHERE used_at IS NULL AND expires_at > ?"
                 " AND attempts < max_attempts",
@@ -548,7 +562,7 @@ class Store:
         return Device(row["device_id"], row["label"], tuple(json.loads(row["scopes"])))
 
     def revoke_device(self, device_id: str) -> bool:
-        with self._write() as db:
+        with self.write() as db:
             if (
                 db.execute("SELECT 1 FROM device WHERE device_id = ?", (device_id,)).fetchone()
                 is None
@@ -576,6 +590,7 @@ class Store:
                 "devices": "SELECT count(*) FROM device WHERE revoked_at IS NULL",
             }
             result = {name: db.execute(query).fetchone()[0] for name, query in counts.items()}
+            result.update(upload_queue.counts(db))
         result["media_bytes"] = sum(
             path.stat().st_size for path in self.media.blobs.glob("*/*") if path.is_file()
         )
@@ -584,23 +599,33 @@ class Store:
     # --- retention (D4) -----------------------------------------------------------------------------------------
 
     def retention(self) -> dict[str, int]:
-        """Drop cached media for items whose latest decision the PC answered long enough ago."""
+        """Drop cached media for items whose latest decision the PC answered long enough ago.
+
+        Kept media also waits for Immich: nothing is purged while an upload is owed (RG-130).
+        """
 
         now = self.clock()
-        with self._write() as db:
+        with self.write() as db:
             rows = db.execute(
-                "SELECT item.library_id, item.sha256, outbox.record, outbox.status, outbox.answered_at"
+                "SELECT item.library_id, item.sha256, outbox.record, outbox.status,"
+                " outbox.answered_at, owed.state AS upload"
                 " FROM item JOIN outbox ON outbox.record_id = item.latest_record_id"
+                " LEFT JOIN immich_upload AS owed ON owed.library_id = item.library_id"
+                "  AND owed.sha256 = item.sha256"
                 " WHERE item.purged_at IS NULL AND NOT EXISTS ("
                 "   SELECT 1 FROM outbox AS other WHERE other.library_id = item.library_id"
                 "   AND other.sha256 = item.sha256 AND other.status = 'pending')"
             ).fetchall()
             expired = []
             for row in rows:
-                discarded = (
-                    row["status"] != "refused"
-                    and json.loads(row["record"])["decision"]["verdict"] == "delete"
-                )
+                verdict = None
+                if row["status"] != "refused":
+                    verdict = json.loads(row["record"])["decision"]["verdict"]
+                if row["upload"] in ("queued", "failed") or (
+                    verdict == "keep" and row["upload"] != "done"
+                ):
+                    continue
+                discarded = verdict == "delete"
                 window = DISCARD_UNDO if discarded else KEEP_AFTER_ANSWER
                 if now - _instant(row["answered_at"]) >= window:
                     expired.append((row["library_id"], row["sha256"]))

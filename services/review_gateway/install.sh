@@ -4,9 +4,11 @@
 # again: the settings, the sync secret, the certificate and the data are kept, and a failed upgrade leaves
 # the running version in place.
 #
-#   SYNC_HOST=192.168.1.50 MEDIA_DIR=/mnt/review-media bash services/review_gateway/install.sh
+#   SYNC_HOST=192.168.1.50 MEDIA_DIR=/mnt/review-media IMMICH_URL=http://192.168.1.20:2283 \
+#       bash services/review_gateway/install.sh
 #
-# SYNC_HOST (the container's LAN address) and MEDIA_DIR apply only when the settings file is first written.
+# SYNC_HOST (the container's LAN address), MEDIA_DIR and IMMICH_URL apply only when the settings file is first
+# written. The Immich API key is never given to the installer: paste it into the file named at the end.
 set -euo pipefail
 umask 022
 
@@ -18,6 +20,7 @@ PREFIX="/opt/review-gateway"
 ETC="/etc/review-gateway"
 CONFIG="$ETC/config.toml"
 SECRET_FILE="$ETC/sync_secret"
+IMMICH_KEY_FILE="$ETC/immich_api_key"
 STATE="/var/lib/review-gateway"
 
 fail() { echo "install: $*" >&2; exit 1; }
@@ -33,6 +36,14 @@ if [ -n "${MEDIA_DIR:-}" ]; then
         *) fail "MEDIA_DIR must be an absolute path" ;;
     esac
 fi
+case "${IMMICH_URL:-}" in
+    *[\"\\[:space:]]*) fail "IMMICH_URL must not contain quotes, backslashes or spaces" ;;
+esac
+# Written to the settings only once, so a value the service would refuse is stopped before that.
+case "${IMMICH_URL:-}" in
+    "" | http://* | https://*) ;;
+    *) fail "IMMICH_URL must start with http:// or https://" ;;
+esac
 if ! python3 -c 'import ensurepip' 2>/dev/null || ! command -v openssl >/dev/null; then
     apt-get update
     apt-get install -y --no-install-recommends python3-venv openssl
@@ -77,6 +88,10 @@ sync_port = 9443
 sync_tls_cert = "$ETC/sync.crt"
 sync_tls_key = "$ETC/sync.key"
 
+# Immich, where kept items go; empty means they wait. The API key is read from the file, never from here.
+immich_url = "${IMMICH_URL:-}"
+immich_key_file = "$IMMICH_KEY_FILE"
+
 # Loopback only; "tailscale serve" publishes it.
 phone_host = "127.0.0.1"
 phone_port = 8443
@@ -102,6 +117,15 @@ if [ ! -s "$TLS_CERT" ] || [ ! -s "$TLS_KEY" ]; then
     chmod 0644 "$TLS_CERT"
     chmod 0600 "$TLS_KEY"
 fi
+
+# An empty, owner-only file for the Immich API key; a key already there is kept.
+KEY_PATH="$(python3 -c 'import os, sys, tomllib; c = tomllib.load(open(sys.argv[1], "rb")); print(c.get("immich_key_file") or os.path.join(os.path.dirname(c["secret_file"]), "immich_api_key"))' "$CONFIG")"
+[ ! -L "$KEY_PATH" ] || fail "$KEY_PATH is a symbolic link; use the real path in $CONFIG"
+if [ ! -e "$KEY_PATH" ]; then
+    install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" /dev/null "$KEY_PATH"
+fi
+chown "$SERVICE_USER":"$SERVICE_USER" "$KEY_PATH"
+chmod 0600 "$KEY_PATH"
 
 (cd "$APP" && runuser -u "$SERVICE_USER" -- "$VENV/bin/python" -B -m review_gateway --config "$CONFIG" check-config)
 FINGERPRINT="$(gateway fingerprint)"
@@ -154,4 +178,8 @@ echo "  sync URL:    https://$(setting sync_host):9443"
 echo "  sync secret: $SECRET_FILE  (enter it once in StableNew's pairing settings)"
 echo "  certificate SHA-256: $FINGERPRINT  (enter it with the secret)"
 echo "  phone app:   publish with: tailscale serve --bg --https=443 http://127.0.0.1:8443"
-echo "  admin:       review-gateway-admin fingerprint | devices | revoke <id> | status | purge"
+echo "  Immich:      1. set immich_url in $CONFIG (add the line if it is not there)"
+echo "               2. paste an API key with only asset.upload, asset.update, album.read,"
+echo "                  album.create and albumAsset.create into $KEY_PATH"
+echo "               3. systemctl restart review-gateway && review-gateway-admin immich-check"
+echo "  admin:       review-gateway-admin fingerprint | devices | revoke <id> | status | purge | immich-check"

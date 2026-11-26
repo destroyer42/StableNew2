@@ -118,6 +118,7 @@ def test_kept_and_refused_items_stay_for_14_days_after_the_answer(rig) -> None:
     rig.pair()
     decided(rig, "kept")
     decided(rig, "refused", "delete", outcome="refused", reason_code="archive_failed")
+    rig.confirm_uploads()  # a kept item also waits for Immich (test_immich_upload.py)
 
     rig.clock.advance(days=13, hours=23)
     assert rig.gateway.retention()["items_purged"] == 0

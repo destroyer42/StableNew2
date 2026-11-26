@@ -1,7 +1,8 @@
 # StableNew phone review gateway
 
 A small self-hosted service that lets a paired phone triage StableNew outputs (Keep, Delete, Favorite, reason tags)
-over Tailscale. It is a cache and outbox, never an authority, and it never imports StableNew's `src/` (RG-100, RG-110).
+over Tailscale. It is a cache and outbox, never an authority, and it never imports StableNew's `src/` (RG-100, RG-110). It uploads kept
+originals to Immich, one album per run, with an API key that lives only here (RG-130).
 
 - Deploy, pair, revoke, back up: [`docs/runbooks/review_gateway.md`](../../docs/runbooks/review_gateway.md)
 - Behavior and sync HTTP routes: [`docs/Subsystems/ReviewGateway/REVIEW_GATEWAY.md`](../../docs/Subsystems/ReviewGateway/REVIEW_GATEWAY.md)
@@ -31,4 +32,4 @@ python -m review_gateway --config trial.toml init-secret
 python -m review_gateway --config trial.toml serve
 ```
 
-Admin commands: `devices`, `revoke <id>`, `status`, `purge`, `check-config`.
+Admin commands: `devices`, `revoke <id>`, `status`, `purge`, `check-config`, `immich-check`.
