@@ -212,6 +212,8 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `gui_config_service.py`: Capture GUI drafts and project randomizer, stage, and LoRA values through the config adapter
 - `learning_completion_router.py`: learning_completion_router — routes job-completion events to the learning controller without hard-wiring AppC…
 - `pack_draft_service.py`: Build selected PromptPack entries through the existing Add to Job lifecycle
+- `pack_model_batch_recipes.py`: N5 owner decision 3: in a packs x models batch, a model with a saved recipe uses its own settings
+- `pack_model_batch_service.py`: N5: packs x models batch builder - plan, count, estimate and queue one named batch on the existing path
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
 - `run_submission_service.py`: Bridge GUI run requests and witnessed previews to the queue submission worker
 - `runtime_projection_coordinator.py`: Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink
@@ -267,6 +269,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `app_state_v2.py`: Hold GUI configuration and runtime projections and notify subscribers of state changes
 - `artifact_metadata_inspector_dialog.py`: Read-only artifact metadata inspector dialog
 - `base_generation_panel_v2.py`: Base generation panel for GUI V2
+- `batch_builder_dialog.py`: N5 Packs x Models batch builder: pick PromptPacks and models, see the exact totals, queue one named batch
 - `batch_operations_panel_v2.py`: Tk "Batches" view inside the Queue/History operator workflow (PR-BATCH-OPS-201)
 - `batch_retry_dialog.py`: Modal review of a selected retry (PR-BATCH-OPS-201)
 - `design_system_v2.py`: Tk/ttk style registration and primitive helpers for the StableNew V2 GUI
