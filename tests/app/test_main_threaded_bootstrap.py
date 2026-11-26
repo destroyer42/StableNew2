@@ -15,6 +15,9 @@ class _FakeRoot:
     def after(self, delay_ms: int, callback) -> None:
         self.after_calls.append((int(delay_ms), callback))
 
+    def bind(self, *_args, **_kwargs) -> None:
+        return None
+
     def mainloop(self) -> None:
         return None
 
