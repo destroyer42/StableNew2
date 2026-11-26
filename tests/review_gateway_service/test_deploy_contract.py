@@ -34,9 +34,32 @@ def test_the_gateway_imports_only_itself_the_standard_library_and_its_pins() -> 
                 assert name.split(".")[0] in allowed, f"{path.name} imports {name}"
 
 
+def _imported_modules(source: str) -> list[str]:
+    names: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            names += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            names.append(node.module)
+    return names
+
+
 def test_the_application_never_imports_the_gateway() -> None:
+    # Checks imports, not text: the PC side (RG-120) legitimately names its own modules after the gateway, e.g.
+    # `src.gui.review_gateway_dialog`. What must never happen is the app importing the separate deployable.
     for path in (ROOT / "src").rglob("*.py"):
-        assert "review_gateway" not in path.read_text(encoding="utf-8"), path
+        for name in _imported_modules(path.read_text(encoding="utf-8")):
+            top = name.split(".")[0]
+            assert top != "review_gateway" and not name.startswith("services"), (
+                f"{path} imports {name}"
+            )
+
+
+def test_the_import_check_catches_a_real_gateway_import() -> None:
+    real = "import review_gateway.app\nfrom services.review_gateway import x\n"
+    assert _imported_modules(real) == ["review_gateway.app", "services.review_gateway"]
+    pc_side = "from src.gui.review_gateway_dialog import install\n"
+    assert _imported_modules(pc_side) == ["src.gui.review_gateway_dialog"]
 
 
 def test_every_locked_requirement_is_pinned_and_hashed() -> None:
