@@ -52,7 +52,8 @@ Never serve port 9443 through Tailscale or any proxy.
 
 The installer creates `/etc/review-gateway/sync_secret` (mode 0600) and a self-signed certificate
 (`sync.crt`, `sync.key`) once. It prints the secret's path, never its value, and the certificate's SHA-256 fingerprint.
-Enter the address, the secret (`cat /etc/review-gateway/sync_secret`) and the fingerprint in StableNew's pairing
+Enter the address (`host:port`, or the `https://host:port` sync URL the installer prints), the secret
+(`cat /etc/review-gateway/sync_secret`) and the fingerprint in StableNew's pairing
 settings (RG-120). The PC sends the secret only to a server showing that certificate.
 
 ```bash

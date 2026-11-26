@@ -229,6 +229,103 @@ def test_mobile_video_is_transcoded_only_when_needed(env, monkeypatch):
         assert variant.content_type == "video/mp4"
 
 
+def _clip(env, name: str, **fields) -> LibraryItem:
+    clip = env.root / RUN / name
+    clip.write_bytes(b"\x00\x00\x00\x18ftypmp42" + name.encode() * 512)
+    stat = clip.stat()
+    return LibraryItem(
+        path=f"{RUN}/{name}",
+        mime="video/mp4",
+        version=(stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns),
+        **fields,
+    )
+
+
+def _publish_only(env, items: list[LibraryItem], monkeypatch, *, hold: bool = False):
+    from src.app.site_library_reconcile import key_for
+    from src.app.site_output_library import Preview
+
+    monkeypatch.setattr(
+        env.publisher, "candidates", lambda _limit: [(key_for(item.path), item) for item in items]
+    )
+    monkeypatch.setattr(
+        env.library, "grid_preview", lambda *_a, **_k: Preview("image/jpeg", b"\xff\xd8thumb")
+    )
+    return env.publisher.publish(
+        GatewayClient(env.gateway, SECRET), limit=8, cancel=Event(), hold_unlabelled_video=hold
+    )
+
+
+def test_a_retained_rife_source_clip_is_never_published(env, monkeypatch):
+    """Owner bug 2026-11-26: with RIFE on, the un-smoothed clip reached phone review and Immich."""
+
+    smoothed = _clip(env, "clip_smooth.mp4", provenance="embedded", role="primary")
+    source = _clip(env, "clip.mp4", provenance="embedded", role="retained_source")
+    legacy = _clip(env, "older.mp4", provenance="embedded")  # written before roles existed
+
+    result = _publish_only(env, [smoothed, source, legacy], monkeypatch)
+
+    published = {env.ledger.published(key)["rel_path"] for key in env.gateway.manifests}
+    assert published == {smoothed.path, legacy.path}
+    assert result.published == 2 and result.skipped == 1
+    from src.app.site_library_reconcile import key_for
+
+    assert env.ledger.published(key_for(source.path))["state"] == "retained"
+
+
+def test_a_video_without_stablenew_metadata_waits_while_a_job_runs(env, monkeypatch):
+    """The un-smoothed clip lands before RIFE finishes and its role is written; it must not slip out meanwhile."""
+
+    unlabelled = _clip(
+        env, "clip.mp4"
+    )  # provenance "unknown": its job has not written metadata yet
+    result = _publish_only(env, [unlabelled], monkeypatch, hold=True)
+    assert result.pending == 1 and not env.gateway.manifests
+
+    result = _publish_only(env, [unlabelled], monkeypatch, hold=False)
+    assert result.published == 1  # idle: an unlabelled clip (not from a job) is published as before
+
+
+def test_library_reads_the_output_role_from_embedded_metadata():
+    basic = LibraryItem(path=f"{RUN}/clip.mp4", mime="video/mp4", version=(1, 2, 3, 4, 5))
+    assert OutputLibrary._describe(basic, {"output_role": "retained_source"}, "embedded").role == (
+        "retained_source"
+    )
+    assert OutputLibrary._describe(basic, {"output_role": "primary"}, "embedded").role == "primary"
+    assert OutputLibrary._describe(basic, {"output_role": "bogus"}, "embedded").role is None
+    assert OutputLibrary._describe(basic, {"prompt": "x"}, "embedded").role is None
+    # Rows indexed before the field existed still load.
+    row = {"body": json.dumps({k: v for k, v in basic.__dict__.items() if k != "role"})}
+    assert LibraryItem.from_row(row).role is None
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("https://gw.tail1234.ts.net:9443", ("gw.tail1234.ts.net", 9443)),
+        ("https://192.168.1.23:9443/", ("192.168.1.23", 9443)),
+        ("HTTPS://gateway.lan", ("gateway.lan", 9443)),
+        ("https://[fd7a:115c::1]:9443", ("fd7a:115c::1", 9443)),
+        ("192.168.1.23:9443", ("192.168.1.23", 9443)),
+    ],
+)
+def test_gateway_address_accepts_the_installer_sync_url(text, expected):
+    from src.app.review_gateway_store import parse_address
+
+    assert parse_address(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["http://gateway.lan:9443", "https://gateway.lan:9443/sync", "https://", "https://u@h:9443"],
+)
+def test_gateway_address_still_refuses_other_urls(text):
+    from src.app.review_gateway_store import parse_address
+
+    with pytest.raises(ValueError):
+        parse_address(text)
+
+
 def test_run_id_falls_back_to_a_dated_group():
     from datetime import UTC, datetime
 
@@ -717,7 +814,7 @@ def test_settings_are_validated_and_stored_protected(tmp_path):
     store.save(settings)
     assert SECRET.encode() not in (tmp_path / "settings.bin").read_bytes()
     assert store.load() == settings and SECRET not in repr(settings)
-    for address in ("https://gateway", "gateway/sync", "user@gateway", "gateway:99999", ""):
+    for address in ("http://gateway", "gateway/sync", "user@gateway", "gateway:99999", ""):
         with pytest.raises(ValueError):
             GatewaySettings.build(address, FINGERPRINT, SECRET)
     with pytest.raises(ValueError):

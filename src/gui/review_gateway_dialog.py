@@ -64,7 +64,7 @@ class ReviewGatewayDialog:
         settings.pack(fill="x")
         for row, (label, name, hidden) in enumerate(
             (
-                ("Address (host or host:port)", "address", False),
+                ("Address (host:port or the installer's https://host:port)", "address", False),
                 ("Certificate SHA-256 fingerprint", "fingerprint", False),
                 ("Sync secret", "secret", True),
             )

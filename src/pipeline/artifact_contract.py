@@ -10,6 +10,14 @@ ARTIFACT_SCHEMA_VERSION = "stablenew.artifact.v2.6"
 
 _VIDEO_STAGES = {"animatediff", "svd_native", "video_workflow", "movie_assembly"}
 
+#: The role of one output file, recorded in its own container metadata (``output_role``). A file with no role is
+#: ``primary``: every output written before roles existed keeps its old treatment.
+OUTPUT_ROLE_PRIMARY = "primary"
+#: Kept on the PC for retention only (the un-smoothed clip behind a RIFE result): never sent to review, the phone
+#: gateway or Immich. Its path is listed in the artifact record's ``retained_paths``.
+OUTPUT_ROLE_RETAINED_SOURCE = "retained_source"
+OUTPUT_ROLES = frozenset({OUTPUT_ROLE_PRIMARY, OUTPUT_ROLE_RETAINED_SOURCE})
+
 
 def _coerce_path(value: Any) -> str | None:
     if value is None:
@@ -54,12 +62,13 @@ def build_artifact_record(
     thumbnail_path: str | None = None,
     input_image_path: str | None = None,
     job_id: str | None = None,
+    retained_paths: Sequence[Any] | None = None,
 ) -> dict[str, Any]:
     outputs = _dedupe_paths(output_paths)
     primary = _coerce_path(primary_path)
     if primary and primary not in outputs:
         outputs.insert(0, primary)
-    return {
+    record = {
         "schema": ARTIFACT_SCHEMA_VERSION,
         "stage": str(stage or "").strip() or "unknown",
         "artifact_type": artifact_type,
@@ -70,6 +79,11 @@ def build_artifact_record(
         "input_image_path": _coerce_path(input_image_path),
         "job_id": _coerce_path(job_id),
     }
+    # Outputs kept for retention only (OUTPUT_ROLE_RETAINED_SOURCE); never the primary.
+    retained = [path for path in _dedupe_paths(retained_paths) if path != primary]
+    if retained:
+        record["retained_paths"] = retained
+    return record
 
 
 def canonicalize_variant_entry(
@@ -173,6 +187,7 @@ def artifact_manifest_payload(
     input_image_path: Path | str | None = None,
     artifact_type: str | None = None,
     job_id: str | None = None,
+    retained_paths: Sequence[Any] | None = None,
 ) -> dict[str, Any]:
     primary_path = _coerce_path(image_or_output_path)
     stage_name = str(stage or "").strip() or "unknown"
@@ -185,11 +200,15 @@ def artifact_manifest_payload(
         thumbnail_path=_coerce_path(thumbnail_path),
         input_image_path=_coerce_path(input_image_path),
         job_id=_coerce_path(job_id),
+        retained_paths=retained_paths,
     )
 
 
 __all__ = [
     "ARTIFACT_SCHEMA_VERSION",
+    "OUTPUT_ROLES",
+    "OUTPUT_ROLE_PRIMARY",
+    "OUTPUT_ROLE_RETAINED_SOURCE",
     "artifact_manifest_payload",
     "build_artifact_record",
     "canonicalize_variant_entries",
