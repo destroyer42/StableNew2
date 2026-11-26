@@ -191,6 +191,28 @@ setup when approved. An explicit selection and an existing single-model approval
 message, then use **Suggest…** to request and review advice. The review names the model that produced the response.
 Choosing a model records the selection. Ollama handles loading on the next explicit request.
 
+### Check the worker against the repository
+
+`config/ai_worker_manifest.json` records the worker's intended state: the Ollama version, the two limits and each model's
+manifest digest. A read-only check compares the worker with it through the same tunnel. It sends only `GET /api/version`
+and `GET /api/tags`, and it changes nothing on the PC or the worker:
+
+```powershell
+python -m tools.ai_worker_check
+```
+
+| Outcome | Exit | Meaning |
+|---|---|---|
+| `match` | 0 | Version and every recorded digest match. |
+| `drift` | 1 | Another Ollama version, a replaced digest or a missing model. Check the worker before approving anything again. |
+| `unreachable` | 2 | No answer through the tunnel: is the **StableNew AI Tunnel** task running? |
+| `unrecorded` | 3 | No drift, but a digest in the manifest is `null`. The check prints the installed one, so a reviewed pull request can record it. |
+
+The limits are not visible through the API. The report prints the console line that shows them on the Proxmox host
+(`pct exec 110 -- systemctl show ollama --property=Environment`). Changing Ollama's version or settings, or pulling a model,
+stays an owner step on the worker, followed by a pull request that updates the manifest and, for a new digest, a new
+approval below.
+
 When an approved tag reports a different digest or Ollama reports a different version, check the identity before
 reapproving. To revoke just one model, use its exact name. If it was selected, choose one of the remaining approved models
 before requesting remote inference.

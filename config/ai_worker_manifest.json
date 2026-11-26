@@ -1,0 +1,15 @@
+{
+  "schema": "stablenew.ai-worker-manifest.v1",
+  "_comment": "Desired state of the AI worker (CT 110). Checked read-only by python -m tools.ai_worker_check; changed only by a reviewed pull request. A null digest is not recorded yet: the check prints the installed one.",
+  "ollama": {
+    "version": "0.40.16",
+    "environment": {
+      "OLLAMA_MAX_LOADED_MODELS": "1",
+      "OLLAMA_NUM_PARALLEL": "1"
+    }
+  },
+  "models": [
+    {"name": "qwen3.5:4b-q4_K_M", "digest": "d8b0f5e9760cd1682034f292d7ef72ec46f432149be0df7574bf2d6e92e38c04"},
+    {"name": "lfm3:1.7b", "digest": "b36a103fe2f8fbe9df2ceec88b9cfdf842dc04aaabe2b4677d1acf8e16570b5d"}
+  ]
+}
