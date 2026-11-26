@@ -49,7 +49,7 @@ def test_the_map_lists_modules_in_a_stable_order_without_line_counts(tmp_path: P
     rendered = generator.render(tmp_path)
     assert rendered.index("`a.py`") < rendered.index("`b.py`")
     assert "Skipped" not in rendered
-    assert "2 of 2 modules have a docstring" in rendered
+    assert "modules have a docstring" not in rendered  # no total: it made every module-adding PR conflict
 
 
 def test_the_task_map_satisfies_its_contract() -> None:

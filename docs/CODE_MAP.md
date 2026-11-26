@@ -4,9 +4,8 @@
 
 One line per module under `src/`, taken from its docstring. Regenerate with `python tools/generate_code_map.py`;
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
-For where to start on a task, use `docs/CODEX_MAP.md`.
-
-1019 of 1019 modules have a docstring.
+For where to start on a task, use `docs/CODEX_MAP.md`. Modules without a docstring show as such below; there is
+deliberately no module total here, so parallel branches that add or remove modules don't all conflict on one line.
 
 ## src/
 

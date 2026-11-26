@@ -57,15 +57,11 @@ def module_files(root: Path = ROOT) -> list[Path]:
 
 def render(root: Path = ROOT) -> str:
     groups: dict[str, list[tuple[str, str]]] = {}
-    documented = 0
-    total = 0
     for path in module_files(root):
         relative = path.relative_to(root).as_posix()
         directory, _, name = relative.rpartition("/")
         summary = summarize(path.read_text(encoding="utf-8"))
         groups.setdefault(directory, []).append((name, summary))
-        total += 1
-        documented += summary not in (NO_DOCSTRING, UNPARSEABLE)
     lines = [
         "# StableNew code map",
         "",
@@ -73,9 +69,8 @@ def render(root: Path = ROOT) -> str:
         "",
         "One line per module under `src/`, taken from its docstring. Regenerate with `python tools/generate_code_map.py`;",
         "`tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.",
-        "For where to start on a task, use `docs/CODEX_MAP.md`.",
-        "",
-        f"{documented} of {total} modules have a docstring.",
+        "For where to start on a task, use `docs/CODEX_MAP.md`. Modules without a docstring show as such below; there is",
+        "deliberately no module total here, so parallel branches that add or remove modules don't all conflict on one line.",
     ]
     for directory in sorted(groups):
         lines += ["", f"## {directory}/", ""]
