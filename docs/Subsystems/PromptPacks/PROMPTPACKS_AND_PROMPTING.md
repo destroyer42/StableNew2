@@ -154,6 +154,28 @@ Matrix vector; ordinary PromptPack expansion remains unchanged. See Learning sec
 - Config sweeps (`ConfigVariantPlanV2`, `ConfigVariant`, dot-path overrides such as `txt2img.cfg_scale`) are accepted by `JobBuilderV2.build_jobs` and recorded in provenance (`config_variant_label`, `config_variant_index`, `config_variant_overrides`). The only producer is `PipelineController._build_normalized_jobs_from_state` from `app_state.config_sweep_enabled`/`config_sweep_variants`; `PromptPackNormalizedJobBuilder` never passes a plan, so sweeps do not apply to PromptPack jobs [V]. That path also drops any exception (`JobBuilderV2 failed to build jobs`) into an empty preview.
 - `src/utils/randomizer.py` (`PromptRandomizer`, wildcard and S/R rules) and `src/pipeline/randomizer_v2.py` are reached from the GUI randomizer adapter, not from `PromptPackNormalizedJobBuilder` [V]. The spec's wildcard and S/R claims describe that older layer, not the PromptPack compile path.
 
+### 5.3 Packs × models batch (N5)
+
+The **Packs × Models…** button on the Pipeline tab's PromptPack card opens `src/gui/batch_builder_dialog.py`. There the
+owner picks several packs and several checkpoints, sets ADetailer and upscale, and names the batch. Plan, counting
+and Queue live in `src/controller/app_controller_services/pack_model_batch_service.py` (work package
+`docs/work_packages/N5_batch_builder.md`).
+
+- **Compiling.** One cell is one pack compiled for one checkpoint by a batch-owned `PromptPackNormalizedJobBuilder`,
+  built off the Tk thread. Each cell starts from the Pipeline tab's working settings, captured like Add to Job; only
+  the checkpoint (`with_model`, the one per-cell settings seam) and the batch's stage choices change. Each model's
+  compile policy still applies.
+- **Counting.** Jobs and images are counted from the compiled records. Images per NJR is `images_per_prompt`, since
+  `loop_count` is already one NJR per run [V]. A cell that cannot compile is listed with its reason, and the rest
+  still queue. A Klein checkpoint that needs a LoRA selection review is one example: the batch has no selection
+  review.
+- **Warnings and time.** N1 warnings are collected once across the batch. The ETA is the Queue's
+  `DurationStatsService` estimate per stage chain, with per-stage defaults when there is no history.
+- **Queueing.** Queue stamps `provenance.metadata.batch` (`stablenew.batch.v1`: `batch_id`, `name`, the cell's pack
+  and model with the N12 `model_key`, `cells`, `jobs`) and makes one `_submit_normalized_jobs` call, which sorts by
+  model, freezes the warnings and calls `JobService.submit_njrs` (all or none). `batch_identity` reads the stamp
+  back from a record or a stored snapshot [V: `tests/controller/test_pack_model_batch_n5.py`].
+
 ## 6. Reference evidence: saved settings, missing assets, LoRA selection
 
 ### 6.1 Saved-settings quality

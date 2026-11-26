@@ -1036,6 +1036,14 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         """Expose the Base Generation policy and backend authority for read-only candidate discovery."""
         return self._model_policy_projection.project_checkpoint_candidates(model_names)
 
+    def model_choices(self) -> list[tuple[str, str]]:
+        """The checkpoints the picker offers, as ``(display, internal name)`` (N5 batch builder)."""
+        return list(self._model_name_map.items())
+
+    def selected_model_name(self) -> str:
+        """The picked checkpoint's internal name ('' when none)."""
+        return self._normalize_model_name(self.model_var.get())
+
     def _normalize_model_name(self, raw: object) -> str:
         value = str(raw or "").strip()
         if not value:

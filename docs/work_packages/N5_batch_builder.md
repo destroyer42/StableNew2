@@ -25,7 +25,7 @@ Status: in progress (2026-11-26). Way Forward item N5, after N12 (one canonical 
     `prompt_excerpt`, `job_id` and `workflow` (`src/app/review_gateway_protocol.py`), so grouping by batch is a
     separate RG package that reads the provenance written here.
   - Per-model ETA calibration.
-  - Applying a model's saved generation profile per model (see owner question 3).
+  - Applying a model's saved generation profile per model (decision 3, open).
   - Video, img2img and reprocess sources.
   - Any new queue, runner, submission path or job model.
 
@@ -41,8 +41,7 @@ Status: in progress (2026-11-26). Way Forward item N5, after N12 (one canonical 
 
 - Task start: 2026-11-26T15:17:24Z. Session claude:559b0b20-dd8d-49ce-82de-33c2630f36a4, shared with N12. The
   orchestrator is session 3d36ca46.
-- Branch `claude/n5-batch-builder`, stacked on N12 `13ad601e` (`claude/n12-checkpoint-key-16971d`), which sits on
-  `origin/main` 7bdaefad.
+- Branch `claude/n5-batch-builder` on `origin/main` a3da21d2 (N12 merged as PR #446).
 - Authorities: `AGENTS.md` sections 2 and 4–6; `STATUS.md`; `docs/Subsystems/PromptPacks/PROMPTPACKS_AND_PROMPTING.md`.
 
 ## Design
@@ -95,26 +94,34 @@ Each NJR's `provenance.metadata["batch"]` is stamped at Queue time, so Preview c
 
 ### Where code lives (controller ratchets)
 
-- `src/controller/pipeline_controller_services/pack_model_batch_service.py` (new, no Tk): `BatchRequest`, `BatchCell`,
+- `src/controller/app_controller_services/pack_model_batch_service.py` (new, no Tk, next to `pack_draft_service`): `BatchRequest`, `BatchCell`,
   `BatchPlan`, `plan_batch`, `stamp_batch`, `batch_identity`.
 - `src/gui/batch_builder_dialog.py` (new, Tk): a pack list, a model list, ADetailer and upscale checkboxes, a name
   field, a Plan button that runs on a worker, the summary, and Queue batch.
 - `app_controller.py`, `pipeline_controller.py` and `job_service.py` are each exactly at their checked-in ceiling.
-  Any line added there must be offset by a deletion, or the hook goes on a service the dialog reaches through the
-  existing `_get_queue_submission_service()` accessor pattern.
+  None of them changes: the service takes the `AppController` the way `pack_draft_service` does and queues through
+  `PipelineController._submit_normalized_jobs`, the path Preview's Add to Queue uses.
+- `src/gui/sidebar_panel_v2.py` gets the **Packs × Models…** button. `BaseGenerationPanelV2` gets `model_choices()`
+  and `selected_model_name()` so the dialog does not read the picker's private map.
 
-## Owner UI questions (defaults used until answered)
+## Owner UI decisions
 
-1. **Where the panel lives.** Default: a **Packs × Models…** button on the Pipeline tab's PromptPack card opens a
-   dialog. The alternative is a new top-level tab.
-2. **ETA source.** Default: the existing Queue ETA source (history median per stage chain, per-stage defaults when
-   history is thin). The alternative is a per-model, per-image calibrated estimate from history, as a follow-up.
-3. **Per-model settings.** Default: one set of working settings from the Pipeline tab for every model, with each
-   model's compile policy applied. Should a model with a saved generation profile (recipe) use its own sampler,
-   steps and CFG in the batch instead?
-4. **Default batch name.** Default: `YYYY-MM-DD <first pack> +N × <M> models`, editable.
-5. **Large batches.** Default: no cap. A warning line shows above 500 images ("about Xh"), and Queue stays enabled.
-6. **Gateway grouping.** Default: this PR only records the batch; inbox grouping is a follow-up RG package.
+The orchestrator answered these on 2026-11-26, relaying owner direction:
+
+1. **Where the panel lives:** a **Packs × Models…** button on the Pipeline tab's PromptPack card opens a dialog.
+   Accepted.
+2. **ETA source:** the existing Queue ETA source (`DurationStatsService`: history median per stage chain, per-stage
+   defaults when history is thin). Accepted. Per-model calibration is on the follow-up list.
+3. **Per-model settings: open, put to the owner.** Should a model with a saved generation profile (recipe) use its
+   own sampler, steps and CFG? Until the owner answers, the default holds: the Pipeline tab's working settings plus
+   each model's compile policy. The per-cell settings change lives in one function
+   (`pack_model_batch_service.with_model`), so adding "use the model's saved recipe" is a small change there.
+4. **Default batch name:** `YYYY-MM-DD <first pack> +N x <M> model(s)`, editable. Accepted.
+5. **Large batches:** no cap. A warning line shows above 500 images, and Queue stays enabled. Accepted; this matches
+   the owner's standing "no self-imposed limits" rule.
+6. **Gateway grouping:** this PR only records `provenance.metadata.batch`. Confirmed. Inbox grouping is a follow-up
+   RG package. That package bumps the gateway manifest schema, so it must be sequenced **after RG-140 and
+   LAUNCH-UPDATE-2**, which change the same schema.
 
 ## Acceptance and evidence reuse
 
@@ -141,7 +148,7 @@ Each NJR's `provenance.metadata["batch"]` is stamped at Queue time, so Preview c
 
 - A controller ceiling cannot be met without raising it.
 - Batch identity would need an NJR schema change.
-- Answering an owner question changes the design materially.
+- The owner's answer to decision 3 changes the design beyond `with_model`.
 
 ## Documentation impact
 

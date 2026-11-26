@@ -79,7 +79,8 @@ REPLACE_ALLOWED: dict[str, tuple[int, str]] = {
     "src/pipeline/policy_warnings.py": (
         1,
         "N1/N1b: one helper freezes policy warnings into the provenance of a record Preview built (warnings accepted "
-        "at Queue just before submit_njrs, and pending warnings for Preview); same identity, no new job",
+        "at Queue just before submit_njrs, and pending warnings for Preview), and N5 stamps the batch identity "
+        "through it; same identity, no new job",
     ),
     "tools/acceptance/img_116_klein_acceptance.py": (
         1,

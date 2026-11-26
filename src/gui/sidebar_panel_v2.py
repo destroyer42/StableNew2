@@ -529,6 +529,18 @@ class SidebarPanelV2(ttk.Frame):
             self.preview_toggle_button,
             "Shows the first prompt text of the selected PromptPack. It does not generate an image.",
         )
+        self.batch_builder_button = ttk.Button(
+            btn_frame,
+            text="Packs × Models…",
+            command=self._open_batch_builder,
+            style="Dark.TButton",
+        )
+        self.batch_builder_button.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        attach_tooltip(
+            self.batch_builder_button,
+            "Queue several PromptPacks on several models as one named batch, with the exact job and image totals "
+            "shown before anything is queued.",
+        )
 
         list_frame = ttk.Frame(frame)
         list_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 8))
@@ -900,6 +912,12 @@ class SidebarPanelV2(ttk.Frame):
                 return
         self._hide_stale_pack_notice()
         self._add_packs_to_job(pack_ids)
+
+    def _open_batch_builder(self) -> None:
+        """N5: the Packs × Models batch dialog (planning and Queue run in the controller service)."""
+        from src.gui.batch_builder_dialog import open_batch_builder
+
+        open_batch_builder(self)
 
     def _add_packs_to_job(self, pack_ids: list[str]) -> None:
         controller = self.controller
