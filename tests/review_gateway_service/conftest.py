@@ -45,11 +45,12 @@ def sha(data: bytes) -> str:
 class Rig:
     """One gateway instance with both listeners' test clients and the PC/phone steps tests repeat."""
 
-    def __init__(self, tmp_path: Path, clock: FakeClock) -> None:
+    def __init__(self, tmp_path: Path, clock: FakeClock, **overrides) -> None:
         from review_gateway.app import Gateway
         from review_gateway.config import Settings
 
         self.clock = clock
+        tmp_path.mkdir(parents=True, exist_ok=True)
         secret_file = tmp_path / "sync_secret"
         secret_file.write_text(SECRET + "\n", encoding="utf-8")
         secret_file.chmod(0o600)
@@ -59,6 +60,7 @@ class Rig:
             secret_file=secret_file,
             schema_file=SCHEMA_PATH,
             sync_host="127.0.0.1",
+            **overrides,
         )
         self.gateway = Gateway(self.settings, clock=clock)
         self._clients: list = []
@@ -186,6 +188,12 @@ class Rig:
             **fields,
         }
         return self.sync.post("/sync/v1/acknowledgements", json=payload)
+
+    def confirm_uploads(self) -> None:
+        """Stand in for Immich where a test is only about what happens after it has the keepers."""
+
+        with self.gateway.store.write() as database:
+            database.execute("UPDATE immich_upload SET state = 'done' WHERE state <> 'cancelled'")
 
     # --- phone steps ----------------------------------------------------------------------------------------------
 

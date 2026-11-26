@@ -134,6 +134,10 @@ def build_sync_app(store: Store, contract: Contract, secret: bytes) -> Starlette
         known = await run_in_threadpool(store.revoke_device, body["device_id"])
         return JSONResponse({"status": "revoked" if known else "unknown_device"})
 
+    async def immich_receipts(request: Request) -> Response:
+        cursor = request.query_params.get("cursor", "")
+        return JSONResponse(await run_in_threadpool(store.immich_receipts, cursor))
+
     return Starlette(
         routes=[
             Route("/sync/v1/health", health, methods=["GET"]),
@@ -143,6 +147,7 @@ def build_sync_app(store: Store, contract: Contract, secret: bytes) -> Starlette
             Route("/sync/v1/acknowledgements", acknowledgements, methods=["POST"]),
             Route("/sync/v1/pairing-offers", pairing_offers, methods=["POST"]),
             Route("/sync/v1/device-revocations", device_revocations, methods=["POST"]),
+            Route("/sync/v1/immich-receipts", immich_receipts, methods=["GET"]),
         ],
         middleware=[Middleware(_SyncSecret, secret=secret)],
         exception_handlers=EXCEPTION_HANDLERS,
