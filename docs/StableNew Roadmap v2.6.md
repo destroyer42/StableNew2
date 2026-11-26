@@ -1,6 +1,6 @@
 # Finalized MVP Roadmap — StableNew v2.6
 
-Status: CURRENT AND ACTIVE
+Status: SUPERSEDED by `docs/audits/2026-10-26_product_capability_roadmap.md` (the active product roadmap named in `STATUS.md`); kept as the MVP record.
 Owner: Rob
 Updated: 2026-09-16
 
