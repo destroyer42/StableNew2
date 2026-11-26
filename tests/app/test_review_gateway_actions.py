@@ -19,7 +19,6 @@ from PIL import Image
 from src.app.review_gateway_actions import (
     ActionRefused,
     AppActionCompiler,
-    Caps,
     CompiledAction,
     GatewayActions,
 )
@@ -107,7 +106,7 @@ def _codec_store(path: Path) -> GatewaySettingsStore:
 
 
 class Env:
-    def __init__(self, tmp_path: Path, *, caps: Caps = Caps()) -> None:
+    def __init__(self, tmp_path: Path) -> None:
         self.root = (tmp_path / "output").resolve()
         (self.root / RUN).mkdir(parents=True)
         self.image = self.root / RUN / "portrait.png"
@@ -152,7 +151,6 @@ class Env:
             self.compiler,
             admit,
             owner_of=gateway_owner,
-            caps=caps,
             clock=self.clock,
         )
         applier = RecordApplier(
@@ -300,7 +298,7 @@ def test_a_review_only_phone_is_refused_before_anything_compiles(tmp_path):
         environment.close()
 
 
-def test_the_pairing_offer_names_the_queue_grant_only_when_ticked(tmp_path):
+def test_the_pairing_offer_grants_queueing_unless_unticked(tmp_path):
     environment = Env(tmp_path)
     try:
         environment.pair(allow_queue=False)
@@ -443,42 +441,52 @@ def test_nothing_is_admitted_while_the_app_is_shutting_down(env):
     assert env.submitted == []
 
 
-@pytest.mark.parametrize(
-    "caps, action, params, step",
-    [
-        (Caps(prepares_per_day=1), "fix_face", {}, "second_prepare"),
-        (Caps(jobs_per_request=2), "more_like_this", {"count": 3}, "prepare"),
-        (Caps(jobs_per_day=2), "more_like_this", {"count": 3}, "confirm"),
-    ],
-)
-def test_caps_refuse_per_request_and_per_day(tmp_path, caps, action, params, step):
-    environment = Env(tmp_path, caps=caps)
-    try:
-        environment.pair()
-        prepared = environment.request(action, **params)
-        first = environment.answer(prepared)
-        if step == "prepare":
-            assert first["reason_code"] == "cap_exceeded"
-            return
-        if step == "second_prepare":
-            assert environment.answer(environment.request(action))["reason_code"] == "cap_exceeded"
-            return
-        confirmed = environment.confirm(prepared, _summary(first)["revision"], action)
-        assert environment.answer(confirmed)["reason_code"] == "cap_exceeded"
-        assert environment.submitted == []
-    finally:
-        environment.close()
+def test_there_is_no_quota_on_phone_work(env):
+    """Owner decision 2026-11-26 (Q3): many prepares and admissions in a day are all answered."""
+
+    for _ in range(12):
+        prepared = env.request("more_like_this", count=8)
+        summary = _summary(env.answer(prepared))
+        assert (
+            env.answer(env.confirm(prepared, summary["revision"], "more_like_this"))["outcome"]
+            == "applied"
+        )
+    assert sum(len(records) for records, _policy in env.submitted) == 96
 
 
-def test_the_daily_window_rolls(tmp_path):
-    environment = Env(tmp_path, caps=Caps(prepares_per_day=1))
-    try:
-        environment.pair()
-        environment.answer(environment.request("fix_face"))
-        environment.clock.now += timedelta(hours=25)
-        assert environment.answer(environment.request("fix_face"))["outcome"] == "applied"
-    finally:
-        environment.close()
+def test_queueing_is_on_by_default_and_the_desktop_can_withdraw_it(env):
+    assert env.ledger.device("phone-device-01").scopes == ("review", "queue")
+    env.sync.set_queue("phone-device-01", False)
+
+    ack = env.answer(env.request("fix_face"))
+
+    assert ack["reason_code"] == "not_granted"
+    assert env.ledger.device("phone-device-01").scopes == ("review",)
+    env.sync.set_queue("phone-device-01", True)
+    assert env.answer(env.request("fix_face"))["outcome"] == "applied"
+
+
+def test_a_phone_paired_before_rg140_can_queue_without_pairing_again(tmp_path):
+    path = tmp_path / "ledger.sqlite3"
+    first = SyncLedger(path)
+    first.get_meta("x")  # create the schema
+    with first._transaction() as db:
+        db.execute(
+            "DELETE FROM meta WHERE key = 'rg140_queue_default'"
+        )  # a ledger from before RG-140
+        db.execute(
+            "INSERT INTO devices VALUES ('owner-phone-1', 'offer', '[\"review\"]', 'Pixel',"
+            " '2026-11-26T09:00:00Z', NULL, 0)"
+        )
+    first.close()
+
+    migrated = SyncLedger(path)
+    assert migrated.device("owner-phone-1").scopes == ("review", "queue")
+    migrated.set_device_queue("owner-phone-1", False)
+    migrated.close()
+    reopened = SyncLedger(path)  # runs once: a later withdrawal stays withdrawn
+    assert reopened.device("owner-phone-1").scopes == ("review",)
+    reopened.close()
 
 
 def test_a_request_admitted_before_a_restart_is_not_admitted_again(env):

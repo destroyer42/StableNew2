@@ -19,7 +19,6 @@ const REASONS = {
   archive_failed: "the PC could not move the file",
   admission_refused: "the PC refused the action",
   summary_changed: "the PC's summary changed",
-  cap_exceeded: "this phone's queue limit for today is reached",
   action_unavailable: "the PC cannot do this for this image",
   prepare_required: "the summary expired; ask again",
 };

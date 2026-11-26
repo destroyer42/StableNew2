@@ -13,8 +13,10 @@ re-hashed (S3, invariant 3). This module then:
   shown warnings frozen as accepted on the phone, fixes at the queue's existing HIGH priority (D8 first step) and
   "more like this" at NORMAL.
 
-Caps per device over a rolling 24 hours and per request (S4), and one admission per prepare (S8), are enforced
-here; the gateway's caps only refuse earlier. Compiler failures become closed ``detail`` codes, never their text.
+There is no quota on phone work (owner decision 2026-11-26, RG-140 Q3): phone and desktop are the same owner. What
+stays is protection against duplicates, not against volume: one admission per prepare and deterministic job ids (S8),
+and the input bound of 1 to 8 seeds for "more like this". Compiler failures become closed ``detail`` codes, never
+their text.
 """
 
 from __future__ import annotations
@@ -32,9 +34,9 @@ from typing import Any, Protocol
 from src.app.review_gateway_protocol import (
     ACTION_UNAVAILABLE,
     ADMISSION_REFUSED,
-    CAP_EXCEEDED,
     DETAILS,
     INVALID_RECORD,
+    MAX_SEEDS,
     PREPARE_REQUIRED,
     SLICE_ONE_ACTIONS,
     SUMMARY_CHANGED,
@@ -54,7 +56,6 @@ log = logging.getLogger(__name__)
 
 DEFAULT_SEEDS = 4
 PREPARE_TTL = timedelta(minutes=30)
-USAGE_WINDOW = timedelta(hours=24)
 _SEED_LIMIT = 2**31
 
 _TITLES = {
@@ -71,15 +72,6 @@ _DETAIL_ALIASES = {
     "preview_changed": "source_changed",
     "preview_unavailable": "app_busy",
 }
-
-
-@dataclass(frozen=True)
-class Caps:
-    """S4 limits per device (owner question Q3 in the RG-140 work package)."""
-
-    jobs_per_day: int = 64
-    prepares_per_day: int = 200
-    jobs_per_request: int = 8
 
 
 @dataclass(frozen=True)
@@ -162,7 +154,6 @@ class GatewayActions:
         admit: Admit,
         *,
         owner_of: Callable[[str], str],
-        caps: Caps = Caps(),
         clock: Callable[[], datetime] = utc_now,
         seeds: Callable[[], int] = lambda: secrets.randbelow(_SEED_LIMIT),
     ) -> None:
@@ -170,7 +161,6 @@ class GatewayActions:
         self._compiler = compiler
         self._admit = admit
         self._owner_of = owner_of
-        self._caps = caps
         self._clock = clock
         self._seeds = seeds
 
@@ -180,10 +170,9 @@ class GatewayActions:
         if request.action not in SLICE_ONE_ACTIONS:
             return _refused(INVALID_RECORD)  # reserved for a later slice
         now = self._clock()
-        prepares, jobs = self._ledger.action_usage(record.device_id, utc_text(now - USAGE_WINDOW))
         if request.step == "prepare":
-            return self._prepare(record, path, now, prepares)
-        return self._confirm(record, path, now, prepares, jobs)
+            return self._prepare(record, path, now)
+        return self._confirm(record, path, now)
 
     # -- steps -----------------------------------------------------------------------------------------------------
 
@@ -203,21 +192,17 @@ class GatewayActions:
         except Exception as error:  # noqa: BLE001 - one bad record must never stall the outbox behind it
             log.error("A phone action could not be compiled (%s)", type(error).__name__)
             raise ActionRefused("compile_failed") from error
-        if not 1 <= len(compiled.records) <= self._caps.jobs_per_request:
+        # The compilers make one job per fix and one per seed; anything else is a compiler fault, not a request.
+        if len(compiled.records) != max(count, 1):
             raise ActionRefused("compile_failed")
         return compiled, self._summary(action, compiled, now)
 
-    def _prepare(
-        self, record: OutboxRecord, path: Path, now: datetime, prepares: int
-    ) -> ActionOutcome:
+    def _prepare(self, record: OutboxRecord, path: Path, now: datetime) -> ActionOutcome:
         request = record.action_request
         assert request is not None
-        if prepares >= self._caps.prepares_per_day:
-            return _refused(CAP_EXCEEDED)
         count = self._seed_count(request.action, request.count)
-        if count > self._caps.jobs_per_request:
-            return _refused(CAP_EXCEEDED)
-        self._ledger.log_action(record.record_id, record.device_id, "prepare", 0, utc_text(now))
+        if count > MAX_SEEDS:  # already refused by the codec; an input bound, not a quota
+            return _refused(INVALID_RECORD)
         try:
             _compiled, summary = self._compile(
                 request.action, path, record.target.sha256, count, now
@@ -227,9 +212,7 @@ class GatewayActions:
         self._remember(record, request.action, count, summary, now)
         return ActionOutcome("applied", receipt={"action_summary": summary.payload()})
 
-    def _confirm(
-        self, record: OutboxRecord, path: Path, now: datetime, prepares: int, jobs: int
-    ) -> ActionOutcome:
+    def _confirm(self, record: OutboxRecord, path: Path, now: datetime) -> ActionOutcome:
         request = record.action_request
         assert request is not None
         prepared = self._ledger.prepared(request.prepared_record)
@@ -255,14 +238,9 @@ class GatewayActions:
         except ActionRefused as refusal:
             return _refused(ACTION_UNAVAILABLE, detail=refusal.detail)
         if summary.revision != prepared["revision"]:
-            # The phone shows this one instead; confirming this record admits it (it counts as a prepare).
-            if prepares >= self._caps.prepares_per_day:
-                return _refused(CAP_EXCEEDED)
-            self._ledger.log_action(record.record_id, record.device_id, "prepare", 0, utc_text(now))
+            # The phone shows this one instead; confirming this record admits it (it acts as a prepare).
             self._remember(record, request.action, count, summary, now)
             return _refused(SUMMARY_CHANGED, action_summary=summary.payload())
-        if jobs + len(compiled.records) > self._caps.jobs_per_day:
-            return _refused(CAP_EXCEEDED)
         receipt_id = str(prepared["record_id"]).replace("-", "")
         try:
             compiled.require_current()
@@ -282,9 +260,6 @@ class GatewayActions:
             log.error("A phone action was not admitted (%s)", type(error).__name__)
             return _refused(ADMISSION_REFUSED, detail="compile_failed")
         receipt = {"job_ids": job_ids, "action_summary": summary.payload()}
-        self._ledger.log_action(
-            record.record_id, record.device_id, "confirm", len(job_ids), utc_text(now)
-        )
         self._ledger.mark_prepare_admitted(str(prepared["record_id"]), record.record_id, receipt)
         return ActionOutcome("applied", receipt=receipt)
 

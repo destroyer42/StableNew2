@@ -25,7 +25,6 @@ _REASONS = {
     "archive_failed": "could not be archived",
     "admission_refused": "queue refused",
     "summary_changed": "summary changed; shown again",
-    "cap_exceeded": "phone queue limit reached",
     "action_unavailable": "action not possible",
     "prepare_required": "summary expired",
 }
@@ -45,7 +44,7 @@ class ReviewGatewayDialog:
         self.confirm: Callable[[tk.Misc, str, str], bool] = _confirm
         self._vars: dict[str, tk.StringVar] = {}
         self._allow_queue: tk.BooleanVar | None = None
-        self._pairing_scope = "review only"
+        self._pairing_scope = "review and queueing"
         self._devices: ttk.Treeview | None = None
 
     def open(self) -> None:
@@ -96,10 +95,10 @@ class ReviewGatewayDialog:
         ttk.Label(top, textvariable=self._vars["code"], font=("TkFixedFont", 14)).pack(
             side="left", padx=(12, 0)
         )
-        self._allow_queue = tk.BooleanVar(master=dialog, value=False)
+        self._allow_queue = tk.BooleanVar(master=dialog, value=True)
         ttk.Checkbutton(
             pairing,
-            text="Allow queueing from this phone (fix face or hands, more like this)",
+            text="Allow queueing on phone (fix face or hands, more like this)",
             variable=self._allow_queue,
         ).pack(anchor="w", pady=(6, 0))
         devices = self._devices = ttk.Treeview(
@@ -114,8 +113,13 @@ class ReviewGatewayDialog:
             devices.heading(column, text=heading)
             devices.column(column, width=width, anchor="w")
         devices.pack(fill="both", expand=True, pady=(8, 0))
-        ttk.Button(pairing, text="Revoke selected", command=self.revoke_selected).pack(
-            anchor="e", pady=(6, 0)
+        actions = ttk.Frame(pairing)
+        actions.pack(anchor="e", pady=(6, 0))
+        ttk.Button(actions, text="Queueing on/off", command=self.toggle_queue_selected).pack(
+            side="left"
+        )
+        ttk.Button(actions, text="Revoke selected", command=self.revoke_selected).pack(
+            side="left", padx=(6, 0)
         )
         ttk.Button(panel, text="Close", command=self.close).pack(anchor="e", pady=(12, 0))
         self.refresh()
@@ -181,6 +185,22 @@ class ReviewGatewayDialog:
             )
             return
         self._vars["code"].set(f"Code: {code}  (5 minutes, {self._pairing_scope})")
+
+    def toggle_queue_selected(self) -> None:
+        devices = self._devices
+        if devices is None or not devices.selection():
+            return
+        device_id = str(devices.selection()[0])
+        current = next((d for d in self._sync.status().devices if d.device_id == device_id), None)
+        if current is None or current.revoked:
+            return
+        try:
+            self._sync.set_queue(device_id, "queue" not in current.scopes)
+        except OSError:
+            messagebox.showerror(
+                "Phone review gateway", "The change could not be saved.", parent=self._parent()
+            )
+        self.refresh()
 
     def revoke_selected(self) -> None:
         devices = self._devices

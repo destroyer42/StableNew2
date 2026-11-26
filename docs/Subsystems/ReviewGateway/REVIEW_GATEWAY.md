@@ -181,10 +181,15 @@ sources; no real Immich has been used.
 
 The other actions in the schema stay reserved and are refused.
 
-**Grant.** The pairing dialog has a checkbox, "Allow queueing from this phone", which is off by default. It adds
-`queue` to the offer's scopes. The gateway takes action requests only from a device enrolled with `queue`. The PC
-checks the scope again from the offer it issued, so the PC stays the authority. To change a paired phone's grant,
-revoke it and pair it again.
+**Queueing flag (owner decision 2026-11-26).** Queueing is a per-phone flag that is on by default.
+
+- The pairing dialog's checkbox, "Allow queueing on phone", is ticked by default and adds `queue` to the offer's
+  scopes.
+- Phones paired before RG-140 are granted `queue` once, by a migration on each side, so they need no new pairing.
+- The desktop's "Queueing on/off" button withdraws or restores one phone's queueing. The PC is the authority, so it
+  refuses that phone's action requests (`not_granted`) while its review continues.
+- The gateway is not told about a withdrawal yet, so the phone keeps showing the buttons.
+- The gateway takes action requests only from a device whose scopes include `queue`.
 
 **Two steps.** Each step is one outbox record, answered by an acknowledgement.
 
@@ -221,7 +226,6 @@ relay uses, into `JobService.submit_njrs`. Fixes go through `submit_reprocess_nj
 | `revoked_device` | The phone was revoked. |
 | `unknown_item`, `digest_mismatch` | The item is not one the PC published, or its file changed. |
 | `invalid_record` | An action reserved for a later slice. |
-| `cap_exceeded` | A cap below was reached. |
 | `prepare_required` | The confirm names a prepare that is unknown, from another phone, for another item or action, or older than 30 minutes. |
 | `summary_changed` | The summary changed since the phone showed it. |
 | `action_unavailable` | The action cannot be prepared. `receipt.detail` gives a closed code: `adetailer_unavailable`, `detector_unavailable`, `model_family_refused`, `provenance_unverified`, `recipe_not_variable`, `source_changed`, `not_an_image`, `compile_failed` and others. Compiler text never crosses. |
@@ -229,14 +233,14 @@ relay uses, into `JobService.submit_njrs`. Fixes go through `submit_reprocess_nj
 
 An unexpected compiler error is answered as `compile_failed`, so it never stalls the records behind it.
 
-**Caps (S4).**
+**Limits (S4 as amended 2026-11-26).** There is no quota on phone work: phone and desktop are the same owner. What
+remains guards against duplicates and malformed input, not against volume:
 
-- PC, authoritative: one job per fix; at most 8 seeds; per phone in any rolling 24 hours, 64 admitted jobs and 200
-  prepares.
-- Gateway, early refusal: at most 20 unanswered action requests per phone (`too_many_pending`) and 300 per 24 hours
-  (`daily_limit`).
-- Idempotency: the gateway is unique per device and key (a reused key is 409 `idempotency_conflict`), and the PC
-  ledger answers a re-sent record with its first outcome.
+- Idempotency: the gateway is unique per device and key (a reused key is 409 `idempotency_conflict`). The PC ledger
+  answers a re-sent record with its first outcome and admits once per prepare.
+- Input bounds: one job per fix and 1 to 8 seeds for "more like this"; JSON bodies of at most 64 KiB.
+- A technical bound: at most 1,000 *unanswered* action requests per phone on the gateway (`too_many_pending`). It
+  protects the outbox and the PC's next sync from a phone stuck resending in a loop. Answered requests never count.
 
 **Phone API.**
 

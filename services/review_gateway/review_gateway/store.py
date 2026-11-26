@@ -34,10 +34,10 @@ DISCARD_UNDO = timedelta(hours=48)
 KEEP_AFTER_ANSWER = timedelta(days=14)
 STALE_FILE_S = 24 * 3600
 _SEEN_RESOLUTION = timedelta(hours=1)
-#: RG-140 (S4): early refusals on the gateway; the PC's caps are the authoritative ones.
-MAX_PENDING_ACTIONS = 20
-MAX_DAILY_ACTIONS = 300
-ACTION_WINDOW = timedelta(hours=24)
+#: RG-140: not a quota (the owner set none, 2026-11-26). A technical bound on one phone's *unanswered* action requests,
+#: far above a person's use (a whole 300-item batch fixed while the PC sleeps fits). It protects the outbox and the PC's
+#: next sync from a phone stuck resending in a loop with fresh keys; answered requests never count.
+MAX_PENDING_ACTIONS = 1000
 #: RG-140 slice 1. The schema reserves the others for later slices; the PC refuses anything it does not implement.
 SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
 
@@ -478,15 +478,13 @@ class Store:
                 raise GatewayError(404, "unknown_item")
             if item["kind"] != "image":
                 raise GatewayError(422, "not_an_image")
-            pending, recent = db.execute(
-                "SELECT coalesce(sum(status = 'pending'), 0), coalesce(sum(created_at > ?), 0)"
-                " FROM outbox WHERE device_id = ? AND kind = 'action_request'",
-                (stamp(now - ACTION_WINDOW), device_id),
-            ).fetchone()
+            pending = db.execute(
+                "SELECT count(*) FROM outbox WHERE device_id = ? AND kind = 'action_request'"
+                " AND status = 'pending'",
+                (device_id,),
+            ).fetchone()[0]
             if pending >= MAX_PENDING_ACTIONS:
                 raise GatewayError(429, "too_many_pending")
-            if recent >= MAX_DAILY_ACTIONS:
-                raise GatewayError(429, "daily_limit")
             db.execute(
                 "INSERT INTO outbox (record_id, idempotency_key, device_id, library_id, sha256,"
                 " record, status, kind, created_at)"
@@ -783,6 +781,15 @@ def _migrate(db: sqlite3.Connection) -> None:
     columns = {row[1] for row in db.execute("PRAGMA table_info(outbox)")}
     if "kind" not in columns:
         db.execute("ALTER TABLE outbox ADD COLUMN kind TEXT NOT NULL DEFAULT 'decision'")
+        # Owner decision 2026-11-26 (RG-140 Q4): queueing is on by default, including phones paired before it
+        # existed, so they need no new pairing. Runs once: only a database without the kind column gets here.
+        for device_id, scopes in db.execute("SELECT device_id, scopes FROM device").fetchall():
+            granted = json.loads(scopes)
+            if "review" in granted and "queue" not in granted:
+                db.execute(
+                    "UPDATE device SET scopes = ? WHERE device_id = ?",
+                    (json.dumps([*granted, "queue"]), device_id),
+                )
     if "created_at" not in columns:
         db.execute("ALTER TABLE outbox ADD COLUMN created_at TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS outbox_device_kind ON outbox (device_id, kind, seq)")

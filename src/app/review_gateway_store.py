@@ -197,11 +197,6 @@ CREATE TABLE IF NOT EXISTS action_prepares (
     action TEXT NOT NULL, seeds INTEGER, revision TEXT NOT NULL, at TEXT NOT NULL,
     admitted_by TEXT, receipt TEXT
 );
-CREATE TABLE IF NOT EXISTS action_log (
-    record_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, step TEXT NOT NULL, jobs INTEGER NOT NULL,
-    at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS action_log_device ON action_log (device_id, at);
 """
 
 
@@ -229,6 +224,33 @@ class RecordOutcome:
     ack_sent: bool
 
 
+_QUEUE_DEFAULT_KEY = "rg140_queue_default"
+
+
+def _grant_queue_once(db: sqlite3.Connection) -> None:
+    """Owner decision 2026-11-26 (RG-140 Q4): queueing is on by default, phones paired before RG-140 included.
+
+    Runs once per ledger; afterwards a phone's queueing is whatever the desktop last set (``set_device_queue``).
+    """
+
+    if db.execute("SELECT 1 FROM meta WHERE key = ?", (_QUEUE_DEFAULT_KEY,)).fetchone():
+        return
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        for row in db.execute("SELECT device_id, scopes FROM devices").fetchall():
+            scopes = json.loads(row[1])
+            if "review" in scopes and "queue" not in scopes:
+                db.execute(
+                    "UPDATE devices SET scopes = ? WHERE device_id = ?",
+                    (json.dumps([*scopes, "queue"]), row[0]),
+                )
+        db.execute("INSERT INTO meta VALUES (?, ?)", (_QUEUE_DEFAULT_KEY, "1"))
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
+    db.execute("COMMIT")
+
+
 class SyncLedger:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path if path is not None else _local_state_dir() / "ledger.sqlite3"
@@ -246,6 +268,7 @@ class SyncLedger:
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("PRAGMA synchronous=FULL")
             db.executescript(_LEDGER_SCHEMA)
+            _grant_queue_once(db)
             self._db = db
         return self._db
 
@@ -391,23 +414,6 @@ class SyncLedger:
 
     # -- phone actions (RG-140) ------------------------------------------------------------------------------------
 
-    def action_usage(self, device_id: str, since: str) -> tuple[int, int]:
-        """``(prepares, admitted jobs)`` this device used since ``since`` (UTC text), for the S4 caps."""
-
-        rows = self._read(
-            "SELECT coalesce(sum(step = 'prepare'), 0) AS prepares, coalesce(sum(jobs), 0) AS jobs"
-            " FROM action_log WHERE device_id = ? AND at > ?",
-            (device_id, since),
-        )
-        return int(rows[0]["prepares"]), int(rows[0]["jobs"])
-
-    def log_action(self, record_id: str, device_id: str, step: str, jobs: int, at: str) -> None:
-        with self._transaction() as db:
-            db.execute(
-                "INSERT OR IGNORE INTO action_log VALUES (?,?,?,?,?)",
-                (record_id, device_id, step, jobs, at),
-            )
-
     def remember_prepare(
         self,
         record_id: str,
@@ -509,6 +515,23 @@ class SyncLedger:
             None if row["revoked_at"] is None else str(row["revoked_at"]),
             bool(row["revocation_sent"]),
         )
+
+    def set_device_queue(self, device_id: str, allowed: bool) -> bool:
+        """Grant or withdraw one phone's queueing (D6 as amended 2026-11-26); its review scope is untouched."""
+
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT scopes FROM devices WHERE device_id = ?", (device_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            scopes = [scope for scope in json.loads(row["scopes"]) if scope != "queue"]
+            if allowed:
+                scopes.append("queue")
+            db.execute(
+                "UPDATE devices SET scopes = ? WHERE device_id = ?", (json.dumps(scopes), device_id)
+            )
+            return True
 
     def revoke_device(self, device_id: str, at: str) -> bool:
         with self._transaction() as db:

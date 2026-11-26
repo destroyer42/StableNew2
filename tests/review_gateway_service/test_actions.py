@@ -237,42 +237,25 @@ def test_a_malformed_summary_from_the_pc_is_refused(queue_rig) -> None:
     assert bad.status_code == 422
 
 
-def test_pending_requests_and_daily_requests_are_capped_per_phone(queue_rig) -> None:
+def test_there_is_no_daily_quota_only_a_bound_on_unanswered_requests(
+    queue_rig, monkeypatch
+) -> None:
+    """Owner decision 2026-11-26: no quota on phone work. Only a runaway-retry bound on unanswered requests."""
+
     from review_gateway import store
 
-    for _ in range(store.MAX_PENDING_ACTIONS):
+    assert store.MAX_PENDING_ACTIONS >= 1000  # far above a person's use
+    monkeypatch.setattr(store, "MAX_PENDING_ACTIONS", 3)
+    for _ in range(3):
         assert prepare(queue_rig, queue_rig.item).status_code == 200
     refused = prepare(queue_rig, queue_rig.item)
     assert refused.status_code == 429
     assert refused.json() == {"error": "too_many_pending"}
 
     for record in queue_rig.outbox()["records"]:
-        queue_rig.acknowledge(record["record_id"], "refused", reason_code="cap_exceeded")
-    with queue_rig.gateway.store.write() as db:  # stand in for a busy day of answered requests
-        db.execute(
-            "UPDATE outbox SET created_at = ? WHERE kind = 'action_request'",
-            (queue_rig.clock.stamp(minutes=-5),),
-        )
-        rows = [
-            (
-                str(uuid.uuid4()),
-                uuid.uuid4().hex,
-                queue_rig.device,
-                queue_rig.item["library_id"],
-                queue_rig.item["sha256"],
-                queue_rig.clock.stamp(minutes=-5),
-            )
-            for _ in range(store.MAX_DAILY_ACTIONS - store.MAX_PENDING_ACTIONS)
-        ]
-        db.executemany(
-            "INSERT INTO outbox (record_id, idempotency_key, device_id, library_id, sha256, record,"
-            " status, kind, created_at) VALUES (?, ?, ?, ?, ?, '{}', 'refused', 'action_request', ?)",
-            rows,
-        )
-    assert prepare(queue_rig, queue_rig.item).json() == {"error": "daily_limit"}
-
-    queue_rig.clock.advance(hours=24)
-    assert prepare(queue_rig, queue_rig.item).status_code == 200
+        queue_rig.acknowledge(record["record_id"], "refused", reason_code="action_unavailable")
+    for _ in range(3):  # answered requests never count, however many there were today
+        assert prepare(queue_rig, queue_rig.item).status_code == 200
 
 
 def test_answering_an_action_never_touches_the_keep_or_its_upload(queue_rig) -> None:
@@ -328,6 +311,12 @@ def test_an_outbox_from_before_rg140_is_migrated(tmp_path, clock) -> None:
             INSERT INTO outbox (record_id, idempotency_key, device_id, library_id, sha256, record, status)
             VALUES ('11111111-1111-4111-8111-111111111111', 'old-key-0123456789', 'device-old',
                     'lib-old_____', 'aa', '{"kind": "decision"}', 'applied');
+            CREATE TABLE device (
+                device_id TEXT PRIMARY KEY, token_sha256 TEXT NOT NULL UNIQUE, offer_id TEXT NOT NULL,
+                label TEXT, scopes TEXT NOT NULL, enrolled_at TEXT NOT NULL, seen_at TEXT, revoked_at TEXT
+            );
+            INSERT INTO device VALUES ('owner-phone-1', 'h1', 'o1', 'Pixel', '["review"]',
+                                       '2026-11-26T09:00:00Z', NULL, NULL);
             """
         )
 
@@ -336,6 +325,18 @@ def test_an_outbox_from_before_rg140_is_migrated(tmp_path, clock) -> None:
         assert rig.gateway.store.database == database
         with rig.gateway.store.connection() as db:
             row = db.execute("SELECT kind FROM outbox").fetchone()
+            scopes = db.execute("SELECT scopes FROM device").fetchone()["scopes"]
         assert row["kind"] == "decision"
+        # Owner decision 2026-11-26 (Q4): a phone paired before RG-140 can queue without pairing again.
+        assert scopes == '["review", "queue"]'
+        with (
+            rig.gateway.store.write() as db
+        ):  # a later review-only choice is not undone by reopening
+            db.execute("UPDATE device SET scopes = '[\"review\"]'")
+        from review_gateway.store import Store
+
+        Store(database, rig.gateway.store.media, rig.gateway.contract)  # opened again
+        with rig.gateway.store.connection() as db:
+            assert db.execute("SELECT scopes FROM device").fetchone()["scopes"] == '["review"]'
     finally:
         rig.close()

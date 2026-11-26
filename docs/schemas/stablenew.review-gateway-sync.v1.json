@@ -618,7 +618,6 @@
             "archive_failed",
             "admission_refused",
             "summary_changed",
-            "cap_exceeded",
             "action_unavailable",
             "prepare_required"
           ]

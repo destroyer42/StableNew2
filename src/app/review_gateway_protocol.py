@@ -60,7 +60,6 @@ FAVORITE_WITH_DELETE = "favorite_with_delete"
 ARCHIVE_FAILED = "archive_failed"
 ADMISSION_REFUSED = "admission_refused"
 SUMMARY_CHANGED = "summary_changed"
-CAP_EXCEEDED = "cap_exceeded"
 ACTION_UNAVAILABLE = "action_unavailable"
 PREPARE_REQUIRED = "prepare_required"
 REASON_CODES = frozenset(
@@ -74,7 +73,6 @@ REASON_CODES = frozenset(
         ARCHIVE_FAILED,
         ADMISSION_REFUSED,
         SUMMARY_CHANGED,
-        CAP_EXCEEDED,
         ACTION_UNAVAILABLE,
         PREPARE_REQUIRED,
     }
