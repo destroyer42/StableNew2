@@ -40,7 +40,8 @@
     - FFmpeg missing for Movie Clips;
     - RIFE without a frame rate.
 
-    Each needs its own Preview twin. They are listed for a follow-up.
+    Each needs its own Preview twin. They are listed for a follow-up. N1c (`N1c_early_real_blocks.md`) moves all five
+    to Queue admission.
 
 ## Execution class and model recommendation
 

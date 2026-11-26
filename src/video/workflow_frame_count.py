@@ -121,12 +121,49 @@ def parse_frame_count(spec: Any, value: Any) -> int:
     return count
 
 
+def interpolation_requested(value: Any) -> bool:
+    """Whether a stage-config ``interpolation`` block asks for RIFE smoothing (the runtime is resolved at dispatch)."""
+
+    return isinstance(value, Mapping) and bool(value.get("enabled"))
+
+
+def interpolation_source_fps(
+    spec: Any, stage_config: Mapping[str, Any], *, outcome: str = "Nothing was generated."
+) -> int:
+    """The encoded frame rate RIFE multiplies, from the output policy for saved frames.
+
+    Shared by Queue admission and dispatch (N1 follow-up): a workflow that declares no frame rate is a fixed spec fact.
+    """
+
+    from src.video.frames_out import frames_output_fps
+
+    output_fps = frames_output_fps(spec)
+    if output_fps is not None:
+        return output_fps
+
+    policy = frame_count_policy(spec)
+    raw = stage_config.get("fps") or (policy or {}).get("fps") or 0
+    try:
+        fps = int(raw)
+    except (TypeError, ValueError):
+        fps = 0
+    if fps < 1:
+        raise ValueError(
+            f"Workflow '{spec.workflow_id}' declares no frame rate, so RIFE smoothing cannot "
+            f"choose an output rate. {outcome} Turn off RIFE smoothing for this job, or choose a "
+            "workflow that declares a frame rate."
+        )
+    return fps
+
+
 __all__ = [
     "FRAME_COUNT_INPUT",
     "approximate_seconds",
     "frame_count_advisory",
     "frame_count_policy",
     "frame_count_projection",
+    "interpolation_requested",
+    "interpolation_source_fps",
     "legal_frame_counts",
     "parse_frame_count",
 ]

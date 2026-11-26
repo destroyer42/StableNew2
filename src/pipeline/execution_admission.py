@@ -12,3 +12,6 @@ def require_execution_admission(record: Any) -> None:
     require_workflow_admission(record)
     # N1: real image-plan blocks are reported at Queue, never only after the job has waited in the queue.
     require_image_admission(record)
+    from src.video.movie_assembly_engine import require_movie_assembly_admission
+
+    require_movie_assembly_admission(record)
