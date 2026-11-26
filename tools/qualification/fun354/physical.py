@@ -618,6 +618,9 @@ class PhysicalExecutor:
             )
             client = self.seams.client_factory(base_url)
 
+            # Only a plan that declares the metric queries it, so the 1.0.0 plan samples as before.
+            wants_temperature = "gpu_temperature_peak_c" in plan.telemetry
+
             def sample() -> Sample:
                 commit, available = self.seams.system_memory()
                 used, total = self.seams.gpu_memory()
@@ -627,7 +630,7 @@ class PhysicalExecutor:
                     available,
                     used,
                     total,
-                    self.seams.gpu_temperature(),
+                    self.seams.gpu_temperature() if wants_temperature else None,
                 )
 
             def logs() -> str:
