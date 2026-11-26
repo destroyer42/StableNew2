@@ -168,3 +168,33 @@ A1111, Forge and ComfyUI keep their own interpreters and are not touched.
 Successful bootstrap proves runtime prerequisites and local-only model/cache
 readiness. It does not submit an NJR, load a model, run portrait inference,
 or constitute the broader MVP-080 release proof.
+
+## Update and restart (LAUNCH-UPDATE-1)
+
+The header button **Update** opens a dialog for the checkout the app is running from. Design, threat model and the
+owner decisions D1–D10: `docs/work_packages/LAUNCH-UPDATE_remote_restart.md`.
+
+- **Check for update** fetches `origin` and reports whether `main` can be fast-forwarded, and by how many commits.
+- **Update and restart** asks for confirmation, then:
+  1. refuses (and changes nothing) unless the checkout is on `main` tracking `origin/main`, `origin` is the
+     StableNew2 repository, no tracked file is modified or staged, `origin/main` is a descendant of `HEAD`, and the
+     new commit's pinned constraints pass the launcher's read-only check against the current `.venv`. Nothing is ever
+     installed: an update that needs packages is refused as `environment_drift`;
+  2. holds the queue in memory (not the Pause button) and waits up to 60 minutes for the running job to finish. It
+     never cancels it. If the job is still running then, the queue continues and the update is refused
+     `busy_timeout`;
+  3. starts `scripts\update_and_restart.ps1` and closes StableNew normally. The script waits for the app to exit (it
+     never kills it), checks the checkout again, runs `git merge --ff-only`, and starts
+     `scripts\launch_stablenew.ps1` minimized. Queued jobs resume as after any restart;
+  4. if the new version does not start (the launcher exits, for example with 11 for a drifted `.venv`), moves local
+     `main` back with `git reset --keep <old commit>` and starts the old version again. `origin` is never changed.
+- The dialog shows the last result: old and new commit, or the reason it was refused or rolled back.
+- **Allow remote update** (off by default) is the PC-side switch for phone requests, which arrive with LAUNCH-UPDATE-2.
+  Update and restart from the desktop works with the switch off.
+
+State lives in `%LOCALAPPDATA%\StableNew\live-update` (`intent.json`, `result.json`, `started.json`,
+`last_result.json`, `settings.json`, and the copy of the updater that ran), outside the checkout. Output, logs, packs,
+presets, `data\` and the `.venv` are not touched: a fast-forward changes only tracked files that differ between the
+two commits. If something goes wrong away from the desk, the result file says which step stopped. A `rollback_failed`
+result leaves the checkout at the new commit with StableNew stopped; at the desk, run
+`git reset --keep <old_sha from result.json>` and start StableNew again.
