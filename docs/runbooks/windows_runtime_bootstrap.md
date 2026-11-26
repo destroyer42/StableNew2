@@ -38,8 +38,48 @@ It always runs `<repo>\.venv\Scripts\python.exe -m src.main` and returns the app
 - Bootstrap failure exits 10; a folder that is not a StableNew checkout exits 12.
 - It starts, stops and selects no A1111, Forge, Comfy or SVD runtime; the application owns those.
 
-`launch_stablenew_advanced.bat` only forwards to `launch_stablenew.bat`;
-`scripts\create_desktop_shortcut.ps1` creates a shortcut to it.
+`launch_stablenew_advanced.bat` only forwards to `launch_stablenew.bat`.
+
+### Desktop shortcut and autostart at sign-in
+
+`scripts\manage_stablenew_shortcuts.ps1` installs, reports and removes two per-user shortcuts to the checkout it
+lives in. Run it from the checkout the app should start from (the live app uses the `StableNew-main` checkout):
+
+```powershell
+cd <StableNew-main checkout>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\manage_stablenew_shortcuts.ps1           # install both
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\manage_stablenew_shortcuts.ps1 -Status   # report only
+```
+
+| Shortcut | File | Window |
+| --- | --- | --- |
+| Desktop | `<Desktop>\StableNew.lnk` | normal |
+| Autostart | `shell:startup\StableNew.lnk` (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`) | minimized |
+
+Windows opens everything in the user's Startup folder at each sign-in, including the first sign-in after a
+restart or a reboot. It does not start StableNew before someone signs in: a reboot that stops at the sign-in screen
+leaves StableNew stopped until the owner (or Windows automatic sign-in, if the owner set that up separately) signs
+in. Nothing machine-wide changes: no registry Run key, no Scheduled Task, no service, no admin rights. Task Manager >
+Startup apps lists the entry and can disable it too.
+
+- `-Desktop` or `-Autostart` limits the run to one shortcut; with neither, both are acted on.
+- Install is idempotent: a second run prints `already installed` and rewrites nothing. A StableNew shortcut that points
+  at another checkout's `launch_stablenew.bat` is retargeted to this one, and the old target is printed.
+- A `StableNew.lnk` whose target is not a `launch_stablenew.bat` is never overwritten or removed; the script reports
+  it and exits 2.
+- StableNew's single-instance lock keeps an autostarted app and a later manual launch from both running.
+- If the launch fails at sign-in, the minimized launcher window stays open with the reason (`launch_stablenew.bat`
+  pauses on failure).
+
+To undo:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\manage_stablenew_shortcuts.ps1 -Autostart -Remove   # stop starting at sign-in
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\manage_stablenew_shortcuts.ps1 -Desktop -Remove     # remove the desktop shortcut
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\manage_stablenew_shortcuts.ps1 -Remove              # remove both
+```
+
+`scripts\create_desktop_shortcut.ps1` still works and forwards to `manage_stablenew_shortcuts.ps1 -Desktop`.
 
 ## Bootstrap
 

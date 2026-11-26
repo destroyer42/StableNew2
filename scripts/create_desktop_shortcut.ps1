@@ -1,17 +1,7 @@
-# Creates a desktop shortcut to the canonical StableNew launcher (PR-DEVEX-LAUNCH-180).
-# The repository is resolved from this script's own location; nothing is hard-coded.
+# Creates (or confirms) the desktop shortcut to the canonical StableNew launcher, launch_stablenew.bat
+# (PR-DEVEX-LAUNCH-180). Kept for existing habits; it forwards to the idempotent, reversible manager
+# (LAUNCH-AUTOSTART-440), which also handles autostart at sign-in and removal:
+#   .\scripts\manage_stablenew_shortcuts.ps1 [-Desktop] [-Autostart] [-Remove] [-Status]
 
-$RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
-$Launcher = Join-Path $RepoRoot "scripts\launch_stablenew.bat"
-
-$WshShell = New-Object -ComObject WScript.Shell
-$Desktop = [System.Environment]::GetFolderPath('Desktop')
-$Shortcut = $WshShell.CreateShortcut((Join-Path $Desktop "StableNew.lnk"))
-$Shortcut.TargetPath = $Launcher
-$Shortcut.WorkingDirectory = $RepoRoot
-$Shortcut.Description = "StableNew"
-$Shortcut.WindowStyle = 1
-$Shortcut.IconLocation = "shell32.dll,2"
-$Shortcut.Save()
-
-Write-Host "Desktop shortcut created: $(Join-Path $Desktop 'StableNew.lnk') -> $Launcher"
+& (Join-Path $PSScriptRoot "manage_stablenew_shortcuts.ps1") -Desktop @args
+exit $LASTEXITCODE
