@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-1018 of 1018 modules have a docstring.
+1019 of 1019 modules have a docstring.
 
 ## src/
 
@@ -1111,6 +1111,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_asset_integrity.py`: Read-only verification of catalog-pinned assets in the configured Comfy model folders
 - `workflow_catalog.py`: Assemble the versioned Comfy catalog with governance, dependencies, and runtime policies
 - `workflow_catalog_fun_control.py`: Pinned stock-node Fun Control graph; no installation or physical qualification
+- `workflow_catalog_hunyuan15.py`: HunyuanVideo 1.5 480p image-to-video, step-distilled FP8: an EXPERIMENTAL eval candidate (VID-CAND-382)
 - `workflow_catalog_wan_a14b.py`: Wan2.2 I2V-A14B lightx2v 4-step workflow spec (VID-CLIP-370; approved by VID-CLIP-372)
 - `workflow_catalog_wan_a14b_svi.py`: Experimental Wan2.2 I2V-A14B + SVI 2.0 workflow for multi-segment sequences (VID-A14B-SVI-375)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)

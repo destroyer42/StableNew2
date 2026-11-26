@@ -1,7 +1,7 @@
 # PR-VID-MOTION-430: alternative conditioning, engine evaluation and qualification readiness
 
 Status: **implemented on a feature branch; offline only** (Phase 4 of `docs/Subsystems/Video/CONTROLLED_MOTION_ROADMAP.md`). This is a per-PR record: the code and
-the living docs (`VIDEO_PIPELINE.md`, `MOTION_LIBRARY.md`, `docs/runbooks/motion_conditioning_and_engine_evaluation.md`, `docs/runbooks/video_eval_kit.md` section 11) win where they differ. No physical
+the living docs (`VIDEO_PIPELINE.md`, `MOTION_LIBRARY.md`, `docs/runbooks/motion_conditioning_and_engine_evaluation.md`, `docs/runbooks/video_eval_kit.md` section 12) win where they differ. No physical
 generation, qualification run, model download, dependency or custom-node installation, workflow promotion or ledger change was made.
 
 Execution class: Standard, difficult bounded cross-file. **Model recommendation:** Claude Code Sonnet 5.5 XHigh; Codex GPT-6.1 Sol XHigh (`docs/AI_MODEL_SELECTION.md`).
