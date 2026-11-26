@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import logging
 import socket
 import sys
 import time
@@ -533,6 +534,38 @@ def test_status_reports_gateway_refusals_without_secrets(env, caplog):
     status = env.sync.status()
     assert status.state == "refused_secret" and "secret" in status.message
     assert SECRET not in caplog.text and SECRET not in repr(env.sync._settings)
+
+
+def test_sync_logs_carry_no_prompt_or_secret(tmp_path, caplog):
+    """N11 / RG-100 E1: a full publish, pair and decide cycle logs neither the prompt nor the sync secret."""
+
+    from PIL.PngImagePlugin import PngInfo
+
+    prompt = "zebra-quokka-marker in a moonlit field"
+    caplog.set_level(logging.DEBUG)
+    environment = Env(tmp_path)
+    try:
+        info = PngInfo()
+        info.add_text(
+            "parameters", f"{prompt}\nNegative prompt: blurry-walrus-marker\nSteps: 20, Seed: 7"
+        )
+        Image.new("RGB", (64, 48), "#557733").save(environment.small, pnginfo=info)
+        environment.publish_all()
+        environment.pair()
+        library_id, sha = environment.item(environment.small)
+        environment.gateway.decide(library_id, sha, "keep", favorite=True, tags=["hands"])
+        environment.gateway.secret = "other-secret-" + "x" * 30  # a refused cycle logs too
+        environment.sync.run_cycle()
+        environment.gateway.secret = SECRET
+        environment.sync.run_cycle()
+    finally:
+        environment.close()
+
+    assert "zebra-quokka-marker" in json.dumps(
+        environment.gateway.manifests
+    )  # the prompt did flow to the phone
+    for forbidden in ("zebra-quokka-marker", "blurry-walrus-marker", SECRET):
+        assert forbidden not in caplog.text
 
 
 # -- boundaries -----------------------------------------------------------------------------------------------------

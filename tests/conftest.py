@@ -343,6 +343,38 @@ def _isolate_site_library_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
 
 @pytest.fixture(autouse=True)
+def _jsonl_log_never_touches_the_operators_log(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """``AppController`` attaches the JSONL handler on ``logs/stablenew.log.jsonl``, relative to the working directory.
+
+    In the owner's checkout that is the live log (N11). Each test gets its own file in a sibling of ``tmp_path`` (not
+    created here), the environment carries it to any child process, and a handler a test leaves on the root logger is
+    closed so it cannot hold the file open for the next test.
+    """
+
+    import logging
+
+    try:
+        from src.config import app_config
+        from src.utils.logger import JsonlFileHandler
+    except Exception:  # pragma: no cover - isolation must never break collection
+        yield
+        return
+    log_path = tmp_path.with_name(tmp_path.name + "-logs") / "stablenew.log.jsonl"
+    monkeypatch.setenv("STABLENEW_JSONL_LOG_PATH", str(log_path))
+    monkeypatch.setattr(
+        app_config, "_jsonl_log_config", app_config.JsonlFileLogConfig(enabled=True, path=log_path)
+    )
+    root = logging.getLogger()
+    before = set(root.handlers)
+    yield
+    for handler in [
+        h for h in root.handlers if isinstance(h, JsonlFileHandler) and h not in before
+    ]:
+        root.removeHandler(handler)
+        handler.close()
+
+
+@pytest.fixture(autouse=True)
 def _isolate_photo_optimize_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Building the app opens the Photo Optimize workspace, by default under the checkout's ``output/``.
 

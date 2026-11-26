@@ -299,7 +299,9 @@ def test_checkpoint_switch_immediately_after_verified_module_cleanup(
         assert now == 115.0
     if scenario == "refusal":
         assert "model change request failed: 400 error" in caplog.text
-        assert entry.error_message == "No images were generated successfully"
+        # N11: the History entry carries the backend's refusal, not the generic "No images were generated" text.
+        assert "model change request failed: 400 error" in str(entry.error_message)
+        assert "Checkpoint mismatch" not in str(entry.error_message)
     if checkpoint_posts:
         assert writes_at == [101.0]
         clear = transport.calls.index(("POST", "/sdapi/v1/options", {"forge_additional_modules": []}))

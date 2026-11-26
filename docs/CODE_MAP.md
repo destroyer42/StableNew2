@@ -44,6 +44,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `forge_client.py`: Forge WebUI transport adapter (PR-IMG-FORGE-100)
 - `healthcheck.py`: Probe WebUI readiness through configured endpoints and track backoff after hard connection failures
 - `http_transport.py`: A small typed HTTP transport (audit E1, P3-4)
+- `process_exit_cause.py`: Turn a managed process's exit code and output tail into one operator-readable cause (N11)
 - `types.py`: API result and error types for StableNew V2
 - `webui_api.py`: WebUI API helpers with throttled options plumbing
 - `webui_failure_evidence.py`: Bounded, content-free classification of WebUI execution failures (PR-QUEUE-WEBUI-171)
@@ -781,6 +782,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `model_synchronizer.py`: Deterministic A1111 checkpoint synchronization for pipeline execution
 - `njr_compiler.py`: The single assembly boundary for ``NormalizedJobRecord`` (P4-2)
 - `njr_core_v26.py`: Immutable eight-part Normalized Job Record contract for StableNew v2.6
+- `no_output_reason.py`: Operator-readable reasons a stage produced no output (N11)
 - `openpose_compile.py`: PromptPack OpenPose conditioning compilation (PR-IMG-CNET-210)
 - `outpaint_canvas.py`: Toolkit-neutral outpainting canvas preparation and original-pixel preservation
 - `pipeline_runner.py`: Production pipeline runner integration
@@ -942,6 +944,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `config_helpers.py`: Helpers for logging when default configuration values are used
 - `contention_lock.py`: A lock that reports the operation that held it, or waited for it, long enough to stall other threads
 - `debug_shutdown_inspector.py`: Utilities for logging detailed shutdown state diagnostics
+- `diagnostic_redaction.py`: Remove prompt text and secrets from values that leave the app as diagnostics (N11, RG-100 finding E1)
 - `diagnostics_bundle_v2.py`: Collect bounded runtime diagnostics into ZIP bundles with single-flight and cooldown controls
 - `embedding_prompt_utils.py`: Normalize textual-inversion references and read the backend's embedding usage report
 - `embedding_scanner.py`: Compatibility projection from AssetRegistry; it owns no scan or cache

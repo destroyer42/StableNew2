@@ -151,8 +151,11 @@ def test_backend_unreachable_is_not_reported_as_a_checkpoint_problem(tmp_path):
 
     assert result.success is False
     assert client.generation_posts == 0
-    assert result.error == GENERIC
-    assert "heckpoint" not in result.error
+    # N11: the job says what actually happened (the query failed), and it is still not called a mismatch.
+    assert "Checkpoint mismatch" not in result.error
+    assert (
+        result.error.startswith("txt2img: stage failed:") and "connection refused" in result.error
+    )
 
 
 def test_a_failed_model_change_request_is_not_reported_as_a_verified_mismatch(tmp_path):
@@ -162,7 +165,8 @@ def test_a_failed_model_change_request_is_not_reported_as_a_verified_mismatch(tm
 
     result = _run(_Raises("model-b.safetensors"), tmp_path)
 
-    assert result.error == GENERIC
+    assert "Checkpoint mismatch" not in result.error
+    assert result.error != GENERIC and "read timed out" in result.error
 
 
 def test_unrelated_failure_keeps_its_message_and_does_not_inherit_a_stale_reason(tmp_path):

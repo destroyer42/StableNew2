@@ -22,9 +22,8 @@ class FileAccessLogger:
         self._seen: set[str] = set()
         self._lock = threading.Lock()
         self._is_writing = False  # NEW: track when writing own log file
-
-        # Ensure parent directory exists
-        self._log_path.parent.mkdir(parents=True, exist_ok=True)
+        # The parent directory is created on the first write, never at import: the module-level logger below points
+        # at ``logs/`` relative to the working directory, and importing must not create it (N11).
 
     @property
     def log_path(self) -> Path:
@@ -61,6 +60,7 @@ class FileAccessLogger:
 
             self._is_writing = True
             try:
+                self._log_path.parent.mkdir(parents=True, exist_ok=True)
                 with self._log_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(entry) + "\n")
             finally:

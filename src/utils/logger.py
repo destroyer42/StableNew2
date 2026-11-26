@@ -1,11 +1,16 @@
 """Logging utilities with structured JSON output"""
 
 import atexit
+import contextlib
 import copy
 import csv
 import json
 import logging
+import os
 import queue
+import shutil
+import sys
+import time
 import weakref
 from collections import deque
 from collections.abc import Iterable, Mapping
@@ -204,8 +209,26 @@ class JsonlFileLogConfig:
     backup_count: int = 5
 
 
+# A refused rotation is retried no sooner than this; before N11 it was retried on every record.
+_ROTATION_RETRY_SECONDS = 60.0
+# Keys every JSONL record carries (N11). A payload's own value for one of them is kept as ``payload_<key>``.
+_JSONL_RECORD_KEYS = ("ts", "level", "logger")
+
+
+def _record_timestamp(created: float) -> str:
+    """ISO 8601 local time with its UTC offset, to the millisecond."""
+
+    return datetime.fromtimestamp(created).astimezone().isoformat(timespec="milliseconds")
+
+
 class JsonlFileHandler(RotatingFileHandler):
-    """Handler that writes one JSON payload per line with optional rotation."""
+    """Handler that writes one JSON object per line, with rotation that never fails silently.
+
+    Every record carries ``ts``, ``level`` and ``logger``; an exception's traceback stays inside the line as
+    ``exc_text``. Rotation renames the live file before touching any backup, so a refused rename (on Windows, any
+    other open handle) destroys nothing. It then falls back to copy-and-truncate. If that fails too it writes one
+    ``log_rotation_failed`` record and retries after ``_ROTATION_RETRY_SECONDS``.
+    """
 
     def __init__(
         self,
@@ -224,46 +247,159 @@ class JsonlFileHandler(RotatingFileHandler):
             encoding="utf-8",
         )
         self.setLevel(level)
+        self._next_rotation_attempt = 0.0
+        self._rotation_failure_reported = False
 
-    def doRollover(self) -> None:
-        """
-        Override doRollover to handle Windows file locking issues.
+    # -- rotation --------------------------------------------------------------------------------------------------
 
-        On Windows, os.rename() fails with PermissionError if the target file
-        is open by another process/thread. This override closes the file first,
-        does the rotation, then reopens it.
-        """
+    def shouldRollover(self, record: logging.LogRecord) -> bool:  # noqa: N802 - logging API
+        if self.maxBytes <= 0 or time.monotonic() < self._next_rotation_attempt:
+            return False
+        return bool(super().shouldRollover(record))
+
+    def doRollover(self) -> None:  # noqa: N802 - logging API
         if self.stream:
             self.stream.close()
-            self.stream = None  # type: ignore
-
+            self.stream = None  # type: ignore[assignment]
+        failure: OSError | None = None
         try:
-            # Perform rotation with file closed
-            super().doRollover()
-        except (PermissionError, OSError):
-            # Windows file locking issue - log silently failed, continue without rotation
-            # This prevents crash but means log file may grow beyond maxBytes temporarily
-            pass
+            self._rotate_files()
+        except OSError as exc:
+            failure = exc
         finally:
-            # Reopen the file
             if not self.stream:
                 self.stream = self._open()
+        if failure is None:
+            self._next_rotation_attempt = 0.0
+            self._rotation_failure_reported = False
+            return
+        self._next_rotation_attempt = time.monotonic() + _ROTATION_RETRY_SECONDS
+        self._report_rotation_failure(failure)
+
+    def _rename(self, source: str, destination: str) -> None:
+        os.replace(source, destination)
+
+    def _copy(self, source: str, destination: str) -> None:
+        shutil.copyfile(source, destination)
+
+    def _backup_name(self, index: int) -> str:
+        return self.rotation_filename(f"{self.baseFilename}.{index}")
+
+    def _rotate_files(self) -> None:
+        base = self.baseFilename
+        if not os.path.exists(base):
+            return
+        if self.backupCount <= 0:
+            self._truncate(base)
+            return
+        staging = base + ".rotating"
+        try:
+            self._rename(base, staging)
+        except OSError:
+            # Another handle has the live file open (a log viewer, a diagnostics bundle, a second process).
+            # The backups are not held, so shift them and keep this file's content as a copy.
+            self._shift_backups()
+            self._copy(base, self._backup_name(1))
+            self._truncate(base)
+            return
+        try:
+            self._shift_backups()
+            self._rename(staging, self._backup_name(1))
+        except OSError:
+            try:
+                self._rename(staging, base)  # nothing is lost: the live file goes back where it was
+            except OSError:
+                pass
+            raise
+
+    def _shift_backups(self) -> None:
+        # ``os.replace`` overwrites the next name in one step, so a refused move deletes nothing.
+        for index in range(self.backupCount - 1, 0, -1):
+            source = self._backup_name(index)
+            if os.path.exists(source):
+                self._rename(source, self._backup_name(index + 1))
+
+    @staticmethod
+    def _truncate(path: str) -> None:
+        with open(path, "r+b") as handle:
+            handle.truncate(0)
+
+    def _report_rotation_failure(self, error: OSError) -> None:
+        try:
+            size = os.path.getsize(self.baseFilename)
+        except OSError:
+            size = -1
+        text = f"{type(error).__name__}: {error}"
+        if self._rotation_failure_reported:
+            return
+        self._rotation_failure_reported = True
+        message = (
+            f"Log rotation failed for {self.baseFilename} ({size} bytes, limit {self.maxBytes}); "
+            f"retrying in {int(_ROTATION_RETRY_SECONDS)} s: {text}"
+        )
+        payload = {
+            "message": message,
+            "event": "log_rotation_failed",
+            "error": text,
+            "size_bytes": size,
+            "max_bytes": self.maxBytes,
+            "retry_in_s": _ROTATION_RETRY_SECONDS,
+            "ts": _record_timestamp(time.time()),
+            "level": "WARNING",
+            "logger": __name__,
+        }
+        # Reporting must never raise out of a log call: a closed stderr or a full disk ends the report quietly.
+        with contextlib.suppress(OSError, ValueError):
+            print(message, file=sys.stderr)
+        with contextlib.suppress(OSError, ValueError):
+            if self.stream:
+                self.stream.write(
+                    json.dumps(payload, sort_keys=True, ensure_ascii=False) + self.terminator
+                )
+                self.flush()
+
+    # -- records ---------------------------------------------------------------------------------------------------
 
     def emit(self, record: logging.LogRecord) -> None:
         payload = getattr(record, "json_payload", None)
-        if payload is None:
-            payload = {"message": record.getMessage()}
+        payload = (
+            dict(payload) if isinstance(payload, Mapping) else {"message": record.getMessage()}
+        )
+        values = {
+            "ts": _record_timestamp(record.created),
+            "level": record.levelname,
+            "logger": record.name,
+        }
+        for key in _JSONL_RECORD_KEYS:
+            if key in payload and payload[key] != values[key]:
+                payload[f"payload_{key}"] = payload[key]
+            payload[key] = values[key]
+        exc_text = self._exception_text(record)
+        if exc_text:
+            payload.setdefault("exc_text", exc_text)
         try:
-            json_line = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+            json_line = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
         except Exception:
-            json_line = json.dumps({"message": record.getMessage()}, ensure_ascii=False)
+            json_line = json.dumps({"message": record.getMessage(), **values}, ensure_ascii=False)
         record = copy.copy(record)
         record.msg = json_line
         record.args = ()
-        try:
-            super().emit(record)
-        except PermissionError:
-            return
+        # The traceback is inside the JSON; the formatter must not append it as raw lines.
+        record.exc_info = None
+        record.exc_text = None
+        record.stack_info = None
+        super().emit(record)
+
+    @staticmethod
+    def _exception_text(record: logging.LogRecord) -> str:
+        parts: list[str] = []
+        if record.exc_info:
+            parts.append(record.exc_text or logging.Formatter().formatException(record.exc_info))
+        elif record.exc_text:
+            parts.append(record.exc_text)
+        if record.stack_info:
+            parts.append(record.stack_info)
+        return "\n".join(parts)
 
 
 def attach_jsonl_log_handler(
@@ -271,18 +407,26 @@ def attach_jsonl_log_handler(
     *,
     level: int = logging.INFO,
 ) -> JsonlFileHandler | None:
-    """Attach a JSONL rotating log handler to the root logger."""
+    """Attach a JSONL rotating log handler to the root logger (once per file: a second handler on the same file
+    would hold it open and make the first one's rotation fail)."""
 
     cfg = config or JsonlFileLogConfig(path=Path("logs") / "stablenew.log.jsonl")
     if not cfg.enabled or cfg.path is None:
         return None
+    root = logging.getLogger()
+    target = os.path.normcase(os.path.abspath(cfg.path))
+    for existing in root.handlers:
+        if (
+            isinstance(existing, JsonlFileHandler)
+            and os.path.normcase(existing.baseFilename) == target
+        ):
+            return existing
     handler = JsonlFileHandler(
         cfg.path,
         level=level,
         max_bytes=cfg.max_bytes,
         backup_count=cfg.backup_count,
     )
-    root = logging.getLogger()
     if root.level > level or root.level == logging.NOTSET:
         root.setLevel(level)
     root.addHandler(handler)

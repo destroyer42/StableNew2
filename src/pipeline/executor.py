@@ -71,6 +71,7 @@ from src.pipeline.model_synchronizer import (
     normalize_model_name,
     operator_model_title,
 )
+from src.pipeline.no_output_reason import empty_response_reason, exception_reason, operator_reason
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
@@ -340,6 +341,8 @@ class Pipeline:
         self._run_vae_switch_count: int = 0
         # Operator-readable reason of the last verified checkpoint problem in this run (see take_model_sync_failure).
         self._model_sync_failure_message: str | None = None
+        # The first concrete reason a stage of this run produced nothing (N11; see take_no_output_reason).
+        self._no_output_reason: str | None = None
         self._stage_policy_engine = StagePolicyEngine()
 
     def _begin_run_metrics(self) -> None:
@@ -349,6 +352,7 @@ class Pipeline:
         self._run_model_switch_count = 0
         self._run_vae_switch_count = 0
         self._model_sync_failure_message = None
+        self._no_output_reason = None
 
     def take_model_sync_failure(self) -> str | None:
         """Return (and clear) the operator-readable checkpoint-mismatch reason recorded during this run.
@@ -359,6 +363,20 @@ class Pipeline:
         """
         message, self._model_sync_failure_message = self._model_sync_failure_message, None
         return message
+
+    def _note_no_output(self, stage: str, reason: str) -> None:
+        """Remember why ``stage`` produced nothing. The first reason in a run is the cause; later ones follow from it."""
+
+        if self._no_output_reason is None:
+            self._no_output_reason = operator_reason(f"{stage}: {reason}")
+
+    def take_no_output_reason(self) -> str | None:
+        """Return (and clear) why this run produced no output: a verified checkpoint mismatch first, else the first
+        reason a stage recorded. ``None`` when nothing was recorded."""
+
+        model_sync = self.take_model_sync_failure()
+        stage_reason, self._no_output_reason = self._no_output_reason, None
+        return model_sync or stage_reason
 
     def _record_model_switch(self) -> None:
         self._run_model_switch_count += 1
@@ -449,10 +467,10 @@ class Pipeline:
                 optimizer_config.large_chunk_warning_threshold,
             )
         if optimizer_config.log_before_after:
-            logger.info("ORIGINAL POSITIVE: %s", result.positive.original_prompt)
-            logger.info("OPTIMIZED POSITIVE: %s", result.positive.optimized_prompt)
-            logger.info("ORIGINAL NEGATIVE: %s", result.negative.original_prompt)
-            logger.info("OPTIMIZED NEGATIVE: %s", result.negative.optimized_prompt)
+            logger.debug("ORIGINAL POSITIVE: %s", result.positive.original_prompt)
+            logger.debug("OPTIMIZED POSITIVE: %s", result.positive.optimized_prompt)
+            logger.debug("ORIGINAL NEGATIVE: %s", result.negative.original_prompt)
+            logger.debug("OPTIMIZED NEGATIVE: %s", result.negative.optimized_prompt)
         if optimizer_config.log_bucket_assignments:
             logger.debug(
                 "PROMPT OPTIMIZER BUCKETS | pipeline=%s | positive=%s",
@@ -3238,6 +3256,7 @@ class Pipeline:
         init_image = self._load_image_base64(input_image_path)
         if not init_image:
             logger.error("Failed to load input image")
+            self._note_no_output("adetailer", "the input image could not be loaded")
             return None
 
         # Determine the working resolution for this image
@@ -3793,6 +3812,7 @@ class Pipeline:
 
         if not response or "images" not in response:
             logger.error("adetailer failed")
+            self._note_no_output("adetailer", empty_response_reason(response))
             return None
 
         # Save enhanced image
@@ -3906,6 +3926,7 @@ class Pipeline:
         )
         if image_b64 is None:
             logger.error("adetailer returned no image payload to save")
+            self._note_no_output("adetailer", "the backend returned no image to save")
             return None
         actual_path = save_image_from_base64(
             image_b64, image_path, metadata_builder=metadata_builder
@@ -4187,7 +4208,7 @@ class Pipeline:
                     self._merge_stage_positive(patched_positive, apply_global_positive, frozen_positive)
                 )
             if positive_global_applied:
-                logger.info(
+                logger.debug(
                     "✨ Applied global positive terms (txt2img stage) - Enhanced: '%s'",
                     (enhanced_positive[:100] + "...")
                     if len(enhanced_positive) > 100
@@ -4199,7 +4220,7 @@ class Pipeline:
                 self._merge_stage_negative(patched_negative, apply_global_negative, frozen_negative)
             )
             if negative_global_applied:
-                logger.info(
+                logger.debug(
                     "dY>нЛ,? Applied global negative terms (txt2img stage) - Enhanced: '%s'",
                     (enhanced_negative[:100] + "...")
                     if len(enhanced_negative) > 100
@@ -4395,7 +4416,7 @@ class Pipeline:
                 prompt_optimizer_analysis=prompt_optimizer_analysis,
             )
             try:
-                logger.info(
+                logger.debug(
                     "[executor/txt2img] final negative prompt='%s'",
                     (payload["negative_prompt"][:160] + "...")
                     if len(payload["negative_prompt"]) > 160
@@ -4511,6 +4532,7 @@ class Pipeline:
                     self._image_performance.active.returned_images = len(returned)
             if not response or "images" not in response or not response["images"]:
                 logger.error("txt2img failed - no images returned")
+                self._note_no_output("txt2img", empty_response_reason(response))
                 return None
 
             gen_info = self._extract_generation_info(response) if response else {}
@@ -4673,6 +4695,7 @@ class Pipeline:
                 batch_image_name = image_name
             else:
                 logger.error("No images were saved successfully")
+                self._note_no_output("txt2img", "the returned images could not be saved to the output folder")
                 return None
 
             saved_image_count = len(saved_paths)
@@ -4827,6 +4850,7 @@ class Pipeline:
             raise
         except Exception as e:
             logger.error(f"txt2img stage failed: {str(e)}")
+            self._note_no_output("txt2img", f"stage failed: {exception_reason(e)}")
             return None
 
     def run_img2img_stage(
@@ -4873,6 +4897,7 @@ class Pipeline:
             )
             if not input_image_b64:
                 logger.error(f"Failed to load input image: {input_image_path}")
+                self._note_no_output("img2img", "the input image could not be loaded")
                 return None
 
             # Set model and VAE if specified
@@ -4915,7 +4940,7 @@ class Pipeline:
             )
             if global_applied:
                 try:
-                    logger.info(
+                    logger.debug(
                         "dY>нЛ,? Applied global NSFW prevention (img2img stage) - Enhanced: '%s'",
                         (enhanced_negative[:100] + "...")
                         if len(enhanced_negative) > 100
@@ -4949,6 +4974,7 @@ class Pipeline:
                 )
                 if not mask_image_b64:
                     logger.error(f"Failed to load mask image: {mask_image_path}")
+                    self._note_no_output("img2img", "the mask image could not be loaded")
                     return None
                 payload["mask"] = mask_image_b64
                 payload["mask_blur"] = int(config.get("mask_blur", 4))
@@ -4986,7 +5012,7 @@ class Pipeline:
                 prompt_optimizer_analysis=prompt_optimizer_analysis,
             )
             try:
-                logger.info(
+                logger.debug(
                     "[executor/img2img] final negative prompt (with%s global + aesthetic): '%s'",
                     "" if apply_global else "out",
                     (payload["negative_prompt"][:160] + "...")
@@ -5021,6 +5047,7 @@ class Pipeline:
             self._ensure_not_cancelled(cancel_token, "img2img post-call")
             if not response or "images" not in response or not response["images"]:
                 logger.error("img2img request failed or returned no images")
+                self._note_no_output("img2img", empty_response_reason(response))
                 return None
 
             # Outpainting: restore the protected original at the one finalization boundary, or publish nothing.
@@ -5115,6 +5142,7 @@ class Pipeline:
             )
             if image_b64 is None:
                 logger.error("img2img returned no image payload to save")
+                self._note_no_output("img2img", "the backend returned no image to save")
                 return None
             actual_path = save_image_from_base64(
                 image_b64, image_path, metadata_builder=metadata_builder
@@ -5153,6 +5181,7 @@ class Pipeline:
                 return metadata
             else:
                 logger.error(f"Failed to save img2img image: {image_path}")
+                self._note_no_output("img2img", "the returned image could not be saved to the output folder")
                 self._record_stage_event("img2img", "exit", 1, 1, False)
                 return None
 
@@ -5163,6 +5192,7 @@ class Pipeline:
             raise
         except Exception as e:
             logger.error(f"img2img stage failed: {e}")
+            self._note_no_output("img2img", f"stage failed: {exception_reason(e)}")
             return None
 
     def run_svd_native_stage(
@@ -5298,6 +5328,7 @@ class Pipeline:
                 logger.error("svd_native stage failed: %s", exc)
                 raise
             logger.error("svd_native stage failed: %s", exc)
+            self._note_no_output("svd_native", f"stage failed: {exception_reason(exc)}")
             return None
 
     def run_upscale_stage(
@@ -5339,6 +5370,7 @@ class Pipeline:
             input_image_b64 = self._load_image_base64(input_image_path)
             if not input_image_b64:
                 logger.error(f"Failed to load input image: {input_image_path}")
+                self._note_no_output("upscale", "the input image could not be loaded")
                 return None
 
             upscale_mode = config.get("upscale_mode", "single")
@@ -5534,7 +5566,7 @@ class Pipeline:
                         )
                         payload["negative_prompt"] = enhanced_neg
                         if global_applied:
-                            logger.info(
+                            logger.debug(
                                 "Applied global NSFW prevention (upscale img2img) - Enhanced: '%s'",
                                 (enhanced_neg[:120] + "...")
                                 if len(enhanced_neg) > 120
@@ -5638,6 +5670,7 @@ class Pipeline:
 
             if not response or response_key not in response:
                 logger.error("Upscale request failed or returned no image")
+                self._note_no_output("upscale", empty_response_reason(response))
                 return None
 
             # Save image
@@ -5653,6 +5686,7 @@ class Pipeline:
             else:
                 if not response[response_key] or len(response[response_key]) <= image_key:
                     logger.error("No image data returned from upscale")
+                    self._note_no_output("upscale", "the backend returned no image data")
                     return None
                 image_data = response[response_key][image_key]
 
@@ -5827,6 +5861,7 @@ class Pipeline:
                 return metadata
             else:
                 logger.error(f"Failed to save upscaled image: {image_path}")
+                self._note_no_output("upscale", "the upscaled image could not be saved to the output folder")
                 self._record_stage_event("upscale", "exit", 1, 1, False)
                 return None
 
@@ -5839,6 +5874,7 @@ class Pipeline:
             import traceback
 
             logger.error(f"Upscale stage failed: {e}")
+            self._note_no_output("upscale", f"stage failed: {exception_reason(e)}")
             logger.error(f"Traceback:\n{traceback.format_exc()}")
             self._record_stage_event("upscale", "exit", 1, 1, False)
             return None
@@ -5911,6 +5947,7 @@ class Pipeline:
             raise
         except Exception as e:
             logger.error(f"adetailer stage failed: {e}")
+            self._note_no_output("adetailer", f"stage failed: {exception_reason(e)}")
             return None
         finally:
             self._record_stage_event("adetailer", "exit", 1, 1, False)
