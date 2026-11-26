@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 369,
+    "total": 366,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -317,7 +317,6 @@
       "tests/tools/test_missing_asset_reference_triage.py",
       "tests/tools/test_operator_journey_harness.py",
       "tests/tools/test_promptpack_quality_census.py",
-      "tests/tools/test_vid150_qualification.py",
       "tests/tools/test_vid160c_commit_adjudication.py",
       "tests/tools/test_vid181_runner.py",
       "tests/tools/test_vid190_acceptance_harness_verdict.py",
@@ -342,7 +341,6 @@
       "tools/acceptance/img_156_zimage_acceptance.py",
       "tools/acceptance/img_forge_100_acceptance.py",
       "tools/acceptance/img_forge_120_default_acceptance.py",
-      "tools/acceptance/vid130_wan_acceptance.py",
       "tools/acceptance/vid190_queue_recycling_acceptance.py",
       "tools/ci/census_summary.py",
       "tools/ci/ci_truth.py",
@@ -363,7 +361,6 @@
       "tools/qualification/img_forge_100/provenance.py",
       "tools/qualification/img_forge_100/run.py",
       "tools/qualification/img_forge_100/runtime_capture.py",
-      "tools/qualification/vid150/run.py",
       "tools/qualification/vid160b/run.py",
       "tools/qualification/vid160c/adjudicate.py",
       "tools/qualification/vid160c/run.py",
