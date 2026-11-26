@@ -25,9 +25,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below), the controller Tk import
   boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
-- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,365 errors in
-  168 files), unformatted files (366), blind/silent excepts in `src` (BLE001 1,153, S110 451, S112 31), thread and layering
-  rules (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6), plain truncating file writes outside `atomic_io` (non-atomic file writes 17; allowlist in `tools/ci/run_architecture_ratchets.py`), and the four controller line ceilings.
+- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`; `python tools/ci/ci_truth.py --ratchets` prints the current figures): whole-`src` strict mypy, unformatted files, blind/silent excepts in `src` (BLE001, S110, S112), thread and layering rules (daemon threads, raw threads, utils importing upward, controller importing the GUI), plain truncating file writes outside `atomic_io` (allowlist in `tools/ci/run_architecture_ratchets.py`), and the four controller line ceilings. Figures are not repeated here, so parallel ratchet-lowering PRs don't conflict; a figure stated here must still match the baseline.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
   Flaky tests are repaired or quarantined with an owner and expiry (`tests/quarantine/README.md`).
 
@@ -93,36 +91,23 @@ P2-6 wave 1 retired the leaf harnesses; the rest stay with named retirement cond
 
 Video: the owner-accepted video roadmap is `docs/audits/2026-10-20_video_experience_roadmap.md` (phases A-E, decisions D1-D8).
 
-GUI: the dated workflow/usability audit, evidence classifications and candidate PR tranche are at
-`docs/audits/2026-10-22_gui_ux_audit_and_tranche.md`; future PRs require their own current contract checks.
+GUI: the dated workflow/usability audit, evidence classifications and candidate PR tranche are at `docs/audits/2026-10-22_gui_ux_audit_and_tranche.md`; future PRs require their own current contract checks.
 
-Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
-of the roadmap; where they conflict with this file, this file and the repository are current.
+Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1 of the roadmap; where they conflict with this file, this file and the repository are current.
 
 ## Open owner decisions
 
-1. LICENSE file (copyright holder) and the single canonical version number (`pyproject.toml` 1.0.0, `.stableNew_version.txt`
-   1.0.4, README v2.6).
-2. Further retirement of the retained qualification harnesses, each at its stated condition in `tools/qualification/README.md`
-   (the per-PR model ceremony is decided: a one-line recommendation and a one-line usage record, see `docs/AI_MODEL_SELECTION.md`).
+1. LICENSE file (copyright holder) and the single canonical version number (`pyproject.toml` 1.0.0, `.stableNew_version.txt` 1.0.4, README v2.6).
+2. Further retirement of the retained qualification harnesses, each at its stated condition in `tools/qualification/README.md` (the per-PR model ceremony is decided: a one-line recommendation and a one-line usage record, see `docs/AI_MODEL_SELECTION.md`).
 3. Decided 2026-11-22. [DIAG-GPU-160](docs/Subsystems/Runtime/DIAG-GPU-160_PCIe_Gen4_Resolution.md) closes `DIAG-GPU-130` after the owner forced PCIe Gen4.
 4. Should the GUI "batch runs" control apply on the state-fallback job-building path? It has never applied there.
 5. A physical restart check that queued WebUI jobs are held then released against a running Forge.
-6. Decided: Character Training stays on hold pending a real trainer decision (see Holds). Retired: AnimateDiff execution (only an
-   enabled stage is refused; disabled placeholders and history stay readable), the disabled LTX specs (future LTX support is not ruled
-   out and needs bridge implementations plus accepted runtime evidence), the dormant story-plan/continuity authoring code, the AI
-   settings-suggestion stub (external scripts importing `src.ai` would break, unverified) and the cluster scaffolding.
+6. Decided: Character Training stays on hold pending a real trainer decision (see Holds). Retired: AnimateDiff execution (only an enabled stage is refused; disabled placeholders and history stay readable), the disabled LTX specs (future LTX support is not ruled out and needs bridge implementations plus accepted runtime evidence), the dormant story-plan/continuity authoring code, the AI settings-suggestion stub (external scripts importing `src.ai` would break, unverified) and the cluster scaffolding.
 7. Decided 2026-11-18: `PR-IMG-120` (Ideogram 4 NF4 on a Diffusers backend) is authorized and its licence accepted; implemented on a branch, not physically qualified (`docs/Subsystems/Image/PR-IMG-120_Ideogram4_Diffusers_Production_Slice.md`).
 8. Product order after the safety work: inpainting/ControlNet (the local LoRA browser, history browser, Iterate from History, parent/child compare and Learning payoff are in).
-9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments). Decided: store it
-   once per experiment by hash, forward-only; implemented forward-only; backfill/prune still open (LEARN-SNAPSHOT-914: new Learning jobs and ratings carry `snapshot_sha256`, the body lives once in the job repository's `experiment_snapshots` table).
-   Open: backfilling existing rows, and whether to prune jobs whose images and manifests were deleted (archive then delete, or delete), both
-   only after the owner reads the output of `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
-10. Decided 2026-10-20 and implemented: Movie Clips assembly is a queued CPU `movie_assembly` job on the canonical path
-   (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows are production video backends and Wan2.2
-   TI2V-5B 1.2.0 is promoted; the frames-out 1.3.0 was promoted on 2026-10-21 after real acceptance runs.
-11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a durable CANCELLING
-   status (decision 12) and moving the executor into `image_backends` (decision 14). Decision 11 (composition root) is accepted for the Tk host only: one construction site `src/app/runtime_stack.py` plus a verified read-only `RuntimeStack` (P3-2A) is the accepted runtime-stack composition. On 2026-11-13 the coordinating session, by owner delegation, ruled that bootstrap-level inversion (`build_v2_app` injects the stack, a production flag) is not done now and is revisited only when a second production host (Qt) is authorized; P3-2B retired the dormant `AppController._execute_job`, `run_app` and the direct-admission replay path, and pinned pause/auto-run ownership by characterization tests only (OD-5).
+9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments). Decided: store it once per experiment by hash, forward-only; implemented forward-only; backfill/prune still open (LEARN-SNAPSHOT-914: new Learning jobs and ratings carry `snapshot_sha256`, the body lives once in the job repository's `experiment_snapshots` table). Open: backfilling existing rows, and whether to prune jobs whose images and manifests were deleted (archive then delete, or delete), both only after the owner reads the output of `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
+10. Decided 2026-10-20 and implemented: Movie Clips assembly is a queued CPU `movie_assembly` job on the canonical path (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows are production video backends and Wan2.2 TI2V-5B 1.2.0 is promoted; the frames-out 1.3.0 was promoted on 2026-10-21 after real acceptance runs.
+11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a durable CANCELLING status (decision 12) and moving the executor into `image_backends` (decision 14). Decision 11 (composition root) is accepted for the Tk host only: one construction site `src/app/runtime_stack.py` plus a verified read-only `RuntimeStack` (P3-2A) is the accepted runtime-stack composition. On 2026-11-13 the coordinating session, by owner delegation, ruled that bootstrap-level inversion (`build_v2_app` injects the stack, a production flag) is not done now and is revisited only when a second production host (Qt) is authorized; P3-2B retired the dormant `AppController._execute_job`, `run_app` and the direct-admission replay path, and pinned pause/auto-run ownership by characterization tests only (OD-5).
 
 ## Holds and safety constraints
 

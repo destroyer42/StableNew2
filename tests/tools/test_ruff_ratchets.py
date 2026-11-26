@@ -77,10 +77,8 @@ def test_the_checked_in_baseline_is_well_formed_and_refers_to_real_files() -> No
     assert counts and all(path.startswith("src/") and (ROOT / path).is_file() for path in counts)
     assert all(n > 0 for per in counts.values() for n in per.values())
     data = json.loads(ratchets.BASELINE_PATH.read_text(encoding="utf-8"))
-    assert data["format"]["total"] == len(files)
-    assert data["rules"]["totals"] == {
-        rule: sum(per.get(rule, 0) for per in counts.values()) for rule in ratchets.RULES
-    }
+    # Totals are derived on demand (ci_truth --ratchets), never stored: stored totals made parallel PRs conflict.
+    assert "total" not in data["format"] and "totals" not in data["rules"]
 
 
 def test_the_ratchets_are_wired_into_the_local_gate_and_the_required_ci_job() -> None:
