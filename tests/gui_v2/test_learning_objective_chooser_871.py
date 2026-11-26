@@ -190,7 +190,7 @@ def test_an_unsupported_model_shows_each_studys_own_refusal_and_keeps_the_study_
     root.update()
     assert widget.current_study_slug() == "prompt_slot"
     # The existing readiness text is the same refusal the chooser showed.
-    assert "registry-verified SDXL" in widget.readiness_reason()
+    assert "Only SDXL checkpoints" in widget.readiness_reason()
     assert result.get("prompt_slot").reason in widget.readiness_reason()
 
 
@@ -298,8 +298,7 @@ def test_the_catalog_details_block_lists_what_this_model_can_test():
     )
     refusal = "\n".join(evidence_window._can_test_lines(unsupported, None))
     assert (
-        "Prompt Slot: not available - Prompt Slot currently requires registry-verified SDXL txt2img."
-        in refusal
+        "Prompt Slot: not available - Only SDXL checkpoints can be used for Prompt Slot" in refusal
     )
     broken = SimpleNamespace(policy=None, identity=SimpleNamespace(display_name="x"))
     assert evidence_window._can_test_lines(broken, None)[0].startswith("Not available yet")

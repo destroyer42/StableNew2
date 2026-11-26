@@ -78,7 +78,8 @@ These gates still require registry SDXL. Each is listed for a follow-up:
 - a LoRA Strength axis on an unclassified model, refused by the controlled-variable LoRA rule;
 - the Learning design panel's readiness line, which does not show the warning (Preview does).
 
-A ControlNet weight whose SDXL structure is unverified is still a block. That check is about ControlNet weights, not the
+Model Comparison readiness still refuses a damaged (truncated or malformed) safetensors header and a pickle `.ckpt`
+(no header to read safely). A ControlNet weight whose SDXL structure is unverified is still a block. That check is about ControlNet weights, not the
 checkpoint.
 
 ## Execution class and model recommendation

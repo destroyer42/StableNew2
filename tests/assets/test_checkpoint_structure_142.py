@@ -84,9 +84,10 @@ def test_unsupported_sdxl_architecture_never_gets_base_policy(tmp_path, architec
         {"name": "candidate", "filename": str(path)},
         {"name": "other", "filename": str(tensor_checkpoint(tmp_path / "other.safetensors"))},
     ]
-    with pytest.raises(ValueError, match=f"candidate: .*sdxl_{architecture}"):
-        prepare_comparison_evidence(["candidate", "other"], entries, registry=registry)
-    assert not registry.cache_path.exists()  # no full hash solely to classify a rejected target
+    # N1b: a refiner or inpaint variant is admitted unverified (a Preview warning), never with the base policy.
+    evidence = prepare_comparison_evidence(["candidate", "other"], entries, registry=registry)
+    assert evidence.policy_for("candidate").evidence == "unknown_evidence"
+    assert evidence.policy_for("other").evidence == "registry_evidence"
 
 
 @pytest.mark.parametrize(
@@ -240,7 +241,9 @@ def test_unsupported_format_and_filename_hint_stay_unverified_without_hash(tmp_p
     monkeypatch.setattr(
         "src.assets.registry.hashlib.sha256", lambda: pytest.fail("hash solely for family")
     )
-    for path in (tmp_path / "sdxl.ckpt", tmp_path / "sdxl.safetensors"):
+    # A pickle .ckpt has no safetensors header to read, so it stays refused before any hash. (N1b: a filename hint on
+    # a safetensors file is admitted unverified instead; see the test below.)
+    for path in (tmp_path / "sdxl.ckpt",):
         checkpoint(path)
         other = tensor_checkpoint(tmp_path / "other.safetensors")
         with pytest.raises(
@@ -251,6 +254,19 @@ def test_unsupported_format_and_filename_hint_stay_unverified_without_hash(tmp_p
                 [{"name": p.stem, "filename": str(p)} for p in (path, other)],
                 registry=AssetRegistry(tmp_path, cache_path=tmp_path / "cache.json"),
             )
+
+
+def test_a_filename_hint_is_admitted_unverified_never_as_sdxl(tmp_path):
+    """N1b: the name alone is not family evidence; the file is hashed for its exact identity and warns at Preview."""
+    path = checkpoint(tmp_path / "sdxl.safetensors")
+    other = tensor_checkpoint(tmp_path / "other.safetensors")
+    evidence = prepare_comparison_evidence(
+        [path.stem, "other"],
+        [{"name": p.stem, "filename": str(p)} for p in (path, other)],
+        registry=AssetRegistry(tmp_path, cache_path=tmp_path / "cache.json"),
+    )
+    assert evidence.policy_for(path.stem).evidence != "registry_evidence"
+    assert len(evidence.model_identities[path.stem]["sha256"]) == 64
 
 
 def test_partial_signature_does_not_accept_metadata_override(tmp_path):

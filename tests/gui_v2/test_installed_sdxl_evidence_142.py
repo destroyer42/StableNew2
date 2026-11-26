@@ -52,8 +52,11 @@ def test_hidden_names_are_removed_from_ready_summary(operator):
 def test_hidden_names_are_omitted_from_failure_feedback(operator):
     from tests.assets.checkpoint_fixtures import checkpoint
 
+    # A positively identified other family still fails readiness (N1b warns only for unclassified ones).
     paths = [
-        checkpoint(operator.webui / f"{name}.safetensors")
+        checkpoint(
+            operator.webui / f"{name}.safetensors", metadata={"ss_base_model_version": "sd_v1.5"}
+        )
         for name in ("private-first", "private-second")
     ]
     operator.select(("private-first", "private-second"), paths=paths)
