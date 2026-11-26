@@ -137,7 +137,7 @@ def test_a_live_incompatible_owned_process_blocks_queue_with_a_release_hint(
     probes.launch = ComfyLaunchFacts(saved_command=GOOD, active_command=BARE, owns_runtime=True)
     tab, runner = _tab(tk_root, tmp_path, monkeypatch, probes)
     _select(tab, ANIMATE_ID)
-    tab._on_workflow_selected(None)  # satisfy consent so only runtime compatibility blocks
+    tab._on_workflow_selected(None)  # an explicit pick; only runtime compatibility can block (N1)
     tab._refresh_queue_gate()
     runner.drain()
     strip = tab.runtime_readiness_strip
@@ -187,23 +187,25 @@ def test_an_ordinary_workflow_keeps_its_readiness_and_queue_behaviour(
 
 
 @pytest.mark.gui
-def test_an_experimental_wan_workflow_still_needs_its_own_opt_in_which_defaults_off(
+def test_an_experimental_wan_workflow_is_gated_only_by_real_blocks_and_records_the_opt_in(
     tk_root, tmp_path, monkeypatch
 ) -> None:
     tab, runner = _tab(tk_root, tmp_path, monkeypatch, _LaunchProbes())
     _select(tab, ANIMATE_ID)
     runner.drain()
 
-    assert tab._experimental_selection_confirmed() is False
+    # N1: experimental status no longer gates Queue, but a real block (unproven launch flags) still does, and it
+    # is the reason shown; the job's opt-in is the Queue on the warned header once nothing real blocks.
     assert tab.queue_workflow_button.instate(["disabled"])
-    assert "Choose this experimental workflow" in tab.queue_block_reason_var.get()
+    assert "Launch flags" in tab.queue_block_reason_var.get()
+    assert "Choose this experimental workflow" not in tab.queue_block_reason_var.get()
+    assert tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is True
     _select(
         tab,
-        next(
-            v["workflow_id"] for v in tab._workflow_map.values() if v["workflow_id"] != ANIMATE_ID
-        ),
+        next(v["workflow_id"] for v in tab._workflow_map.values() if not v.get("experimental")),
     )
-    assert tab._experimental_selection_confirmed() is False  # never carried to another workflow
+    # Never carried to an approved workflow.
+    assert tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is False
 
 
 # --------------------------------------------------------------------------- Engine Settings dialog

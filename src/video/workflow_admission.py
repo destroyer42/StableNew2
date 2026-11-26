@@ -25,15 +25,18 @@ def require_workflow_admission(record: Any) -> None:
         ):
             raise ValueError("Unknown version of the frozen controlled-motion workflow") from None
         return
+    intent = stage.get("video_execution") or {}
+    if spec.is_experimental and intent.get("experimental_opt_in") is not True:
+        # N1 (AGENTS.md section 2): the Queue summary warns and Queue records this job's opt-in; a job that
+        # arrives without it is refused here, at Queue, never after it has waited in the queue.
+        raise ValueError(
+            f"'{spec.display_name}' is experimental and this job has no recorded experimental opt-in. Queue it from a summary "
+            "that shows its warning to record the opt-in. Nothing was queued."
+        )
     if not requires_exact_motion(spec):
         return
     if not workflow_version:
         raise ValueError("An explicit frozen workflow version is required for controlled motion")
-    intent = stage.get("video_execution") or {}
-    if intent.get("experimental_opt_in") is not True:
-        raise ValueError(
-            "Controlled-motion workflow requires an explicit experimental opt-in for this job"
-        )
     verify_exact_dispatch_inputs(
         spec,
         SimpleNamespace(

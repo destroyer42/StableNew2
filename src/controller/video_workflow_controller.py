@@ -40,6 +40,7 @@ from src.video.workflow_picker import recommended_workflow_id
 from src.video.workflow_preflight import PreflightProbes
 from src.video.workflow_registry import latest_spec_per_workflow
 from src.video.workflow_source_preparation import preview_declared_workflow_source
+from src.video.workflow_warnings import experimental_workflow_warning
 
 
 class VideoWorkflowController(VideoWorkflowMixins):
@@ -83,6 +84,12 @@ class VideoWorkflowController(VideoWorkflowMixins):
                         dependency.to_dict() for dependency in spec.dependency_specs
                     ],
                     "experimental": bool(getattr(spec, "is_experimental", False)),
+                    # N1: the Queue summary's warnings as data (rendered by Tk now, by the phone later).
+                    "policy_warnings": [
+                        warning.as_dict()
+                        for warning in (experimental_workflow_warning(spec),)
+                        if warning is not None
+                    ],
                     "make_video_default": bool(
                         (getattr(spec, "backend_defaults", None) or {}).get("make_video_default")
                     ),

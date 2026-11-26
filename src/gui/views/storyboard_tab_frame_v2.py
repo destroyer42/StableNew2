@@ -59,6 +59,12 @@ BANNER_FONT = (Typography.FAMILY, 11, "bold")
 _LIVE_STATES = frozenset({"pending", "queued", "running"})
 
 
+EXPERIMENTAL_CONTINUE_WARNING = (
+    "Warning: this workflow is experimental (not promoted for production; its output can vary). "
+    "Queue runs it anyway and records your opt-in on each Continue job."
+)
+
+
 @dataclass(frozen=True, slots=True)
 class _State:
     tree: StoryboardTree
@@ -769,10 +775,12 @@ class StoryboardTabFrameV2(ttk.Frame):
         ttk.Label(scrolled, textvariable=self.engine_var, style="Dark.TLabel", wraplength=480).grid(
             row=2, column=0, sticky="w"
         )
-        self.experimental_check = ttk.Checkbutton(
+        # N1: a warning, not a gate. Queue on this summary is each Continue job's own recorded opt-in.
+        self.experimental_check = ttk.Label(
             scrolled,
-            text="This workflow is experimental: allow it for this Continue only",
-            variable=self.experimental_var,
+            text=EXPERIMENTAL_CONTINUE_WARNING,
+            style="Dark.TLabel",
+            wraplength=480,
         )
         actions = ttk.Frame(host, style="Panel.TFrame")
         actions.grid(row=4, column=0, sticky="e", pady=4)
@@ -907,11 +915,12 @@ class StoryboardTabFrameV2(ttk.Frame):
         needs = bool(
             getattr(self._service(), "needs_experimental_opt_in", lambda _tree: False)(tree)
         )
+        # The opt-in follows the warning shown now; it is never restored from the file.
+        self.experimental_var.set(needs)
         if needs:
             self.experimental_check.grid(row=3, column=0, sticky="w")
         else:
             self.experimental_check.grid_remove()
-            self.experimental_var.set(False)
 
     def _build_request(self) -> ContinueRequest | None:
         tree, target = self.tree, self.target

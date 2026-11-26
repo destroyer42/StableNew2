@@ -232,43 +232,60 @@ def test_without_the_gate_the_ordinary_path_strips_the_modules_a_9b_checkpoint_n
     assert transport.rejected_generations == ["AssertionError: You do not have Qwen3 state dict!"]  # ... then Forge failed
 
 
-def test_unqualified_9b_with_its_modules_selected_is_refused_before_any_write_or_generation(models) -> None:
+def test_unqualified_9b_with_its_modules_selected_runs_with_forge_modules_left_as_they_are(models) -> None:
+    """N1 (warn, don't block, option a): the operator's Forge module selection is used and it works."""
+
     transport = _forge(models, selected=("qwen8", "vae"))
     before = list(transport.options["forge_additional_modules"])
 
     entry = _run(_njr(), transport)
 
-    assert entry.status is JobStatus.FAILED
-    message = str(entry.error_message)
-    assert "multi-component" in message and "no exact qualified execution profile" in message
-    assert "was not dispatched" in message and "module selection was not changed" in message
-    assert "hidden size 64" in message and "32 latent channels" in message  # what the header asks for
-    assert "qwen_3_8b.safetensors" in message and "flux2-vae.safetensors" in message  # present and selected
-    assert "qwen_3_4b" not in message  # the 4B-class encoder is not offered as a match
-    assert _posts(transport) == []  # no options write, no generation, nothing mutating at all
-    assert transport.generation_calls == [] and transport.rejected_generations == []
-    assert transport.options["forge_additional_modules"] == before  # the operator's selection is untouched
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    assert _module_writes(transport) == []  # StableNew never cleared or replaced the modules this model needs
+    assert transport.options["forge_additional_modules"] == before
+    assert transport.generation_calls and transport.rejected_generations == []
 
 
 @pytest.mark.parametrize(
-    ("selected", "catalog", "status"),
+    ("selected", "catalog"),
     [
-        (("vae",), ("qwen8", "qwen4", "vae"), ReadinessStatus.DEPENDENCIES_PRESENT_NOT_SELECTED),  # only the VAE
-        (("qwen8",), ("qwen8", "qwen4", "vae"), ReadinessStatus.DEPENDENCIES_PRESENT_NOT_SELECTED),  # only the encoder
-        ((), ("qwen8", "qwen4", "vae"), ReadinessStatus.DEPENDENCIES_PRESENT_NOT_SELECTED),  # nothing selected
-        (("qwen4", "vae"), ("qwen4", "vae"), ReadinessStatus.DEPENDENCIES_INCOMPLETE),  # 4B-class encoder is no match
-        (("qwen8",), ("qwen8",), ReadinessStatus.DEPENDENCIES_INCOMPLETE),  # no VAE listed at all
+        (("vae",), ("qwen8", "qwen4", "vae")),  # only the VAE selected
+        ((), ("qwen8", "qwen4", "vae")),  # nothing selected
+        (("qwen4", "vae"), ("qwen4", "vae")),  # a 4B-class encoder is no match
     ],
 )
-def test_every_dependency_state_of_the_9b_is_refused_without_touching_forge(models, selected, catalog, status) -> None:
+def test_without_its_modules_the_9b_runs_and_fails_as_an_ordinary_forge_error(models, selected, catalog) -> None:
+    """The policy no longer refuses; a combination that cannot load fails as Forge's own error, modules untouched."""
+
     transport = _forge(models, selected=selected, catalog=catalog)
     before = list(transport.options["forge_additional_modules"])
 
-    entry = _run(_njr(job_id=f"m150-{status.value}"), transport)
+    entry = _run(_njr(job_id=f"m150-{len(selected)}-{len(catalog)}"), transport)
 
     assert entry.status is JobStatus.FAILED
-    assert _posts(transport) == [] and transport.options["forge_additional_modules"] == before
-    assert STATUS_LABEL(status) in str(entry.error_message)
+    assert "was not dispatched" not in str(entry.error_message)  # not a policy refusal
+    assert transport.rejected_generations == ["AssertionError: You do not have Qwen3 state dict!"]
+    assert _module_writes(transport) == [] and transport.options["forge_additional_modules"] == before
+
+
+def test_an_unreadable_module_state_warns_and_leaves_the_modules_alone(
+    monkeypatch: pytest.MonkeyPatch, models
+) -> None:
+    transport = _forge(models, selected=("qwen8", "vae"))
+    monkeypatch.setattr(ForgeWebUIClient, "get_additional_modules", lambda self: None)
+
+    entry = _run(_njr(job_id="m150-unreadable"), transport)
+
+    assert "was not dispatched" not in str(entry.error_message)
+    assert _module_writes(transport) == []  # unknown state is never "cleared" to a guess
+
+
+def test_every_stage_of_a_chain_keeps_the_operators_modules(models) -> None:
+    transport = _forge(models, selected=("qwen8", "vae"))
+    entry = _run(_njr(job_id="m150-chain", chain=("txt2img", "adetailer")), transport)
+
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    assert _module_writes(transport) == []
 
 
 def STATUS_LABEL(status: ReadinessStatus) -> str:  # noqa: N802 - local helper reads like a constant table
@@ -277,25 +294,61 @@ def STATUS_LABEL(status: ReadinessStatus) -> str:  # noqa: N802 - local helper r
     return STATUS_LABELS[status]
 
 
-def test_an_unreadable_module_state_is_reported_unavailable_not_empty_and_still_refused(
-    monkeypatch: pytest.MonkeyPatch, models
-) -> None:
-    transport = _forge(models, selected=("qwen8", "vae"))
-    monkeypatch.setattr(ForgeWebUIClient, "get_additional_modules", lambda self: None)
+def test_the_dispatch_gate_returns_a_warning_with_the_fix_and_records_it_on_the_result(models) -> None:
+    from pathlib import Path as _Path
+    from types import SimpleNamespace
 
-    entry = _run(_njr(job_id="m150-unreadable"), transport)
+    from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
+    from src.image_backends.image_backend_types import ImageExecutionRequest
+    from src.pipeline.policy_warnings import CODE_IMAGE_MODEL_UNQUALIFIED
 
-    assert entry.status is JobStatus.FAILED
-    assert "Unavailable/stale" in str(entry.error_message)
-    assert "could not be read" in str(entry.error_message)
-    assert _posts(transport) == []
+    transport = _forge(models, selected=("vae",), catalog=("qwen4", "vae"))
+    backend = ForgeWebUIImageBackend()
+    accepted = [{"code": CODE_IMAGE_MODEL_UNQUALIFIED, "subject": NINE_B}]
+    request = ImageExecutionRequest(
+        backend_id="forge_webui",
+        stage_name="txt2img",
+        stage_config={},
+        output_dir=_Path("."),
+        selected_model=NINE_B,
+        job_id="m150-warn",
+        backend_options={"image": {"backend_id": "forge_webui"}},
+        context_metadata={"provenance": {"accepted_warnings": accepted}},
+    )
+    backend._before_dispatch(SimpleNamespace(client=_client(transport)), request)
+
+    record = backend._policy_warnings["m150-warn"]
+    assert record["code"] == CODE_IMAGE_MODEL_UNQUALIFIED and record["accepted"] is True
+    assert "Missing: a text encoder with hidden size 64" in record["fix"]  # why it would fail, and the fix
+    assert "text_encoder" in record["fix"] and "ask Claude" in record["fix"]
+    assert backend._module_baseline["m150-warn"]["left_as_is"] is True
+    assert _posts(transport) == []  # reading is all the gate did
 
 
-def test_every_stage_of_a_chain_is_gated_and_the_first_one_refuses(models) -> None:
-    transport = _forge(models, selected=("qwen8", "vae"))
-    entry = _run(_njr(job_id="m150-chain", chain=("txt2img", "adetailer")), transport)
+def test_a_text_encoder_selected_as_the_checkpoint_is_still_refused(models) -> None:
+    from pathlib import Path as _Path
+    from types import SimpleNamespace
 
-    assert entry.status is JobStatus.FAILED
+    from src.image_backends.forge_webui_backend import (
+        ForgeUnqualifiedModelError,
+        ForgeWebUIImageBackend,
+    )
+    from src.image_backends.image_backend_types import ImageExecutionRequest
+
+    encoder = "qwen_3_8b.safetensors"
+    transport = _forge(models, checkpoint=encoder, selected=())
+    transport.checkpoint_files = {encoder: str(models["qwen8"])}
+    request = ImageExecutionRequest(
+        backend_id="forge_webui",
+        stage_name="txt2img",
+        stage_config={},
+        output_dir=_Path("."),
+        selected_model=encoder,
+        job_id="m150-encoder",
+        backend_options={"image": {"backend_id": "forge_webui"}},
+    )
+    with pytest.raises(ForgeUnqualifiedModelError, match="not a diffusion checkpoint"):
+        ForgeWebUIImageBackend()._before_dispatch(SimpleNamespace(client=_client(transport)), request)
     assert _posts(transport) == []
 
 
@@ -536,20 +589,19 @@ def test_the_header_bounds_still_reject_oversized_and_duplicate_headers(tmp_path
 def test_a_successful_empty_catalog_means_absent_but_a_failed_catalog_read_means_unavailable(
     models, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from src.image_backends.model_readiness_probe import probe_model_readiness
+
     empty = _forge(models, selected=("qwen8", "vae"), catalog=())  # Forge answered: it lists no modules at all
-    entry = _run(_njr(job_id="m150-empty-catalog"), empty)
-    assert entry.status is JobStatus.FAILED and _posts(empty) == []
-    assert "Discovered \u2014 dependencies incomplete" in str(entry.error_message)
-    assert "Not found in Forge's module catalog" in str(entry.error_message)
+    listed = probe_model_readiness(_client(empty), NINE_B)
+    assert listed.status is ReadinessStatus.DEPENDENCIES_INCOMPLETE
+    assert "Not found in Forge's module catalog" in listed.summary()
 
     # A failed catalog read is exercised at the probe: the runtime identity guard (which also lists /sd-modules) would
     # refuse such an endpoint before the gate in a full job. The probe is exactly what the gate and the UI both use.
-    from src.image_backends.model_readiness_probe import probe_model_readiness
-
     failed = _forge(models, selected=("qwen8", "vae"), modules_listing_status=500)  # the read failed: unknown, not absent
     readiness = probe_model_readiness(_client(failed), NINE_B)
     assert readiness.status is ReadinessStatus.UNAVAILABLE_OR_STALE and readiness.catalog_names is None
-    assert readiness.blocks_dispatch is True  # still refused: the checkpoint itself is positively identified
+    assert readiness.blocks_dispatch is True  # still identified (N1 makes it a warning, not a refusal)
     assert "module catalog could not be read" in readiness.summary()
     assert "Not found in Forge's module catalog" not in readiness.summary()  # never reported as absent
     assert _posts(failed) == []  # reading is all it did
@@ -598,16 +650,13 @@ def test_the_exact_klein_4b_name_is_exempt_from_the_gate_even_on_a_dependency_be
     assert "multi-component" not in str(entry.error_message)
 
 
-def test_an_unqualified_model_in_a_later_stage_is_refused_before_that_stage_writes_anything(models) -> None:
-    """Per-stage gating at the backend boundary: a safe first stage passes, the 9B second stage never reaches a write."""
+def test_an_unqualified_model_in_a_later_stage_warns_and_writes_no_modules(models) -> None:
+    """Per-stage gating at the backend boundary: the 9B stage warns (N1) and its modules are left as they are."""
 
     from pathlib import Path as _Path
     from types import SimpleNamespace
 
-    from src.image_backends.forge_webui_backend import (
-        ForgeUnqualifiedModelError,
-        ForgeWebUIImageBackend,
-    )
+    from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
     from src.image_backends.image_backend_types import ImageExecutionRequest
 
     transport = _forge(models, checkpoint=SDXL, selected=())
@@ -621,9 +670,8 @@ def test_an_unqualified_model_in_a_later_stage_is_refused_before_that_stage_writ
         )
 
     backend._before_dispatch(pipeline, request("txt2img", SDXL))  # an ordinary first stage is admitted
-    with pytest.raises(ForgeUnqualifiedModelError):
-        backend._before_dispatch(pipeline, request("adetailer", NINE_B))  # a later stage with the 9B is refused
-    with pytest.raises(ForgeUnqualifiedModelError):
-        backend._before_dispatch(pipeline, request("img2img", NINE_B))
+    backend._before_dispatch(pipeline, request("adetailer", NINE_B))  # a later stage with the 9B warns
+    assert backend._module_baseline["m150-later"]["left_as_is"] is True
+    backend._before_dispatch(pipeline, request("img2img", NINE_B))
     assert _posts(transport) == []  # nothing mutating happened at any stage
     assert _module_writes(transport) == [] and transport.generation_calls == []

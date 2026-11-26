@@ -27,6 +27,8 @@ from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
 from src.video.workflow_frame_count import frame_count_policy
 
 EXPERIMENTAL_OPT_IN_FIELD = "experimental_opt_in"
+#: Where the operator accepted the Queue summary's warnings (``desktop`` or ``phone``); submission-only intent.
+WARNING_SURFACE_FIELD = "warning_surface"
 
 
 def _text(value: Any) -> str:
@@ -164,6 +166,7 @@ def form_visibility(spec: Any) -> dict[str, bool]:
 __all__ = [
     "EXPERIMENTAL_OPT_IN_FIELD",
     "VIDEO_EXECUTION_KEY",
+    "WARNING_SURFACE_FIELD",
     "build_video_execution_block",
     "capability_errors",
     "default_negative_prompt",

@@ -16,10 +16,8 @@ from src.image_backends import (
     ImageBackendRegistry,
     ImageExecutionRequest,
     build_default_image_backend_registry,
-    resolve_image_backend_id,
 )
 from src.image_backends.image_backend_types import RUNTIME_FAMILY_WEBUI
-from src.image_backends.model_policy import resolve_model_policy
 from src.learning.experiment_naming import (
     build_learning_folder_label,
 )
@@ -32,6 +30,7 @@ from src.pipeline.config_contract_v26 import (
     extract_adaptive_refinement_intent,
     validate_train_lora_execution_config,
 )
+from src.pipeline.image_admission import IMAGE_STAGE_NAMES, require_image_plan
 from src.pipeline.image_performance import (
     METADATA_KEY as IMAGE_PERFORMANCE_KEY,
 )
@@ -1535,33 +1534,22 @@ class PipelineRunner:
             return None
 
     def _resolve_image_backend_id(self, njr: NormalizedJobRecord, stage_names: list[str]) -> str:
-        """Resolve and validate one image backend before any stage dispatch."""
+        """Resolve and validate one image backend before any stage dispatch (shared with Queue admission, N1)."""
 
-        image_stages = [
-            stage_name
-            for stage_name in stage_names
-            if stage_name in {"txt2img", "img2img", "adetailer", "upscale"}
-        ]
-        if not image_stages:
+        backend_id = require_image_plan(
+            njr,
+            stage_names,
+            self._image_backends,
+            stage_config=self._stage_config_for_njr,
+            select_model=self._selected_stage_model,
+        )
+        if not backend_id:
             return ""
-        backend_options = thaw_json(getattr(njr, "backend_options", {}))
-        backend_id = resolve_image_backend_id(backend_options)
-        self._image_backends.validate_stage_chain(backend_id, image_stages)
         # Backend-owned immutable-intent check (e.g. a model profile's envelope) before any dispatch.
+        image_stages = [stage_name for stage_name in stage_names if stage_name in IMAGE_STAGE_NAMES]
         validate_intent = getattr(self._image_backends.get(backend_id), "validate_njr_intent", None)
         if callable(validate_intent):
             validate_intent(njr, image_stages)
-        start_stage = getattr(njr, "start_stage", None)
-        dispatched_stages = stage_names[stage_names.index(start_stage):] if start_stage in stage_names else stage_names
-        if "adetailer" in dispatched_stages:
-            stage = self._stage_config_for_njr(njr, "adetailer")
-            model = self._selected_stage_model("adetailer", stage, njr=njr)
-            policy = resolve_model_policy(model)
-            if "adetailer" not in policy.stages or backend_id not in policy.allowed_backends:
-                raise ValueError(
-                    f"ADetailer cannot run with {policy.display_name} on {backend_id}. "
-                    "Create a fresh job with a supported checkpoint."
-                )
         return backend_id
 
     def _execute_image_backend(

@@ -79,6 +79,7 @@ from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.submission_notice_v2 import SubmissionNotice
+from src.pipeline.policy_warnings import PolicyWarning
 from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
 )
@@ -265,11 +266,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.status_var = tk.StringVar(value="Ready to queue a workflow-driven video job.")
         self.workflow_detail_var = tk.StringVar(value="No workflow selected.")
-        self._explicit_workflow_selection: tuple[str, str] | None = None
         # Optional RIFE smoothing of the finished clip (a saved preference, unlike the per-job opt-in).
         self.smooth_var = tk.BooleanVar(value=False)
-        # Why Queue is disabled for the selected workflow (empty when it is not). Batch mode also
-        # disables the single-image Queue, but says so through its own panel.
+        # Why Queue is disabled for the selected workflow, or (N1) the warning Queue will accept for it; empty
+        # when there is neither. Batch mode also disables the single-image Queue, but says so through its own panel.
         self.queue_block_reason_var = tk.StringVar(value="")
         self._queue_blocked_by_batch = False
         self.source_summary_var = tk.StringVar(value="Source: none selected")
@@ -511,6 +511,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.queue_block_label = ttk.Label(
             action_bar, textvariable=self.queue_block_reason_var, style="Muted.TLabel"
         )
+        self.queue_block_tooltip = attach_tooltip(self.queue_block_label, "")
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
         # Inline, non-modal feedback for Queue: a failure stays visible until dismissed or the next attempt;
         # an accepted job is acknowledged with a "View in queue" action instead of a blocking dialog.
@@ -908,22 +909,30 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.workflow_var.set(workflow_id)
 
     def _on_workflow_id_changed(self) -> None:
-        self._explicit_workflow_selection = None
         self._sync_workflow_label()
         self._invalidate_experiment_preview()
         self._refresh_queue_gate()
 
     def _on_workflow_selected(self, _event: tk.Event) -> None:
-        # Only the picker's selection event is evidence of operator intent. A StringVar
-        # trace also runs for defaults, restored forms and other programmatic writes.
-        self._explicit_workflow_selection = self._selected_workflow_identity()
         self._invalidate_experiment_preview()
         self._refresh_queue_gate()
 
-    def _experimental_selection_confirmed(self) -> bool:
+    def _experimental_warning_text(self) -> tuple[str, str]:
+        """N1: the selected experimental workflow's warning beside Queue (short line, full text for the tooltip).
+
+        Queue on this header records the job's opt-in; the full why-and-fix text is the same data the phone shows."""
+
         meta = self._workflow_map.get(self.workflow_var.get(), {})
-        return bool(meta.get("experimental")) and (
-            self._explicit_workflow_selection == self._selected_workflow_identity()
+        if not meta.get("experimental"):
+            return "", ""
+        warnings = [PolicyWarning.from_dict(item) for item in meta.get("policy_warnings") or ()]
+        title = " ".join(warning.title for warning in warnings) or (
+            f"{meta.get('display_name') or 'This workflow'} is experimental."
+        )
+        full = " ".join(warning.text() for warning in warnings) or title
+        return (
+            f"Warning: {title} Queue runs it anyway and records your opt-in (hover for why).",
+            full,
         )
 
     def apply_make_video_defaults(self) -> str:
@@ -950,7 +959,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             with self._pins.applying():
                 self.workflow_var.set(recommended)
         elif current.get("experimental"):
-            self._explicit_workflow_selection = None
             self._invalidate_experiment_preview()
             self._refresh_queue_gate()
         self.submission_notice.clear()
@@ -1099,8 +1107,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if self.workflow_controls_panel.control_names:
             state["operator_controls"] = self.workflow_controls_panel.get_values()
         if for_submission:
-            # The per-job authorization is only ever part of a submission, never saved state.
-            state["experimental_opt_in"] = self._experimental_selection_confirmed()
+            # N1: Queue on a header that shows the experimental warning is the job's opt-in; it is only ever part of
+            # a submission, never saved state.
+            state["experimental_opt_in"] = bool(workflow_meta.get("experimental"))
         else:
             # PR-VID-UX-360: a GUI intent, saved with the form and never part of a job.
             state["task"] = self._task
@@ -1117,8 +1126,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if "show_media" in state:
             self.show_media_var.set(bool(state.get("show_media")))
         self._restore_task_and_engine(state)
-        # A restore never carries consent, even for the engine already selected (no variable write happens then).
-        self._explicit_workflow_selection = None
         self._invalidate_experiment_preview()
         self._refresh_queue_gate()
         self.source_image_var.set(str(state.get("source_image_path") or ""))
@@ -1271,8 +1278,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         if policy_reason:
             return str(policy_reason)
-        if workflow_meta.get("experimental") and not self._experimental_selection_confirmed():
-            return "Choose this experimental workflow in the picker to enable Queue."
         runtime_reason = self._runtime_readiness_session.block_reason()
         if runtime_reason:
             # The full reason, and what to do about it, is in the Runtime readiness strip below.
@@ -1287,11 +1292,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if not hasattr(self, "queue_block_label"):
             return  # the header is still being built
         reason = self._queue_block_reason()
-        self.queue_block_reason_var.set(reason)
         blocked = bool(reason) or self._queue_blocked_by_batch
+        warning, warning_detail = ("", "") if reason else self._experimental_warning_text()
+        self.queue_block_reason_var.set(reason or warning)
+        self.queue_block_tooltip.text = warning_detail or reason
         self.queue_workflow_button.configure(state="disabled" if blocked else "normal")
         self.queue_block_label.pack_forget()
-        if reason:
+        if self.queue_block_reason_var.get():
             self.queue_block_label.pack(side="left", padx=(12, 0), before=self.status_label)
 
     def _apply_frame_count_choices(self, workflow_meta: dict[str, Any], enabled: bool) -> None:
@@ -1338,7 +1345,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
         identity = self._selected_workflow_identity()
         if identity != getattr(self, "_capability_workflow_identity", None):
-            self._explicit_workflow_selection = None
             self._capability_workflow_identity = identity
             self._follow_engine(workflow_meta)
             kept_length = self._frame_count_labels.get(self.frame_count_var.get())

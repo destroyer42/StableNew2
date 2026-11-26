@@ -39,8 +39,26 @@ The canonical outer path is:
 - MVP execution is same-process and single-node. Production video backends
   are native SVD XT and the Comfy workflows the catalog marks `approved`
   (owner decision D2, 2026-10-20); an `experimental` workflow runs only with
-  the job's own recorded opt-in, never a global switch. The approved set is
-  stated in `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 1.1.
+  the job's own recorded opt-in, never a global switch, and that opt-in is the
+  operator's Queue on a summary that showed the workflow's warning. The
+  approved set is stated in `docs/Subsystems/Video/VIDEO_PIPELINE.md`
+  section 1.1.
+- **Warn, don't block** (owner decision N1, 2026-11-25). A governance,
+  qualification or recognition status (experimental, unqualified, unverified)
+  on something the operator can select is a warning, not a refusal. Preview and
+  the Queue summary present each warning as typed data
+  (`src/pipeline/policy_warnings.py`: why it is shown and what makes it work)
+  that every surface, the phone included, shows the same way. Selecting Queue
+  on that summary is the job's recorded opt-in: the accepted warnings are
+  frozen in the NJR provenance. `JobService.submit_njrs` refuses an
+  experimental workflow that has no recorded opt-in; no other warning refuses a
+  job, and dispatch never refuses for policy. Real blocks stay refusals:
+  missing, unreadable or changed files and inputs; an operation the backend
+  cannot perform; unproven process ownership or launch flags; host or device
+  limits that can destabilize the machine; device-loss quarantine and outage
+  holds; retired or disabled entries; security boundaries. A block is reported
+  as early as it can be known. Dispatch re-checks only what can change while a
+  job waits.
 - Do not add parallel job models, runner entrypoints, live legacy fallbacks, or
   compatibility layers without a named removal condition. Prefer deleting
   proven-obsolete compatibility code.

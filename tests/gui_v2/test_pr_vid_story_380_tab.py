@@ -269,16 +269,22 @@ def test_an_image_root_continues_from_the_still_with_no_handoff(storyboard_tab, 
     )
 
 
-def test_experimental_opt_in_is_shown_only_when_needed_and_never_preset(
-    storyboard_tab, fake_service
-):
+def test_an_experimental_continue_warns_and_queue_records_the_opt_in(storyboard_tab, fake_service):
+    # N1: the warning is shown only when needed, and Queue on it is the job's own opt-in (no checkbox).
     fake_service.needs_experimental_opt_in = lambda tree: True
     _continue_from(storyboard_tab, "t1b", index=13, rows=["a"])
     assert storyboard_tab.experimental_check.winfo_manager() == "grid"
-    assert storyboard_tab.experimental_var.get() is False
-    storyboard_tab.experimental_var.set(True)
+    assert "experimental" in str(storyboard_tab.experimental_check.cget("text"))
     storyboard_tab.queue_button.invoke()
     assert fake_service.last_submit.experimental_opt_in is True
+
+
+def test_an_approved_continue_shows_no_warning_and_records_no_opt_in(storyboard_tab, fake_service):
+    fake_service.needs_experimental_opt_in = lambda tree: False
+    _continue_from(storyboard_tab, "t1b", index=13, rows=["a"])
+    assert storyboard_tab.experimental_check.winfo_manager() == ""
+    storyboard_tab.queue_button.invoke()
+    assert fake_service.last_submit.experimental_opt_in is False
 
 
 # ---------------------------------------------------------------------------------------------- B5
