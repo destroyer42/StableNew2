@@ -124,6 +124,11 @@ def _movie(env: RouteEnv) -> NormalizedJobRecord:
         video_probe=lambda _path: VideoFacts(8, 8, 1.0, None),
         audio_probe=lambda _path: None,
     )
+    # Queue refuses Movie Clips when FFmpeg is missing (N1c); this route is about admission, not the host's FFmpeg.
+    ffmpeg = env.tmp_path / "ffmpeg.exe"
+    env.monkeypatch.setattr(
+        "src.video.movie_assembly_engine.resolve_ffmpeg_executable", lambda: ffmpeg
+    )
     return build_movie_assembly_njr(
         spec,
         output_dir=env.tmp_path / "output",
