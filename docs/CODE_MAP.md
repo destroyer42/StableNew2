@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-1019 of 1019 modules have a docstring.
+1026 of 1026 modules have a docstring.
 
 ## src/
 
@@ -59,6 +59,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
+- `review_gateway_apply.py`: Validate and apply review gateway outbox records on the PC (RG-120)
+- `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
+- `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
+- `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)
+- `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
+- `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
 - `site_desktop_approval.py`: Current-user persistence for the loopback browser's remembered approval
 - `site_library_index.py`: Rebuildable, root-local SQLite projection for Operator Site browsing
@@ -301,6 +307,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_workspace_state.py`: Hold the active Prompt tab pack, selection, and edits and coordinate save and load actions
 - `randomizer_panel_v2.py`: Randomizer panel for GUI v2 - Full plan builder UI
 - `review_batch_dialog.py`: Transient whole-selection review; confirmation admits the exact prepared NJRs
+- `review_gateway_dialog.py`: Desktop settings for the phone review gateway (RG-120): address, pinned certificate, sync secret, pairing, de…
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
 - `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply actions (PR-GUI-UX-520)
 - `sidebar_panel_v2.py`: Present Pipeline working settings, PromptPack selection, base generation values, and run controls

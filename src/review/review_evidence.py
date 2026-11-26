@@ -50,6 +50,13 @@ DISPOSITION_CLEARED = "cleared"
 # recommendation engine applies the same table. Re-work is not scored: it says the image needs more work, not whether
 # its settings were good.
 
+#: Optional disposition metadata written by the phone review gateway (RG-120). Additive: a reader that does not know
+#: them sees an ordinary Retain / Discard row. ``review_favorite`` is ``True`` only on a Retain the phone marked
+#: Favorite; ``review_tags`` is the phone's reason tags; ``review_gateway_receipt`` names the outbox record applied.
+REVIEW_FAVORITE = "review_favorite"
+REVIEW_TAGS = "review_tags"
+REVIEW_GATEWAY_RECEIPT = "review_gateway_receipt"
+
 INSPECTION_KIND = "review_inspection"
 #: Distinct from ``RATING_SOURCE`` and ``DISPOSITION_SOURCE``: rating listing, disposition lookup and "Undo Last Save"
 #: never see an inspection.
@@ -423,6 +430,17 @@ def build_disposition_with_prior_settings(records_path: Path, **kwargs: Any) -> 
         if known:
             record = build_disposition_record(**kwargs, known_settings=known)
     return record
+
+
+def disposition_favorite(row: Mapping[str, Any] | None) -> bool:
+    """Whether a stored disposition row is a Retain marked Favorite (rows without the flag are not)."""
+
+    metadata = (row or {}).get("metadata")
+    return (
+        isinstance(metadata, Mapping)
+        and metadata.get("review_disposition") == "retain"
+        and metadata.get(REVIEW_FAVORITE) is True
+    )
 
 
 def save_disposition(writer: LearningRecordWriter, **kwargs: Any) -> LearningRecord:
