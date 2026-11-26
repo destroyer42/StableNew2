@@ -41,6 +41,29 @@ from src.utils.image_metadata import (
 
 
 @dataclass(frozen=True)
+class AdetailerPasses:
+    """Which of the executor's ADetailer passes run, each with the detectors usable for it (empty: the pass is off).
+
+    A pass keeps the detector the source recorded (or the current ADetailer settings name) when it is usable, and
+    otherwise uses the first usable one, so a job never names a detector the backend does not list.
+    """
+
+    face: tuple[str, ...] = ()
+    hands: tuple[str, ...] = ()
+
+    def apply(self, recorded: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+        block = dict(recorded)
+        chosen = {**fallback, **recorded}
+        block["enable_face_pass"] = bool(self.face)
+        block["enable_hands_pass"] = block["ad_hands_enabled"] = bool(self.hands)
+        for key, usable in (("adetailer_model", self.face), ("adetailer_hands_model", self.hands)):
+            if usable:
+                current = chosen.get(key)
+                block[key] = current if current in usable else usable[0]
+        return block
+
+
+@dataclass(frozen=True)
 class ReviewBatchItem:
     path: str
     model: str = ""
@@ -152,8 +175,13 @@ def prepare_review_batch(
     source_metadata_by_image: dict[str, dict[str, Any]] | None = None,
     group_by_model: bool = False,
     guided: GuidedReprocess | None = None,
+    adetailer_passes: AdetailerPasses | None = None,
 ) -> ReviewBatchPreview:
-    """Compile every source with the existing builder; report every refusal before admission."""
+    """Compile every source with the existing builder; report every refusal before admission.
+
+    ``adetailer_passes`` sets which of the executor's ADetailer passes run, over whatever the source recorded
+    (RG-140 phone fixes: face, hands or both on that exact image).
+    """
     if not image_paths or not stages:
         raise ValueError("Images and target stages are required for reprocessing")
     if set(stages) - {"adetailer", "upscale", "img2img"}:
@@ -171,6 +199,12 @@ def prepare_review_batch(
         or len(image_paths) != 1 or batch_size != 1 or stages != [guided.stage]
     ):
         raise ValueError("A guided correction prepares exactly one source and one stage.")
+    if adetailer_passes is not None and (
+        guided is not None
+        or stages != ["adetailer"]
+        or not (adetailer_passes.face or adetailer_passes.hands)
+    ):
+        raise ValueError("ADetailer passes need the ADetailer stage alone and at least one pass.")
     batch_id = str(uuid.uuid4())
     builder, sources, rows, jobs = ReprocessJobBuilder(), [], [], []
     output_dir = review_output_dir(controller)
@@ -255,6 +289,11 @@ def prepare_review_batch(
                             config["adetailer"]["adetailer_hands_prompt"] = prompt
                         if negative_prompt_delta:
                             config["adetailer"]["adetailer_hands_negative_prompt"] = negative
+            if adetailer_passes is not None:
+                config["adetailer"] = adetailer_passes.apply(
+                    dict(config.get("adetailer") or {}),
+                    dict(fallback_config.get("adetailer") or {}),
+                )
             source = ReprocessSourceItem(
                 input_image_path=str(path), prompt=prompt, negative_prompt=negative,
                 model=model or None, vae=baseline.get("vae"), config=config,

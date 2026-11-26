@@ -177,10 +177,17 @@ class ReviewGatewaySync:
             self._settings, self._settings_loaded = None, True
             self._status = replace(self._status, state="not_configured", address="")
 
-    def create_pairing(self, label: str = "") -> str:
-        """Issue a single-use review-only code; returns it for display. Only its salted hash leaves the PC."""
+    def create_pairing(self, label: str = "", *, allow_queue: bool = True) -> str:
+        """Issue a single-use code; returns it for display. Only its salted hash leaves the PC.
 
-        offer = new_pairing_offer(label=label)
+        The phone may review and, unless ``allow_queue`` is off, queue the RG-140 phone actions. Queueing is a
+        per-phone flag that is on by default (owner decision 2026-11-26, amending D6) and can be withdrawn later
+        with ``set_queue``.
+        """
+
+        offer = new_pairing_offer(
+            label=label, scopes=("review", "queue") if allow_queue else ("review",)
+        )
         payload = offer.payload()
         self._ledger.add_offer(
             offer.offer_id,
@@ -198,6 +205,14 @@ class ReviewGatewaySync:
             )
         self.sync_now()
         return display_code(offer.code)
+
+    def set_queue(self, device_id: str, allowed: bool) -> bool:
+        """Grant or withdraw one phone's queueing here. The PC is the authority: a withdrawn phone's action requests
+        are refused (``not_granted``) from the next record on, while its review continues."""
+
+        changed = self._ledger.set_device_queue(device_id, allowed)
+        self._refresh_status()
+        return changed
 
     def revoke(self, device_id: str) -> bool:
         """Refuse the device here at once; the revocation is sent to the gateway on the next cycle."""

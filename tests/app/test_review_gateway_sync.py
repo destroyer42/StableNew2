@@ -342,7 +342,9 @@ def test_forged_and_unauthorized_records_are_refused(env):
     for action in sorted(ACTIONS):
         record = gateway.decide(library_id, sha, "keep")
         record.pop("decision")
-        record.update(kind="action_request", action_request={"action": action})
+        record.update(
+            kind="action_request", action_request={"action": action, "params": {"step": "prepare"}}
+        )
         actions.append(record)
     env.sync.run_cycle()
 
@@ -561,7 +563,7 @@ def _gateway_modules():
 
 
 def test_no_phone_record_can_reach_the_runner(tmp_path):
-    """RG-100 invariant 6: nothing the phone sends reaches the runner; RG-120 has no submission path at all."""
+    """RG-100 invariant 6: the sync modules have no submission path of their own; phone actions (RG-140) reach the queue only through the injected admission (tests/app/test_review_gateway_actions.py)."""
 
     for module in _gateway_modules():
         tree = ast.parse(module.read_text(encoding="utf-8"))
@@ -630,7 +632,10 @@ def test_no_phone_record_can_reach_the_runner(tmp_path):
         for action in sorted(ACTIONS):
             record = gateway.decide(library_id, sha, "keep", device_id=device)
             record.pop("decision")
-            record.update(kind="action_request", action_request={"action": action, "params": {}})
+            record.update(
+                kind="action_request",
+                action_request={"action": action, "params": {"step": "prepare"}},
+            )
             records.append(record)
         sync.run_cycle()
         acks = {a["record_id"]: a for a in gateway.acks}

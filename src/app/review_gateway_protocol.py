@@ -36,6 +36,7 @@ ACTIONS = frozenset(
     {
         "fix_face",
         "fix_hands",
+        "fix_both",
         "more_like_this",
         "another_model",
         "aspect_ratio",
@@ -58,6 +59,9 @@ INVALID_RECORD = "invalid_record"
 FAVORITE_WITH_DELETE = "favorite_with_delete"
 ARCHIVE_FAILED = "archive_failed"
 ADMISSION_REFUSED = "admission_refused"
+SUMMARY_CHANGED = "summary_changed"
+ACTION_UNAVAILABLE = "action_unavailable"
+PREPARE_REQUIRED = "prepare_required"
 REASON_CODES = frozenset(
     {
         DIGEST_MISMATCH,
@@ -68,8 +72,37 @@ REASON_CODES = frozenset(
         FAVORITE_WITH_DELETE,
         ARCHIVE_FAILED,
         ADMISSION_REFUSED,
+        SUMMARY_CHANGED,
+        ACTION_UNAVAILABLE,
+        PREPARE_REQUIRED,
     }
 )
+
+#: RG-140 slice 1; the other actions stay reserved and are refused as ``invalid_record``.
+SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
+STEPS = frozenset({"prepare", "confirm"})
+MAX_SEEDS = 8
+#: Why an action could not be prepared or admitted (``receipt.detail``): closed codes, never compiler text.
+DETAILS = frozenset(
+    {
+        "not_an_image",
+        "source_changed",
+        "provenance_unverified",
+        "recipe_not_variable",
+        "model_unavailable",
+        "model_family_refused",
+        "adetailer_unavailable",
+        "detector_unavailable",
+        "operation_unsupported",
+        "app_busy",
+        "app_shutting_down",
+        "compile_failed",
+    }
+)
+QUEUE_POSITIONS = frozenset({"next", "last"})
+MAX_SUMMARY_LINES = 8
+MAX_SUMMARY_WARNINGS = 8
+MAX_SUMMARY_JOBS = 64
 
 MAX_PAGE_RECORDS = 500
 MAX_ENROLLED_DEVICES = 50
@@ -196,7 +229,13 @@ class Decision:
 
 @dataclass(frozen=True)
 class ActionRequest:
+    """A phone action (RG-140): ``prepare`` asks for a summary, ``confirm`` admits what that summary showed."""
+
     action: str
+    step: str = "prepare"
+    count: int | None = None
+    prepared_record: str = ""
+    summary_revision: str = ""
 
 
 @dataclass(frozen=True)
@@ -243,15 +282,31 @@ def _decision(value: Any) -> Decision:
 
 
 def _action_request(value: Any) -> ActionRequest:
-    body = _object(value, {"action"}, {"params"})
-    params = body.get("params", {})
-    if (
-        not isinstance(params, dict)
-        or len(params) > 16
-        or not all(isinstance(key, str) and len(key) <= 64 for key in params)
+    body = _object(value, {"action", "params"})
+    action = _choice(body["action"], ACTIONS)
+    params = _object(body["params"], {"step"}, {"count", "prepared_record", "summary_revision"})
+    step = _choice(params["step"], STEPS)
+    count = params.get("count")
+    if count is not None and (
+        action != "more_like_this"
+        or step != "prepare"
+        or type(count) is not int
+        or not 1 <= count <= MAX_SEEDS
     ):
         raise _fail()
-    return ActionRequest(_choice(body["action"], ACTIONS))
+    if step == "confirm":
+        if not {"prepared_record", "summary_revision"} <= params.keys():
+            raise _fail()
+        return ActionRequest(
+            action,
+            step,
+            None,
+            parse_uuid(params["prepared_record"]),
+            _text(params["summary_revision"], SHA256),
+        )
+    if {"prepared_record", "summary_revision"} & params.keys():
+        raise _fail()
+    return ActionRequest(action, step, count)
 
 
 def record_id_of(value: Any) -> str | None:
@@ -462,11 +517,94 @@ def acknowledgement(
     if reason_code:
         body["reason_code"] = reason_code
     if receipt:
-        allowed = {"review_evidence_id", "archived", "job_ids"}
-        if not receipt.keys() <= allowed:
+        allowed = {"review_evidence_id", "archived", "job_ids", "action_summary", "detail"}
+        if not receipt.keys() <= allowed or receipt.get("detail", "") not in DETAILS | {""}:
             raise ProtocolError("invalid_acknowledgement")
         body["receipt"] = dict(receipt)
     return body
+
+
+# -- RG-140 action summaries (PC -> gateway, inside a receipt) -------------------------------------------------------
+
+#: An absolute Windows or POSIX path, a UNC path, or any run of text with a backslash: shown by its last part only.
+_PATHLIKE = re.compile(
+    r"(?:(?<![\w])[A-Za-z]:[\\/]|\\\\|(?<![^\s(\"'])/(?=[^\s/]+/))[^\s,;\"'()]*"
+    r"|[^\s,;\"'()]*\\[^\s,;\"'()]*"
+)
+
+
+def _last_part(match: re.Match[str]) -> str:
+    raw = match.group(0)
+    text = raw.rstrip("\\/.")
+    period = "." if raw.endswith(".") else ""
+    tail = re.split(r"[\\/]", text)[-1] if text else ""
+    return (tail.removesuffix(":") or "a folder on the PC") + period
+
+
+def scrub_text(value: Any, limit: int) -> str:
+    """Display text with every path reduced to its last part (RG-100 invariant 3), bounded to ``limit``."""
+
+    text = " ".join(str(value or "").split())
+    text = _PATHLIKE.sub(_last_part, text)
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+_WARNING_CODE = re.compile(r"[a-z0-9_]{1,64}")
+
+
+@dataclass(frozen=True)
+class SummaryWarning:
+    code: str
+    subject: str
+    title: str
+    why: str = ""
+    fix: str = ""
+
+    def payload(self) -> dict[str, str]:
+        code = self.code if _WARNING_CODE.fullmatch(self.code) else "policy_warning"
+        body = {
+            "code": code,
+            "subject": scrub_text(self.subject, 200) or "-",
+            "title": scrub_text(self.title, 300) or code,
+        }
+        for key, limit in (("why", 800), ("fix", 800)):
+            text = scrub_text(getattr(self, key), limit)
+            if text:
+                body[key] = text
+        return body
+
+
+@dataclass(frozen=True)
+class ActionSummary:
+    """The one screen the phone shows before Queue (S12). ``revision`` fingerprints what it shows and what runs."""
+
+    action: str
+    revision: str
+    title: str
+    lines: tuple[str, ...]
+    job_count: int
+    queue_position: str
+    warnings: tuple[SummaryWarning, ...]
+    expires_at: datetime
+
+    def payload(self) -> dict[str, Any]:
+        if (
+            self.action not in ACTIONS
+            or not SHA256.fullmatch(self.revision)
+            or not 1 <= self.job_count <= MAX_SUMMARY_JOBS
+            or self.queue_position not in QUEUE_POSITIONS
+        ):
+            raise ProtocolError("invalid_summary")
+        return {
+            "action": self.action,
+            "revision": self.revision,
+            "title": scrub_text(self.title, 120) or self.action,
+            "lines": [scrub_text(line, 200) for line in self.lines[:MAX_SUMMARY_LINES]],
+            "job_count": self.job_count,
+            "queue_position": self.queue_position,
+            "warnings": [item.payload() for item in self.warnings[:MAX_SUMMARY_WARNINGS]],
+            "expires_at": utc_text(self.expires_at),
+        }
 
 
 def device_revocation(device_id: str, *, at: datetime | None = None) -> dict[str, Any]:

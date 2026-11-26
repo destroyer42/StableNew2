@@ -5,6 +5,7 @@ There is deliberately no sync route here: the two listeners are two applications
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from datetime import timedelta
 from pathlib import Path
@@ -58,6 +59,8 @@ _VARIANTS = {
     "original": "original",
 }
 _DECISION_FIELDS = {"library_id", "sha256", "verdict", "favorite", "tags", "idempotency_key"}
+_ACTION_FIELDS = {"library_id", "sha256", "action", "params", "idempotency_key"}
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 class _Guard:
@@ -172,9 +175,45 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
         )
         return JSONResponse({"record_id": record_id, "state": state})
 
+    async def queue_session(request: Request) -> Device:
+        device = await session(request)
+        if "queue" not in device.scopes:
+            raise GatewayError(403, "not_granted")  # D6, S4: queueing is its own grant
+        return device
+
     async def actions(request: Request) -> Response:
-        await session(request)
-        raise GatewayError(403, "not_granted")
+        device = await queue_session(request)
+        body = await read_json(request)
+        if body.keys() != _ACTION_FIELDS:
+            raise GatewayError(422, "invalid_record")
+        record_id, state = await run_in_threadpool(
+            store.request_action,
+            device.device_id,
+            {"library_id": body["library_id"], "sha256": body["sha256"]},
+            {"action": body["action"], "params": body["params"]},
+            body["idempotency_key"],
+        )
+        return JSONResponse({"record_id": record_id, "state": state})
+
+    async def item_actions(request: Request) -> Response:
+        device = await queue_session(request)
+        library_id = request.query_params.get("library_id", "")
+        sha256 = request.query_params.get("sha256", "")
+        if not (0 < len(library_id) <= 64 and is_digest(sha256)):
+            raise GatewayError(422, "invalid_request")
+        target = {"library_id": library_id, "sha256": sha256}
+        listed = await run_in_threadpool(store.item_actions, device.device_id, target)
+        return JSONResponse({"actions": listed})
+
+    async def action(request: Request) -> Response:
+        device = await queue_session(request)
+        record_id = request.path_params["record_id"]
+        if not _UUID.fullmatch(record_id):
+            raise GatewayError(404, "not_found")
+        found = await run_in_threadpool(store.action_record, device.device_id, record_id)
+        if found is None:
+            raise GatewayError(404, "not_found")
+        return JSONResponse(found)
 
     async def media(request: Request) -> Response:
         await session(request)
@@ -198,6 +237,8 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
             Route("/api/runs/{run_id}", run, methods=["GET"]),
             Route("/api/decisions", decisions, methods=["POST"]),
             Route("/api/actions", actions, methods=["POST"]),
+            Route("/api/actions", item_actions, methods=["GET"]),
+            Route("/api/actions/{record_id}", action, methods=["GET"]),
             Route("/media/{library_id}/{sha256}/{variant}", media, methods=["GET"]),
         ],
         middleware=[Middleware(_Guard)],

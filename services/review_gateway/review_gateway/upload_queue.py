@@ -72,11 +72,15 @@ def initialize(db: sqlite3.Connection) -> None:
 
 
 def reconcile(db: sqlite3.Connection, key: tuple[str, str], due: str) -> None:
-    """Make the item's row match its decision in force: the newest record not refused or replaced."""
+    """Make the item's row match its decision in force: the newest decision not refused or replaced.
+
+    Action requests (RG-140) are never decisions, so they never start, change or cancel an upload.
+    """
 
     latest = db.execute(
         "SELECT record_id, record FROM outbox WHERE library_id = ? AND sha256 = ?"
-        " AND status IN ('pending','applied','duplicate') ORDER BY seq DESC LIMIT 1",
+        " AND kind = 'decision' AND status IN ('pending','applied','duplicate')"
+        " ORDER BY seq DESC LIMIT 1",
         key,
     ).fetchone()
     decision = json.loads(latest["record"])["decision"] if latest else None

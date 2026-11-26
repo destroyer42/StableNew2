@@ -74,6 +74,8 @@ def validate(value: Any, schema: Mapping[str, Any] | None = None, where: str = "
     if "enum" in schema and value not in schema["enum"]:
         fail("enum")
     if isinstance(value, str):
+        if "minLength" in schema and len(value) < schema["minLength"]:
+            fail("minLength")
         if "pattern" in schema and not re.search(schema["pattern"], value):
             fail("pattern")
         if "maxLength" in schema and len(value) > schema["maxLength"]:
@@ -129,8 +131,12 @@ def validate(value: Any, schema: Mapping[str, Any] | None = None, where: str = "
             fail(f"oneOf matched {matches}")
     for sub in schema.get("allOf", []):
         validate(value, sub, where)
-    if "if" in schema and _is_valid(value, schema["if"]) and "then" in schema:
-        validate(value, schema["then"], where)
+    if "anyOf" in schema and not any(_is_valid(value, option) for option in schema["anyOf"]):
+        fail("anyOf")
+    if "if" in schema:
+        branch = "then" if _is_valid(value, schema["if"]) else "else"
+        if branch in schema:
+            validate(value, schema[branch], where)
     if "not" in schema and _is_valid(value, schema["not"]):
         fail("not")
 
@@ -271,6 +277,32 @@ class FakeGateway:
             }
         )
         return device_id
+
+    def action(
+        self,
+        library_id: str,
+        sha256: str,
+        action: str,
+        *,
+        device_id: str = "phone-device-01",
+        record_id: str | None = None,
+        key: str | None = None,
+        **params: Any,
+    ) -> dict[str, Any]:
+        """An RG-140 action request as the gateway records it (``params`` default to a prepare)."""
+
+        record = {
+            "record_id": record_id or str(uuid.uuid4()),
+            "idempotency_key": key or uuid.uuid4().hex,
+            "device_id": device_id,
+            "created_at": "2026-11-25T21:31:00.000Z",
+            "target": {"library_id": library_id, "sha256": sha256},
+            "kind": "action_request",
+            "action_request": {"action": action, "params": {"step": "prepare", **params}},
+        }
+        validate_def(record, "outbox_record")
+        self.outbox.append(record)
+        return record
 
     def decide(
         self,

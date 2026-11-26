@@ -40,6 +40,12 @@ def phone_owner(grant: PhoneGrant) -> str:
     return hashlib.sha256(f"phone-queue-v1:{grant.id}:{grant.host_secret}".encode()).hexdigest()
 
 
+def gateway_owner(device_id: str) -> str:
+    """The phone owner of jobs a review-gateway device admitted (RG-140); never equal to a hosted-relay owner."""
+
+    return hashlib.sha256(f"review-gateway-v1:{device_id}".encode()).hexdigest()
+
+
 def phone_job_id(owner: str, receipt: str, position: int) -> str:
     return hashlib.sha256(f"phone-job-v1:{owner}:{receipt}:{position}".encode()).hexdigest()[:32]
 

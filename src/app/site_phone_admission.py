@@ -25,8 +25,10 @@ from src.app.site_phone_queue import (
 )
 from src.controller.job_service import JobService
 from src.controller.reprocess_admission import submit_reprocess_njrs
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import NormalizedJobRecord, UnifiedJobSummary, WorkloadKind
 from src.pipeline.njr_compiler import NjrDerivation, derive_njr
+from src.pipeline.policy_warnings import SURFACE_PHONE, PolicyWarning, with_accepted_warnings
 
 if TYPE_CHECKING:
     from src.app.site_phone_followup import PhoneFollowup
@@ -90,6 +92,93 @@ def _preview_job(record: NormalizedJobRecord) -> dict[str, Any]:
         if "upscale" in enabled and isinstance(upscale, Mapping)
         else None,
     }
+
+
+def phone_records(
+    owner: str,
+    identifier: str,
+    kind: str,
+    records: tuple[NormalizedJobRecord, ...] | list[NormalizedJobRecord],
+    *,
+    eval_run: str = "",
+    claim: Mapping[str, str] | None = None,
+) -> tuple[NormalizedJobRecord, ...]:
+    """The phone-owned identities of ``records``: deterministic job ids and the ``phone_submission`` claim.
+
+    One derivation for every phone channel (the hosted relay's Preview and the review gateway's actions), so a
+    phone receipt always names exactly the jobs it admitted.
+    """
+
+    return tuple(
+        derive_njr(
+            record,
+            NjrDerivation(
+                job_id=phone_job_id(owner, identifier, index),
+                provenance=replace(
+                    record.provenance,
+                    metadata={
+                        **record.provenance.metadata,
+                        PHONE_SUBMISSION: {
+                            **(claim or {}),
+                            "owner": owner,
+                            "receipt": identifier,
+                            "kind": kind,
+                            "index": index,
+                            "count": len(records),
+                            **({"eval_run": eval_run} if eval_run else {}),
+                        },
+                    },
+                ),
+            ),
+        )
+        for index, record in enumerate(records)
+    )
+
+
+def admit_phone_records(
+    jobs: JobService,
+    view: PhoneQueueView,
+    owner: str,
+    identifier: str,
+    kind: str,
+    records: tuple[NormalizedJobRecord, ...],
+    warnings: tuple[PolicyWarning, ...],
+    *,
+    reprocess: bool,
+    policy: SubmissionPolicy,
+    claim: Mapping[str, str] | None = None,
+) -> list[str]:
+    """Admit one phone request through ``JobService.submit_njrs`` exactly once (RG-100 invariant 6).
+
+    The warnings the phone showed are frozen into provenance as accepted on the phone (S12). The job ids are
+    deterministic, so a request that was already admitted (a resent record, a restart between admission and its
+    receipt) answers with the existing receipt instead of admitting twice. Raises ``SiteOutputError`` when nothing
+    was admitted.
+    """
+
+    if not 1 <= len(records) <= MAX_PHONE_JOBS:
+        raise SiteOutputError("image_preview_required")
+    existing = view.receipt(owner, identifier)
+    if existing["state"] == "admitted":
+        return list(existing["job_ids"])
+    if jobs.queue.is_dispatch_fenced():
+        raise SiteOutputError("app_shutting_down")
+    derived = [
+        with_accepted_warnings(record, warnings, surface=SURFACE_PHONE)
+        for record in phone_records(owner, identifier, kind, records, claim=claim)
+    ]
+    try:
+        if reprocess:
+            submit_reprocess_njrs(jobs, derived, surface=SURFACE_PHONE, policy=policy)
+        else:
+            jobs.submit_njrs(derived, policy)
+    except Exception as exc:  # noqa: BLE001 - an exception can arrive after the native commit
+        admitted = view.receipt(owner, identifier)
+        if admitted["state"] == "admitted":
+            log.exception("A phone request was admitted but its submission reported an error")
+            return list(admitted["job_ids"])
+        raise SiteOutputError("admission_refused") from exc
+    return [record.job_id for record in derived]
 
 
 class PhoneQueueAdmission:
@@ -230,29 +319,7 @@ class PhoneQueueAdmission:
         draft.require_current()
         catalog.require_active()
         identifier = secrets.token_hex(16)
-        records = tuple(
-            derive_njr(
-                record,
-                NjrDerivation(
-                    job_id=phone_job_id(owner, identifier, index),
-                    provenance=replace(
-                        record.provenance,
-                        metadata={
-                            **record.provenance.metadata,
-                            PHONE_SUBMISSION: {
-                                "owner": owner,
-                                "receipt": identifier,
-                                "kind": kind,
-                                "index": index,
-                                "count": len(draft.records),
-                                **({"eval_run": draft.eval_run} if draft.eval_run else {}),
-                            },
-                        },
-                    ),
-                ),
-            )
-            for index, record in enumerate(draft.records)
-        )
+        records = phone_records(owner, identifier, kind, draft.records, eval_run=draft.eval_run)
         with self._lock:
             self._preview = _FrozenPreview(
                 identifier,

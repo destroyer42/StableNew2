@@ -164,6 +164,41 @@ def assemble_runtime_stack(
     return stack
 
 
+def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
+    """RG-140 phone actions over the running application, or ``None`` when it has no job repository."""
+
+    from src.app.review_gateway_actions import AppActionCompiler, GatewayActions
+    from src.app.site_phone_admission import admit_phone_records
+    from src.app.site_phone_preview_host import PhonePreviewHost
+    from src.app.site_phone_queue import PhoneQueueView, gateway_owner
+    from src.controller.submission_policy_v26 import SubmissionPolicy
+    from src.queue.job_model import JobPriority
+    from src.review.review_lineage import repository_of
+
+    repository = repository_of(app)
+    if repository is None:
+        return None
+
+    def admit(owner: str, receipt: str, compiled: Any, warnings: Any, runs_next: bool) -> list[str]:
+        jobs = app.job_service  # read through: it may be replaced
+        return admit_phone_records(
+            jobs,
+            PhoneQueueView(repository, jobs),
+            owner,
+            receipt,
+            compiled.kind,
+            compiled.records,
+            warnings,
+            reprocess=compiled.reprocess,
+            # D8 first step: touch-ups run after the current job, ahead of NORMAL work (the existing priority).
+            policy=SubmissionPolicy(priority=JobPriority.HIGH if runs_next else JobPriority.NORMAL),
+            claim={"channel": "review_gateway"},
+        )
+
+    compiler = AppActionCompiler(PhonePreviewHost(app, repository, records), repository, root)
+    return GatewayActions(ledger, compiler, admit, owner_of=gateway_owner)
+
+
 def build_review_gateway_sync(
     app: Any,
     *,
@@ -174,9 +209,11 @@ def build_review_gateway_sync(
 ) -> ReviewGatewaySync:
     """Compose the phone review gateway sync worker (RG-120) around the running application; nothing starts here.
 
-    The worker reads the Output Library index (never the job database), writes review evidence and archive moves
-    through the native services, and has no path to the queue or the runner: action requests are refused until
-    RG-140. ``app`` is the application controller; Discard refuses (fails closed) when its job queue is unreadable.
+    The worker reads the Output Library index (never the job database) and writes review evidence and archive moves
+    through the native services. Phone actions (RG-140) from a device with the ``queue`` grant are compiled by the
+    existing Preview and follow-up compilers and admitted only through ``admit_phone_records`` into
+    ``JobService.submit_njrs``; without a job repository they are refused. ``app`` is the application controller;
+    Discard refuses (fails closed) when its job queue is unreadable.
     """
 
     from src.app.review_gateway_apply import RecordApplier
@@ -204,7 +241,13 @@ def build_review_gateway_sync(
 
     active = (lambda: active_input_paths(queue)) if queue is not None else unreadable
     records = records_path or get_learning_records_path(create_parent=False)
-    applier = RecordApplier(ledger, root, records, active_inputs=active)
+    applier = RecordApplier(
+        ledger,
+        root,
+        records,
+        active_inputs=active,
+        actions=_gateway_actions(app, ledger, root, records),
+    )
 
     def busy() -> bool:
         runner = getattr(

@@ -24,6 +24,9 @@ _REASONS = {
     "favorite_with_delete": "favorite with delete",
     "archive_failed": "could not be archived",
     "admission_refused": "queue refused",
+    "summary_changed": "summary changed; shown again",
+    "action_unavailable": "action not possible",
+    "prepare_required": "summary expired",
 }
 
 
@@ -40,6 +43,8 @@ class ReviewGatewayDialog:
         #: Replaced by tests: a real modal would hang the run.
         self.confirm: Callable[[tk.Misc, str, str], bool] = _confirm
         self._vars: dict[str, tk.StringVar] = {}
+        self._allow_queue: tk.BooleanVar | None = None
+        self._pairing_scope = "review and queueing"
         self._devices: ttk.Treeview | None = None
 
     def open(self) -> None:
@@ -90,19 +95,31 @@ class ReviewGatewayDialog:
         ttk.Label(top, textvariable=self._vars["code"], font=("TkFixedFont", 14)).pack(
             side="left", padx=(12, 0)
         )
+        self._allow_queue = tk.BooleanVar(master=dialog, value=True)
+        ttk.Checkbutton(
+            pairing,
+            text="Allow queueing on phone (fix face or hands, more like this)",
+            variable=self._allow_queue,
+        ).pack(anchor="w", pady=(6, 0))
         devices = self._devices = ttk.Treeview(
-            pairing, columns=("label", "enrolled", "state"), show="headings", height=5
+            pairing, columns=("label", "enrolled", "access", "state"), show="headings", height=5
         )
         for column, heading, width in (
-            ("label", "Phone", 180),
-            ("enrolled", "Paired", 170),
-            ("state", "State", 90),
+            ("label", "Phone", 160),
+            ("enrolled", "Paired", 160),
+            ("access", "Access", 110),
+            ("state", "State", 80),
         ):
             devices.heading(column, text=heading)
             devices.column(column, width=width, anchor="w")
         devices.pack(fill="both", expand=True, pady=(8, 0))
-        ttk.Button(pairing, text="Revoke selected", command=self.revoke_selected).pack(
-            anchor="e", pady=(6, 0)
+        actions = ttk.Frame(pairing)
+        actions.pack(anchor="e", pady=(6, 0))
+        ttk.Button(actions, text="Queueing on/off", command=self.toggle_queue_selected).pack(
+            side="left"
+        )
+        ttk.Button(actions, text="Revoke selected", command=self.revoke_selected).pack(
+            side="left", padx=(6, 0)
         )
         ttk.Button(panel, text="Close", command=self.close).pack(anchor="e", pady=(12, 0))
         self.refresh()
@@ -156,8 +173,10 @@ class ReviewGatewayDialog:
         self.refresh()
 
     def pair(self) -> None:
+        allow_queue = bool(self._allow_queue.get()) if self._allow_queue is not None else False
+        self._pairing_scope = "review and queueing" if allow_queue else "review only"
         try:
-            code = self._sync.create_pairing()
+            code = self._sync.create_pairing(allow_queue=allow_queue)
         except (OSError, ValueError):
             messagebox.showerror(
                 "Phone review gateway",
@@ -165,7 +184,23 @@ class ReviewGatewayDialog:
                 parent=self._parent(),
             )
             return
-        self._vars["code"].set(f"Code: {code}  (5 minutes, review only)")
+        self._vars["code"].set(f"Code: {code}  (5 minutes, {self._pairing_scope})")
+
+    def toggle_queue_selected(self) -> None:
+        devices = self._devices
+        if devices is None or not devices.selection():
+            return
+        device_id = str(devices.selection()[0])
+        current = next((d for d in self._sync.status().devices if d.device_id == device_id), None)
+        if current is None or current.revoked:
+            return
+        try:
+            self._sync.set_queue(device_id, "queue" not in current.scopes)
+        except OSError:
+            messagebox.showerror(
+                "Phone review gateway", "The change could not be saved.", parent=self._parent()
+            )
+        self.refresh()
 
     def revoke_selected(self) -> None:
         devices = self._devices
@@ -211,7 +246,9 @@ class ReviewGatewayDialog:
         )
         self._vars["refusals"].set(f"Recent refusals: {refusals}" if refusals else "")
         if status.pairing_code:
-            self._vars["code"].set(f"Code: {status.pairing_code}  (5 minutes, review only)")
+            self._vars["code"].set(
+                f"Code: {status.pairing_code}  (5 minutes, {self._pairing_scope})"
+            )
         elif self._vars["code"].get():
             self._vars["code"].set("")
         devices = self._devices
@@ -225,6 +262,7 @@ class ReviewGatewayDialog:
             values = (
                 device.label or device.device_id[:12],
                 device.enrolled_at,
+                "review, queue" if "queue" in device.scopes else "review",
                 "revoked" if device.revoked else "active",
             )
             if devices.exists(device.device_id):
