@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/destroyer42/StableNew2/docs/schemas/stablenew.review-gateway-sync.v1.json",
+  "title": "StableNew review gateway sync contract v1",
+  "description": "Payloads exchanged between the StableNew PC sync worker (RG-120) and the review gateway (RG-110). The PC initiates every exchange. Items are identified by library id plus SHA-256 and never by path (RG-100 invariant 3). Outbox records are requests the PC validates, applies or refuses (invariant 4). A breaking change bumps schema_version.",
+  "oneOf": [
+    { "$ref": "#/$defs/item_manifest" },
+    { "$ref": "#/$defs/outbox_page" },
+    { "$ref": "#/$defs/acknowledgement" },
+    { "$ref": "#/$defs/immich_receipt" },
+    { "$ref": "#/$defs/device_revocation" }
+  ],
+  "$defs": {
+    "schema_version": { "const": "stablenew.review-gateway-sync.v1" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "library_id": {
+      "description": "Opaque, stable Output Library item id assigned by the PC. Never a path.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{8,64}$"
+    },
+    "run_id": {
+      "description": "Output run folder name, used only for grouping.",
+      "type": "string",
+      "pattern": "^[0-9]{8}_[0-9]{6}_[A-Za-z0-9._ -]{1,96}$"
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "uuid": { "type": "string", "format": "uuid" },
+    "item_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["library_id", "sha256"],
+      "properties": {
+        "library_id": { "$ref": "#/$defs/library_id" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "media_variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "bytes", "content_type"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 4294967296 },
+        "content_type": { "enum": ["image/png", "image/jpeg", "image/webp", "video/mp4", "video/webm"] },
+        "width": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 16384 }
+      }
+    },
+    "item_manifest": {
+      "description": "PC to gateway: one publishable item. Media bodies are uploaded separately and addressed by their sha256. Idempotent by (library_id, sha256).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "item", "kind", "run_id", "created_at", "media"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "type": { "const": "item_manifest" },
+        "item": { "$ref": "#/$defs/item_ref" },
+        "kind": { "enum": ["image", "video"] },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "duration_s": { "type": "number", "minimum": 0, "maximum": 3600 },
+        "media": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["thumb_320", "original"],
+          "properties": {
+            "thumb_320": { "$ref": "#/$defs/media_variant" },
+            "preview_1080": { "$ref": "#/$defs/media_variant" },
+            "mobile_video": { "$ref": "#/$defs/media_variant" },
+            "original": { "$ref": "#/$defs/media_variant" }
+          }
+        },
+        "display": {
+          "description": "Display-only text, rendered as text on the phone (S7). Never used for decisions.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": { "type": "string", "maxLength": 200 },
+            "prompt_excerpt": { "type": "string", "maxLength": 512 },
+            "seed": { "type": "integer" },
+            "job_id": { "type": "string", "maxLength": 64 },
+            "workflow": { "type": "string", "maxLength": 120 }
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "favorite"],
+      "properties": {
+        "verdict": { "enum": ["keep", "delete"] },
+        "favorite": { "type": "boolean", "description": "Only meaningful with keep; the PC refuses favorite with delete." },
+        "tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 6,
+          "items": { "enum": ["face", "hands", "anatomy", "artifact", "prompt_miss", "needs_fix"] }
+        }
+      }
+    },
+    "action_request": {
+      "description": "Reserved for RG-140. The RG-110 gateway refuses to create these (D6); the RG-120 PC refuses them until RG-140 enables the grant.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "enum": ["fix_face", "fix_hands", "more_like_this", "another_model", "aspect_ratio", "prompt_tweak", "make_video", "rerun_clip", "continue_clip"]
+        },
+        "params": {
+          "description": "Typed per action in RG-140; validated on the PC against the catalogs.",
+          "type": "object",
+          "maxProperties": 16
+        }
+      }
+    },
+    "outbox_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id", "idempotency_key", "device_id", "created_at", "target", "kind"],
+      "properties": {
+        "record_id": { "$ref": "#/$defs/uuid" },
+        "idempotency_key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,128}$" },
+        "device_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,64}$" },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "target": { "$ref": "#/$defs/item_ref" },
+        "kind": { "enum": ["decision", "action_request"] },
+        "decision": { "$ref": "#/$defs/decision" },
+        "action_request": { "$ref": "#/$defs/action_request" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "decision" } } },
+          "then": { "required": ["decision"], "not": { "required": ["action_request"] } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "action_request" } } },
+          "then": { "required": ["action_request"], "not": { "required": ["decision"] } }
+        }
+      ]
+    },
+    "outbox_page": {
+      "description": "Gateway to PC, in reply to the PC's list request: pending records in creation order.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "records"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "type": { "const": "outbox_page" },
+        "records": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/outbox_record" } },
+        "next_cursor": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "acknowledgement": {
+      "description": "PC to gateway: the authoritative outcome of one outbox record. The gateway purges nothing before this arrives (S9).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "record_id", "outcome", "acknowledged_at"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "type": { "const": "acknowledgement" },
+        "record_id": { "$ref": "#/$defs/uuid" },
+        "outcome": { "enum": ["applied", "refused", "duplicate"] },
+        "reason_code": {
+          "enum": ["digest_mismatch", "unknown_item", "revoked_device", "not_granted", "invalid_record", "favorite_with_delete", "archive_failed", "admission_refused"]
+        },
+        "receipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "review_evidence_id": { "type": "string", "maxLength": 128 },
+            "archived": { "type": "boolean" },
+            "job_ids": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 64 } }
+          }
+        },
+        "acknowledged_at": { "$ref": "#/$defs/timestamp" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "outcome": { "const": "refused" } } },
+          "then": { "required": ["reason_code"] }
+        }
+      ]
+    },
+    "immich_receipt": {
+      "description": "Gateway to PC (listed with the outbox): the result of uploading a kept item to Immich (D3). Idempotent by Immich checksum.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "record_id", "item", "status", "at"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "type": { "const": "immich_receipt" },
+        "record_id": { "$ref": "#/$defs/uuid" },
+        "item": { "$ref": "#/$defs/item_ref" },
+        "status": { "enum": ["uploaded", "duplicate", "failed"] },
+        "immich_asset_id": { "type": "string", "maxLength": 64 },
+        "album": { "type": "string", "maxLength": 200 },
+        "favorite": { "type": "boolean" },
+        "error_code": { "type": "string", "maxLength": 64 },
+        "at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "device_revocation": {
+      "description": "PC to gateway: revoke a device enrolled from this desktop (S11). The gateway can also revoke locally.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "device_id", "revoked_at"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "type": { "const": "device_revocation" },
+        "device_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,64}$" },
+        "revoked_at": { "$ref": "#/$defs/timestamp" }
+      }
+    }
+  }
+}
