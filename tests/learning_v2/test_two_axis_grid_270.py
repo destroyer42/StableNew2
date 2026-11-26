@@ -206,14 +206,18 @@ def test_preview_builds_snapshot_and_makes_zero_queue_calls():
     assert not any(v.job_id for v in controller.learning_state.plan)
 
 
-def test_fixed_model_controls_and_unverified_models_are_refused():
+def test_fixed_model_controls_refuse_and_unclassified_models_warn():
     config = baseline()
     config["txt2img"]["model"] = KLEIN
     with pytest.raises(ValueError):
         grid_controller(grid_experiment(), config)
+    # N1b: an unclassified checkpoint runs as SDXL; its warning is frozen for Preview and accepted on Queue.
     config["txt2img"]["model"] = "unknown.safetensors"
-    with pytest.raises(ValueError):
-        grid_controller(grid_experiment(), config)
+    controller = grid_controller(grid_experiment(), config)
+    snapshot = json.loads(controller.learning_state.current_experiment.execution_snapshot_json)
+    assert snapshot["model_policy_context"]["evidence"] == "accepted_unverified"
+    (warning,) = snapshot["policy_warnings"]
+    assert warning["code"] == "image_model_family_unverified" and warning["fix"]
 
 
 @pytest.mark.parametrize(

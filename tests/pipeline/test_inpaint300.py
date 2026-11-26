@@ -233,20 +233,33 @@ def test_dimension_mismatch_and_empty_mask_refused(prepared):
 
 
 @pytest.mark.parametrize(
-    "backend,model",
+    "backend,model,message",
     [
-        ("a1111", "sdxl"),
-        ("comfy", "sdxl"),
-        ("forge_webui", "unknown"),
-        ("forge_webui", "flux-2-klein-4b-fp8.safetensors"),
+        ("a1111", "sdxl", "Masked Review edits require Forge"),
+        ("comfy", "sdxl", "Masked Review edits require Forge"),
+        ("forge_webui", "flux-2-klein-4b-fp8.safetensors", "Only SDXL checkpoints"),
     ],
 )
-def test_unsupported_target_refused_without_freezing(prepared, backend, model):
+def test_unsupported_target_refused_without_freezing(prepared, backend, model, message):
     config = deepcopy(prepared.config)
     config["backend_options"]["image"]["backend_id"] = backend
-    with pytest.raises(ValueError, match="Masked Review edits require"):
+    with pytest.raises(ValueError, match=message):
         prepared.prepare(fallback_config=config, baseline={"model": model})
     assert not inputs.default_snapshot_root().exists()
+
+
+def test_unclassified_target_previews_with_a_warning_that_queue_accepts(prepared):
+    """N1b: an unclassified checkpoint is a Preview warning (why and fix), recorded as accepted on Queue."""
+    from src.pipeline.policy_warnings import accepted_warning_keys, pending_warnings
+
+    preview = prepared.prepare(baseline={"model": "unknown"})
+    (warning,) = pending_warnings(preview.job)
+    assert warning.subject == "unknown" and warning.why and warning.fix
+    submitted = []
+    preview.submit(
+        SimpleNamespace(submit_njrs=lambda njrs, _policy: submitted.extend(njrs) or ["j"])
+    )
+    assert (warning.code, "unknown") in accepted_warning_keys(submitted[0].extra_metadata)
 
 
 @pytest.mark.parametrize(

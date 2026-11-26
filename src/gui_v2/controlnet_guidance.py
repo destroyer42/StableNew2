@@ -43,7 +43,7 @@ from src.conditioning.openpose import (
     OpenPoseSelection,
 )
 from src.image_backends.forge_controlnet_units import MODEL_MODALITIES, model_problem
-from src.image_backends.model_policy import EVIDENCE_REGISTRY
+from src.image_backends.openpose_capability import REASON_CONFLICT, STATUS_UNVERIFIED
 
 SEVERITY_OK = "ok"
 SEVERITY_INFO = "info"
@@ -292,11 +292,20 @@ def describe_readiness(
         )
     counts = _installed_counts(models)
     installed = {name_key(option.name): option for option in models}
-    target_blocker = (
-        "Select a registry-verified SDXL checkpoint on Forge."
-        if target is None or not target.executable or target.evidence != EVIDENCE_REGISTRY
-        else ""
-    )
+    # N1b: a checkpoint StableNew has not classified (or whose records conflict) is a warning, not a blocker;
+    # Preview freezes it with why and the fix and Queue records it. A positively identified other family, an exact
+    # profile and a non-Forge backend stay definite refusals.
+    target_blocker = target_warning = ""
+    if target is None:
+        target_blocker = "Select an SDXL checkpoint on Forge."
+    elif not target.executable:
+        if target.status == STATUS_UNVERIFIED or target.reason == REASON_CONFLICT:
+            target_warning = (
+                "Warning: StableNew has not confirmed this checkpoint as SDXL; Preview shows why and how to fix it, "
+                "and Queue runs it anyway."
+            )
+        else:
+            target_blocker = target.message
     results = []
     for index, unit in enumerate(parse_units(raw)):
         prefix = f"Unit {index + 1} ({modality_label(unit.modality)}): "
@@ -370,6 +379,8 @@ def describe_readiness(
         else:
             state = STATE_LOCAL_OK
             text = "Local resources compatible; Preview and Forge admission remain required."
+        if target_warning and not blockers:
+            text += " " + target_warning
         results.append(UnitReadiness(index, state, prefix + text))
     states = {unit.state for unit in results}
     overall = next(

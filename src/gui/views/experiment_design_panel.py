@@ -1916,7 +1916,7 @@ class ExperimentDesignPanel(ttk.Frame):
     def _special_readiness(self) -> str:
         policy, controller = self._target_policy, self.learning_controller
         if policy is None or controller is None:
-            return "Choose a registry-verified SDXL model in the Learning baseline first."
+            return "Choose an SDXL model in the Learning baseline first."
         images, reason = self._images_reason()
         if reason:
             return reason

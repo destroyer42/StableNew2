@@ -9,8 +9,8 @@ Per-study call shapes (each is the study's own check; the catalog only names it)
 
 * Prompt Slot, LoRA Composition, Embedding: ``require_target(policy, baseline[, channel])``. The Embedding objective is
   judged on the positive channel; the negative channel's extra refusal is part of that design, not of the target.
-* Model Comparison: ``candidate_ineligibility(policy)`` returns the reason (or ``None``). It is the check every compared
-  model must pass, so here it judges the baseline's model as one candidate.
+* Model Comparison: ``candidate_target_check(policy, baseline)``, the N1b verdict every compared model must pass, so
+  here it judges the baseline's model as one candidate.
 * Prompt x Model Matrix: the same candidate check, then ``require_matrix_baseline(baseline)``, the refusal Preview applies.
 * Two-Axis Grid: its policy eligibility, then ``require_plain_txt2img(baseline)``, the refusal Preview applies.
 * Compatibility Probe: ``require_probe_target(policy, baseline, spec)`` over the lineage recipes the probe offers for this
@@ -81,13 +81,25 @@ def variable_reason(code: str) -> str:
     return _VARIABLE_REASONS.get(code) or str(code).replace("_", " ")
 
 
-def _refusal(call: Any) -> str:
-    """The text a study's own check raises, or ``""`` when it passes."""
+def _outcome(call: Any) -> tuple[str, str]:
+    """``(refusal, warning)``: the text a study's own check raises (``""`` when it passes), and the title of the N1b
+    warning a passing SDXL target carries (``""`` when none)."""
+    from src.image_backends.sdxl_target import SdxlTarget
+
     try:
         outcome = call()
     except ValueError as exc:
-        return str(exc)
-    return str(outcome or "")  # ``candidate_ineligibility`` returns its reason instead of raising
+        return str(exc), ""
+    if isinstance(outcome, SdxlTarget):
+        return "", outcome.warning.title if outcome.warning is not None else ""
+    return str(
+        outcome or ""
+    ), ""  # ``candidate_ineligibility`` returns its reason instead of raising
+
+
+def _refusal(call: Any) -> str:
+    """The text a study's own check raises, or ``""`` when it passes."""
+    return _outcome(call)[0]
 
 
 def _target_checks(
@@ -103,15 +115,15 @@ def _target_checks(
 
         return [lambda: check(policy, baseline, POSITIVE)]
     if slug == "model_comparison":
-        return [lambda: check(policy)]
+        return [lambda: check(policy, baseline)]
     if slug == "prompt_model_matrix":
         from src.learning.prompt_model_matrix import require_matrix_baseline
 
-        return [lambda: check(policy), lambda: require_matrix_baseline(baseline)]
+        return [lambda: check(policy, baseline), lambda: require_matrix_baseline(baseline)]
     if slug == "two_axis_grid":
         from src.learning.two_axis_grid import require_plain_txt2img
 
-        return [lambda: check(policy), lambda: require_plain_txt2img(baseline)]
+        return [lambda: check(policy, baseline), lambda: require_plain_txt2img(baseline)]
     if slug == "compatibility_probe":
         from src.learning.compatibility_probe import suggest_recipes
 
@@ -158,22 +170,21 @@ def eligible_studies(
                 reason = "No variable can be tested on this model and stage."
             else:
                 reason = ""
-        else:
-            reason = next(
-                (
-                    text
-                    for text in (
-                        _refusal(call) for call in _target_checks(descriptor, policy, baseline)
-                    )
-                    if text
-                ),
-                "",
-            )
+        warning = ""
+        if descriptor.slug != "controlled_variable":
+            reason = ""
+            for call in _target_checks(descriptor, policy, baseline):
+                reason, found = _outcome(call)
+                warning = warning or found
+                if reason:
+                    break
         note = (
             _NOT_A_BASELINE_MODEL
             if descriptor.slug in ("model_comparison", "prompt_model_matrix")
             else ""
         )
+        if warning and not reason:  # N1b: available, with the warning Preview will show
+            note = " ".join(part for part in (f"Warning: {warning}", note) if part)
         studies.append(
             StudyEligibility(
                 slug=descriptor.slug,
@@ -206,7 +217,8 @@ def describe(result: EligibleStudies) -> tuple[str, ...]:
         lines.append(f"{objective.label}:")
         for study in members:
             if study.available:
-                lines.append(f"  {study.label}: available")
+                warned = study.note.startswith("Warning: ")
+                lines.append(f"  {study.label}: available" + (f" - {study.note}" if warned else ""))
             else:
                 lines.append(f"  {study.label}: not available - {study.reason}")
     if result.variables:

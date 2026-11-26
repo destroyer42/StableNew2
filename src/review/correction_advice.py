@@ -20,6 +20,13 @@ from src.image_backends.model_policy import (
     resolve_model_policy,
 )
 from src.image_backends.operation_compatibility import OperationRequest, assess_operation
+from src.image_backends.sdxl_target import (
+    OP_ADETAILER,
+    OP_IMG2IMG,
+    OP_MASKED_INPAINT,
+    SdxlTarget,
+    assess_sdxl_target,
+)
 from src.pipeline.adetailer_contract import split_detectors
 from src.pipeline.image_edit_inputs import KEY as FROZEN_EDIT_KEY
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
@@ -140,6 +147,25 @@ def detectors_for(action: Action, resources: ReviewResources) -> tuple[str, ...]
     return tuple(faces if action is Action.FACE else hands if action is Action.HANDS else ())
 
 
+_VERDICT_OPERATIONS = {
+    Action.MASK: (OP_MASKED_INPAINT, "masked Review edits"),
+    Action.FACE: (OP_ADETAILER, "guided ADetailer"),
+    Action.HANDS: (OP_ADETAILER, "guided ADetailer"),
+    Action.REPROCESS: (OP_IMG2IMG, "guided img2img"),
+}
+
+
+def target_verdict(action: Action, target: CorrectionTarget) -> SdxlTarget:
+    """The N1b SDXL verdict for one guided action's recorded target (warnings travel with the Preview)."""
+    from src.history.observed_execution import observed_runs_lookup
+
+    operation, feature = _VERDICT_OPERATIONS.get(action, (OP_IMG2IMG, "guided img2img"))
+    return assess_sdxl_target(
+        target.policy, model=target.model, operation=operation, backend_id=target.backend,
+        feature=feature, observed=observed_runs_lookup(),
+    )  # fmt: skip
+
+
 def target_refusal(
     action: Action,
     target: CorrectionTarget,
@@ -160,20 +186,18 @@ def target_refusal(
         return "The recorded target backend is unavailable for this stage."
     if not target.model or target.model not in resources.models:
         return "The target checkpoint is unavailable in the current model inventory."
-    if action is Action.MASK:
-        if target.backend != FORGE_IMAGE_BACKEND_ID or target.policy.policy_id != "sdxl":
-            return "Masked Review edits require Forge and a registry-resolved SDXL base checkpoint."
-    elif action in (Action.FACE, Action.HANDS):
-        if target.policy.policy_id != "sdxl":
-            return f"Guided ADetailer requires a registry-resolved SDXL base checkpoint ({target.policy.display_name})."
+    if action is Action.MASK and target.backend != FORGE_IMAGE_BACKEND_ID:
+        return "Masked Review edits require Forge; select the Forge backend."
+    verdict = target_verdict(action, target)
+    if (
+        not verdict.allowed
+    ):  # N1b: only a positively identified other family refuses; unclassified warns
+        return verdict.block
+    if action in (Action.FACE, Action.HANDS):
         if not resources.adetailer_available:
             return "Check ADetailer availability on the connected backend before choosing a pass."
         if not detectors_for(action, resources):
             return "The current backend inventory contains no detector for this pass."
-    elif target.policy.policy_id != "sdxl":
-        return (
-            f"Guided img2img requires a verified SDXL base target ({target.policy.display_name})."
-        )
     if action is Action.REPROCESS and target.inherited_mask:
         return "The source settings include a mask. Use Edit Mask to approve a new mask."
     return ""
@@ -210,6 +234,11 @@ def recommend(
                 Action.HANDS: "The detector may affect any hand. Use a mask for one region.",
                 Action.REPROCESS: "Img2img reprocesses the whole image.",
             }[action]
+            warning = target_verdict(action, targets[stage]).warning
+            if (
+                warning is not None
+            ):  # N1b: available, with the warning Preview shows and Queue records
+                reason = f"Warning: {warning.title} {reason}"
             result.append(Advisory(action, True, reason))
         else:
             result.append(Advisory(action, False, reason))

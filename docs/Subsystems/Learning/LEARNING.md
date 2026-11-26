@@ -86,11 +86,11 @@ Rules that hold [V]: Run never reads live stage cards (only the snapshot); a pro
 
 ### 3.2 Model Comparison Study
 
-A separate `study_type == "model_comparison"` experiment (`study_type()` in `src/learning/model_comparison.py`): image txt2img, PromptPack-only, at least two distinct registry-evidenced SDXL or exact qualified targets. `build_comparison_snapshot` freezes one row and the first canonical Matrix vector, and every effective arm (policy, structured prompt adaptation, compile policy, path-free `checkpoint_evidence`). Preview first prepares evidence for the exact served checkpoint files (`prepare_comparison_evidence`, cancellable worker, no directory scan or startup hashing). Run validates frozen arms (`verify_arms_admissible`) and builds NJRs with `materialize_njr` without reopening the PromptPack, reading live model evidence or re-running adaptation; all arms compile before one atomic admission. Ratings use record kind `learning_model_comparison_rating` and the claim is `target_envelope_preference` with `causal_one_variable=false`. These ratings and snapshots are excluded from ordinary parameter recommendations and automatic Model selection.
+A separate `study_type == "model_comparison"` experiment (`study_type()` in `src/learning/model_comparison.py`): image txt2img, PromptPack-only, at least two distinct SDXL targets (section 3.19) or exact qualified targets. `build_comparison_snapshot` freezes one row and the first canonical Matrix vector, and every effective arm (policy, structured prompt adaptation, compile policy, path-free `checkpoint_evidence`). Preview first prepares evidence for the exact served checkpoint files (`prepare_comparison_evidence`, cancellable worker, no directory scan or startup hashing). Run validates frozen arms (`verify_arms_admissible`) and builds NJRs with `materialize_njr` without reopening the PromptPack, reading live model evidence or re-running adaptation; all arms compile before one atomic admission. Ratings use record kind `learning_model_comparison_rating` and the claim is `target_envelope_preference` with `causal_one_variable=false`. These ratings and snapshots are excluded from ordinary parameter recommendations and automatic Model selection.
 
 ### 3.7 Two-Axis Grid
 
-A `study_type == "two_axis_grid"` experiment compares two of CFG Scale, Steps and LoRA Strength (one fixed LoRA, only its weight varies) on one frozen prompt, one model and one seed set. Supported target: image txt2img on a registry-verified SDXL checkpoint (decided from `ModelPolicy` evidence and the policy's own control modes, never a name); fixed/restricted controls, unverified or conflicting models, extra stages, hires, refiner (every spelling, including `txt2img.use_refiner`), ControlNet, aesthetic/hypernetwork, unresolved or policy-blocked LoRAs, and PromptPack rows with structural conditioning are refused, never silently disabled.
+A `study_type == "two_axis_grid"` experiment compares two of CFG Scale, Steps and LoRA Strength (one fixed LoRA, only its weight varies) on one frozen prompt, one model and one seed set. Supported target: image txt2img on an SDXL target (section 3.19; decided from `ModelPolicy` evidence, observed runs and the policy's own control modes, never a name); an unclassified or conflicting model runs with a frozen warning; fixed/restricted controls, a positively identified other family, extra stages, hires, refiner (every spelling, including `txt2img.use_refiner`), ControlNet, aesthetic/hypernetwork, unresolved or policy-blocked LoRAs, and PromptPack rows with structural conditioning are refused, never silently disabled.
 
 - **Bounds** (`two_axis_grid.py`): 2-4 distinct canonical values per axis (Decimal ranges; Steps whole numbers; CFG 1-30 and LoRA weight above 0 up to 2, two decimals), at most 16 cells, 1-3 images per cell, at most 36 images. An oversized or malformed design is refused with its reason; nothing is truncated or repaired.
 - **Cells**: each cell is one `LearningVariant`; `param_value` is the frozen coordinate `{cell_id, x_variable, x_value, y_variable, y_value}` and `cell_id` hashes `(experiment_id, x variable/value, y variable/value)`. Row-major order (X across columns, Y down rows, selected order kept) lives in the frozen `two_axis_grid` block of the snapshot, so row and column are never inferred from job order, completion time or file names.
@@ -243,7 +243,7 @@ findings are refused. No ratings, experiment state, jobs, favorites or startup d
 ### 3.11 Controlled Prompt Slot experiments
 
 Design offers **Prompt Slot** under the *Which do I prefer* objective (section 3.18). The initial
-target is registry-verified SDXL txt2img. Choose Custom Template or a native PromptPack row
+target is SDXL txt2img (section 3.19). Choose Custom Template or a native PromptPack row
 (write each slot as `[[slot_name]]`; the named-slot list follows the prompt as it is edited), choose exactly one to vary and explicitly fill every other slot.
 Repeated occurrences and normalized aliases of the selected slot share one candidate value.
 Add, replace, remove or reorder 2–8 distinct candidates; choose 1–3 images each (maximum 24).
@@ -289,8 +289,8 @@ returns no parameter recommendations and generation-profile publication remains 
 
 ### 3.12 Controlled LoRA Composition experiments
 
-Design offers **LoRA Composition** under the *Is this adapter worth using* objective (section 3.18) (target: registry-verified SDXL
-txt2img, one frozen Learning baseline, optimizer and Style Consistency off). One experiment tests
+Design offers **LoRA Composition** under the *Is this adapter worth using* objective (section 3.18) (target: SDXL
+txt2img (section 3.19), one frozen Learning baseline, optimizer and Style Consistency off). One experiment tests
 **one designated LoRA position**; every other LoRA, the prompt text (trigger words included),
 negative prompt, settings and seed cohort stay fixed. Operations: **Add / Remove** (one LoRA at
 different strengths, including *No LoRA*; strength 0 means absent, never `<lora:x:0>`),
@@ -333,7 +333,7 @@ excluded from `RecommendationEngine`, Apply and profile publication.
 
 ### 3.13 Controlled Textual Inversion Embedding experiments
 
-Design offers **Embedding** under the *Is this adapter worth using* objective (section 3.18) (target: registry-verified SDXL txt2img on
+Design offers **Embedding** under the *Is this adapter worth using* objective (section 3.18) (target: SDXL txt2img (section 3.19) on
 the Forge backend, one frozen Learning baseline, optimizer and Style Consistency off). One
 experiment tests **one designated embedding position** in **one channel** (positive or negative);
 every other embedding, the prompt text, the other channel, settings and seed cohort stay fixed.
@@ -685,11 +685,44 @@ The Design step starts from an objective. The eight study engines, their forms, 
 
 `ExperimentDesignPanel` keeps `study_type_var` and its display names as the single selection state, so the `study_type` literals written to saved sessions and frozen snapshots, Preview staleness (`design_signature` includes the study type) and `restore_state` are untouched. `choose_study(slug)` is the one way an objective sets it; a reopened Compatibility Probe session is marked as the probe entry (`current_study_slug`) and keeps the form it always had.
 
-**Eligibility (`study_eligibility.eligible_studies(policy, baseline, resources)`).** A pure projection, no Tk and no I/O: each study is available or unavailable for the Learning baseline's model, with the refusal text the study's own target check raises, plus the model's testable variables from `project_learning_capabilities`. It adds no rule; it calls `require_target` (Prompt Slot, LoRA Composition, Embedding on the positive channel), `candidate_ineligibility` (Model Comparison; the Matrix adds `require_matrix_baseline`), the grid's policy check and `require_plain_txt2img`, and `require_probe_target` over the recipes the probe offers for the family (a probe runs on its own optimizer-free baseline, so the authored baseline is not passed). Controlled Variable is available when the capability projection supports the stage and offers a variable. `resources` only adds inventory notes (for example no LoRAs listed) and never changes a verdict. For Model Comparison and the Matrix the verdict judges the baseline's model as one candidate; each compared model is still checked when chosen.
+**Eligibility (`study_eligibility.eligible_studies(policy, baseline, resources)`).** A pure projection, no Tk and no I/O: each study is available or unavailable for the Learning baseline's model, with the refusal text the study's own target check raises, plus the model's testable variables from `project_learning_capabilities`. It adds no rule; it calls `require_target` (Prompt Slot, LoRA Composition, Embedding on the positive channel), `candidate_target_check` (Model Comparison; the Matrix adds `require_matrix_baseline`), the grid's policy check and `require_plain_txt2img`, and `require_probe_target` over the recipes the probe offers for the family (a probe runs on its own optimizer-free baseline, so the authored baseline is not passed). Controlled Variable is available when the capability projection supports the stage and offers a variable. `resources` only adds inventory notes (for example no LoRAs listed) and never changes a verdict. For Model Comparison and the Matrix the verdict judges the baseline's model as one candidate; each compared model is still checked when chosen.
 
 **Unavailable is shown, not hidden.** Each unavailable study stays selectable and shows "Not available on this model: <reason>" under its entry. Opening it shows the same refusal as the existing readiness text (`ExperimentDesignPanel.readiness_reason`), and for an inherited baseline setting the baseline editor's Turn Off for This Study remains reachable; a disabled entry would have made that unreachable. Model Evidence Catalog details add a "What you can test on this model" block from the same projection for the selected checkpoint's own policy (details only; no other catalog behaviour changed).
 
 **Owner decision OD-2 (2026-11-16).** Four objectives group the studies as in the table; Two-Axis Grid and Prompt x Model Matrix move under "More comparisons"; the three duplicate shortcut buttons are removed; no study type is retired or deleted.
+
+### 3.19 SDXL target evidence (N1b, owner decision 2026-11-25)
+
+Embedding, LoRA Composition, Prompt Slot, Two-Axis Grid, Model Comparison and the Prompt x Model Matrix are written for SDXL
+checkpoints. Owner rule: "Experimental evidence should trump anecdotal or registry evidence. If it works, it works."
+`src/image_backends/sdxl_target.py` gives one verdict per (checkpoint, operation, backend), and the study runs with the
+policy that verdict returns (`src/learning/sdxl_study_target.py`):
+
+- **Observed.** A completed queue job for the same checkpoint name, with the same capability-level operation (plain
+  txt2img for Prompt Slot, Two-Axis and Model Comparison; txt2img with embeddings or LoRAs for those studies) on the same
+  backend, is verified and shows no warning (`observed_execution` evidence, "ran N times here"). Where a job recorded
+  the checkpoint SHA-256 (Model Comparison arms) and the registry knows the current file's, a different hash does not count.
+- **Registry SDXL base** (header read by the asset registry): verified, as before (`registry_evidence`).
+- **Unclassified** (no registry record, an unclassified or conflicting header, a name hint only, an SDXL refiner or inpaint
+  variant): a `PolicyWarning` with why and the fix. The study runs as SDXL with `accepted_unverified` evidence. Preview
+  lists the warning (names are hidden in the SFW content mode), the snapshot freezes it (`policy_warnings`), and every queued
+  job records it in `provenance.metadata.accepted_warnings`.
+- **Positively another family** (SD1.5, SD2, SD3, FLUX, an exact qualified profile): a real block with a fix. When such a
+  file has completed the same operation here, the block becomes a warning (why and fix) and Queue records it (owner
+  decision Q1, 2026-11-26, "Warn, then run"), because a completed job does not prove the family: Forge skips a LoRA or
+  embedding that does not match the checkpoint. An exact qualified profile is never outranked.
+- A damaged (truncated or malformed) safetensors header stays a Model Comparison block: the backend cannot load the file.
+
+"Same operation" is the capability level, not the study kind, with ControlNet per modality (owner decision Q2,
+2026-11-26). The three SDXL tiers carry the identical SDXL contract, so `compatible_context` treats them as one: a study
+frozen with a warning may be continued or pooled with a registry-verified study of the same model, and the accepted
+warning stays on its record (owner decision Q3, 2026-11-26). Observed runs decide
+eligibility only. They never feed `RecommendationEngine`, proposals or publication (invariant 5).
+
+The observed lookup (`src/history/observed_execution.py`) never reads on the calling thread: it answers from a
+per-checkpoint cache and schedules one background read on the repository's read-only connection (newest jobs first, at most
+20,000 rows and 200 matching jobs, refreshed after five minutes). Until that read finishes it answers 0, so the first Preview
+of a model can show a warning that a later Preview no longer shows.
 
 ## 4. Data and persistence
 
@@ -764,7 +797,7 @@ Because both layers stay in the compiler, the invariant "randomization never hap
 2. Compile all, then admit once. No partial experiment may enter the queue. Run reads the frozen snapshot, not live GUI state, and never the live Pipeline: the Learning baseline is copied from the Pipeline only by an explicit action or the one-time first-display seed (section 3.9).
 3. The NJR and frozen snapshot are immutable. Learning never mutates a historical artifact, NJR, PromptPack or prior job; Apply affects only the current draft intent or a derived job.
 4. `ModelPolicy` is the only source of model/profile applicability. Learning must not detect families by name or duplicate LoRA compatibility rules; fixed/restricted controls are not variables.
-5. Evidence is gated: controlled data may recommend only the field the frozen experiment varied; `experiment_strong` needs two distinct values and three controlled ratings in one durable experiment, each sample counted once at its latest rating; observational evidence is manual-only; insufficient evidence returns no recommendation. The best-rated value wins; confidence only breaks ties.
+5. Evidence is gated: controlled data may recommend only the field the frozen experiment varied; `experiment_strong` needs two distinct values and three controlled ratings in one durable experiment, each sample counted once at its latest rating; observational evidence is manual-only (N1b observed-execution counts decide study eligibility only, section 3.19); insufficient evidence returns no recommendation. The best-rated value wins; confidence only breaks ties.
 6. Model Comparison ratings never feed ordinary recommendations or automatic Model selection; they claim preference under each frozen envelope, not causality.
 6b. LoRA Composition ratings are experiment-local: record kind `learning_experiment_rating` with `study_type` `lora_composition`, excluded from `RecommendationEngine`, Apply and profile publication. Preview refuses (never deduplicates or truncates) any design whose only difference is not the one designated LoRA position, and readback proves the whole expected LoRA set or the variant is uncontrolled.
 6d. One eligibility rule for every recommendation entry point: `controlled_studies.reports_setting_recommendations`. For an experiment-local study (`LOCAL_ONLY_STUDIES`), both `get_recommendations_for_current_prompt` and `update_recommendations`/`refresh_recommendations` decline to query the engine, and the review panel replaces any shown recommendations with `LOCAL_STUDY_RECOMMENDATION_NOTICE` and disables Apply. Before `fix/learn-evidence-consistency` the refresh path had no guard and could show recommendations the getter and Apply refused.
@@ -819,7 +852,7 @@ A Learning change should cover persistence/resume, stage capability validation, 
 - Silent failures [V, narrowed by PR-LEARN-PAYOFF-780]: `save_review_feedback` rejects unconfirmed appends and Review shows inline outcomes. `record_staged_curation_selection` still ignores the append result and swallows exceptions; these other write paths are outside this repair.
 - Steps are whole numbers [fixed in `fix/learn-evidence-consistency`]: `VariableMetadata` marks Steps `integer`, so `_generate_variant_values` (range and proposal values) returns ints through `variable_metadata.whole_number_values` and refuses a fractional range at Preview. Ratings saved by older sweeps keep their `30.0` on disk; publication reads an integral float as its integer and still refuses `30.5`. Profile validation is unchanged.
 - Dead pipeline-side emitters [V: no callers in `src`]: `PipelineRunner._emit_learning_record`, so records are not produced automatically from runs; `PipelineController.handle_learning_record` is its receiver. Evidence comes only from operator actions in the Learning and Review tabs.
-- Two-Axis Grid limits [V]: txt2img on registry-verified SDXL only; CFG Scale, Steps and one fixed LoRA's strength only; no three-axis sweeps, no automatic best-setting choice, no different-LoRA axis. A cell is one job with N images, so per-sample seeds are the backend's read-back vector (`actual_all_seeds`), shown only when its length equals the image count. Physical GPU behaviour of a grid has not been qualified by this package. Post-run read-back verifies a cell's LoRA only; that CFG and Steps were honoured by the backend is proven at compile time, as for single-variable experiments. `LearningAnalytics.get_overall_summary` still counts grid ratings in its global totals (descriptive only; nothing recommends from it).
+- Two-Axis Grid limits [V]: txt2img on an SDXL target only (section 3.19; a LoRA Strength axis on an unclassified model is still refused by the controlled-variable LoRA rule); CFG Scale, Steps and one fixed LoRA's strength only; no three-axis sweeps, no automatic best-setting choice, no different-LoRA axis. A cell is one job with N images, so per-sample seeds are the backend's read-back vector (`actual_all_seeds`), shown only when its length equals the image count. Physical GPU behaviour of a grid has not been qualified by this package. Post-run read-back verifies a cell's LoRA only; that CFG and Steps were honoured by the backend is proven at compile time, as for single-variable experiments. `LearningAnalytics.get_overall_summary` still counts grid ratings in its global totals (descriptive only; nothing recommends from it).
 - Aesthetic conditioning [V]: the executor's prompt fallback uses the canonical unweighted embedding invocation (see `IMAGE_PIPELINE.md` section 4.4); Aesthetic Gradients script mode stays separate. Prompt x Model Matrix (section 3.14) continues to refuse aesthetic conditioning for every model; corrected rendering does not widen study eligibility or establish embedding consumption.
 - Unused declarations [V]: `LearningMode.MULTI_VARIABLE_EXPERIMENT` (the ordinary sweep is one variable; the bounded two-axis grid is section 3.7); `src/learning/learning_contract.py` is placeholder presets used by `learning_plan.py`.
 - Reverse dependencies [V]: `src/learning/execution_controller.py` imports `src.gui.learning_state`; `model_policy_service.py` takes the GUI controller as a parameter and imports `src.gui_v2.recommendation_targets`; `src/learning` imports `src.controller` helpers. `LearningTabFrame` builds stores and services itself and reaches `pipeline_controller._job_service` (audit D3).

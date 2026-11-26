@@ -131,8 +131,12 @@ and requires a fresh preview before another attempt. The dialog admits a preview
 Loading, hashing, snapshot writes, compilation and admission run off Tk; widget updates return through the existing
 `BackgroundWorkRunner` / `TkUiDispatcher`. Source decode limits are 20 MiB, 64–4096 pixels per side; animations are refused.
 
-This first slice supports registry-resolved SDXL base checkpoints on Forge only. `masked_inpaint` projects the existing
-ModelPolicy at preparation, admission and backend validation; unknown families and unsupported backends fail before
+This first slice supports SDXL checkpoints on Forge only. `masked_inpaint` projects the existing ModelPolicy through the
+N1b SDXL verdict (`src/image_backends/sdxl_target.py`; owner decision 2026-11-25) at preparation, admission and backend
+validation. A registry-resolved SDXL base, or a checkpoint that has completed the same edit on Forge here, is verified. An
+unclassified checkpoint (no registry record, unclassified or conflicting header) previews with a warning (why and the fix)
+in the Preview summary and the outpaint support line; Add to Queue records it in `provenance.metadata.accepted_warnings`
+and dispatch does not refuse it. Other backends, exact profiles and positively identified other families fail before
 admission. Physical output quality is not qualified by these CPU contracts. See
 `IMAGE_PIPELINE.md` section 3.2 for the persisted input contract and dispatch integrity.
 
@@ -215,7 +219,9 @@ visible issue. Caption text stays in inspection. A model result cannot open a dr
 The action picker explains eligibility from the recorded target, ModelPolicy, stage compatibility,
 and the current cached checkpoint and detector lists. **Check correction availability**
 reads the connected backend's script catalog. Face and hand passes require an ADetailer
-entry for img2img. Guided img2img and ADetailer require a registry-resolved SDXL base target.
+entry for img2img. Guided img2img and ADetailer require an SDXL target by the same N1b verdict: an unclassified target is offered with
+its warning in the action's reason and carried on the previewed job until Queue records it as accepted; a positively
+identified other family or an exact profile is refused.
 Edit Mask also requires Forge. A face or hand pass may affect
 other regions that its detector finds. A rectangular finding marks the region for manual painting
 in Edit Mask. An explicitly imported, source-matched SAM mask is editable there.

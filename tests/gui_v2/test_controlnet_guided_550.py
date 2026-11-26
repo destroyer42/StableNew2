@@ -511,6 +511,15 @@ def test_readiness_follows_the_target_without_editing_the_declaration(panel, cha
     class Target:
         def __init__(self, executable, evidence=EVIDENCE_REGISTRY):
             self.executable, self.evidence = executable, evidence
+            # A definite refusal (a positively identified other family); N1b warns only for unclassified ones.
+            self.status, self.reason = (
+                ("supported", "supported") if executable else ("unsupported", "family")
+            )
+            self.message = (
+                ""
+                if executable
+                else "OpenPose conditioning is SDXL-only; select an SDXL checkpoint."
+            )
 
     raw = declaration("openpose", "depth")
     panel.set_declaration(raw)

@@ -19,6 +19,7 @@ from src.image_backends.operation_compatibility import (
 )
 from src.pipeline.adetailer_contract import classify_detector
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.policy_warnings import with_pending_warnings
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
 from src.review.archive import configured_output_root, job_queue_of
 from src.review.assist.contracts import AssistError
@@ -28,6 +29,7 @@ from src.review.correction_advice import (
     detectors_for,
     resolve_target,
     target_refusal,
+    target_verdict,
 )
 from src.review.findings import CORRECTION_KEY, Action, correction_context
 from src.review.workflow_adapter import ReviewWorkflowAdapter
@@ -264,6 +266,8 @@ def prepare_review_batch(
                 output_dir=output_dir,
             )
             record = plan.jobs[0]
+            if guided is not None:  # N1b: the unclassified-target warning travels to Preview; Queue accepts it
+                record = with_pending_warnings(record, target_verdict(guided.action, target).warnings)
             model = record.base_model
             assessment = assess_njr(record)
             if not assessment.ready:

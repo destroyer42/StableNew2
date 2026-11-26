@@ -130,8 +130,10 @@ def test_image_cap(images):
 def test_optimizer_and_unknown_model_refuse():
     with pytest.raises(ValueError, match="optimizer"):
         freeze_candidates(design(), policy(), {"prompt_optimizer": {"enabled": True}})
-    with pytest.raises(ValueError, match="registry"):
-        freeze_candidates(design(), resolve_model_policy("unknown"), {})
+    # N1b: a positively identified other family refuses; an unclassified one runs as SDXL with a warning.
+    with pytest.raises(ValueError, match="Only SDXL checkpoints"):
+        freeze_candidates(design(), _registry_family_policy("sd1"), {})
+    freeze_candidates(design(), resolve_model_policy("unknown"), {})
 
 
 def test_readback_seed_and_launch_boundaries(tmp_path):
@@ -614,3 +616,14 @@ def test_candidate_identity_change_and_fixed_setting_drift_are_uncontrolled(tmp_
     variant = copy.deepcopy(bench.state.plan[0])
     variant.executed_config["txt2img"]["steps"] += 1
     assert "context" in prompt_readback_reason(snapshot, variant, readback)
+
+
+def _registry_family_policy(family: str):
+    """A policy the registry positively classified as ``family`` (N1b: a real block for SDXL-only features)."""
+    from types import SimpleNamespace
+
+    compat = SimpleNamespace(
+        status=SimpleNamespace(value="resolved"), family=SimpleNamespace(value=family),
+        structural_error=None, checkpoint_architecture=None,
+    )  # fmt: skip
+    return resolve_model_policy("other-family.safetensors", family_lookup=lambda _name: compat)

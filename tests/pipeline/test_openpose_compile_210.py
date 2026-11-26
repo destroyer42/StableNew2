@@ -289,14 +289,17 @@ def test_a1111_is_refused_at_compile(tmp_path: Path, monkeypatch: pytest.MonkeyP
 def test_an_identified_non_sdxl_checkpoint_is_refused(tmp_path: Path) -> None:
     harness = Harness(tmp_path)
 
-    with pytest.raises(OpenPoseCompileError, match="SDXL-only"):
+    with pytest.raises(OpenPoseCompileError, match="Only SDXL checkpoints"):
         harness.build([_slot(0, "a person", controlnet_openpose=POSE_A)], model=OLD)
 
 
-def test_an_unidentified_checkpoint_is_refused_unless_the_header_proves_sdxl(tmp_path: Path) -> None:
-    refused = Harness(tmp_path / "a")
-    with pytest.raises(OpenPoseCompileError, match="not identified this checkpoint as SDXL"):
-        refused.build([_slot(0, "a person", controlnet_openpose=POSE_A)], model=MYSTERY)
+def test_an_unidentified_checkpoint_warns_unless_the_header_proves_sdxl(tmp_path: Path) -> None:
+    # N1b: no header evidence is a warning frozen on the NJR for Preview (accepted on Queue), never a refusal.
+    warned = Harness(tmp_path / "a").build([_slot(0, "a person", controlnet_openpose=POSE_A)], model=MYSTERY)[0]
+    metadata = thaw_json(warned.provenance.metadata)
+    assert metadata["conditioning"]["controlnet_openpose"]["target"]["family_source"] == "accepted_unverified"
+    (warning,) = metadata["policy_warnings"]
+    assert warning["code"] == "image_model_family_unverified" and warning["subject"] == MYSTERY
 
     probed: list[str] = []
 

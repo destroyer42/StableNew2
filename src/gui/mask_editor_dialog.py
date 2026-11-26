@@ -27,6 +27,7 @@ from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunne
 from src.gui_v2.mask_editor_state import MaskDocument, MaskViewport
 from src.pipeline.image_edit_inputs import read_source
 from src.pipeline.njr_core_v26 import thaw_json
+from src.pipeline.policy_warnings import pending_warnings
 from src.review.correction_advice import GuidedReprocess
 from src.utils.thread_registry import get_thread_registry
 
@@ -408,6 +409,8 @@ class MaskEditorDialog(tk.Toplevel):
                 "effective_img2img": thaw_json(job.config["img2img"]),
                 "resolved_stage": job.stage_chain[0].to_dict(),
                 "restrictions": "SDXL base / Forge; white changes; black preserves; no outpainting",
+                # N1b: why the model is not confirmed and what makes it work; Add to Queue records acceptance.
+                "warnings": [item.text() for item in pending_warnings(job)],
             }
             visibility = ContentVisibilityResolver(
                 getattr(

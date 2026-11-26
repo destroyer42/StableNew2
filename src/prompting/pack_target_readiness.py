@@ -207,18 +207,38 @@ def assess_pack_readiness(
                     break
     openpose_unverified = False
     openpose_target = assess_openpose_target(policy, backend_id)
+    # N1b: an unclassified checkpoint is a warning (the compiler freezes it for Preview); only a positively
+    # identified other family, an exact profile or a non-Forge backend is refused.
+    from src.pipeline.openpose_compile import controlnet_sdxl_target
+
+    sdxl = controlnet_sdxl_target(policy, model_name, str(backend_id or ""))  # legacy OpenPose
+    units_warned = False
     for slot in getattr(pack, "slots", []) or []:
         from src.conditioning.controlnet import enabled as units_enabled
-        from src.image_backends.model_policy import EVIDENCE_REGISTRY
+        from src.conditioning.controlnet import parse_units
 
-        if units_enabled(getattr(slot, "controlnet_units", None)) and (not openpose_target.executable or policy.evidence != EVIDENCE_REGISTRY):
-            refusals.append(f"row {int(getattr(slot, 'index', 0)) + 1}: ControlNet requires registry-verified SDXL on Forge")
+        declared = getattr(slot, "controlnet_units", None)
+        if units_enabled(declared):
+            try:  # owner decision Q2: observed runs count per ControlNet modality
+                modalities = tuple(unit.modality for unit in parse_units(declared) if unit.settings.enabled)
+            except ValueError:
+                modalities = ()
+            unit_sdxl = controlnet_sdxl_target(policy, model_name, str(backend_id or ""), modalities)
+            units_target = (
+                assess_openpose_target(unit_sdxl.policy, backend_id) if unit_sdxl.allowed else None
+            )
+            if units_target is None or not units_target.executable:
+                reason = unit_sdxl.block or (units_target.message if units_target is not None else "")
+                refusals.append(f"row {int(getattr(slot, 'index', 0)) + 1}: {reason}")
+            elif unit_sdxl.warning is not None:
+                units_warned = True
         raw = getattr(slot, "openpose", None)
         if raw is None or declaration_problems(raw) or not declaration_enabled(raw):
             continue  # invalid declarations are structural errors; disabled ones are not executed
-        if openpose_target.blocked:
+        rescued = openpose_target.reason in ("conflicting_evidence", "family") and sdxl.allowed  # N1b warning
+        if openpose_target.blocked and not rescued:
             refusals.append(f"row {int(getattr(slot, 'index', 0)) + 1}: {openpose_target.message}")
-        elif openpose_target.status == OPENPOSE_TARGET_UNVERIFIED:
+        elif openpose_target.status == OPENPOSE_TARGET_UNVERIFIED or rescued:
             openpose_unverified = True
     return PackReadiness(
         evaluated="unsaved editor state" if dirty else "saved pack file",
@@ -229,6 +249,7 @@ def assess_pack_readiness(
             *sorted(adapted),
             *(("lora_evidence_incomplete_kept_unchanged",) if incomplete else ()),
             *(("openpose_target_unverified_checked_at_preview",) if openpose_unverified else ()),
+            *(("controlnet_target_unverified_warning_at_preview",) if units_warned else ()),
         ),
         target_checked=policy.qualified or not target_is_unverified(policy),
         limits=(

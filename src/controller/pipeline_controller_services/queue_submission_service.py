@@ -9,7 +9,7 @@ from typing import Any
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.image_backends.model_policy_warnings import shown_model_warnings
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.pipeline.policy_warnings import SURFACE_DESKTOP, with_accepted_warnings
+from src.pipeline.policy_warnings import SURFACE_DESKTOP, pending_warnings, with_accepted_warnings
 
 
 class QueueSubmissionService:
@@ -112,7 +112,14 @@ class QueueSubmissionService:
         records = sort_jobs_by_model(records)
         # N1: Queue on a Preview whose model showed a warning is the operator's acceptance; freeze it in provenance.
         records = [
-            with_accepted_warnings(record, shown_model_warnings(record), surface=SURFACE_DESKTOP)
+            with_accepted_warnings(
+                record,
+                (
+                    *shown_model_warnings(record),
+                    *pending_warnings(record),
+                ),  # N1b: compile-time warnings too
+                surface=SURFACE_DESKTOP,
+            )
             for record in records
         ]
         if is_queue_submission_blocked():

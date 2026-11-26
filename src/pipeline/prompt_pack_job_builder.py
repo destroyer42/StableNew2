@@ -64,6 +64,7 @@ from src.pipeline.njr_compiler import (
     compile_njr,
 )
 from src.pipeline.openpose_compile import CompiledConditioning, OpenPoseCompiler
+from src.pipeline.policy_warnings import PENDING_WARNINGS_KEY
 from src.pipeline.prompt_pack_parser import PackRow
 from src.pipeline.resolution_layer import (
     PackPromptIntent,
@@ -529,6 +530,8 @@ class PromptPackNormalizedJobBuilder:
                     "target": dict(prepared.conditioning.target),
                 }
             }
+            if prepared.conditioning.target.get("policy_warnings"):  # N1b: shown at Preview, accepted on Queue
+                provenance_metadata[PENDING_WARNINGS_KEY] = list(prepared.conditioning.target["policy_warnings"])
 
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
         batch_settings = self._build_batch_settings(merged_config)

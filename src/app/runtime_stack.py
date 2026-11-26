@@ -64,6 +64,10 @@ def build_queue_stack(
         repository = queue.repository
     if repository is None:
         repository = JobRepository(resolve_job_repository_location())
+    # N1b: completed runs in this repository are observed-execution evidence (read-only, off the Tk thread).
+    from src.history.observed_execution import install_for_repository
+
+    install_for_repository(repository)
     if queue is None:
         queue = JobQueue(repository=repository)
     if runner is None:

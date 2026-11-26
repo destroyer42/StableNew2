@@ -16,7 +16,7 @@ compilation and calls this once per prepared slot.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -31,9 +31,18 @@ from src.conditioning.openpose_library import (
 from src.conditioning.openpose_snapshot import FrozenOpenPose, freeze_selection
 from src.image_backends.model_policy import EVIDENCE_REGISTRY, ModelPolicy, resolve_model_policy
 from src.image_backends.openpose_capability import (
+    REASON_CONFLICT,
+    REASON_FAMILY,
+    REASON_UNVERIFIED,
     STATUS_UNVERIFIED,
     OpenPoseTarget,
     assess_openpose_target,
+)
+from src.image_backends.sdxl_target import (
+    SdxlTarget,
+    assess_sdxl_target,
+    combine,
+    controlnet_operation,
 )
 
 FAMILY_SOURCE_SNAPSHOT = "registry_snapshot"
@@ -153,6 +162,15 @@ class OpenPoseBuild:
         source = FAMILY_SOURCE_SNAPSHOT if policy.evidence == EVIDENCE_REGISTRY else policy.evidence
         if target.status == STATUS_UNVERIFIED and model_name:
             policy, target, source = self._substantiate(model_name, backend_id, policy, target, source)
+        sdxl = None
+        if not target.executable and target.reason in (REASON_UNVERIFIED, REASON_CONFLICT, REASON_FAMILY):
+            # N1b: no positive header evidence after the live probe is a warning; observed runs outrank the registry.
+            sdxl = controlnet_sdxl_target(policy, model_name, backend_id)
+            if not sdxl.allowed:
+                raise OpenPoseCompileError(f"{label}: {sdxl.block}")
+            policy = sdxl.policy
+            target = assess_openpose_target(policy, backend_id)
+            source = family_source(policy)
         if not target.executable:
             raise OpenPoseCompileError(f"{label}: {target.message}")
 
@@ -175,6 +193,11 @@ class OpenPoseBuild:
                 "family_source": source,
                 "backend_id": backend_id,
                 "stage": "txt2img",
+                **(
+                    {"policy_warnings": [item.as_dict() for item in sdxl.warnings]}
+                    if sdxl is not None and sdxl.warnings
+                    else {}
+                ),
             },
         )
 
@@ -198,6 +221,9 @@ class OpenPoseBuild:
         probed_target = assess_openpose_target(probed, backend_id)
         if probed_target.executable:
             return probed, probed_target, FAMILY_SOURCE_HEADER
+        if probed_target.reason == REASON_FAMILY:
+            # Positive header evidence of another family is kept, so N1b refuses it rather than warning.
+            return probed, probed_target, FAMILY_SOURCE_HEADER
         return policy, target, source
 
     def _image(self, asset: str) -> ValidatedImage:
@@ -208,8 +234,44 @@ class OpenPoseBuild:
         return cached
 
 
+def controlnet_sdxl_target(
+    policy: ModelPolicy,
+    model_name: str | None,
+    backend_id: str,
+    modalities: Sequence[str] = ("openpose",),
+) -> SdxlTarget:
+    """The N1b SDXL verdict for ControlNet conditioning with ``modalities`` on ``model_name``; observed runs count per
+    modality (owner decision Q2). Pure but for the read-only, non-blocking observed-execution index."""
+
+    from src.history.observed_execution import observed_runs_lookup
+
+    lookup = observed_runs_lookup()
+    return combine(
+        [
+            assess_sdxl_target(
+                policy,
+                model=str(model_name or ""),
+                operation=controlnet_operation(modality),
+                backend_id=str(backend_id or ""),
+                feature="ControlNet",
+                observed=lookup,
+            )
+            for modality in (tuple(modalities) or ("openpose",))
+        ]
+    )
+
+
+def family_source(policy: ModelPolicy) -> str:
+    """Where the frozen target's family came from (``registry_snapshot``, ``observed_execution``,
+    ``accepted_unverified``)."""
+
+    return FAMILY_SOURCE_SNAPSHOT if policy.evidence == EVIDENCE_REGISTRY else policy.evidence
+
+
 __all__ = [
     "CompiledConditioning",
+    "controlnet_sdxl_target",
+    "family_source",
     "OpenPoseBuild",
     "FAMILY_SOURCE_HEADER",
     "FAMILY_SOURCE_SNAPSHOT",

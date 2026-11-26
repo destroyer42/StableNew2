@@ -19,9 +19,11 @@ from src.image_backends.image_backend_types import (
 )
 from src.image_backends.masked_inpaint import require_mask_target
 from src.image_backends.model_policy import FamilyLookup
+from src.image_backends.sdxl_target import OP_OUTPAINT
 from src.pipeline.image_edit_inputs import KEY, ORIGINAL_KEY, OUTPAINT_KEY, freeze_outpaint_inputs
 from src.pipeline.njr_core_v26 import thaw_json
 from src.pipeline.outpaint_canvas import OPERATION, Extents, assess_pressure
+from src.pipeline.policy_warnings import pending_warnings
 from src.pipeline.reprocess_builder import ImageEditSpec
 
 QUALITY_NOTICE = (
@@ -53,12 +55,16 @@ def describe_support(
     """Whether the selected target can run an outpaint, with an operator-facing sentence (read-only projection)."""
     try:
         options = normalize_image_backend_options(dict(backend_options), model_name=model)
-        require_mask_target(model, options, family_lookup=family_lookup)
+        target = require_mask_target(
+            model, options, family_lookup=family_lookup, operation=OP_OUTPAINT
+        )
     except ValueError as exc:
         return False, str(exc)
+    if target.warning is not None:  # N1b: runs, with the warning Preview shows and Queue records
+        return True, f"Warning: {target.warning.text()}"
     return (
         True,
-        f"Supported target: {model or 'selected model'} on {resolve_image_backend_id(options)} (SDXL base).",
+        f"Supported target on {resolve_image_backend_id(options)}: {target.evidence_text()}",
     )
 
 
@@ -110,6 +116,8 @@ def outpaint_preview_summary(preview: MaskEditPreview) -> dict[str, Any]:
         expanded["width"], expanded["height"], steps if type(steps) is int else 20
     )
     return {
+        # N1b: why the model is not confirmed and what makes it work; Add to Queue records acceptance.
+        "warnings": [item.text() for item in pending_warnings(job)],
         "original": {
             "path": frozen["original_path"],
             "sha256": frozen[ORIGINAL_KEY]["sha256"],

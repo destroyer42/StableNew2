@@ -29,6 +29,11 @@ from src.learning.prompt_slot_experiment import (
     frozen_candidate,
     require_target,
 )
+from src.learning.sdxl_study_target import (
+    SNAPSHOT_WARNINGS_KEY,
+    accept_frozen_warnings,
+    warning_records,
+)
 from src.pipeline.njr_core_v26 import NormalizedJobRecord, thaw_json
 from src.pipeline.resolution_layer import pack_prompt_intent_from_dict
 
@@ -173,7 +178,8 @@ def build_plan(controller: Any, experiment: Any) -> None:
     baseline = freeze_preview_global_policy(baseline)
     model = selected_model(baseline, "txt2img")
     policy = resolve_policy(model, controller, baseline)
-    require_target(policy, baseline)
+    target = require_target(policy, baseline)
+    policy = target.policy  # N1b: the SDXL policy carrying its evidence tier
     problems = authoring.baseline_problems(baseline, "txt2img")
     if problems:
         raise ValueError("The Learning baseline is incomplete: " + "; ".join(problems))
@@ -236,6 +242,8 @@ def build_plan(controller: Any, experiment: Any) -> None:
         ),
     )
     snapshot.update(study_type=STUDY_TYPE, **{STUDY_TYPE: frozen})
+    if target.warnings:  # N1b: Preview shows these; Queue records them as accepted
+        snapshot[SNAPSHOT_WARNINGS_KEY] = warning_records([target])
     from src.generation_profiles.identity import ModelIdentityResolver
 
     snapshot["model_identity"] = (
@@ -286,7 +294,7 @@ def build_variant(controller: Any, experiment: Any, variant: Any) -> NormalizedJ
     baseline = snapshot["baseline_config"]
     model = selected_model(baseline, "txt2img")
     policy = resolve_policy(model, controller, baseline)
-    require_target(policy, baseline)
+    policy = require_target(policy, baseline).policy
     if not compatible_context(
         snapshot["model_policy_context"], policy_context(policy, model, "txt2img")
     ):
@@ -309,4 +317,4 @@ def build_variant(controller: Any, experiment: Any, variant: Any) -> NormalizedJ
         raise ValueError(
             "Prompt Slot NJR differs from the frozen Preview. No variants were admitted."
         )
-    return record
+    return accept_frozen_warnings(record, snapshot)

@@ -14,6 +14,7 @@ from src.learning import embedding_experiment
 from src.learning.experiment_execution import thaw_snapshot
 from src.learning.lora_composition import OPERATION_LABELS, preview_details
 from src.learning.model_comparison import STUDY_TYPE as MODEL_COMPARISON
+from src.learning.sdxl_study_target import frozen_warnings
 from src.learning.two_axis_grid import variant_label
 
 _MAX_VALUES_SHOWN = 8
@@ -308,6 +309,16 @@ def build_preview_summary(
         warnings.append(
             "The plan and the frozen Preview disagree on the variant count. Build Preview again."
         )
+    # N1b: each model warning Preview froze (why and the fix); Queue records them as accepted.
+    for item in frozen_warnings(snapshot):
+        if show_model_names:
+            warnings.append(item.text())
+        else:  # names stay hidden here, as everywhere else in this summary
+            warnings.append(
+                "A model in this study is not confirmed as SDXL; Queue runs it anyway and records the accepted "
+                "warning. Model names are hidden in this content mode, so the details are not shown here."
+            )
+            break
     return PreviewSummary(
         rows=tuple(rows),
         warnings=tuple(warnings),

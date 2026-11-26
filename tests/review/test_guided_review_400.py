@@ -162,11 +162,26 @@ def test_policy_inventory_and_mask_are_visible_refusals(tmp_path):
         not missing_extension.eligible
         and "Check ADetailer availability" in missing_extension.reason
     )
-    for model in ("FLUX.2-klein-4B-fp8.safetensors", "looks-like-SDXL.safetensors"):
-        unverified = targets(model, lambda _model: None)
+    from src.image_backends.forge_klein_profile import latest_klein_profile
+
+    klein = latest_klein_profile().transformer.filename  # an exact qualified profile: a real block
+    profile = targets(klein, lambda _model: None)
+    assert all(
+        not row.eligible
+        for row in recommend(local, profile, replace(resources, models=frozenset({klein})))
+    )
+    # N1b: a name alone is unclassified evidence, so the passes are offered with the warning, not refused.
+    for named in ("FLUX.2-klein-4B-fp8.safetensors", "looks-like-SDXL.safetensors"):
+        rows = recommend(
+            local,
+            targets(named, lambda _model: None),
+            replace(resources, models=frozenset({named})),
+        )
+        assert [row.action for row in rows if row.eligible] == [Action.MASK, Action.HANDS]
         assert all(
-            not row.eligible
-            for row in recommend(local, unverified, replace(resources, models=frozenset({model})))
+            row.reason.startswith(f"Warning: {named} is not confirmed as SDXL.")
+            for row in rows
+            if row.eligible
         )
 
 

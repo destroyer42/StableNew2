@@ -324,8 +324,14 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         config = getattr(njr, "config", None) or {}
         config = config if isinstance(config, Mapping) else {}
         self._validate_openpose_njr(njr, backend_options, config, stage_names)
-        if validate_units_intent(config, stage_names, backend_id=self.backend_id) is not None:
-            validate_units_target(str(getattr(njr, "base_model", "") or ""), self.backend_id, backend_options)
+        units = validate_units_intent(config, stage_names, backend_id=self.backend_id)
+        if units is not None:
+            validate_units_target(
+                str(getattr(njr, "base_model", "") or ""),
+                self.backend_id,
+                backend_options,
+                tuple(unit.modality for unit in units.units),
+            )
         hypernetworks = requested_hypernetworks_for_njr(njr)
         if hypernetworks and not self.capabilities.supports_hypernetworks:
             raise ForgeUnsupportedIntentError(
@@ -543,10 +549,20 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             )
 
     def _validate_openpose_request(self, request: ImageExecutionRequest) -> None:
-        if request.stage_name == "txt2img" and validate_units_intent(request.execution_config, (request.stage_name,), backend_id=self.backend_id) is not None:
+        units = (
+            validate_units_intent(request.execution_config, (request.stage_name,), backend_id=self.backend_id)
+            if request.stage_name == "txt2img"
+            else None
+        )
+        if units is not None:
             if request.input_image_path is not None:
                 raise OpenPoseDispatchError(CODE_BACKEND, "ControlNet applies to base txt2img, not image edits.")
-            validate_units_target(request.selected_model or "", self.backend_id, request.backend_options)
+            validate_units_target(
+                request.selected_model or "",
+                self.backend_id,
+                request.backend_options,
+                tuple(unit.modality for unit in units.units),
+            )
         frozen = validate_openpose_intent(
             request.execution_config, (request.stage_name,), backend_id=self.backend_id, backend_supported=True
         )

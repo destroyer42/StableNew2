@@ -387,14 +387,16 @@ def test_e29_fixed_embeddings_are_admitted_like_tested_ones():
         )
 
 
-def test_e30_target_must_be_registry_verified_sdxl_forge_txt2img():
-    with pytest.raises(ValueError, match="SDXL txt2img"):
+def test_e30_target_must_be_sdxl_forge_txt2img_and_unclassified_warns():
+    with pytest.raises(ValueError, match="Only SDXL checkpoints"):
         freeze(design(ee.PRESENCE, PRESENCE_PAIRS), pol=policy(KLEIN))
     with pytest.raises(ValueError, match="txt2img"):
         ee.require_target(sdxl(), baseline(), ee.POSITIVE, "img2img")
+    # N1b: an unclassified checkpoint is a warning (why and fix), run as SDXL, never a refusal.
     unverified = resolve_model_policy("sdxl-unlisted-checkpoint.safetensors")
-    with pytest.raises(ValueError):
-        ee.require_target(unverified, baseline(), ee.POSITIVE)
+    target = ee.require_target(unverified, baseline(), ee.POSITIVE)
+    assert target.warning is not None and target.warning.fix
+    assert target.policy.family == "sdxl" and target.policy.evidence == "accepted_unverified"
     other = baseline()
     other["backend_options"] = {"image": {"backend_id": "comfyui"}}
     with pytest.raises(ValueError, match="Forge"):
