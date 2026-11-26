@@ -227,7 +227,9 @@ tailscale serve --bg --https=443 http://127.0.0.1:8443
 systemctl disable --now review-placeholder   # then removed its unit file and /srv/placeholder
 ```
 
-- Sync URL for the PC: `https://<gateway-ip>:9443`. It is reachable from the PC only and never published on the tailnet.
+- Sync address for the PC: `<gateway-ip>:9443`. It is reachable from the PC only and never published on the tailnet.
+  The installer prints it as `https://<gateway-ip>:9443`, but StableNew's Phone review gateway dialog takes only
+  `host:port`, without `https://`.
 - The sync certificate's SHA-256 fingerprint was unchanged by the upgrade. It is not recorded here; read it on the
   gateway when entering it in StableNew.
 - The sync secret is in `/etc/review-gateway/sync_secret` (0600). Read it on the console when entering it in StableNew;
@@ -272,5 +274,5 @@ Kept items then wait in the gateway's queue.
 - **RAM.** CT 110 has 11 GB of the host's 15 GiB, so there is no room for Forge on Proxmox (D8, about 16 GB) without
   more memory.
 - **Storage.** Two TrueNAS storage findings, for separate jobs, are in the owner's private copy.
-- **Still to do on the desktop:** pair the phone and enter the sync URL, secret and fingerprint in StableNew (RG-120).
+- **Still to do on the desktop:** pair the phone and enter the sync address, secret and fingerprint in StableNew (RG-120).
 - No remote access to Immich was found or added.
