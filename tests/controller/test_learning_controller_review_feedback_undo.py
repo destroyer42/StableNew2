@@ -15,6 +15,7 @@ class _StubPipelineController:
 
 def test_review_feedback_advanced_rating_and_undo(tmp_path: Path) -> None:
     records_path = tmp_path / "learning_records.jsonl"
+    image_path = str(tmp_path / "output" / "a.png")
     writer = LearningRecordWriter(records_path)
     controller = LearningController(
         learning_state=LearningState(),
@@ -24,7 +25,7 @@ def test_review_feedback_advanced_rating_and_undo(tmp_path: Path) -> None:
 
     record = controller.save_review_feedback(
         {
-            "image_path": "output/a.png",
+            "image_path": image_path,
             "rating": 2,
             "quality_label": "poor",
             "notes": "hands are wrong",
@@ -49,6 +50,6 @@ def test_review_feedback_advanced_rating_and_undo(tmp_path: Path) -> None:
     assert metadata["user_rating_raw"] == 2
     assert metadata["user_rating"] == 3
 
-    undone = controller.undo_review_feedback(run_id=record.run_id, image_path="output/a.png")
+    undone = controller.undo_review_feedback(run_id=record.run_id, image_path=image_path)
     assert undone is True
     assert records_path.read_text(encoding="utf-8").strip() == ""

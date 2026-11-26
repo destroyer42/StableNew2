@@ -17,6 +17,7 @@ from fractions import Fraction
 from typing import Any
 
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
+from src.video.conditioning_inspection import preview_notes
 from src.video.motion_conversion import conversion_plan as cp
 from src.video.motion_conversion.blender import BlenderInstall
 from src.video.motion_conversion.conditioning_preview import ConditioningPreview
@@ -608,5 +609,5 @@ class ConditioningPreviewSession:
             status=self.status,
             heading=self.heading,
             preview=result,
-            warnings=result.warnings if result is not None and result.ok else (),
+            warnings=preview_notes(result) if result is not None and result.ok else (),
         )

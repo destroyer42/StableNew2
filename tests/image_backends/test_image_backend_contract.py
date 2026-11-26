@@ -26,6 +26,8 @@ from src.queue.job_repository import JobRepository
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 
 class _FakeTxt2ImgBackend:
     backend_id = "fake_test"

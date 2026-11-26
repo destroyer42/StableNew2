@@ -23,7 +23,7 @@ class ResourcePeaks:
     vram_peak_mib: int = 0
     ram_available_min_gb: float = 0.0
     last_ram_gb: float = 0.0
-    temp_peak_c: int = 0
+    temp_peak_c: float = 0.0
     power_peak_w: float = 0.0
     gpu_mhz_min_busy: int = 0  # lowest graphics clock while the GPU was >50% utilised
     throttle_reasons_seen: int = 0  # OR of every nvidia-smi clocks_event_reasons bitmask
@@ -53,7 +53,7 @@ class ResourcePeaks:
 @dataclass(frozen=True)
 class GpuSample:
     vram_mib: int
-    temp_c: int
+    temp_c: float
     power_w: float
     gpu_mhz: int
     mem_mhz: int
@@ -68,7 +68,7 @@ def parse_gpu_line(line: str) -> GpuSample:
     vram, temp, power, gpu_mhz, mem_mhz, util, throttle = fields[:7]
     return GpuSample(
         vram_mib=int(vram),
-        temp_c=int(temp),
+        temp_c=float(temp),
         power_w=float(power),
         gpu_mhz=int(gpu_mhz),
         mem_mhz=int(mem_mhz),

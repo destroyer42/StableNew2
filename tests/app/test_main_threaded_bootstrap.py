@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import src.main as main_module
-from src.gui import site_connection_dialog
+from src.gui import review_gateway_dialog, site_connection_dialog
 
 
 class _FakeRoot:
@@ -56,6 +56,7 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     captured: dict[str, object] = {}
     emergency_callbacks = []
     install_site_control = Mock()
+    install_gateway_control = Mock()
 
     monkeypatch.setattr(main_module, "tk", SimpleNamespace(Tk=lambda: fake_root))
     monkeypatch.setattr(main_module, "messagebox", None)
@@ -71,6 +72,9 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         site_connection_dialog, "install_site_connection_control", install_site_control
+    )
+    monkeypatch.setattr(
+        review_gateway_dialog, "install_review_gateway_control", install_gateway_control
     )
 
     def _fake_build_v2_app(**kwargs):
@@ -93,5 +97,10 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
         install_site_control.assert_called_once_with(
             fake_root, fake_controller, fake_window.header_zone
         )
+        install_gateway_control.assert_called_once_with(
+            fake_root, fake_controller, fake_window.header_zone
+        )
+        install_gateway_control.return_value.shutdown.assert_called_once_with()
     else:
         install_site_control.assert_not_called()
+        install_gateway_control.assert_not_called()

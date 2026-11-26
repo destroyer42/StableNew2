@@ -94,18 +94,17 @@ def _root_with(text: str) -> Path:
 
 
 def _ratchet_root(tmp_path: Path, *, mypy_errors: int = 1403, line: str | None = None) -> Path:
-    """A throwaway repo whose STATUS ratchet line matches fixture baselines (wrapped like the real file)."""
+    """A throwaway repo whose per-file fixture baselines produce the figures on its STATUS ratchet line."""
     ci = tmp_path / "tools" / "ci"
     ci.mkdir(parents=True)
     (ci / "mypy_baseline.json").write_text(
-        json.dumps({"total": mypy_errors, "counts": {"src/a.py": 1, "src/b.py": 2}}),
-        encoding="utf-8",
+        json.dumps({"counts": {"src/a.py": 1, "src/b.py": mypy_errors - 1}}), encoding="utf-8"
     )
     (ci / "ruff_ratchet_baseline.json").write_text(
         json.dumps(
             {
-                "format": {"total": 378, "files": []},
-                "rules": {"totals": {"BLE001": 1213, "S110": 479, "S112": 35}, "counts": {}},
+                "format": {"files": [f"src/f{i}.py" for i in range(378)]},
+                "rules": {"counts": {"src/a.py": {"BLE001": 1213, "S110": 479, "S112": 35}}},
             }
         ),
         encoding="utf-8",
@@ -113,12 +112,14 @@ def _ratchet_root(tmp_path: Path, *, mypy_errors: int = 1403, line: str | None =
     (ci / "architecture_baseline.json").write_text(
         json.dumps(
             {
-                "totals": {
-                    "daemon_threads": 13,
-                    "raw_threads": 9,
-                    "utils_upward_imports": 18,
-                    "controller_gui_imports": 6,
-                    "non_atomic_writes": 17,
+                "counts": {
+                    "src/a.py": {
+                        "daemon_threads": 13,
+                        "raw_threads": 9,
+                        "utils_upward_imports": 18,
+                        "controller_gui_imports": 6,
+                        "non_atomic_writes": 17,
+                    }
                 }
             }
         ),
@@ -137,10 +138,26 @@ def test_ratchet_numbers_matching_the_baselines_pass(tmp_path: Path) -> None:
     assert _truth().status_problems(_ratchet_root(tmp_path)) == []
 
 
+def test_a_ratchet_line_without_figures_passes(tmp_path: Path) -> None:
+    line = "- Ratchets only allow recorded debt to shrink: mypy, unformatted files and excepts.\n- Next bullet.\n"
+    assert _truth().status_problems(_ratchet_root(tmp_path, line=line)) == []
+
+
 def test_a_wrong_ratchet_number_is_rejected(tmp_path: Path) -> None:
     root = _ratchet_root(tmp_path, mypy_errors=1500)
     problems = _truth().status_problems(root)
     assert any("mypy errors 1,403" in p and "1,500" in p for p in problems), problems
+
+
+def test_the_ratchet_figures_are_derived_from_the_per_file_baselines(tmp_path: Path) -> None:
+    figures = _truth().ratchet_figures(_ratchet_root(tmp_path, mypy_errors=10))
+    assert figures is not None
+    assert (
+        figures["mypy errors"] == 10
+        and figures["mypy files"] == 2
+        and figures["unformatted files"] == 378
+    )
+    assert figures["S110"] == 479 and figures["non-atomic writes"] == 17
 
 
 def test_a_missing_ratchet_line_is_rejected(tmp_path: Path) -> None:

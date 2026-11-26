@@ -23,7 +23,10 @@ from src.gui.view_contracts.video_motion_alignment_contract import (
     PREPARED_FIELD as ALIGN_PREPARED_FIELD,
 )
 from src.gui.view_contracts.video_motion_alignment_contract import AlignInputs
-from src.gui.view_contracts.video_motion_prep_contract import MotionPreparationSession
+from src.gui.view_contracts.video_motion_prep_contract import (
+    PREPARED_FIELD,
+    MotionPreparationSession,
+)
 from src.gui.view_contracts.video_motion_readiness_contract import MotionReadinessSession
 from src.gui.view_contracts.video_runtime_readiness_contract import RuntimeReadinessSession
 from src.gui.view_contracts.video_sequence_contract import SequenceSession
@@ -83,6 +86,7 @@ from src.gui.widgets.submission_notice_v2 import SubmissionNotice
 from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
 )
+from src.video.conditioning_inspection import build_inspection_context
 from src.video.motion_library.handoff import (
     FIELD_LIBRARY_BINDING,
     HandoffPlan,
@@ -1930,27 +1934,56 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_finished=self._refresh_motion_library,
         )
 
+    def _conditioning_context(self, detail: Any) -> Any:
+        """The effective-driver inspection context for the selected engine, or ``None`` when it takes no driving clip."""
+
+        resolve = getattr(self._library_controller(), "motion_conversion_workflow", None)
+        if resolve is None:
+            return None
+        choice = resolve(*self._selected_workflow_identity())
+        if getattr(choice, "spec", None) is None:
+            return None
+        prepared = self._motion_prep_session.submission_fields().get(PREPARED_FIELD)
+        return build_inspection_context(
+            choice.spec,
+            detail.asset,
+            detail.media_path,
+            prepared if isinstance(prepared, Mapping) else None,
+            frame_count=self._read_motion_prep_form().get("frame_count"),
+        )
+
+    def _run_conditioning_preview(
+        self, path: str, sha: str, size: tuple[int, int], cancel: Any
+    ) -> Any:
+        context = getattr(self, "_conditioning_inspection", None)
+        controller = self._library_controller()
+        if context is not None:
+            return controller.motion_conditioning_inspection(context, cancel)
+        return controller.motion_conditioning_preview(path, sha, size, cancel)
+
     def _open_conditioning_preview(self, detail: Any) -> None:
-        """Approximate Canny preview of the selected, verified library clip (no queue, no Comfy, no GPU)."""
+        """Approximate Canny preview of the effective driving clip for the selected engine (no queue, Comfy or GPU).
+
+        The effective clip is the verified prepared or aligned derivative when one exists for this engine and length; a
+        preparation made for another engine is never used and is reported as stale (PR-VID-MOTION-430)."""
 
         window = getattr(self, "_conditioning_preview_window", None)
         try:
             if window is None or not window.winfo_exists():
-                window = ConditioningPreviewWindow(
-                    self,
-                    preview=lambda path,
-                    sha,
-                    size,
-                    cancel: self._library_controller().motion_conditioning_preview(
-                        path, sha, size, cancel
-                    ),
-                )
+                window = ConditioningPreviewWindow(self, preview=self._run_conditioning_preview)
                 self._conditioning_preview_window = window
             else:
                 window.lift()
         except tk.TclError:
             return
         asset = detail.asset
+        context = self._conditioning_context(detail)
+        self._conditioning_inspection = context
+        if context is not None:
+            window.show_clip(
+                context.driver.path, context.driver.sha256, context.target_size, context.heading
+            )
+            return
         portrait = not asset.width or not asset.height or asset.height >= asset.width
         size = (480, 832) if portrait else (832, 480)
         window.show_clip(

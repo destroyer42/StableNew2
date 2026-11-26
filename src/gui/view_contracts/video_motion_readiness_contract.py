@@ -39,6 +39,7 @@ from src.video.motion_source_readiness import (
     OutputTiming,
     assess_motion_source,
 )
+from src.video.workflow_conditioning import conditioning_lines
 from src.video.workflow_source_preparation import WorkflowSourceGeometry
 
 SOURCE_DISPLAY_MAX_EDGE = 240
@@ -432,6 +433,9 @@ class MotionReadinessSession:
             guidance_title = str(guidance.get("title") or "")
             supported = bool(guidance.get("supported"))
             guidance_lines = tuple(self._guidance_lines(guidance))
+        conditioning = self._meta.get("conditioning")
+        if isinstance(conditioning, Mapping):
+            guidance_lines = (*conditioning_lines(conditioning), "", *guidance_lines)
         summary = ""
         if STATE_READY in (self._source_state, self._video_state):
             count = len(advisory_lines)

@@ -70,7 +70,7 @@ plan-producing commands accept an omitted `--out`.
 
 | Command | Canonical destination | Existing plan schema |
 |---|---|---|
-| `tools.qualification.fun354 propose` | `qualification/fun354/<dated-id>/plan.json` | `stablenew.fun-control-qualification-plan.v1` |
+| `tools.qualification.fun354 propose` (`--workflow-version 1.0.0` default, or `1.1.0` for the trial; PR-VID-MOTION-430) | `qualification/fun354/<dated-id>/plan.json` | `stablenew.fun-control-qualification-plan.v1` |
 | `tools.qualification.system840 plan` | `qualification/system840/<dated-id>/plan.json` | `1` |
 | `tools.qualification.ai111` and `tools.qualification.ai111.final_plan` | `qualification/ai111/<dated-id>/plan.json` and its offline companion files | `stablenew.ai111.v1` / `ai111.final.v2` |
 | `tools.qualification.wan321f` | `qualification/wan321f/<dated-id>/plan.json` and its offline companion files | `stablenew.wan321f.v1` |

@@ -340,6 +340,27 @@ def cross_subject_html(assessment: Assessment | None) -> str:
     return "".join(out)
 
 
+def representation_groups_html(assessment: Assessment | None) -> str:
+    if assessment is None or not assessment.representation_groups:
+        return ""
+    out = [
+        "<h3>Driving-representation groups (integrity)</h3><p class='caveat'>Cases that share a source image and "
+        "arm but bind different drivers. Only drivers verified as representations of one movement are a controlled "
+        "comparison; anything else is exploratory evidence.</p><ul class='caveat'>"
+    ]
+    for group in assessment.representation_groups:
+        integrity = group.integrity
+        kinds = ", ".join(_esc(k) for k in group.representations) or "unverified drivers"
+        out.append(
+            f"<li>arm {_esc(group.arm_id)}, {_esc(group.category)}: {', '.join(_esc(c) for c in group.case_ids)} ({kinds}) - "
+            f"{_esc(INTEGRITY_LABELS[integrity.integrity])}"
+            + "".join(f" ({_esc(note)})" for note in (*integrity.disclosed, *integrity.reasons))
+            + "</li>"
+        )
+    out.append("</ul>")
+    return "".join(out)
+
+
 def rubric_html() -> str:
     anchors = " ".join(f"<b>{score}</b> {_esc(text)}" for score, text in FIDELITY_ANCHORS)
     rows = "".join(
@@ -374,6 +395,7 @@ __all__ = [
     "cell_html",
     "cross_subject_html",
     "pair_html",
+    "representation_groups_html",
     "rubric_html",
     "transfer_html",
 ]

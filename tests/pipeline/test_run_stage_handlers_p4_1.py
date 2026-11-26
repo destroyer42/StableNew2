@@ -22,6 +22,8 @@ from src.pipeline.run_stage_handlers import (
 )
 from tests.pipeline.test_pipeline_runner import _minimal_normalized_record
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 
 @pytest.fixture(autouse=True)
 def isolated_runtime_endpoints(monkeypatch):

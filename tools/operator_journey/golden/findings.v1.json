@@ -266,7 +266,7 @@
         "Run tests/tools/test_operator_journey_gui.py::test_discovered_outputs_journey_passes_on_an_isolated_output_tree on unchanged main."
       ],
       "expected": "The discovered-outputs journey passes on an isolated output tree.",
-      "observed": "Fails identically on unchanged HEAD with AttributeError: MediaInspector has no attribute '_current_path'. Documented in docs/work_packages/IMG_EVIDENCE_AUTOPILOT_800.md.",
+      "observed": "Fails identically on unchanged HEAD with AttributeError: MediaInspector has no attribute '_current_path'. Documented in docs/archive/work_packages/IMG_EVIDENCE_AUTOPILOT_800.md.",
       "harness_workaround": "None; the test is reported as a known inherited failure and is not weakened.",
       "friction_kinds": [],
       "evidence": [

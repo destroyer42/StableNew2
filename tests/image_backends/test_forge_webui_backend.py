@@ -41,6 +41,8 @@ from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 from tests.helpers.njr_factory import make_pipeline_njr
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 FORGE = WebUIRuntimeIdentity(FORGE_WEBUI_IDENTITY)
 A1111 = WebUIRuntimeIdentity(A1111_WEBUI_IDENTITY)
 

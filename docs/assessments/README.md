@@ -61,3 +61,5 @@ The [2026-11-12 P4-2 unified NJR compiler design](2026-11-12_p4_2_unified_njr_co
 static-analysis design record at `67e0e559` for one NJR assembly core. Its packages (P4-2A to P4-2F, in
 [the work-package plan](../work_packages/P4-2_unified_njr_compiler_migration.md)) are proposals; each needs its own
 owner authorization and a fresh check against current source.
+
+The [2026-11-25 VID-MOTION-430 alternative-conditioning candidate assessment](2026-11-25_vid_motion_430_alternative_conditioning_candidates.md) is a Focused, research-only report on three approaches (pose or depth control on the pinned Fun Control weights, SCAIL-2, Wan VACE). Every recommendation is conditional on physical evidence that does not yet exist; it authorizes no download, installation or integration.

@@ -3,6 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from src.image_backends import (
     ImageBackendCapabilities,
     ImageBackendRegistry,
@@ -11,6 +13,8 @@ from src.image_backends import (
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.logger import StructuredLogger
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
+
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
 
 
 class FakeImageBackend:

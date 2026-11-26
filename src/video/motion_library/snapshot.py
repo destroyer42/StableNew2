@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from src.video.motion_library.models import MotionAsset
 from src.video.motion_library.store import LibraryError, MotionLibraryStore
+from src.video.motion_library.variants import VariantRef, group_variants
 from src.video.motion_library.verification import FILE_UNREADABLE, FileCheck, quick_check
 
 
@@ -31,6 +32,8 @@ class LibrarySnapshot:
     #: For a harvested clip: whether a file still exists where its original was recorded (one ``stat``; the bytes are not
     #: re-verified, and a missing original never affects the clip, which verifies on its own).
     harvest_sources: Mapping[str, bool] = field(default_factory=dict)
+    #: PR-VID-MOTION-430: other catalog clips rendered from the same movement under the same parameters, per asset id.
+    variants: Mapping[str, tuple[VariantRef, ...]] = field(default_factory=dict)
     issues: tuple[str, ...] = ()
     revision: int = 0
     #: A refusal to open the library at all (corrupt or newer manifest, unusable folder).
@@ -68,6 +71,13 @@ def build_snapshot(store: MotionLibraryStore) -> LibrarySnapshot:
         thumb = store.thumbnail_path(asset)
         if thumb is not None and thumb.is_file():
             thumbnails[asset.asset_id] = str(thumb)
+    groups = group_variants(assets)
+    variants: dict[str, tuple[VariantRef, ...]] = {}
+    for group in groups.values():
+        for member in group.members:
+            variants[member.asset_id] = tuple(
+                m for m in group.members if m.asset_id != member.asset_id
+            )
     issues = list(store.report.issues)
     if store.report.orphan_files:
         issues.append(
@@ -83,6 +93,7 @@ def build_snapshot(store: MotionLibraryStore) -> LibrarySnapshot:
         media_paths=media_paths,
         derivation_sources=derivation_sources,
         harvest_sources=harvest_sources,
+        variants=variants,
         issues=tuple(issues),
         revision=store.revision,
     )

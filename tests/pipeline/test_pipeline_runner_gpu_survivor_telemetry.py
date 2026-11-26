@@ -17,6 +17,8 @@ from src.video.video_backend_registry import VideoBackendRegistry
 from src.video.video_backend_types import VideoBackendCapabilities, VideoExecutionResult
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 
 class _Recorder:
     def __init__(self, **kwargs: Any) -> None:

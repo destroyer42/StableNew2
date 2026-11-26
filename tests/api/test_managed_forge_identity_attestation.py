@@ -42,6 +42,8 @@ from src.image_backends import (
 from src.pipeline.pipeline_runner import PipelineRunner
 from tests.helpers.njr_factory import make_pipeline_njr
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 ENDPOINT = "http://127.0.0.1:7871"
 FORGE = WebUIRuntimeIdentity(FORGE_WEBUI_IDENTITY, {"options_readable": True})
 A1111 = WebUIRuntimeIdentity(A1111_WEBUI_IDENTITY, {"options_readable": True})

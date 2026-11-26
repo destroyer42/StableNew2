@@ -52,14 +52,15 @@ TELEMETRY_HEADER = (
 )
 
 
-def _gpu_sample() -> tuple[int, int, float, int]:
+def _gpu_sample() -> tuple[int, float, float, int]:
     out = subprocess.check_output(
         ["nvidia-smi", f"--query-gpu={GPU_QUERY}", "--format=csv,noheader,nounits"],
         text=True,
         timeout=10,
     )
     vram, temp, power, util = (part.strip() for part in out.strip().splitlines()[0].split(","))
-    return int(vram), int(temp), float(power), int(util)
+    # nvidia-smi can report a decimal temperature ("83.9"); ``int()`` raised on it and silently ended sampling.
+    return int(vram), float(temp), float(power), int(util)
 
 
 def _vram_used_mib() -> int:
@@ -78,7 +79,7 @@ class CommitAwarePeaks:
     ram_available_min_gb: float = 0.0
     swap_used_max_gb: float = 0.0
     swap_percent_max: float = 0.0
-    temp_peak_c: int = 0
+    temp_peak_c: float = 0.0
     power_peak_w: float = 0.0
     commit_limit_gb: float = 0.0
     commit_total_peak_gb: float = 0.0
