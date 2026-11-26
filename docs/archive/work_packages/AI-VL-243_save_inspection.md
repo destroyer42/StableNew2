@@ -6,7 +6,7 @@
   *no defect seen* (a confirmed-clean mark) or the set of defects they confirmed (category, region, certainty, optional
   severity), plus an optional subject count. The record is non-mutating Review evidence bound to the image bytes. The
   AI-VL-240 exporter reads it, so the real-image evaluation set can contain clean images, severity and subject counts. This
-  closes the first four gaps of `docs/work_packages/AI-VL-240_review_label_export.md` section 3. Owner decision D25.
+  closes the first four gaps of `docs/archive/work_packages/AI-VL-240_review_label_export.md` section 3. Owner decision D25.
 - In scope: `src/review/review_evidence.py` (record kind `review_inspection`), `src/review/findings.py` (optional
   `Severity`), `src/gui/guided_review_dialog.py` (the controls), `src/gui/views/review_tab_frame_v2.py` and
   `src/gui/view_contracts/review_workspace_contract.py` (writer hand-off, Undo, one-line row indicator),

@@ -1,7 +1,7 @@
 # PR-DEVEX-CONTEXT-100 — Deterministic task router, dependency index, capsules and docstring completion
 
 **State:** Owner-approved proposed implementation outcome; not implemented or authorized for publication by the docs-only roadmap PR.
-**Roadmap:** [Agent context and AI-worker roadmap](DEVEX-CONTEXT_AI_WORKER_ROADMAP.md).
+**Roadmap:** [Agent context and AI-worker roadmap](../../work_packages/DEVEX-CONTEXT_AI_WORKER_ROADMAP.md).
 **Authority:** Current checkout, `AGENTS.md`, `STATUS.md`, `docs/CODEX_MAP.md` and relevant living architecture/testing docs precede this package.
 
 ## Objective and execution profile

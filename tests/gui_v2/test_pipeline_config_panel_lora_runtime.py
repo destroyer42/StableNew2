@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from src.gui.panels_v2.pipeline_panel_v2 import PipelinePanelV2
+from src.gui.pipeline_panel_v2 import PipelinePanelV2
 
 
 class FakeController:

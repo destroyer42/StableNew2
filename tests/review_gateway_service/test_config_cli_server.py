@@ -200,6 +200,20 @@ def test_the_owner_can_list_and_revoke_devices_on_the_gateway(rig, tmp_path, cap
     assert main(["--config", str(path), "revoke", "nobody-here"]) == 1
 
 
+def test_device_ids_never_start_with_a_dash() -> None:
+    # A leading "-" made `revoke <id>` parse the id as an option (seen as a CI flake about 1 run in 64).
+    from review_gateway.store import new_device_id
+
+    assert not any(new_device_id().startswith("-") for _ in range(2000))
+
+
+def test_revoke_accepts_an_id_starting_with_a_dash_after_the_separator(tmp_path, capsys) -> None:
+    path = config_file(tmp_path, f'schema_file = "{SCHEMA_PATH.as_posix()}"\n')
+
+    assert main(["--config", str(path), "revoke", "--", "-not-enrolled"]) == 1
+    assert "no such device: -not-enrolled" in capsys.readouterr().err
+
+
 def test_status_and_purge_report_without_serving(rig, tmp_path, capsys) -> None:
     rig.publish()
     path = config_file(tmp_path)

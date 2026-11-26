@@ -94,7 +94,6 @@ def write_baseline(counts: dict[str, int], path: Path = BASELINE_PATH) -> None:
     payload = {
         "schema_version": SCHEMA_VERSION,
         "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
-        "total": sum(counts.values()),
         "counts": counts,
     }
     path.write_text(

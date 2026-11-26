@@ -1,4 +1,4 @@
-"""Gateway settings, the sync secret file, and the listener rules (RG-100 D9, S2)."""
+"""Gateway settings, the sync secret file, the listener rules (RG-100 D9, S2) and where Immich is."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 
 from .contract import SCHEMA_FILE_NAME
+from .immich import check_url
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 # Tailscale's address ranges: the sync API must never be reachable from the tailnet.
@@ -28,6 +29,7 @@ _PATH_SETTINGS = (
     "schema_file",
     "sync_tls_cert",
     "sync_tls_key",
+    "immich_key_file",
 )
 
 
@@ -56,6 +58,15 @@ class Settings:
     phone_port: int = 8443
     sync_tls_cert: Path | None = None
     sync_tls_key: Path | None = None
+    #: Empty until the owner enters the Immich address; keepers wait in the queue meanwhile.
+    immich_url: str = ""
+    immich_key_file: Path | None = None
+
+    @property
+    def immich_key_path(self) -> Path:
+        """The owner's API key, beside the sync secret unless configured elsewhere (S5)."""
+
+        return self.immich_key_file or self.secret_file.parent / "immich_api_key"
 
     def check_listeners(self) -> None:
         """The phone app is loopback only (published by ``tailscale serve``); sync is one LAN address."""
@@ -96,9 +107,16 @@ def load_settings(path: Path) -> Settings:
         if name in raw:
             raw[name] = Path(raw[name])
     try:
-        return Settings(**raw)
+        settings = Settings(**raw)
     except TypeError as error:
         raise ConfigError(f"missing setting in {path}: {error}") from error
+    if settings.immich_url != "":
+        try:
+            check_url(str(settings.immich_url))
+        except ValueError as error:
+            # The value is not echoed: it may hold a password.
+            raise ConfigError("immich_url must be a plain http:// or https:// address") from error
+    return settings
 
 
 def certificate_fingerprint(path: Path | None) -> str:

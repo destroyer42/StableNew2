@@ -222,8 +222,8 @@ def test_pipeline_tab_never_resizes_the_root_window(tmp_path: Path) -> None:
 
         assert not hasattr(PipelineTabFrame, "MIN_WINDOW_WIDTH")
         assert not hasattr(PipelineTabFrame, "_ensure_minimum_window_width")
-        # The sidebar scans the controller's ``_packs_dir``; a bare mock there becomes a ``MagicMock/`` folder.
-        controller = MagicMock(_packs_dir=tmp_path / "packs")
+        # The sidebar creates the controller's pack directory; a bare mock attribute would become ./MagicMock/.
+        controller = MagicMock(_packs_dir=tmp_path)
         pipeline_tab = PipelineTabFrame(root, app_state=AppStateV2(), pipeline_controller=controller)
         pipeline_tab.pack(fill="both", expand=True)
         root.update()

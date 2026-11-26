@@ -2,7 +2,6 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 369,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -317,7 +316,6 @@
       "tests/tools/test_missing_asset_reference_triage.py",
       "tests/tools/test_operator_journey_harness.py",
       "tests/tools/test_promptpack_quality_census.py",
-      "tests/tools/test_vid150_qualification.py",
       "tests/tools/test_vid160c_commit_adjudication.py",
       "tests/tools/test_vid181_runner.py",
       "tests/tools/test_vid190_acceptance_harness_verdict.py",
@@ -342,7 +340,6 @@
       "tools/acceptance/img_156_zimage_acceptance.py",
       "tools/acceptance/img_forge_100_acceptance.py",
       "tools/acceptance/img_forge_120_default_acceptance.py",
-      "tools/acceptance/vid130_wan_acceptance.py",
       "tools/acceptance/vid190_queue_recycling_acceptance.py",
       "tools/ci/census_summary.py",
       "tools/ci/ci_truth.py",
@@ -363,7 +360,6 @@
       "tools/qualification/img_forge_100/provenance.py",
       "tools/qualification/img_forge_100/run.py",
       "tools/qualification/img_forge_100/runtime_capture.py",
-      "tools/qualification/vid150/run.py",
       "tools/qualification/vid160b/run.py",
       "tools/qualification/vid160c/adjudicate.py",
       "tools/qualification/vid160c/run.py",
@@ -377,11 +373,6 @@
   },
   "rules": {
     "metric": "findings per src file",
-    "totals": {
-      "BLE001": 1170,
-      "S110": 456,
-      "S112": 34
-    },
     "counts": {
       "src/api/client.py": {
         "BLE001": 23,
@@ -514,11 +505,6 @@
       "src/gui/job_history_panel_v2.py": {
         "BLE001": 12,
         "S110": 7
-      },
-      "src/gui/learning_review_dialog_v2.py": {
-        "BLE001": 3,
-        "S110": 1,
-        "S112": 1
       },
       "src/gui/log_trace_panel_v2.py": {
         "BLE001": 2
@@ -731,10 +717,6 @@
         "BLE001": 3,
         "S110": 3
       },
-      "src/gui/widgets/image_thumbnail.py": {
-        "BLE001": 4,
-        "S110": 3
-      },
       "src/gui/widgets/lora_picker_panel.py": {
         "BLE001": 2
       },
@@ -750,10 +732,6 @@
         "BLE001": 2,
         "S110": 2
       },
-      "src/gui/widgets/thumbnail_widget_v2.py": {
-        "BLE001": 5,
-        "S110": 1
-      },
       "src/gui/zimage_optional_control_projection.py": {
         "BLE001": 1,
         "S110": 1
@@ -768,17 +746,10 @@
       "src/image_backends/forge_webui_backend.py": {
         "BLE001": 2
       },
-      "src/learning/dataset_builder.py": {
-        "BLE001": 2,
-        "S112": 2
-      },
       "src/learning/discovered_review_store.py": {
         "BLE001": 5
       },
       "src/learning/experiment_store.py": {
-        "BLE001": 1
-      },
-      "src/learning/feedback_manager.py": {
         "BLE001": 1
       },
       "src/learning/learning_analytics.py": {
@@ -827,9 +798,6 @@
         "BLE001": 2
       },
       "src/pipeline/model_synchronizer.py": {
-        "BLE001": 2
-      },
-      "src/pipeline/payload_builder.py": {
         "BLE001": 2
       },
       "src/pipeline/pipeline_runner.py": {

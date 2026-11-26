@@ -91,7 +91,7 @@ tab overview → (17) Recent outputs (MediaInspector).
   controls; so the section usually holds only `VideoEvalPanel` (wired L898-906). RIFE = `smooth_check` (L724), availability
   `rife_available()`. Movie Clips: Recent outputs "Send to Movie Clips" → `_send_output_to_movie` (L2014) →
   `src/gui/controllers/video_workspace_handoff.py::route_bundle_to_movie_clips`. Batch strip `_sync_batch_strip` (L1684).
-- Attribute names that must keep existing (VID-UX-360 plan `docs/work_packages/VID-UX-360_Task_First_Video_Workflow.md` line 22):
+- Attribute names that must keep existing (VID-UX-360 plan `docs/archive/work_packages/VID-UX-360_Task_First_Video_Workflow.md` line 22):
   `advanced_section`, `compare_section`, `eval_panel`, `motion_readiness_panel`, … — keep them as attributes even if they become
   views/tabs; add aliases rather than renaming.
 

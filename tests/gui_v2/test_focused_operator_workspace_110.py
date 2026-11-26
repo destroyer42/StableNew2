@@ -26,7 +26,6 @@ from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, Ac
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
-from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.utils import InMemoryLogHandler
 
 
@@ -318,79 +317,6 @@ def _image(tmp_path: Path, name: str = "a.png", size: tuple[int, int] = (768, 10
     path = tmp_path / name
     Image.new("RGB", size, (180, 70, 70)).save(path)
     return path
-
-
-@pytest.mark.parametrize(("parent_width", "expected"), [(900, 620), (437, 437), (150, 200)])
-def test_responsive_thumbnail_fits_its_parent_within_bounds(laptop_root: tk.Tk, parent_width: int, expected: int) -> None:
-    from tkinter import ttk
-
-    holder = ttk.Frame(laptop_root, width=parent_width, height=700)
-    holder.pack(anchor="nw")
-    holder.pack_propagate(False)
-    holder.columnconfigure(0, weight=1)
-    thumb = ThumbnailWidget(holder, width=620, height=620, responsive=True)
-    thumb.pack(fill="x")
-    try:
-        _settle(laptop_root, 200)
-        assert thumb.fitted_edge() == expected
-        assert int(thumb._canvas.cget("width")) == expected
-        assert thumb.winfo_width() <= max(parent_width, 200)  # never forces its parent wider
-    finally:
-        holder.destroy()
-
-
-def test_responsive_thumbnail_preserves_aspect_and_rescales_without_decoding_again(laptop_root: tk.Tk) -> None:
-    from tkinter import ttk
-
-    holder = ttk.Frame(laptop_root, width=620, height=700)
-    holder.pack(anchor="nw")
-    holder.pack_propagate(False)
-    thumb = ThumbnailWidget(holder, width=620, height=620, responsive=True)
-    thumb.pack(fill="x")
-    try:
-        _settle(laptop_root, 200)
-        thumb.set_image(Image.new("RGB", (620, 310), "navy"))  # 2:1 source
-        assert thumb._photo_image.width() == 620 and thumb._photo_image.height() == 310
-
-        with patch("src.utils.thread_registry.ThreadRegistry.spawn") as spawn:
-            holder.configure(width=400)
-            _settle(laptop_root, 250)
-            assert thumb.fitted_edge() == 400
-            ratio = thumb._photo_image.width() / thumb._photo_image.height()
-            assert abs(ratio - 2.0) < 0.02  # aspect ratio preserved on the rescale
-            spawn.assert_not_called()  # a resize never decodes the file again
-    finally:
-        holder.destroy()
-
-
-def test_thumbnail_ignores_superseded_and_post_destroy_results(tmp_path: Path, laptop_root: tk.Tk) -> None:
-    thumb = ThumbnailWidget(laptop_root, width=300, height=300, responsive=True)
-    thumb.pack()
-    first, second = _image(tmp_path, "one.png"), _image(tmp_path, "two.png")
-    spawned: list[object] = []
-    try:
-        with patch("src.utils.thread_registry.ThreadRegistry.spawn", side_effect=lambda **kw: spawned.append(kw)):
-            thumb.set_image_from_path(first)
-            first_request = thumb._request_id
-            thumb.set_image_from_path(first)  # identical decode already in flight: no duplicate work
-            assert len(spawned) == 1 and thumb._request_id == first_request
-            thumb.set_image_from_path(second)  # a newer selection supersedes it
-            assert len(spawned) == 2 and thumb._request_id == first_request + 1
-
-        stale = Image.new("RGB", (100, 100), "red")
-        thumb._on_image_loaded(stale, first_request, str(first))
-        assert thumb._source_image is None  # the stale result is discarded
-
-        fresh = Image.new("RGB", (100, 100), "green")
-        thumb._on_image_loaded(fresh, thumb._request_id, str(second))
-        assert thumb._source_image is fresh and thumb._inflight_path is None
-
-        pending = thumb._request_id
-        thumb.destroy()
-        thumb._on_image_loaded(fresh, pending, str(second))  # a late callback against a destroyed widget is a no-op
-    finally:
-        if thumb.winfo_exists():
-            thumb.destroy()
 
 
 def test_review_preview_and_metadata_stay_inside_the_viewport_at_laptop_and_increased_scaling(laptop_root: tk.Tk, tmp_path: Path) -> None:

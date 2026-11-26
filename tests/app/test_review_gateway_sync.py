@@ -485,6 +485,48 @@ def test_immich_receipts_are_stored_for_published_items_only(env):
     assert env.ledger.immich_receipt("11111111-0000-4000-8000-000000000002") is None
 
 
+def test_immich_receipt_pages_are_followed_and_the_cursor_is_kept(env):
+    env.publish_all()
+    library_id, sha = env.item(env.small)
+
+    def page(number, next_cursor):
+        receipts = [
+            {
+                "schema_version": "stablenew.review-gateway-sync.v1",
+                "type": "immich_receipt",
+                "record_id": f"11111111-0000-4000-8000-00000000000{number}",
+                "item": {"library_id": library_id, "sha256": sha},
+                "status": "uploaded",
+                "at": "2026-11-25T21:40:00Z",
+            }
+        ]
+        return {
+            "schema_version": "stablenew.review-gateway-sync.v1",
+            "type": "immich_receipt_page",
+            "receipts": receipts if number else [],
+            "next_cursor": next_cursor,
+        }
+
+    env.gateway.immich_pages = {
+        "": page(1, "epoch:1"),
+        "epoch:1": page(2, "epoch:2"),
+        "epoch:2": page(0, None),
+    }
+
+    def asked():
+        return [path for _method, path in env.gateway.calls if "immich-receipts" in path]
+
+    env.gateway.calls.clear()
+    env.sync.run_cycle()
+
+    assert len(asked()) == 3 and asked()[-1].endswith("?cursor=epoch%3A2")
+    for number in (1, 2):
+        assert env.ledger.immich_receipt(f"11111111-0000-4000-8000-00000000000{number}")
+    env.gateway.calls.clear()
+    env.sync.run_cycle()  # only what is new since last time
+    assert asked() == ["/sync/v1/immich-receipts?cursor=epoch%3A2"]
+
+
 def test_status_reports_gateway_refusals_without_secrets(env, caplog):
     env.gateway.secret = "other-secret-" + "x" * 30
     env.sync.run_cycle()

@@ -1,4 +1,4 @@
-"""One gateway instance: its store plus the two ASGI applications that share it."""
+"""One gateway instance: its store, the two ASGI applications that share it and the Immich uploader."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from .media import MediaStore
 from .phone_app import build_phone_app
 from .store import Clock, Store, utc_now
 from .sync_app import build_sync_app
+from .uploader import Uploader
 
 
 class Gateway:
@@ -29,6 +30,9 @@ class Gateway:
 
     def sync_app(self) -> Starlette:
         return build_sync_app(self.store, self.contract, read_secret(self.settings.secret_file))
+
+    def uploader(self) -> Uploader:
+        return Uploader(self.store, self.settings.immich_url, self.settings.immich_key_path)
 
     def retention(self) -> dict[str, int]:
         return self.store.retention()

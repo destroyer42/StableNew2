@@ -1,6 +1,6 @@
 # Finalized MVP Roadmap — StableNew v2.6
 
-Status: CURRENT AND ACTIVE
+Status: SUPERSEDED by `docs/audits/2026-10-26_product_capability_roadmap.md` (the active product roadmap named in `STATUS.md`); kept as the MVP record.
 Owner: Rob
 Updated: 2026-09-16
 
@@ -292,7 +292,7 @@ legacy failures remain non-blocking.
 
 **Developer-experience enabling track (owner-approved direction, not an active
 production dependency):** [agent context and AI-worker research roadmap](work_packages/DEVEX-CONTEXT_AI_WORKER_ROADMAP.md).
-Its first implementable package is [PR-DEVEX-CONTEXT-100](work_packages/PR-DEVEX-CONTEXT-100.md):
+Its first implementable package is [PR-DEVEX-CONTEXT-100](archive/work_packages/PR-DEVEX-CONTEXT-100.md):
 deterministic task routing, static dependency index, compact context capsules,
 and module-docstring completion. Follow-on [AI-WORKER-110](work_packages/AI-WORKER-110.md)
 is a separately authorized Proxmox/model measurement gate;

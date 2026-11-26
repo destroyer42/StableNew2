@@ -33,7 +33,7 @@ STATUS_MAX_LINES = 150
 #: Byte cap for any one STATUS.md line. A ratchet: it was set at the longest line when it was introduced (the Learning and Video
 #: capability paragraphs) and may only be lowered as those paragraphs are split at sentence boundaries.
 STATUS_MAX_LINE_BYTES = 3198
-#: Ratchet-line figures in STATUS.md must equal the checked-in baselines under tools/ci/.
+#: STATUS.md keeps a ratchet line; any figure on it must equal the totals derived from the baselines under tools/ci/.
 STATUS_RATCHET_ANCHOR = "Ratchets only allow recorded debt to shrink"
 #: Phrases that mean a per-PR narrative or an out-of-date lifecycle label crept back in (matched case-insensitively).
 STATUS_BANNED_MARKERS = (
@@ -89,41 +89,71 @@ def _load_baseline(root: Path, name: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def status_ratchet_problems(root: Path, text: str) -> list[str]:
-    """The ratchet line's numbers must equal the baselines (the AppController size is deliberately not checked here)."""
-    paragraph = _status_ratchet_paragraph(text)
-    if paragraph is None:
-        return [f"{STATUS} has no ratchet line starting {STATUS_RATCHET_ANCHOR!r}"]
+def ratchet_figures(root: Path = ROOT) -> dict[str, int] | None:
+    """Current ratchet totals, derived from the per-file baselines (None when a baseline is missing or malformed).
+
+    Totals are computed, never stored: a stored total changed in every ratchet-lowering PR, so any two such PRs
+    conflicted on the same line of the baseline and of STATUS.md.
+    """
     mypy = _load_baseline(root, "mypy_baseline.json")
     ruff = _load_baseline(root, "ruff_ratchet_baseline.json")
     arch = _load_baseline(root, "architecture_baseline.json")
     if mypy is None or ruff is None or arch is None:
-        return [f"{STATUS} ratchet line cannot be checked: a baseline under tools/ci/ is missing or unreadable"]
+        return None
     try:
-        totals = ruff["rules"]["totals"]
-        arch_totals = arch["totals"]
-        expected = {
-            "mypy errors": (r"\(([\d,]+) errors in", mypy["total"]),
-            "mypy files": (r"errors in\s+([\d,]+) files", len(mypy["counts"])),
-            "unformatted files": (r"unformatted files \(([\d,]+)\)", ruff["format"]["total"]),
-            "BLE001": (r"BLE001 ([\d,]+)", totals["BLE001"]),
-            "S110": (r"S110 ([\d,]+)", totals["S110"]),
-            "S112": (r"S112 ([\d,]+)", totals["S112"]),
-            "daemon threads": (r"daemon threads ([\d,]+)", arch_totals["daemon_threads"]),
-            "raw threads": (r"raw threads ([\d,]+)", arch_totals["raw_threads"]),
-            "utils importing upward": (r"utils importing upward ([\d,]+)", arch_totals["utils_upward_imports"]),
-            "controller importing the GUI": (r"controller importing the GUI ([\d,]+)", arch_totals["controller_gui_imports"]),
-            "non-atomic writes": (r"non-atomic file writes ([\d,]+)", arch_totals["non_atomic_writes"]),
+        rule_counts = ruff["rules"]["counts"].values()
+        arch_counts = arch["counts"].values()
+
+        def rule_total(per_file: object, rule: str) -> int:
+            return sum(int(per.get(rule, 0)) for per in per_file)  # type: ignore[attr-defined]
+
+        return {
+            "mypy errors": sum(int(v) for v in mypy["counts"].values()),
+            "mypy files": len(mypy["counts"]),
+            "unformatted files": len(ruff["format"]["files"]),
+            "BLE001": rule_total(rule_counts, "BLE001"),
+            "S110": rule_total(rule_counts, "S110"),
+            "S112": rule_total(rule_counts, "S112"),
+            "daemon threads": rule_total(arch_counts, "daemon_threads"),
+            "raw threads": rule_total(arch_counts, "raw_threads"),
+            "utils importing upward": rule_total(arch_counts, "utils_upward_imports"),
+            "controller importing the GUI": rule_total(arch_counts, "controller_gui_imports"),
+            "non-atomic writes": rule_total(arch_counts, "non_atomic_writes"),
         }
-    except (KeyError, TypeError):
-        return [f"{STATUS} ratchet line cannot be checked: a baseline under tools/ci/ has an unexpected shape"]
+    except (KeyError, TypeError, AttributeError, ValueError):
+        return None
+
+
+#: How each figure may appear on the STATUS ratchet line. Figures are optional there (``--ratchets`` prints them),
+#: but a figure that is stated must equal the baseline, so STATUS can never show a stale number.
+_RATCHET_PATTERNS = {
+    "mypy errors": r"\(([\d,]+) errors in",
+    "mypy files": r"errors in\s+([\d,]+) files",
+    "unformatted files": r"unformatted files \(([\d,]+)\)",
+    "BLE001": r"BLE001 ([\d,]+)",
+    "S110": r"S110 ([\d,]+)",
+    "S112": r"S112 ([\d,]+)",
+    "daemon threads": r"daemon threads ([\d,]+)",
+    "raw threads": r"raw threads ([\d,]+)",
+    "utils importing upward": r"utils importing upward ([\d,]+)",
+    "controller importing the GUI": r"controller importing the GUI ([\d,]+)",
+    "non-atomic writes": r"non-atomic file writes ([\d,]+)",
+}
+
+
+def status_ratchet_problems(root: Path, text: str) -> list[str]:
+    """The ratchet line must exist; any figure it states must equal the baselines (AppController size not checked)."""
+    paragraph = _status_ratchet_paragraph(text)
+    if paragraph is None:
+        return [f"{STATUS} has no ratchet line starting {STATUS_RATCHET_ANCHOR!r}"]
+    figures = ratchet_figures(root)
+    if figures is None:
+        return [f"{STATUS} ratchet line cannot be checked: a baseline under tools/ci/ is missing, unreadable or malformed"]
     problems: list[str] = []
-    for label, (pattern, value) in expected.items():
+    for label, pattern in _RATCHET_PATTERNS.items():
         match = re.search(pattern, paragraph)
-        if match is None:
-            problems.append(f"{STATUS} ratchet line does not state {label}")
-        elif int(match.group(1).replace(",", "")) != value:
-            problems.append(f"{STATUS} ratchet line says {label} {match.group(1)}; the baseline says {value:,}")
+        if match is not None and int(match.group(1).replace(",", "")) != figures[label]:
+            problems.append(f"{STATUS} ratchet line says {label} {match.group(1)}; the baseline says {figures[label]:,}")
     return problems
 
 
@@ -429,7 +459,15 @@ def docs_truth_problems(root: Path = ROOT) -> list[str]:
     return problems
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    if "--ratchets" in (sys.argv[1:] if argv is None else argv):
+        figures = ratchet_figures()
+        if figures is None:
+            print("CI truth: a ratchet baseline under tools/ci/ is missing, unreadable or malformed", file=sys.stderr)
+            return 1
+        for label, value in figures.items():
+            print(f"{label}: {value:,}")
+        return 0
     problems = docs_truth_problems() + workflow_contract_problems()
     for problem in problems:
         print(f"CI truth: {problem}", file=sys.stderr)

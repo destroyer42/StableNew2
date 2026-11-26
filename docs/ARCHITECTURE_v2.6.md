@@ -626,8 +626,8 @@ and selection generation. A pending receipt can be reconciled only under the own
 the native queue and repository still resolve admission. See the
 [Operator Site runbook](runbooks/stablenew_operator_site.md)
 
-Approved design, partly built (owner decisions D1–D9, 2026-11-25; the gateway service of RG-110 exists, the PC sync
-worker does not, nothing is deployed): a self-hosted **phone review gateway** replaces
+Approved design, partly built (owner decisions D1–D9, 2026-11-25; the gateway service of RG-110, the PC sync worker of
+RG-120 and the Immich upload of RG-130 exist, phone actions do not, nothing is deployed): a self-hosted **phone review gateway** replaces
 the hosted relay for phone review. It is a separate deployable (`services/review_gateway/`) in its own Proxmox
 container with no GPU, reached by the phone only over Tailscale. It is a projection and outbox, never an authority. The
 PC syncs to it outbound only: a sync worker publishes items from the Output Library index by library id and SHA-256, and
