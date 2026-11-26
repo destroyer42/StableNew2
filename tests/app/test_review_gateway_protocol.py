@@ -143,7 +143,10 @@ def test_action_params_are_typed_per_step(action_request):
 def test_a_boolean_is_not_a_seed_count():
     request = {
         **_forged(kind="action_request", decision=KeyError),
-        "action_request": {"action": "more_like_this", "params": {"step": "prepare", "count": True}},
+        "action_request": {
+            "action": "more_like_this",
+            "params": {"step": "prepare", "count": True},
+        },
     }
     with pytest.raises(ProtocolError):
         parse_record(request)

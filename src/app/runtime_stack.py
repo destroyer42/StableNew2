@@ -242,7 +242,11 @@ def build_review_gateway_sync(
     active = (lambda: active_input_paths(queue)) if queue is not None else unreadable
     records = records_path or get_learning_records_path(create_parent=False)
     applier = RecordApplier(
-        ledger, root, records, active_inputs=active, actions=_gateway_actions(app, ledger, root, records)
+        ledger,
+        root,
+        records,
+        active_inputs=active,
+        actions=_gateway_actions(app, ledger, root, records),
     )
 
     def busy() -> bool:

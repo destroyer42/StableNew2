@@ -44,7 +44,5 @@ def submit_reprocess_njrs(
                     raise ValueError("Frozen mask edits require exactly one img2img source")
                 verified_inputs(edit, njr.input_image_paths[0], check_original=True)
     # N1b: Queue on a Preview that showed warnings is the operator's acceptance; freeze them in provenance.
-    njrs = [
-        with_accepted_warnings(njr, pending_warnings(njr), surface=surface) for njr in njrs
-    ]
+    njrs = [with_accepted_warnings(njr, pending_warnings(njr), surface=surface) for njr in njrs]
     return len(job_service.submit_njrs(njrs, policy or SubmissionPolicy()))
