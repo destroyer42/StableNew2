@@ -13,3 +13,12 @@ pytest-xvfb==3.1.1; sys_platform == "linux"
 ruff==0.14.9
 mypy==2.4.0
 types-requests==2.33.0.20261006
+
+# Review gateway (services/review_gateway) tests only. The gateway deploys from its own hash-pinned
+# requirements.txt; these exact pins mirror its direct dependencies so hosted CI and a developer machine test the
+# versions it runs (tests/review_gateway_service/test_deploy_contract.py keeps them in step). httpx2 is the client
+# Starlette's TestClient needs. The application itself imports none of these.
+starlette==1.10.0
+uvicorn==0.54.0
+jsonschema==4.26.0
+httpx2==2.16.2
