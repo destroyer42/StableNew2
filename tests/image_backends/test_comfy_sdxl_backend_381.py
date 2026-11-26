@@ -34,6 +34,8 @@ from tests.helpers.comfy_image_fakes import (
     sdxl_object_info,
 )
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 CKPT, LORA, VAE = "juggernaut.safetensors", "detail.safetensors", "sdxl_vae.safetensors"
 SDXL_LOOKUP = Mock(
     return_value=CompatibilityProfile(CompatibilityStatus.RESOLVED, ModelFamily.SDXL, ())

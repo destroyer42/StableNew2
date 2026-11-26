@@ -9,6 +9,8 @@ import pytest
 
 from src.pipeline.executor import Pipeline
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 _HEALTHY_RUNTIME_ADMISSION = {
     "schema": "stablenew.runtime-admission.v1",
     "status": "healthy",

@@ -371,6 +371,7 @@ class _NoWebUIPipeline:
         return {}
 
 
+@pytest.mark.usefixtures("isolated_cwd")
 def test_canonical_run_njr_dispatches_to_diffusers_without_any_webui_call(tmp_path: Path) -> None:
     config = {
         "model": P.model_name,

@@ -11,6 +11,8 @@ from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.config import build_sampler_scheduler_payload
 from src.utils.logger import StructuredLogger
 
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 
 def _success_outcome(images: list[str]) -> SimpleNamespace:
     return SimpleNamespace(

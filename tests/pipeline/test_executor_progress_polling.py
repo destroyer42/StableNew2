@@ -1,5 +1,6 @@
 """Tests for Pipeline executor progress polling."""
 
+import tempfile
 import threading
 import time
 import unittest
@@ -352,6 +353,9 @@ class TestGenerateWithProgress(unittest.TestCase):
         )
         self.pipeline._extract_generation_info = Mock(return_value={})
 
+        output_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(output_dir.cleanup)
+
         with (
             patch("src.pipeline.executor.save_image_from_base64", return_value=Path("out.png")),
             patch.object(self.pipeline, "_build_image_metadata_builder", return_value=None),
@@ -360,7 +364,7 @@ class TestGenerateWithProgress(unittest.TestCase):
                 "prompt",
                 "negative",
                 {"txt2img": {"steps": 20}, "batch_size": 1},
-                Path("outdir"),
+                Path(output_dir.name),
                 "image_name",
             )
 
