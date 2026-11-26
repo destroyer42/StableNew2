@@ -223,7 +223,8 @@ def totals(counts: dict[str, dict[str, int]]) -> dict[str, int]:
 
 
 def write_baseline(counts: dict[str, dict[str, int]], path: Path = BASELINE_PATH) -> None:
-    payload = {"schema_version": SCHEMA_VERSION, "totals": totals(counts), "counts": counts}
+    # Totals are printed, never stored: storing them made every pair of ratchet-lowering PRs conflict.
+    payload = {"schema_version": SCHEMA_VERSION, "counts": counts}
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 

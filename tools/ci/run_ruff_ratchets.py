@@ -130,15 +130,15 @@ def load_baseline(path: Path = BASELINE_PATH) -> tuple[list[str], dict[str, dict
 def write_baseline(
     files: list[str], counts: dict[str, dict[str, int]], path: Path = BASELINE_PATH
 ) -> None:
-    totals = {rule: sum(per.get(rule, 0) for per in counts.values()) for rule in RULES}
+    # No stored totals: they are derived (see `ci_truth.ratchet_figures`), and storing them made every pair of
+    # ratchet-lowering PRs conflict on the same line.
     payload = {
         "schema_version": SCHEMA_VERSION,
         "format": {
             "metric": "files `ruff format --check` would reformat",
-            "total": len(files),
             "files": files,
         },
-        "rules": {"metric": f"findings per {RULE_SCOPE} file", "totals": totals, "counts": counts},
+        "rules": {"metric": f"findings per {RULE_SCOPE} file", "counts": counts},
     }
     path.write_text(
         json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8", newline="\n"

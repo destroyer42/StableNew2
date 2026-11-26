@@ -66,7 +66,9 @@ def test_the_checked_in_baseline_is_well_formed_and_refers_to_real_files() -> No
     import json
 
     data = json.loads(ratchet.BASELINE_PATH.read_text(encoding="utf-8"))
-    assert data["total"] == sum(baseline.values())
+    assert (
+        "total" not in data
+    )  # derived on demand (ci_truth --ratchets); a stored total made parallel PRs conflict
 
 
 def test_the_ratchet_is_wired_into_the_local_gate_and_the_required_ci_job() -> None:

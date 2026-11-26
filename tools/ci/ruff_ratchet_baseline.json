@@ -2,7 +2,6 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 369,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -377,11 +376,6 @@
   },
   "rules": {
     "metric": "findings per src file",
-    "totals": {
-      "BLE001": 1170,
-      "S110": 456,
-      "S112": 34
-    },
     "counts": {
       "src/api/client.py": {
         "BLE001": 23,

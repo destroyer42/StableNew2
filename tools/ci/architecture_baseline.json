@@ -1,13 +1,5 @@
 {
   "schema_version": 1,
-  "totals": {
-    "daemon_threads": 13,
-    "raw_threads": 9,
-    "utils_upward_imports": 18,
-    "controller_gui_imports": 6,
-    "ai_assist_forbidden_imports": 0,
-    "non_atomic_writes": 17
-  },
   "counts": {
     "src/ai_assist/runtime.py": {
       "non_atomic_writes": 2
