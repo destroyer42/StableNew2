@@ -834,6 +834,10 @@ class OutputLibrary:
         finally:
             self.store.previews.lock.release()
 
+    def grid_preview(self, item: LibraryItem, *, cancel: Event | None = None) -> Preview | None:
+        """The cached 320 px preview (a poster frame for a clip), built when absent. Blocking; never on Tk."""
+        return self._preview(item, cancel=cancel)
+
     def _preview_cancelled(self, cancel: Event | None) -> bool:
         try:
             self.require_active()

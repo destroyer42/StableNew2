@@ -87,6 +87,15 @@ def _dpapi(data: bytes, *, decrypt: bool) -> bytes:
         kernel32.LocalFree(result.data)
 
 
+def protect_for_current_user(data: bytes) -> bytes:
+    """Encrypt for the current Windows user (DPAPI); shared with the review gateway settings (RG-120)."""
+    return _dpapi(data, decrypt=False)
+
+
+def unprotect_for_current_user(data: bytes) -> bytes:
+    return _dpapi(data, decrypt=True)
+
+
 class PhoneGrantStore:
     def __init__(self, path: Path | None = None) -> None:
         self._configured_path = path

@@ -703,10 +703,13 @@ def main() -> None:
     )
 
     site_connection = None
+    review_gateway = None
     if sys.platform == "win32":
+        from src.gui.review_gateway_dialog import install_review_gateway_control
         from src.gui.site_connection_dialog import install_site_connection_control
 
         site_connection = install_site_connection_control(root, app_controller, window.header_zone)
+        review_gateway = install_review_gateway_control(root, app_controller, window.header_zone)
 
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(
@@ -756,6 +759,8 @@ def main() -> None:
         )
         if site_connection is not None:
             site_connection.shutdown()
+        if review_gateway is not None:
+            review_gateway.shutdown()
 
 
 if __name__ == "__main__":
