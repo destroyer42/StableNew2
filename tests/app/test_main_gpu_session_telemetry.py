@@ -13,6 +13,9 @@ class _LoopRoot:
     def after(self, _delay_ms: int, _callback) -> None:
         return None
 
+    def bind(self, *_args, **_kwargs) -> None:
+        return None
+
     def mainloop(self) -> None:
         self._events.append("mainloop")
 

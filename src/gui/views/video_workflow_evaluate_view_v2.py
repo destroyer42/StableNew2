@@ -51,6 +51,11 @@ class VideoWorkflowEvaluateView(ttk.Frame):
         )
         self.experiment_empty_label.grid(row=1, column=0, sticky="ew")
         bind_wraplength(self.experiment_empty_label)
+        self.rate_heading = ttk.Label(body, text="Rate & review", style="Dark.TLabel")
+        self.rate_heading.grid(row=4, column=0, sticky="w", pady=(12, 4))
+        self.rate_host = ttk.Frame(body, style="Panel.TFrame")
+        self.rate_host.grid(row=5, column=0, sticky="ew")
+        self.rate_host.columnconfigure(0, weight=1)
         self._experiment_panel: Any = None
 
     # ``compare_section`` used to be a DisclosureSection; the Evaluate view is never collapsed.

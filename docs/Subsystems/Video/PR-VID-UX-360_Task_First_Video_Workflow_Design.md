@@ -198,7 +198,15 @@ The VID-UX-360 task model, pins and suggestions are unchanged; the layout around
 - **Evaluate view:** the eval kit (`VideoEvalPanel`) and *Compare one control* (its empty state says when it is
   available) full width, with their actions visible immediately; the eval queue is that view's Primary. Switching
   views keeps every form value.
+  **Rate & review** (follow-up, `video_workflow_rate_review_v2.py`) closes the view: a status line for the run selected
+  in the eval panel (`RunEntry`: suite, report built or pending, *rated n of m clips*, a progress bar) and three
+  buttons, **Open report**, **Review Motion...** (driving-motion runs with a built report) and **Review on Operator
+  Site**. It rates nothing itself: the buttons delegate to `VideoEvalPanel.open_selected_report` /
+  `open_selected_motion_review`, and the Site button raises the `<<OpenOperatorSite>>` virtual event on the toplevel
+  (bound in `src/main.py` to the existing header button), so no `AppController` or controller code was added. The
+  panel reports selection changes through its `on_run_changed` callback. Site review is Windows-only and disabled
+  until the report is built.
 - Attribute names kept: `advanced_section` (now *More settings*), `compare_section` (the Evaluate container),
   `eval_panel`, `experiment_panel`, `motion_readiness_panel`, `suggested_line`.
 - Modules: `video_workflow_layout_v2.py`, `video_workflow_evaluate_view_v2.py`, `video_workflow_media_pane_v2.py`,
-  `video_workflow_sections_v2.py`. Tests: `tests/gui_v2/test_vid_ux_384_layout.py`.
+  `video_workflow_sections_v2.py`, `video_workflow_rate_review_v2.py`. Tests: `tests/gui_v2/test_vid_ux_384_layout.py`, `tests/gui_v2/test_vid_ux_384_rate_review.py`. Live-app screenshots (1366x768, 1920x1080, forced narrow Form | Media): `docs/assessments/evidence/vid_ux_384/`.

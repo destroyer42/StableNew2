@@ -490,6 +490,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
+- `video_workflow_rate_review_v2.py`: Rate & review section of the Evaluate view (VID-UX-384 follow-up)
 - `video_workflow_recent_outputs_panel_v2.py`: Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
 - `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workflow_sections_v2.py`: Section builders for the Video Workflow tab's left pane (VID-UX-384)
