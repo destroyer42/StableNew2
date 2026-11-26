@@ -93,11 +93,12 @@ review media to compare motion *and* appearance independently. A clean technical
 not evidence that identity transfer worked.
 
 **Qualification remains closed.** The original third-run 14/14 result only establishes
-feasibility on the tested hardware with operator-prepared 480x832 MP4s. It does not qualify
-this new 832-long-edge scaling policy or enable Fun Control Queue. Repeat a bounded
-owner-authorized physical/visual test before changing the catalog's `not_qualified` state.
-Canny preview stays approximate until tested against the pinned runtime's actual node
-and known vectors; real capture-system BVH remains unqualified.
+feasibility on the tested hardware with operator-prepared 480x832 MP4s on 1.0.0's graph. It does not qualify
+this 832-long-edge scaling policy, the 1.1.0 trial's provisional resource policy or the application path. 1.0.0 stays blocked; 1.1.0 is the owner trial (queueable, per-job opt-in,
+not qualified). Repeat a bounded owner-authorized physical/visual test before changing a catalog `qualification_status`.
+The Canny preview follows the pinned graph's order and matches the pinned kornia Canny on four recorded synthetic vectors, but stays *approximate* because parity on real clips is not
+verified; real capture-system BVH remains unqualified. One animation can be converted to character, silhouette and skeleton renders with the same plan; the library then lists them as related
+variants (`docs/runbooks/motion_conditioning_and_engine_evaluation.md`).
 
 ## Diagnostics and batch conversion (PR-VID-MOTION-356)
 

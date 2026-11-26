@@ -372,6 +372,7 @@ class ConversionWorkbench:
         window_start: int = 0,
         window_frames: int = 0,
         cancel: threading.Event | None = None,
+        **context: Any,
     ) -> cond.ConditioningPreview:
         inspection = inspect_driving_video(video, frame_count=0, cancel=cancel)
         if inspection.facts is None:
@@ -403,4 +404,5 @@ class ConversionWorkbench:
             window_start=window_start,
             window_frames=window_frames,
             cancel=cancel,
+            **context,
         )

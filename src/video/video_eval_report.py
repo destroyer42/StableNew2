@@ -740,6 +740,7 @@ def render_html(report: EvalReport, *, show_prompts: bool = True) -> str:
         out.append(motion_html.rubric_html())
         out.append(motion_html.caveats_html())
         out.append(motion_html.cross_subject_html(report.assessment))
+        out.append(motion_html.representation_groups_html(report.assessment))
         out.append(motion_html.transfer_html(report.transfer))
     out.append("<table class='grid'><thead><tr><th>case</th>")
     for arm in arms:

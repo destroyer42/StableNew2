@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-1021 of 1021 modules have a docstring.
+1026 of 1026 modules have a docstring.
 
 ## src/
 
@@ -1020,6 +1020,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `comfy_process_manager.py`: Own managed ComfyUI startup, health checks, launch flag evidence, and child process shutdown
 - `comfy_runtime_setup.py`: Toolkit-neutral facts about how ComfyUI is configured, what this process is running, and what that means (PR-…
 - `comfy_workflow_backend.py`: Execute frozen Comfy video requests and collect artifacts, provenance, and runtime liveness evidence
+- `conditioning_advisories.py`: Advisories for the effective conditioning of a driving clip (PR-VID-MOTION-430)
+- `conditioning_inspection.py`: What the operator should inspect, and which engines a selected motion asset can honestly go to (PR-VID-MOTION…
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: Model continuity packs, their anchors and references, and the links stored with video jobs
 - `depth_map_resolver.py`: Validate supplied depth maps or materialize estimated depth images for conditioned video workflows
@@ -1121,6 +1123,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_catalog_wan_a14b_svi.py`: Experimental Wan2.2 I2V-A14B + SVI 2.0 workflow for multi-segment sequences (VID-A14B-SVI-375)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
 - `workflow_compiler.py`: Compile declared workflow inputs into a backend request by rendering graph templates
+- `workflow_conditioning.py`: What a driving-video workflow actually does with the driving clip (PR-VID-MOTION-430)
 - `workflow_contracts.py`: Define workflow versions, governance, capabilities, bindings, and compiled requests
 - `workflow_controls.py`: Neutral, spec-declared operator controls for workflow-owned generation inputs (PR-VID-192)
 - `workflow_frame_count.py`: Neutral, spec-declared generation-length contract (PR-VID-190)
@@ -1154,6 +1157,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `inventory.py`: Read-only inventory of downloaded motion assets (PR-VID-MOTION-354)
 - `library_bridge.py`: Accept a verified converted clip into the existing Motion Library (PR-VID-MOTION-354)
 - `ports.py`: Calls the Convert Motion dialog needs, supplied by the controller (PR-VID-MOTION-354)
+- `representation.py`: Verified relationships between representations of one movement (PR-VID-MOTION-430)
 - `rig_compat.py`: Bone-name compatibility between an animation's skeleton and a character (PR-VID-MOTION-354)
 - `workbench.py`: The operator-level facade over inventory, Blender conversion, library import and conditioning preview (PR-VID…
 
@@ -1175,6 +1179,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `search.py`: Local search over the catalog (PR-VID-MOTION-LIB-353)
 - `snapshot.py`: A point-in-time, read-only view of the catalog for the browser (PR-VID-MOTION-LIB-353)
 - `store.py`: Versioned local catalog of motion-reference videos (PR-VID-MOTION-LIB-353)
+- `variants.py`: Related representations of one movement in the Motion Library (PR-VID-MOTION-430)
 - `verification.py`: Is the file an asset points at still the file that was imported? (PR-VID-MOTION-LIB-353)
 
 ## src/video/restoration/

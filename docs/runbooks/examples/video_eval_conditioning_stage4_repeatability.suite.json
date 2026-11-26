@@ -1,0 +1,121 @@
+{
+  "schema": "stablenew.video-eval-suite.v2",
+  "suite_id": "conditioning-430-stage4-repeatability",
+  "description": "Unexecuted template (PR-VID-MOTION-430). Bind your own images and driving videos; no media is committed and a physical run needs the owner's separate authorization of this exact suite. Both arms share the seed, source image, original driver, window and length, so the comparison is a multi-engine one: the conditioning mechanism, controls (Fun Control takes no separate motion prompt), prepared derivative and noise semantics differ together and the report discloses that. The shared envelope is 17-49 frames at 24 FPS; do not compare these clips against 81-frame Animate-2 clips. Bind each driver from the Motion Library so a converted clip carries its verified representation and movement identity; unbound drivers make a representation group exploratory. Stage 4 repeatability: one additional seed (431) for a representative upper-body case and a locomotion case under the two engines (4 jobs). Use the same source, driver and representation as the matching Stage 3 cases. Two engines and two cases are a limited sample; it does not establish broad reliability.",
+  "seed": 431,
+  "baseline_arm": "animate2",
+  "cases": [
+    {
+      "case_id": "hand_wave_repeat",
+      "image": "images/hand_wave_a.png",
+      "prompt": "a person standing in a plain, evenly lit studio, seen from the front, photorealistic",
+      "tags": [
+        "hand_wave",
+        "engine-conditioning",
+        "repeatability"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/hand_wave_selected.mp4"
+        },
+        "action": "Raises the right hand to shoulder height, waves it side to side twice, and lowers it.",
+        "motion_prompt": "the person raises their right hand and waves it side to side, then lowers it, body otherwise still",
+        "category": "hand_wave",
+        "expected_outcome": "The intended subject's right hand waves side to side at about shoulder height and returns down; the body stays in place and the hand keeps five fingers.",
+        "direction": "side to side",
+        "phases": [
+          "raise hand",
+          "wave",
+          "lower hand"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "upper body",
+          "viewpoint": "front",
+          "compatibility": [
+            "single subject",
+            "static camera"
+          ],
+          "source_compatibility": "upper_body_front"
+        }
+      }
+    },
+    {
+      "case_id": "walk_forward_repeat",
+      "image": "images/walk_forward_a.png",
+      "prompt": "a person standing in a plain, evenly lit studio, seen from the front, photorealistic",
+      "tags": [
+        "walk_forward",
+        "engine-conditioning",
+        "repeatability"
+      ],
+      "motion": {
+        "driving": {
+          "path": "motion/walk_forward_selected.mp4"
+        },
+        "action": "Walks a few steps straight toward the camera with a natural gait.",
+        "motion_prompt": "the person walks forward toward the camera with a natural gait, arms swinging gently",
+        "category": "walk_forward",
+        "expected_outcome": "The intended subject takes several steps toward the camera with alternating legs and swinging arms; the background stays still and the body proportions stay stable.",
+        "direction": "toward the camera",
+        "phases": [
+          "start",
+          "steps",
+          "continue"
+        ],
+        "window": {
+          "start_frame": 0,
+          "end_frame": null
+        },
+        "preparation": {
+          "mode": "workflow_prepared",
+          "fps_conversion": "workflow_rate"
+        },
+        "annotations": {
+          "framing": "full body",
+          "viewpoint": "front",
+          "compatibility": [
+            "single subject",
+            "static camera"
+          ],
+          "source_compatibility": "full_body_front"
+        }
+      }
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "animate2",
+      "label": "Wan-Animate-2 Driving Video 1.2.0 (baseline)",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan_animate2_drive_i2v_v1",
+        "workflow_version": "1.2.0",
+        "frame_count": 49,
+        "experimental_opt_in": true,
+        "operator_controls": {
+          "pose_strength": 1.0,
+          "reference_image_strength": 1.0
+        }
+      }
+    },
+    {
+      "arm_id": "fun_control",
+      "label": "Wan2.2 Fun Control 5B Canny trial 1.1.0",
+      "backend": "video_workflow",
+      "form": {
+        "workflow_id": "wan22_fun_control_5b_canny_i2v_v1",
+        "workflow_version": "1.1.0",
+        "frame_count": 49,
+        "experimental_opt_in": true
+      }
+    }
+  ]
+}

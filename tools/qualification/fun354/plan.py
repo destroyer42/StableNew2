@@ -20,6 +20,11 @@ from src.video.workflow_frame_count import frame_count_policy, legal_frame_count
 
 SCHEMA = "stablenew.fun-control-qualification-plan.v1"
 WORKFLOW_VERSION = "1.0.0"
+#: PR-VID-MOTION-430: the owner-authorized experimental trial (the identical graph under an enforced VRAM floor).  A plan for
+#: it is a separate proposal with its own digest; the 1.0.0 plan and its recorded evidence are read exactly as before.
+TRIAL_VERSION = "1.1.0"
+#: The ``resource_readiness.qualification_status`` each plannable version must still declare.
+EXPECTED_STATUS = {WORKFLOW_VERSION: "not_qualified", TRIAL_VERSION: "trial_unqualified"}
 RUNTIME_COMMIT = "6b747c0428c343e1417219641db93a4fb7cb69ae"  # managed ComfyUI v0.38.0 (VID-FUN-352)
 REQUIRED_LAUNCH_FLAGS = ("--disable-pinned-memory", "--disable-auto-launch")
 BASELINE_WORKFLOW = ("wan22_ti2v_5b_i2v_v1", "1.3.0")
@@ -123,6 +128,9 @@ class QualificationPlan:
     prompt: str = ""
     negative_prompt: str = ""
     coverage: tuple[CoverageEntry, ...] = ()
+    #: Trial plans only: the exact resource policy the catalog entry carries (``None`` keeps a 1.0.0 record, and its digest,
+    #: byte-for-byte what it always was).
+    resource_policy: dict[str, Any] | None = None
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -144,6 +152,43 @@ class QualificationPlan:
             "coverage": [asdict(c) for c in self.coverage],
             "physical_execution": "NOT AUTHORIZED",
             "frozen_catalog_entry": "unchanged; qualification never edits the immutable 1.0.0 spec",
+        } | self._candidate_record()
+
+    def _candidate_record(self) -> dict[str, Any]:
+        if self.resource_policy is None:
+            return {}
+        policy_blob = json.dumps(self.resource_policy, sort_keys=True, separators=(",", ":"))
+        return {
+            "frozen_catalog_entry": (
+                f"unchanged; qualification never edits a published spec (1.0.0 stays blocked, "
+                f"{self.workflow_version} stays the owner-authorized trial)"
+            ),
+            "candidate": {
+                "workflow_version": self.workflow_version,
+                "resource_policy": dict(self.resource_policy),
+                "resource_policy_sha256": hashlib.sha256(policy_blob.encode("ascii")).hexdigest(),
+                "policy_status": (
+                    "provisional floors taken from the TI2V-5B figures; this plan measures them, it does not "
+                    "change them, and a changed policy is a new plan and an owner decision"
+                ),
+                "preparation": [
+                    "driving clips are Prepare Motion Source derivatives: exact frames at 24 FPS for the case length",
+                    "MP4 drivers are pre-scaled to the plan geometry before pinning; Canny runs at the prepared size "
+                    "and 4K drivers failed (memory, time-out) in VID-MOTION-354 runs 1 and 2",
+                    "one concrete seed per case; per-job experimental consent is recorded by the app, not by this harness",
+                ],
+                "evidence_scope": [
+                    "VID-MOTION-354 run 3 (14 cases FEASIBLE) is historical technical feasibility on 1.0.0's graph; it "
+                    "is not a qualification of 1.1.0, of its resource policy or of the application path",
+                    "a verdict from this plan is feasibility under this plan only; qualification needs the owner-accepted "
+                    "ledger entry",
+                ],
+                "telemetry_not_captured": [
+                    "cold-start and generation durations separately (only wall time per case is recorded)",
+                    "Comfy allocator state",
+                    "driver recovery beyond the Windows event-log fault scan",
+                ],
+            },
         }
 
     @property
@@ -165,11 +210,11 @@ class PlanError(ValueError):
     pass
 
 
-def fun_control_spec() -> Any:
+def fun_control_spec(version: str = WORKFLOW_VERSION) -> Any:
     for spec in build_builtin_workflow_specs():
-        if spec.workflow_id == FUN_ID and spec.workflow_version == WORKFLOW_VERSION:
+        if spec.workflow_id == FUN_ID and spec.workflow_version == version:
             return spec
-    raise PlanError("The Fun Control 1.0.0 catalog entry is not registered.")
+    raise PlanError(f"The Fun Control {version} catalog entry is not registered.")
 
 
 STOPS = (
@@ -235,6 +280,8 @@ TELEMETRY = (
     "runtime_identity",
     "owner_visual_rating_via_vid_quality_351",
 )
+#: Trial plans add what the executor really records: decimal GPU temperature and the minimum VRAM headroom.
+TRIAL_TELEMETRY = (*TELEMETRY, "gpu_temperature_peak_c", "gpu_vram_headroom_min_mib")
 
 
 def build_plan(
@@ -245,17 +292,26 @@ def build_plan(
     reference_size: int = 0,
     extra_inputs: Sequence[InputPin] = (),
     coverage: Sequence[CoverageEntry] = (),
+    workflow_version: str = WORKFLOW_VERSION,
 ) -> QualificationPlan:
     """Freeze the proposal from the catalog.  Raises ``PlanError`` if the catalog no longer matches what was reviewed."""
 
-    spec = fun_control_spec()
+    if workflow_version not in EXPECTED_STATUS:
+        raise PlanError(f"No qualification plan is written for Fun Control {workflow_version}.")
+    spec = (
+        fun_control_spec()
+        if workflow_version == WORKFLOW_VERSION
+        else fun_control_spec(workflow_version)
+    )
     provenance = spec.backend_defaults.get("provenance") or {}
     integrity = spec.backend_defaults.get("asset_integrity") or {}
     readiness = spec.backend_defaults.get("resource_readiness") or {}
-    if readiness.get("qualification_status") != "not_qualified":
+    expected = EXPECTED_STATUS[workflow_version]
+    if readiness.get("qualification_status") != expected:
         raise PlanError(
-            "The catalog entry is no longer marked not_qualified; this proposal was written for the unqualified spec."
+            f"The catalog entry is no longer marked {expected}; this proposal was written for that policy."
         )
+    trial = workflow_version != WORKFLOW_VERSION
     if integrity.get("revision") != FUN_REVISION:
         raise PlanError("The pinned upstream revision changed.")
     policy = frame_count_policy(spec)
@@ -343,7 +399,7 @@ def build_plan(
     )
     return QualificationPlan(
         workflow_id=FUN_ID,
-        workflow_version=WORKFLOW_VERSION,
+        workflow_version=workflow_version,
         graph_sha256=graph,
         runtime_commit=RUNTIME_COMMIT,
         launch_flags=REQUIRED_LAUNCH_FLAGS,
@@ -361,9 +417,10 @@ def build_plan(
         fps=int(policy["fps"]),
         phases=phases,
         stops=STOPS,
-        telemetry=TELEMETRY,
+        telemetry=TRIAL_TELEMETRY if trial else TELEMETRY,
         baseline=BASELINE_WORKFLOW,
         prompt=PROMPT,
         negative_prompt=str(spec.backend_defaults.get("default_negative_prompt") or ""),
         coverage=tuple(coverage),
+        resource_policy=dict(readiness) if trial else None,
     )

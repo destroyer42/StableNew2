@@ -349,6 +349,9 @@ class DerivationRecord:
     blender_version: str = ""
     script_version: str = ""
     character_mode: str = ""
+    #: PR-VID-MOTION-430: digest of every conversion choice except the render profile; clips with equal keys are related
+    #: representations of one movement.  Empty for a clip converted before this field existed (never inferred).
+    movement_key: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {name: getattr(self, name) for name in self.__slots__}
@@ -374,6 +377,7 @@ class DerivationRecord:
             blender_version=clean_text(data.get("blender_version"), 40),
             script_version=clean_text(data.get("script_version"), 20),
             character_mode=clean_text(data.get("character_mode"), 60),
+            movement_key=_sha_or_empty(data.get("movement_key")),
         )
 
 
