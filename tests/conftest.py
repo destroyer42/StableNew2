@@ -343,6 +343,24 @@ def _isolate_site_library_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
 
 @pytest.fixture(autouse=True)
+def _isolate_photo_optimize_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Building the app opens the Photo Optimize workspace, by default under the checkout's ``output/``.
+
+    An injected ``PHOTO_OPTIMIZE_ROOT`` is what ``get_photo_optimize_store`` honours without migrating operator data.
+    The directory is a sibling of ``tmp_path`` and is not created here.
+    """
+
+    try:
+        from src.photo_optimize import store
+    except Exception:  # pragma: no cover - isolation must never break collection
+        return
+    monkeypatch.setattr(
+        store, "PHOTO_OPTIMIZE_ROOT", tmp_path.with_name(tmp_path.name + "-PhotoOptimize")
+    )
+    monkeypatch.setattr(store, "_global_store", None)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_global_prompt_user_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Pytest never reads or writes the operator's per-user Global Prompt store.
 

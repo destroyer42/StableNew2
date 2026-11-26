@@ -1,8 +1,12 @@
-"""Refuse, and fail, a test that writes into the checkout's own runtime folders.
+"""Fail a test that writes into the checkout's own runtime folders.
 
 In the owner's checkout ``output/`` is the live Output folder, and a relative path in a test (or a ``Mock`` used as a
 path) resolves against the checkout. The guard is a Python audit hook, so it sees only the pytest process: an app
 running from the same checkout cannot trip it, and neither can a child process a test starts.
+
+The hook only records; it never raises, so it cannot change what the code under test does. Refusing the write sent the
+app into an error handler that opened a modal dialog, which blocks inside Tk where the census's per-test timeout
+cannot reach it.
 
 A test whose subject resolves a relative path against the working directory uses the ``isolated_cwd`` fixture.
 """
@@ -22,7 +26,7 @@ class CheckoutWriteGuard:
     def __init__(self, root: Path) -> None:
         self._root = os.path.normcase(os.path.abspath(root)) + os.sep
         self._guarded = {os.path.normcase(name) for name in GUARDED_FOLDERS}
-        # ``StructuredLogger()`` creates a bare ``output`` folder in many tests. Anything inside it is refused.
+        # ``StructuredLogger()`` creates a bare ``output`` folder in many tests. Anything inside it is recorded.
         self._allowed_folder = os.path.normcase("output")
         self._violations: list[str] = []
 
@@ -42,10 +46,9 @@ class CheckoutWriteGuard:
             if inside is None or (event == "os.mkdir" and inside == self._allowed_folder):
                 continue
             self._violations.append(f"{event} {inside}")
-            raise PermissionError(f"tests may not write into the checkout: {inside}")
 
     def take(self) -> list[str]:
-        """The refusals since the last call; product code may swallow the exception, so each is kept."""
+        """The writes seen since the last call."""
 
         violations, self._violations = self._violations, []
         return violations
@@ -53,7 +56,13 @@ class CheckoutWriteGuard:
     def _guarded_relative_path(self, path: object) -> str | None:
         if not isinstance(path, (str, bytes, os.PathLike)):  # a file descriptor
             return None
-        full = os.path.normcase(os.path.abspath(os.fsdecode(path)))
+        # ``\\?\`` is the Windows long-path form of the same file.
+        text = os.fsdecode(path).removeprefix("\\\\?\\")
+        try:
+            # A path that cannot be resolved (a deleted working directory) is skipped: the hook must not raise.
+            full = os.path.normcase(os.path.abspath(text))
+        except (OSError, ValueError):
+            return None
         if not full.startswith(self._root):
             return None
         inside = full[len(self._root) :]
