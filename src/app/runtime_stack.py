@@ -263,16 +263,22 @@ def build_live_update_service(
     root = repo_root or lu.REPO_ROOT
     git = lu.subprocess_git(root)
     env_check = lu.environment_check(
-        root, python=Path(sys.executable), read_file=lambda sha, path: lu.read_target_file(git, sha, path)
+        root,
+        python=Path(sys.executable),
+        read_file=lambda sha, path: lu.read_target_file(git, sha, path),
     )
 
     def preflight(expected_sha: str | None) -> lu.Preflight:
-        return lu.preflight(git, expected_sha=expected_sha, expected_origin=lu.EXPECTED_ORIGIN, env_check=env_check)
+        return lu.preflight(
+            git, expected_sha=expected_sha, expected_origin=lu.EXPECTED_ORIGIN, env_check=env_check
+        )
 
     queue = job_queue_of(app)
 
     def busy() -> bool:
-        runner = getattr(getattr(app, "job_service", None), "runner", None)  # read through: may be replaced
+        runner = getattr(
+            getattr(app, "job_service", None), "runner", None
+        )  # read through: may be replaced
         if getattr(runner, "current_job_id", None):
             return True
         lister = getattr(queue, "list_jobs", None)
