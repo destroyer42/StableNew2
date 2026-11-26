@@ -5,7 +5,7 @@ queue lock itself signals, so every test observes the same interleaving on every
 
 * ``GatedRepository`` is the real SQLite repository with a seam immediately before and immediately after the durable
   commit of ``transition_job`` (the linearization point).
-* ``ObservableLock`` replaces ``JobQueue._lock`` and reports when another thread is parked on it, so a test can wait
+* ``ObservableLock`` replaces ``JobQueue._transition_lock`` (held by every lifecycle writer across its commit) and reports when another thread is parked on it, so a test can wait
   for "the racing call has either finished or is blocked behind the transition in flight" without guessing.
 * ``assert_three_way_agreement`` is the contract: SQLite row, live job and runnable heap describe the same job.
 """
@@ -25,7 +25,7 @@ PATIENCE = 20.0
 
 
 class ObservableLock:
-    """A non-reentrant lock that tells waiters apart from holders (drop-in for ``JobQueue._lock``)."""
+    """A non-reentrant lock that tells waiters apart from holders (drop-in for ``JobQueue._transition_lock``)."""
 
     def __init__(self) -> None:
         self._inner = threading.Lock()
@@ -112,7 +112,7 @@ class Worker:
                 self._lock.poke()
 
     def settled(self) -> None:
-        """Wait until the call finished or is parked behind the queue lock (the transition in flight holds it)."""
+        """Wait until the call finished or is parked behind the transition lock (the transition in flight holds it)."""
 
         assert self._lock is not None
         assert self._lock.wait_until(lambda: self.finished or self._lock.waiting > 0), (

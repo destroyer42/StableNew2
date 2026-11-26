@@ -39,7 +39,7 @@ def stack(tmp_path: Path):
     repository = GatedRepository(tmp_path / "jobs.sqlite3")
     queue = JobQueue(repository=repository)
     lock = ObservableLock()
-    queue._lock = lock  # noqa: SLF001 - lets a test see when a racing call is parked behind a transition
+    queue._transition_lock = lock  # noqa: SLF001 - lets a test see when a racing writer is parked behind a transition
     yield SimpleNamespace(repository=repository, queue=queue, lock=lock)
     repository.close()
 

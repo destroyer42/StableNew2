@@ -70,6 +70,15 @@ class JobQueue:
         self._queue: list[tuple[int, int, str]] = []
         self._jobs: dict[str, Job] = {}
         self._counter = 0
+        # Two locks, so that reading the projection never waits for the disk (PR-QUEUE-LOCK-IO-N9):
+        # * ``_transition_lock`` serializes every lifecycle writer (claim, transitions, progress, runtime checkpoints,
+        #   reorders, dispatch holds) from its decision through the durable repository commit to its projection. It
+        #   is the "claim lock": a holder decides, commits and projects without another writer in between.
+        # * ``_lock`` guards the in-memory projection (``_jobs``, the heap, the flags). It is held only for in-memory
+        #   work and NEVER across a repository call, so a reader (queue projection, GUI, runner idle checks) cannot
+        #   be parked behind a commit waiting on SQLite or fsync.
+        # Lock order: _quarantine_lock, then _admission_lock, then _transition_lock, then _lock.
+        self._transition_lock = ContentionLock("job_queue_transition", reentrant=False)
         self._lock = ContentionLock("job_queue", reentrant=False)
         # Set whenever queue state changes (see ``_notify_state_listeners``); the runner idles on it instead of polling.
         self._wake = Event()
@@ -160,7 +169,7 @@ class JobQueue:
     def fence_dispatch(self) -> None:
         """Fence new claims and wait for any already-authorized claim to leave its critical section."""
         self.request_dispatch_fence()
-        with self._lock:
+        with self._transition_lock:
             pass
 
     def is_dispatch_fenced(self) -> bool:
@@ -173,7 +182,7 @@ class JobQueue:
         is read and written under the lock that makes eligibility and the QUEUED -> RUNNING transition atomic.
         """
 
-        with self._lock:
+        with self._transition_lock, self._lock:
             if self._webui_hold is not None:
                 return False
             self._webui_hold = {"reason": str(reason or ""), "incident_id": incident_id}
@@ -213,9 +222,10 @@ class JobQueue:
             raise ValueError("a GPU quarantine requires an incident_id")
         # ``_quarantine_lock`` keeps the durable write and the projection of one apply/release together, so a
         # concurrent release can never leave the persisted record and the in-memory flag disagreeing. It is only
-        # ever taken before ``_lock`` and never held across a listener notification.
+        # ever taken before the queue locks and never held across a listener notification. The transition lock makes
+        # the in-memory apply wait for a claim already deciding or committing, exactly like the WebUI hold.
         with self._quarantine_lock:
-            with self._lock:
+            with self._transition_lock, self._lock:
                 if self._gpu_quarantine is not None:
                     return False
                 self._gpu_quarantine = record
@@ -369,7 +379,7 @@ class JobQueue:
 
     def get_next_job(self) -> Job | None:
         """Pop the next eligible job (held jobs are skipped without losing their place)."""
-        with self._lock:
+        with self._transition_lock, self._lock:
             if self._paused or self._dispatch_fenced.is_set():
                 return None
             found = self._pop_next_eligible_locked()
@@ -383,7 +393,7 @@ class JobQueue:
 
     def pause(self) -> None:
         self._repository.set_setting("queue_paused", True)
-        with self._lock:
+        with self._transition_lock, self._lock:
             self._paused = True
         self._notify_state_listeners()
 
@@ -427,16 +437,17 @@ class JobQueue:
         ``None`` when nothing was RUNNING or the job moved on first (nothing is changed then).
         """
 
-        with self._repository.defer_emissions(), self._lock:
-            job = self._running_locked(job_id)
+        with self._repository.defer_emissions(), self._transition_lock:
+            with self._lock:
+                job = self._running_locked(job_id)
             if job is None:
                 return None
             try:
                 verdict = withhold_requeue_after_progress(assessment or NO_EVIDENCE, job)
                 if return_to_queue and verdict.safe_to_requeue:
-                    self._commit_return_locked(job, "return_to_queue", counter=None)
+                    self._commit_return(job, "return_to_queue", counter=None)
                 else:
-                    self._commit_cancel_locked(job, refused=verdict if return_to_queue else None)
+                    self._commit_cancel(job, refused=verdict if return_to_queue else None)
             except JobStatusChanged:
                 return None  # it finished or was cancelled first: nothing to return
         self._notify_status(job, job.status)
@@ -454,14 +465,14 @@ class JobQueue:
         transition, and the heap entry keeps its original counter. ``None`` means nothing was changed.
         """
 
-        with self._repository.defer_emissions(), self._lock:
-            job = self._running_locked(job_id)
+        with self._repository.defer_emissions(), self._transition_lock:
+            with self._lock:
+                job = self._running_locked(job_id)
+                counter = self._claimed_counters.get(job_id)
             if job is None or not withhold_requeue_after_progress(assessment, job).safe_to_requeue:
                 return None
             try:
-                self._commit_return_locked(
-                    job, "outage_requeue_undispatched", counter=self._claimed_counters.get(job_id)
-                )
+                self._commit_return(job, "outage_requeue_undispatched", counter=counter)
             except JobStatusChanged:
                 return None  # the job moved on while the outage coordinator decided
         self._notify_status(job, JobStatus.QUEUED)
@@ -531,15 +542,17 @@ class JobQueue:
         return finalized or self._repository.get_job_model(job_id)
 
     # -- the transition protocol ---------------------------------------------------------------------------------
-    # Every lifecycle change follows one protocol, under ``_lock`` (always entered inside ``defer_emissions`` so the
-    # repository's observers run only after the lock is released):
-    #   1. prepare a *candidate*: a private copy of the live job that carries the intended change. Nothing live,
-    #      nothing in the heap and nothing the repository holds is touched while preparing it.
-    #   2. commit the candidate with the repository's guarded transition. That UPDATE is the durable linearization
-    #      point: if it raises, nothing was written and nothing live was edited.
-    #   3. project the committed row onto the live job and the runnable heap.
-    # A failure in step 3 does not undo step 2. The live job and the heap are re-derived from the committed row
-    # (``_reconcile_locked``), never "rolled back".
+    # Every lifecycle change follows one protocol, under ``_transition_lock`` (always entered inside
+    # ``defer_emissions`` so the repository's observers run only after the locks are released):
+    #   1. decide under ``_lock`` and prepare a *candidate*: a private copy of the live job that carries the intended
+    #      change. Nothing live, nothing in the heap and nothing the repository holds is touched while preparing it.
+    #   2. release ``_lock`` and commit the candidate with the repository's guarded transition. That UPDATE is the
+    #      durable linearization point: if it raises, nothing was written and nothing live was edited. Readers of the
+    #      projection meanwhile see the state from before the transition, never a half-applied one.
+    #   3. project the committed row onto the live job and the runnable heap, under ``_lock`` again.
+    # Every other writer holds ``_transition_lock`` too, so nothing a decision read can change before its projection
+    # (an admission only adds new jobs). A failure in step 3 does not undo step 2. The live job and the heap are
+    # re-derived from the committed row (``_reconcile``), never "rolled back".
 
     @staticmethod
     def _candidate(job: Job, **changes: Any) -> Job:
@@ -557,7 +570,7 @@ class JobQueue:
             return job if job is not None and job.status == JobStatus.RUNNING else None
         return next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
 
-    def _commit_locked(
+    def _commit_transition(
         self,
         job: Job,
         candidate: Job,
@@ -567,7 +580,11 @@ class JobQueue:
         adopt_checkpoints: bool = False,
         **fields: Any,
     ) -> None:
-        """Commit ``candidate`` and project the committed row onto ``job``. The caller holds ``_lock``."""
+        """Commit ``candidate`` and project the committed row onto ``job``.
+
+        The caller holds ``_transition_lock`` and must NOT hold ``_lock``: the commit waits on SQLite and the disk,
+        and only the projection step takes ``_lock``.
+        """
 
         try:
             persisted = self._repository.transition_job(candidate, status, **fields)
@@ -583,12 +600,13 @@ class JobQueue:
             )
             persisted = recovered
         try:
-            self._project_locked(job, persisted, counter=counter, adopt_checkpoints=adopt_checkpoints)
+            with self._lock:
+                self._project_locked(job, persisted, counter=counter, adopt_checkpoints=adopt_checkpoints)
         except Exception:
             logger.exception(
                 "Projecting the committed %s of %s failed; reconciling from the row", status.value, job.job_id
             )
-            self._reconcile_locked(job, counter=counter, adopt_checkpoints=adopt_checkpoints)
+            self._reconcile(job, counter=counter, adopt_checkpoints=adopt_checkpoints)
 
     def _committed_row(self, job: Job, status: JobStatus) -> Job | None:
         """The durable row, but only when it shows that the transition to ``status`` did commit."""
@@ -606,6 +624,10 @@ class JobQueue:
         """Make the live job and the heap show the committed row (``persisted``). The caller holds ``_lock``."""
 
         self._copy_persisted_state(job, persisted, adopt_checkpoints=adopt_checkpoints)
+        if persisted.status is JobStatus.RUNNING and counter is not None:
+            # A claim decides without popping (readers keep seeing the job QUEUED until this projection), so its
+            # entry leaves the heap only now, together with the status change.
+            self._discard_entries_locked(job.job_id)
         if persisted.status in self._FINAL_STATUSES:
             # PR-MEMORY-001: bounded finalized jobs; the terminal job leaves the runnable projection.
             self._add_finalized_job(job.job_id, job)
@@ -623,7 +645,7 @@ class JobQueue:
         else:
             self._discard_entries_locked(job.job_id)
 
-    def _reconcile_locked(
+    def _reconcile(
         self, job: Job, *, counter: int | None = None, adopt_checkpoints: bool = False
     ) -> None:
         """Re-derive the live job and the heap from the committed row after a projection failure.
@@ -631,15 +653,17 @@ class JobQueue:
         ``counter`` and ``adopt_checkpoints`` are what the failed projection would have applied: a claim keeps
         its heap counter, and the checkpoints of the live job are replaced only by a transition that published
         them (a concurrent writer's not-yet-persisted checkpoint list is never overwritten by an older row).
+        The caller holds ``_transition_lock``, not ``_lock``: the row is read first, then projected under ``_lock``.
         """
 
         try:
             row = self._repository.get_job_model(job.job_id)
             if row is not None:
-                self._discard_entries_locked(job.job_id)  # a QUEUED row re-enters the heap below
-                if counter is None:
-                    counter = self._claimed_counters.get(job.job_id)
-                self._project_locked(job, row, counter=counter, adopt_checkpoints=adopt_checkpoints)
+                with self._lock:
+                    self._discard_entries_locked(job.job_id)  # a QUEUED row re-enters the heap below
+                    if counter is None:
+                        counter = self._claimed_counters.get(job.job_id)
+                    self._project_locked(job, row, counter=counter, adopt_checkpoints=adopt_checkpoints)
         except Exception:  # noqa: BLE001 - the row is authoritative; restart recovery re-derives everything
             logger.exception("Reconciling %s from its committed row failed", job.job_id)
 
@@ -649,17 +673,17 @@ class JobQueue:
             heapq.heapify(kept)
             self._queue = kept
 
-    def _commit_return_locked(self, job: Job, action: str, *, counter: int | None) -> None:
+    def _commit_return(self, job: Job, action: str, *, counter: int | None) -> None:
         candidate = self._candidate(
             job, progress=0.0, eta_seconds=None, error_message=None, error_envelope=None, result=None
         )
         candidate.execution_metadata.last_control_action = action
         candidate.execution_metadata.return_to_queue_count += 1
-        self._commit_locked(
+        self._commit_transition(
             job, candidate, JobStatus.QUEUED, expected_status=JobStatus.RUNNING, counter=counter
         )
 
-    def _commit_cancel_locked(self, job: Job, *, refused: FailureAssessment | None) -> None:
+    def _commit_cancel(self, job: Job, *, refused: FailureAssessment | None) -> None:
         candidate = self._candidate(job)
         if refused is None:
             candidate.execution_metadata.last_control_action = "cancelled"
@@ -668,7 +692,7 @@ class JobQueue:
             candidate.execution_metadata.last_control_action = RETURN_REFUSED_CONTROL_ACTION
             candidate.error_envelope = refusal_envelope(job.job_id, refused)
             message = REFUSAL_MESSAGE
-        self._commit_locked(
+        self._commit_transition(
             job, candidate, JobStatus.CANCELLED, error_message=message, expected_status=JobStatus.RUNNING
         )
 
@@ -682,19 +706,20 @@ class JobQueue:
         require_running: bool = False,
         require_queued: bool = False,
     ) -> Job | None:
-        with self._repository.defer_emissions(), self._lock:
-            job = self._jobs.get(job_id)
-            if job is None or (require_running and job.status != JobStatus.RUNNING):
-                return None
-            if require_queued and job.status != JobStatus.QUEUED:
-                return None
-            if status is JobStatus.RUNNING and job.status is JobStatus.QUEUED:
-                if self._dispatch_fenced.is_set() or self._is_held_locked(job):
+        with self._repository.defer_emissions(), self._transition_lock:
+            with self._lock:
+                job = self._jobs.get(job_id)
+                if job is None or (require_running and job.status != JobStatus.RUNNING):
                     return None
-            candidate = self._candidate(job)
+                if require_queued and job.status != JobStatus.QUEUED:
+                    return None
+                if status is JobStatus.RUNNING and job.status is JobStatus.QUEUED:
+                    if self._dispatch_fenced.is_set() or self._is_held_locked(job):
+                        return None
+                candidate = self._candidate(job)
             if stage_checkpoints is not None:
                 candidate.execution_metadata.stage_checkpoints = list(stage_checkpoints)
-            self._commit_locked(
+            self._commit_transition(
                 job,
                 candidate,
                 status,
@@ -761,29 +786,26 @@ class JobQueue:
     def claim_next_job(self) -> Job | None:
         """Atomically claim the next runnable job for the single-node worker."""
         claimed: Job | None = None
-        with self._repository.defer_emissions(), self._lock:
-            if self._paused or self._dispatch_fenced.is_set():
-                return None
-            found = self._pop_next_eligible_locked()
+        with self._repository.defer_emissions(), self._transition_lock:
+            with self._lock:
+                if self._paused or self._dispatch_fenced.is_set():
+                    return None
+                found = self._pop_next_eligible_locked()
+                if found is not None:
+                    # Decide only: every popped entry goes straight back, so while the commit is in flight the
+                    # projection still shows the job QUEUED in its place, and a failed commit leaves nothing to undo.
+                    queue_item, job, skipped = found
+                    for item in (queue_item, *skipped):
+                        heapq.heappush(self._queue, item)
+                    candidate = self._candidate(job)
             if found is not None:
-                queue_item, job, skipped = found
-                try:
-                    self._commit_locked(
-                        job,
-                        self._candidate(job),
-                        JobStatus.RUNNING,
-                        expected_status=JobStatus.QUEUED,
-                        counter=queue_item[1],
-                    )
-                except Exception:
-                    # Put the popped entries back, but only for a job that is still a QUEUED projection.
-                    if self._jobs.get(job.job_id) is job and job.status == JobStatus.QUEUED:
-                        heapq.heappush(self._queue, queue_item)
-                    for held in skipped:
-                        heapq.heappush(self._queue, held)
-                    raise
-                for held in skipped:
-                    heapq.heappush(self._queue, held)
+                self._commit_transition(
+                    job,
+                    candidate,
+                    JobStatus.RUNNING,
+                    expected_status=JobStatus.QUEUED,
+                    counter=queue_item[1],
+                )
                 claimed = job
         if claimed is not None:
             self._notify_status(claimed, JobStatus.RUNNING)
@@ -841,27 +863,29 @@ class JobQueue:
     def persist_runtime_state(self, job: Job) -> None:
         """Durably checkpoint mutable execution metadata for an active job.
 
-        Serialized with every transition by the queue lock: a writer that edited the live metadata in place is either
-        ahead of a transition's candidate or persists after the transition's projection, never in between.
+        Serialized with every transition by the transition lock: a writer that edited the live metadata in place is
+        either ahead of a transition's candidate or persists after the transition's projection, never in between.
         """
-        with self._lock:
+        with self._transition_lock:
             self._repository.persist_runtime_state(job)
 
     def record_progress(self, job_id: str, progress: float, eta_seconds: float | None) -> Job | None:
         """Record a RUNNING job's progress (the high-water mark is kept) and ETA; ``None`` once it is not RUNNING.
 
-        Serialized with every transition by the queue lock, and the SQL update is itself guarded on RUNNING, so a
-        report that arrives after the job moved on cannot write onto its new state.
+        Serialized with every transition by the transition lock, and the SQL update is itself guarded on RUNNING, so
+        a report that arrives after the job moved on cannot write onto its new state.
         """
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if job is None or job.status != JobStatus.RUNNING:
-                return None
-            reported = max(job.progress, float(progress))
+        with self._transition_lock:
+            with self._lock:
+                job = self._jobs.get(job_id)
+                if job is None or job.status != JobStatus.RUNNING:
+                    return None
+                reported = max(job.progress, float(progress))
             eta = float(eta_seconds) if eta_seconds is not None else None
             if not self._repository.update_progress(job_id, reported, eta):
                 return None
-            job.progress, job.eta_seconds = reported, eta
+            with self._lock:
+                job.progress, job.eta_seconds = reported, eta
             return job
 
     def register_status_callback(self, callback: Callable[[Job, JobStatus], None]) -> None:
@@ -899,27 +923,28 @@ class JobQueue:
         Returns:
             True if the job was moved, False if not found or already at top.
         """
-        moved = False
-        with self._admission_lock, self._lock:
-            # Find queued jobs in order
-            queued = self._get_ordered_queued_jobs()
-            for i, (priority, counter, jid) in enumerate(queued):
-                if jid == job_id:
-                    if i == 0:
-                        return False  # Already at top
-                    # Swap counters with the job above to change ordering
-                    prev_priority, prev_counter, prev_jid = queued[i - 1]
-                    if priority != prev_priority:
-                        return False
-                    candidate = list(queued)
-                    candidate[i - 1], candidate[i] = candidate[i], candidate[i - 1]
-                    self._repository.update_queue_order([item[2] for item in candidate])
-                    self._swap_queue_positions(job_id, prev_jid, counter, prev_counter)
-                    moved = True
-                    break
-        if moved:
-            self._notify_state_listeners()
-        return moved
+        return self._move_adjacent(job_id, -1)
+
+    def _move_adjacent(self, job_id: str, step: int) -> bool:
+        """Swap a queued job with its neighbour ``step`` positions away (same priority only)."""
+
+        with self._admission_lock, self._transition_lock:
+            with self._lock:
+                queued = self._get_ordered_queued_jobs()
+                index = next((i for i, item in enumerate(queued) if item[2] == job_id), None)
+                if index is None or not 0 <= index + step < len(queued):
+                    return False  # unknown, or already at the top / bottom
+                priority, counter, _jid = queued[index]
+                other_priority, other_counter, other_jid = queued[index + step]
+                if priority != other_priority:
+                    return False
+                candidate = list(queued)
+                candidate[index], candidate[index + step] = candidate[index + step], candidate[index]
+            self._repository.update_queue_order([item[2] for item in candidate])
+            with self._lock:
+                self._swap_queue_positions(job_id, other_jid, counter, other_counter)
+        self._notify_state_listeners()
+        return True
 
     def move_down(self, job_id: str) -> bool:
         """Move a queued job down one position (lower priority).
@@ -930,26 +955,7 @@ class JobQueue:
         Returns:
             True if the job was moved, False if not found or already at bottom.
         """
-        moved = False
-        with self._admission_lock, self._lock:
-            queued = self._get_ordered_queued_jobs()
-            for i, (priority, counter, jid) in enumerate(queued):
-                if jid == job_id:
-                    if i == len(queued) - 1:
-                        return False  # Already at bottom
-                    # Swap counters with the job below to change ordering
-                    next_priority, next_counter, next_jid = queued[i + 1]
-                    if priority != next_priority:
-                        return False
-                    candidate = list(queued)
-                    candidate[i], candidate[i + 1] = candidate[i + 1], candidate[i]
-                    self._repository.update_queue_order([item[2] for item in candidate])
-                    self._swap_queue_positions(job_id, next_jid, counter, next_counter)
-                    moved = True
-                    break
-        if moved:
-            self._notify_state_listeners()
-        return moved
+        return self._move_adjacent(job_id, 1)
 
     def move_to_front(self, job_id: str) -> bool:
         """Move a queued job to the front of the queue (highest priority within its priority level).
@@ -960,58 +966,7 @@ class JobQueue:
         Returns:
             True if the job was moved, False if not found or already at front.
         """
-        moved = False
-        with self._admission_lock, self._lock:
-            queued = self._get_ordered_queued_jobs()
-            if not queued:
-                return False
-
-            # Find the job
-            job_index = None
-            job_priority = None
-            for i, (priority, _counter, jid) in enumerate(queued):
-                if jid == job_id:
-                    job_index = i
-                    job_priority = priority
-                    break
-
-            if job_index is None:
-                return False  # Job not found
-
-            if job_index == 0:
-                return False  # Already at front
-
-            # Get the minimum counter value (front of queue) for this priority
-            # We want to assign a counter lower than the first job in the same priority level
-            min_counter_for_priority = float("inf")
-            for priority, counter, _jid in queued:
-                if priority == job_priority:
-                    min_counter_for_priority = min(min_counter_for_priority, counter)
-
-            # Assign a new lower counter (move to front)
-            new_counter = min_counter_for_priority - 1
-
-            candidate = [item for item in queued if item[2] != job_id]
-            insert_at = next(
-                (index for index, item in enumerate(candidate) if item[0] == job_priority),
-                0,
-            )
-            candidate.insert(insert_at, queued[job_index])
-            self._repository.update_queue_order([item[2] for item in candidate])
-
-            # Update the in-memory projection after the durable order succeeds.
-            new_queue = []
-            for priority, counter, jid in self._queue:
-                if jid == job_id:
-                    new_queue.append((priority, new_counter, jid))
-                else:
-                    new_queue.append((priority, counter, jid))
-            self._queue = new_queue
-            heapq.heapify(self._queue)
-            moved = True
-        if moved:
-            self._notify_state_listeners()
-        return moved
+        return self._move_to_end(job_id, front=True)
 
     def move_to_back(self, job_id: str) -> bool:
         """Move a queued job to the back of the queue (lowest priority within its priority level).
@@ -1022,61 +977,40 @@ class JobQueue:
         Returns:
             True if the job was moved, False if not found or already at back.
         """
-        moved = False
-        with self._admission_lock, self._lock:
-            queued = self._get_ordered_queued_jobs()
-            if not queued:
-                return False
+        return self._move_to_end(job_id, front=False)
 
-            # Find the job
-            job_index = None
-            job_priority = None
-            for i, (priority, _counter, jid) in enumerate(queued):
-                if jid == job_id:
-                    job_index = i
-                    job_priority = priority
-                    break
+    def _move_to_end(self, job_id: str, *, front: bool) -> bool:
+        """Move a queued job to the front or back of its priority level (durable order first, then the heap)."""
 
-            if job_index is None:
-                return False  # Job not found
-
-            if job_index == len(queued) - 1:
-                return False  # Already at back
-
-            # Get the maximum counter value (back of queue) for this priority
-            # We want to assign a counter higher than the last job in the same priority level
-            max_counter_for_priority = float("-inf")
-            for priority, counter, _jid in queued:
-                if priority == job_priority:
-                    max_counter_for_priority = max(max_counter_for_priority, counter)
-
-            # Assign a new higher counter (move to back)
-            new_counter = max_counter_for_priority + 1
-
-            candidate = [item for item in queued if item[2] != job_id]
-            insert_at = (
-                max(
-                    (index for index, item in enumerate(candidate) if item[0] == job_priority),
-                    default=len(candidate) - 1,
-                )
-                + 1
-            )
-            candidate.insert(insert_at, queued[job_index])
-            self._repository.update_queue_order([item[2] for item in candidate])
-
-            # Update the in-memory projection after the durable order succeeds.
-            new_queue = []
-            for priority, counter, jid in self._queue:
-                if jid == job_id:
-                    new_queue.append((priority, new_counter, jid))
+        with self._admission_lock, self._transition_lock:
+            with self._lock:
+                queued = self._get_ordered_queued_jobs()
+                job_index = next((i for i, item in enumerate(queued) if item[2] == job_id), None)
+                if job_index is None:
+                    return False  # Job not found
+                if job_index == (0 if front else len(queued) - 1):
+                    return False  # Already at the front / back
+                job_priority = queued[job_index][0]
+                same_level = [counter for priority, counter, _jid in queued if priority == job_priority]
+                # A counter lower than the first (or higher than the last) job of the same priority level.
+                new_counter = min(same_level) - 1 if front else max(same_level) + 1
+                candidate = [item for item in queued if item[2] != job_id]
+                level = [index for index, item in enumerate(candidate) if item[0] == job_priority]
+                if front:
+                    insert_at = level[0] if level else 0
                 else:
-                    new_queue.append((priority, counter, jid))
-            self._queue = new_queue
-            heapq.heapify(self._queue)
-            moved = True
-        if moved:
-            self._notify_state_listeners()
-        return moved
+                    insert_at = (level[-1] if level else len(candidate) - 1) + 1
+                candidate.insert(insert_at, queued[job_index])
+            self._repository.update_queue_order([item[2] for item in candidate])
+            # Update the in-memory projection after the durable order succeeds.
+            with self._lock:
+                self._queue = [
+                    (priority, new_counter if jid == job_id else counter, jid)
+                    for priority, counter, jid in self._queue
+                ]
+                heapq.heapify(self._queue)
+        self._notify_state_listeners()
+        return True
 
     def remove(self, job_id: str) -> Job | None:
         """Remove a job from the queue.
