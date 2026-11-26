@@ -40,4 +40,16 @@ def experimental_workflow_warning(spec: Any, *, alternative: str = "") -> Policy
     )
 
 
-__all__ = ["DEFAULT_WHY", "experimental_workflow_warning", "workflow_subject"]
+def workflow_warning_records(spec: Any) -> list[dict[str, str]]:
+    """The Queue summary's warnings for ``spec`` as plain data (rendered by Tk now, by the phone gateway later)."""
+
+    warning = experimental_workflow_warning(spec)
+    return [] if warning is None else [warning.as_dict()]
+
+
+__all__ = [
+    "DEFAULT_WHY",
+    "experimental_workflow_warning",
+    "workflow_subject",
+    "workflow_warning_records",
+]

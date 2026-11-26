@@ -222,18 +222,21 @@ def test_work_outside_the_envelope_fails_before_any_generation(files, change):
     assert transport.generation_calls == []
 
 
-def test_a_flux1_dev_transformer_without_the_profile_is_refused_before_any_write(files):
+def test_a_flux1_dev_transformer_without_the_profile_runs_with_forge_modules_left_alone(files):
+    # N1 (warn, don't block, option a): no longer refused; Forge's own module selection is used, none is written.
     transport = _transport(files)
-    before = dict(transport.options)
+    before = list(transport.options.get("forge_additional_modules") or [])
     entry = run_njr_via_queue(_njr(profile=False), _client(transport))
-    assert entry.status is JobStatus.FAILED
-    assert FLUX1_UNPROFILED_HINT in str(entry.error_message)
-    assert _posts(transport) == [] and transport.generation_calls == []
-    assert transport.options == before
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    assert FLUX1_UNPROFILED_HINT not in str(entry.error_message or "")
+    assert transport.generation_calls
+    assert list(transport.options.get("forge_additional_modules") or []) == before
 
 
-def test_a_gguf_klein_9b_is_refused_before_any_write_or_generation(files):
+def test_a_gguf_klein_9b_runs_with_a_warning_and_forge_modules_left_alone(files):
+    # N1: the old refusal ("FLUX.2 Klein 9B-class, GGUF Q6_K" + the NO-GO text) is now the warning's why.
     transport = _transport(files)
+    before = list(transport.options.get("forge_additional_modules") or [])
     entry = run_njr_via_queue(
         _njr(
             NINE_B_GGUF,
@@ -245,13 +248,10 @@ def test_a_gguf_klein_9b_is_refused_before_any_write_or_generation(files):
         ),
         _client(transport),
     )
-    assert entry.status is JobStatus.FAILED
-    message = str(entry.error_message)
-    assert (
-        "FLUX.2 Klein 9B-class, GGUF Q6_K" in message
-        and flux_variant_refusal("flux2_klein_9b") in message
-    )
-    assert _posts(transport) == [] and transport.generation_calls == []
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    assert transport.generation_calls
+    assert list(transport.options.get("forge_additional_modules") or []) == before
+    assert flux_variant_refusal("flux2_klein_9b")  # the text still exists, as the warning's why
 
 
 def test_a_frozen_flux1_reference_on_a_9b_checkpoint_is_refused_at_dispatch(files, monkeypatch):

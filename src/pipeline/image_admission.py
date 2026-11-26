@@ -74,10 +74,14 @@ def require_image_admission(record: Any) -> None:
     from src.pipeline.run_plan import build_run_plan_from_njr
 
     plan = build_run_plan_from_njr(record)
+    registry = _default_registry()
+    backend_id = resolve_image_backend_id(thaw_json(getattr(record, "backend_options", {})))
+    if backend_id not in registry.list_backend_ids():
+        return  # an extension or test backend: the runner that registered it validates the plan at dispatch
     require_image_plan(
         record,
         [job.stage_name for job in plan.jobs],
-        _default_registry(),
+        registry,
         stage_config=PipelineRunner._stage_config_for_njr,
         select_model=PipelineRunner._selected_stage_model,
     )

@@ -147,7 +147,12 @@ def test_workflow_projection_gains_one_key_and_keeps_every_existing_one(tmp_path
         "operator_projection",
     }
     for record in records.values():
-        assert set(record) == expected_existing | {"motion_readiness", "make_video_default"}
+        # N1 adds "policy_warnings" (the Queue summary's warnings as data); nothing existing is removed.
+        assert set(record) == expected_existing | {
+            "motion_readiness",
+            "make_video_default",
+            "policy_warnings",
+        }
         assert (
             set(record["motion_readiness"])
             == {

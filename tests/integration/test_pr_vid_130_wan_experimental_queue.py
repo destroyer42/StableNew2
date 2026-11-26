@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
@@ -208,7 +209,8 @@ def test_wan_landscape_source_freezes_geometry_into_the_compiled_graph_and_resul
     repository.close()
 
 
-def test_a_job_compiled_without_opt_in_fails_before_queue_prompt(tmp_path) -> None:
+def test_a_job_compiled_without_opt_in_is_refused_at_queue_never_dispatched(tmp_path) -> None:
+    # N1: before, such a job was admitted and failed at dispatch; now admission refuses it at Queue.
     client = _FakeComfy(tmp_path)
     repository, queue, service, _controller = _build_stack(
         tmp_path, [_wan_backend(tmp_path, client)]
@@ -216,11 +218,10 @@ def test_a_job_compiled_without_opt_in_fails_before_queue_prompt(tmp_path) -> No
     job_id = _real_submit(tmp_path, service, _wan_form())
     record = queue.get_job(job_id)._normalized_record
     assert record  # the controller path always records the choice; forge a job without it:
-    blocked = _submit_forged(tmp_path, service, opt_in=False)
-    service.runner.run_once(queue.get_job(blocked))
-    failed = repository.get_job(blocked)
-    assert failed is not None and failed.status is JobStatus.FAILED
-    assert "experimental" in str(failed.error_message or failed.result)
+    count = repository.count()
+    with pytest.raises(ValueError, match="experimental opt-in"):
+        _submit_forged(tmp_path, service, opt_in=False)
+    assert repository.count() == count  # nothing was admitted
     assert client.queued == []
     service.runner.stop()
     repository.close()

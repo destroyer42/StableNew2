@@ -455,7 +455,7 @@ def test_video_workflow_action_remains_visible_after_explicit_experimental_selec
         scroll = tab._body_scroll
         assert tab.queue_workflow_button.winfo_ismapped()
         assert not _is_under(tab.queue_workflow_button, scroll.inner)
-        assert tab.queue_workflow_button.instate(["disabled"])
+        assert tab.queue_workflow_button.instate(["!disabled"])  # N1: warned beside Queue, not gated
         tab.workflow_combo.event_generate("<<ComboboxSelected>>")
 
         scroll._canvas.yview_moveto(1.0)

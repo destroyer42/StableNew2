@@ -161,6 +161,17 @@ def test_klein_t2i_dispatches_once_with_exact_modules_and_fixed_semantics() -> N
     assert evidence["observed"]["modules"] is not None
 
 
+def _run_or_refusal(njr, transport) -> str:
+    """The failure text: a Queue refusal (N1: a real block decided from the NJR alone) or a failed job's error."""
+
+    try:
+        entry = _run(njr, transport)
+    except ValueError as refused:
+        return str(refused)
+    assert entry.status is JobStatus.FAILED
+    return str(entry.error_message)
+
+
 @pytest.mark.parametrize(
     ("override", "fragment"),
     [
@@ -176,7 +187,7 @@ def test_klein_t2i_dispatches_once_with_exact_modules_and_fixed_semantics() -> N
         ({"stage_chain": (
             make_stage_config("txt2img", steps=4, cfg_scale=1.0, sampler_name="Euler", scheduler="Beta", model=KLEIN),
             make_stage_config("adetailer", model=KLEIN),
-        )}, "stage chain"),
+        )}, "ADetailer cannot run with FLUX.2 Klein 4B FP8"),  # N1: refused at Queue, from the NJR alone
         ({"stage_chain": (
             make_stage_config("txt2img", steps=4, cfg_scale=1.0, sampler_name="Euler", scheduler="Beta", model=KLEIN),
             make_stage_config("upscale", model=KLEIN),
@@ -185,10 +196,9 @@ def test_klein_t2i_dispatches_once_with_exact_modules_and_fixed_semantics() -> N
 )
 def test_conflicting_klein_work_fails_before_any_runtime_call_or_generation(override: dict, fragment: str) -> None:
     transport = _transport()
-    entry = _run(_t2i_njr(**override), transport)
+    message = _run_or_refusal(_t2i_njr(**override), transport)
 
-    assert entry.status is JobStatus.FAILED
-    assert fragment in str(entry.error_message)
+    assert fragment in message
     assert transport.generation_calls == []
     assert _option_writes(transport) == []  # nothing was selected or changed on the endpoint
 
@@ -600,8 +610,7 @@ def test_review_default_reprocess_of_a_klein_artifact_keeps_the_profile_and_fail
     njr = _review_default_njr(tmp_path, stages)
     assert njr.backend_options["image"]["model_profile"] == {"id": "flux2_klein_4b_fp8", "version": 2}
     transport = _transport()
-    entry = _run(njr, transport)
-    assert entry.status is JobStatus.FAILED and "FLUX.2 Klein 4B FP8" in str(entry.error_message)
+    assert "FLUX.2 Klein 4B FP8" in _run_or_refusal(njr, transport)
     assert transport.generation_calls == [] and _option_writes(transport) == []  # no generation, no options mutation
 
 

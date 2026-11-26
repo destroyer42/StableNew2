@@ -28,10 +28,7 @@ from src.video.video_workflow_experiment import (
     ExperimentPlan,
     VideoWorkflowExperimentService,
 )
-from src.video.video_workflow_intent import (
-    EXPERIMENTAL_OPT_IN_FIELD,
-    form_visibility,
-)
+from src.video.video_workflow_intent import EXPERIMENTAL_OPT_IN_FIELD, form_visibility
 from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
 from src.video.workflow_controls import operator_controls_projection
 from src.video.workflow_frame_count import frame_count_projection
@@ -40,7 +37,7 @@ from src.video.workflow_picker import recommended_workflow_id
 from src.video.workflow_preflight import PreflightProbes
 from src.video.workflow_registry import latest_spec_per_workflow
 from src.video.workflow_source_preparation import preview_declared_workflow_source
-from src.video.workflow_warnings import experimental_workflow_warning
+from src.video.workflow_warnings import workflow_warning_records
 
 
 class VideoWorkflowController(VideoWorkflowMixins):
@@ -84,12 +81,7 @@ class VideoWorkflowController(VideoWorkflowMixins):
                         dependency.to_dict() for dependency in spec.dependency_specs
                     ],
                     "experimental": bool(getattr(spec, "is_experimental", False)),
-                    # N1: the Queue summary's warnings as data (rendered by Tk now, by the phone later).
-                    "policy_warnings": [
-                        warning.as_dict()
-                        for warning in (experimental_workflow_warning(spec),)
-                        if warning is not None
-                    ],
+                    "policy_warnings": workflow_warning_records(spec),  # N1: warnings as data
                     "make_video_default": bool(
                         (getattr(spec, "backend_defaults", None) or {}).get("make_video_default")
                     ),
