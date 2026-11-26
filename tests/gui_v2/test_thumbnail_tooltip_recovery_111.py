@@ -1,4 +1,4 @@
-"""PR-GUI-111: thumbnail request recovery, truncation-gated focus tooltips, experimental opt-in transitions."""
+"""PR-GUI-111: truncation-gated focus tooltips, experimental opt-in transitions."""
 
 from __future__ import annotations
 
@@ -6,14 +6,12 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 from PIL import Image
 
 from src.gui.tooltip import attach_tooltip, install_full_value_tooltips
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
-from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 
 SPAWN = "src.utils.thread_registry.ThreadRegistry.spawn"
 
@@ -38,93 +36,6 @@ def _image(tmp_path: Path, name: str = "a.png") -> Path:
 
 
 # --- Scope A: thumbnail request recovery ----------------------------------------------------------------------------
-
-
-def test_worker_start_failure_clears_the_inflight_marker_and_allows_a_retry(
-    shown_root: tk.Tk, tmp_path: Path
-) -> None:
-    thumb = ThumbnailWidget(shown_root, width=200, height=200)
-    thumb.pack()
-    path = _image(tmp_path)
-    try:
-        with patch(SPAWN, side_effect=RuntimeError("cannot start worker")):
-            thumb.set_image_from_path(path)  # must not raise into the Tk callback
-        assert thumb._inflight_path is None  # no phantom decode is "running"
-        assert thumb._current_path == str(path) and thumb._open_path == str(path)  # source stays selected/openable
-        assert "Loading" not in str(thumb._placeholder_shown)  # a neutral failure state, not an endless spinner
-
-        spawned: list[dict] = []
-        with patch(SPAWN, side_effect=lambda **kw: spawned.append(kw)):
-            thumb.set_image_from_path(path)  # the same path is retried normally
-        assert len(spawned) == 1 and thumb._inflight_path == str(path)
-    finally:
-        thumb.destroy()
-
-
-def test_worker_start_failure_of_an_old_request_never_clears_a_newer_one(
-    shown_root: tk.Tk, tmp_path: Path
-) -> None:
-    thumb = ThumbnailWidget(shown_root, width=200, height=200)
-    thumb.pack()
-    first, second = _image(tmp_path, "one.png"), _image(tmp_path, "two.png")
-    try:
-
-        def start_then_supersede(**_kw):
-            # While "starting" the first worker, a newer selection arrives and becomes the live request.
-            with patch(SPAWN, side_effect=lambda **kw: None):
-                thumb.set_image_from_path(second)
-            raise RuntimeError("late start failure of the superseded request")
-
-        with patch(SPAWN, side_effect=start_then_supersede):
-            thumb.set_image_from_path(first)
-        assert thumb._inflight_path == str(second)  # the newer request's marker is untouched
-        assert thumb._current_path == str(second)
-    finally:
-        thumb.destroy()
-
-
-def test_unexpected_decode_exception_resolves_to_a_recoverable_failure(shown_root: tk.Tk, tmp_path: Path) -> None:
-    thumb = ThumbnailWidget(shown_root, width=200, height=200)
-    thumb.pack()
-    path = _image(tmp_path)
-    try:
-        with patch("src.utils.image_utils.load_image_thumbnail", side_effect=MemoryError("decode blew up")):
-            thumb.set_image_from_path(path)
-            deadline = 0
-            while thumb._inflight_path is not None and deadline < 40:
-                _settle(shown_root, 50)  # worker callbacks only land inside the real main loop
-                deadline += 1
-        assert thumb._inflight_path is None  # not stranded
-        assert "Loading" not in str(thumb._placeholder_shown)
-        spawned: list[dict] = []
-        with patch(SPAWN, side_effect=lambda **kw: spawned.append(kw)):
-            thumb.set_image_from_path(path)
-        assert len(spawned) == 1  # recoverable: the same path decodes again
-    finally:
-        thumb.destroy()
-
-
-def test_healthy_duplicate_requests_and_stale_results_keep_their_guards(shown_root: tk.Tk, tmp_path: Path) -> None:
-    thumb = ThumbnailWidget(shown_root, width=200, height=200)
-    thumb.pack()
-    first, second = _image(tmp_path, "one.png"), _image(tmp_path, "two.png")
-    spawned: list[dict] = []
-    try:
-        with patch(SPAWN, side_effect=lambda **kw: spawned.append(kw)):
-            thumb.set_image_from_path(first)
-            old_request = thumb._request_id
-            thumb.set_image_from_path(first)  # a real decode is active: suppressed
-            assert len(spawned) == 1
-            thumb.set_image_from_path(second)
-            assert len(spawned) == 2
-        thumb._on_image_loaded(Image.new("RGB", (8, 8), "red"), old_request, str(first))
-        assert thumb._photo_image is None  # the superseded result did not win
-        pending = thumb._request_id
-        thumb.destroy()
-        thumb._on_image_loaded(Image.new("RGB", (8, 8), "red"), pending, str(second))  # after destroy: no-op
-    finally:
-        if thumb.winfo_exists():
-            thumb.destroy()
 
 
 # --- Scope B: focus tooltips only for truncated values --------------------------------------------------------------

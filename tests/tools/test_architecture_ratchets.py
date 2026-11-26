@@ -222,7 +222,6 @@ def test_the_converted_stores_no_longer_contain_a_truncating_write() -> None:
         "src/utils/config.py",
         "src/pipeline/last_run_store_v2_5.py",
         "src/pipeline/executor.py",
-        "src/services/config_service.py",
         "src/gui/prompt_pack_list_manager.py",
         "src/video/svd_registry.py",
         "src/video/comfy_workflow_backend.py",

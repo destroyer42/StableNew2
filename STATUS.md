@@ -25,8 +25,8 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below), the controller Tk import
   boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
-- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,397 errors in
-  174 files), unformatted files (369), blind/silent excepts in `src` (BLE001 1,170, S110 456, S112 34), thread and layering
+- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,365 errors in
+  168 files), unformatted files (366), blind/silent excepts in `src` (BLE001 1,153, S110 451, S112 31), thread and layering
   rules (daemon threads 13, raw threads 9, utils importing upward 18, controller importing the GUI 6), plain truncating file writes outside `atomic_io` (non-atomic file writes 17; allowlist in `tools/ci/run_architecture_ratchets.py`), and the four controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
   Flaky tests are repaired or quarantined with an owner and expiry (`tests/quarantine/README.md`).
@@ -139,8 +139,8 @@ of the roadmap; where they conflict with this file, this file and the repository
 
 - The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 5,010 lines (ceiling in `tools/ci/controller_surface_baseline.json`) and the executor,
   model-family branches in generic code, untyped stage configuration).
-- Unreachable-module count unmeasured since P3-1 deleted 30 modules (the 2026-10-16 audit's 64 predates it); the retained qualification harnesses
-  (inventory in `tools/qualification/README.md`) remain the bulk of `tools/`.
+- 11 modules under `src/` have no production path after the 2026-11-25 cleanup (kept for operator tools, test doubles,
+  stored-record readers and documented seams); the retained qualification harnesses (inventory in `tools/qualification/README.md`) remain the bulk of `tools/`.
 - Two Tcl callback-noise messages appear after an otherwise clean shutdown; no thread error or leak was observed.
 
 ## Keeping this file true

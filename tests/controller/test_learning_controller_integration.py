@@ -2,16 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from unittest.mock import MagicMock
-
-
-@dataclass
-class MockPipelineResult:
-    """Mock pipeline result for testing."""
-
-    success: bool = True
-    output_path: str = "/fake/path/image.png"
 
 
 def test_app_controller_creates_learning_execution_controller():
@@ -136,35 +127,6 @@ def test_learning_controller_handles_missing_execution_controller():
 
     assert controller.execution_controller is not None
     assert mock_job_service.submit_njrs.called
-
-
-def test_learning_execution_controller_can_run_plan():
-    """Verify LearningExecutionController can execute a learning plan."""
-    from src.controller.learning_execution_controller import LearningExecutionController
-    from src.learning.learning_plan import LearningPlan
-
-    # Create mock run callable
-    mock_run = MagicMock(return_value=MockPipelineResult())
-
-    # Create execution controller
-    exec_ctrl = LearningExecutionController(run_callable=mock_run)
-
-    # Create simple learning plan
-    plan = LearningPlan(
-        mode="single_variable_sweep",
-        stage="txt2img",
-        target_variable="cfg_scale",
-        sweep_values=[7.0, 8.0, 9.0],
-        images_per_step=1,
-    )
-
-    # Run the plan
-    base_config = {"prompt": "test prompt", "model": "test_model"}
-    result = exec_ctrl.run_learning_plan(plan, base_config)
-
-    # Verify run was called
-    assert mock_run.called
-    assert result is not None
 
 
 def test_integration_app_controller_to_gui():

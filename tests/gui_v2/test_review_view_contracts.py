@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.gui.view_contracts.feedback_panel_contract import update_feedback_state
-from src.gui.view_contracts.form_section_contract import update_form_section
-from src.gui.view_contracts.selection_list_contract import update_selection_list
 from src.review.workflow_adapter import ReviewWorkflowAdapter
 
 
@@ -99,23 +96,3 @@ def test_review_adapter_modify_mode_applies_targeted_delta() -> None:
 
     assert prompt == "portrait, laughing, cinematic lighting"
     assert negative == "extra fingers, deformed mouth"
-
-
-def test_view_contract_state_helpers() -> None:
-    sel = update_selection_list(["a", "b", "c"], [0, 2, 9])
-    assert sel.selected_indices == (0, 2)
-    assert sel.selected_count == 2
-
-    form_state, edits = update_form_section(
-        previous_mode="append",
-        next_mode="modify",
-        edits_by_mode={"append": "x"},
-        readonly_text="base prompt",
-    )
-    assert form_state.mode == "modify"
-    assert edits["modify"] == "base prompt"
-
-    feedback = update_feedback_state(selected_count=2, undo_depth=1)
-    assert feedback.can_save is True
-    assert feedback.can_batch_save is True
-    assert feedback.can_undo is True
