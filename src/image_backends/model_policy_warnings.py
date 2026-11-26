@@ -22,9 +22,9 @@ from src.assets.component_evidence import ROLE_TEXT_ENCODER, ROLE_VAE
 from src.image_backends.model_readiness import (
     ModelReadiness,
     ReadinessStatus,
-    normalize_module_name,
 )
 from src.pipeline.policy_warnings import CODE_IMAGE_MODEL_UNQUALIFIED, PolicyWarning
+from src.utils.checkpoint_identity import checkpoint_key
 
 #: Forge Neo's folders for separately supplied modules, relative to the WebUI root.
 MODULE_FOLDERS = {ROLE_TEXT_ENCODER: ("models", "text_encoder"), ROLE_VAE: ("models", "VAE")}
@@ -127,7 +127,7 @@ _SHOWN_LOCK = threading.Lock()
 
 
 def _model_key(name: str | None) -> str:
-    return normalize_module_name(str(name or "").split(" [", 1)[0])
+    return checkpoint_key(name)  # N12: the picker's name and the NJR's name join on one key
 
 
 def publish_shown_warnings(warnings: Mapping[str, PolicyWarning]) -> None:
