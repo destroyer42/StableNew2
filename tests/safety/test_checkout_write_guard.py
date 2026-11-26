@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import sqlite3
 import uuid
 from pathlib import Path
 
@@ -48,6 +50,114 @@ def test_the_windows_long_path_form_is_the_same_folder(tmp_path: Path) -> None:
     guard.audit("os.mkdir", ("\\\\?\\" + str(tmp_path / "output" / "PhotoOptimize"), 0o777, -1))
 
     assert guard.take() == [f"os.mkdir {os.path.normcase(os.path.join('output', 'PhotoOptimize'))}"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="the long-path prefix is a Windows form")
+def test_the_windows_long_path_form_of_a_network_share_is_the_same_folder() -> None:
+    guard = CheckoutWriteGuard(Path(r"\\server\share\repo"))
+
+    # ``photo_optimize.paths.io_path`` writes a network path as ``\\?\UNC\server\share\...``.
+    guard.audit("os.mkdir", (r"\\?\UNC\server\share\repo\output\PhotoOptimize", 0o777, -1))
+
+    assert guard.take() == [f"os.mkdir {os.path.normcase(os.path.join('output', 'PhotoOptimize'))}"]
+
+
+def test_deletes_copies_and_links_there_are_seen(tmp_path: Path) -> None:
+    guard = CheckoutWriteGuard(tmp_path)
+    inside = tmp_path / "output" / "a.png"
+    outside = tmp_path / "elsewhere.png"
+
+    for event, args in (
+        ("os.remove", (str(inside), -1)),
+        ("os.rmdir", (str(tmp_path / "output"), -1)),
+        ("shutil.rmtree", (tmp_path / "output", None)),
+        ("os.truncate", (str(inside), 0)),
+        ("os.link", (str(outside), str(inside), -1, -1)),
+        ("os.symlink", (str(outside), str(inside), -1)),
+        # ``shutil.copy2`` on Windows copies without raising an ``open`` event.
+        ("_winapi.CopyFile2", (str(outside), str(inside), 0)),
+    ):
+        guard.audit(event, args)
+        assert len(guard.take()) == 1, event
+
+
+def test_a_name_relative_to_a_directory_descriptor_is_not_read_against_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On Linux ``rmtree`` removes each entry by bare name through a descriptor, wherever that directory is.
+    monkeypatch.chdir(tmp_path)
+    guard = CheckoutWriteGuard(tmp_path)
+
+    for event, args in (
+        ("os.remove", ("output", 7)),
+        ("os.rmdir", ("output", 7)),
+        ("shutil.rmtree", ("output", 7)),
+        ("os.rename", ("output", "outdir", 7, 7)),
+    ):
+        guard.audit(event, args)
+
+    assert guard.take() == []
+
+
+def test_opening_a_database_there_is_seen(tmp_path: Path) -> None:
+    guard = CheckoutWriteGuard(tmp_path)
+    database = tmp_path / "output" / "a.db"
+
+    for target in (
+        database,
+        str(database),
+        os.fsencode(database),
+        database.as_uri(),
+        f"{database.as_uri()}?mode=rwc",
+        f"file:{database.as_posix()}",
+    ):
+        guard.audit("sqlite3.connect", (target,))
+        assert guard.take() == [
+            f"sqlite3.connect {os.path.normcase(os.path.join('output', 'a.db'))}"
+        ], target
+
+
+def test_a_database_that_cannot_write_there_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    guard = CheckoutWriteGuard(tmp_path)
+    database = tmp_path / "output" / "a.db"
+
+    for target in (
+        ":memory:",
+        "",
+        f"{database.as_uri()}?mode=ro",
+        "file:output/shared?mode=memory&cache=shared",
+        "file::memory:?cache=shared",
+        tmp_path / "state.db",
+    ):
+        guard.audit("sqlite3.connect", (target,))
+
+    assert guard.take() == []
+
+
+@pytest.mark.parametrize("operation", ["remove", "rmdir", "rmtree", "copy2", "sqlite"])
+def test_this_session_sees_the_real_operation(tmp_path: Path, operation: str) -> None:
+    guard = checkout_write_guard.session_guard()
+    assert guard is not None, "tests/conftest.py installs the guard"
+    # The parent does not exist, so each call fails after its audit event and changes nothing.
+    probe = REPO_ROOT / "test_output" / f"guard-probe-{uuid.uuid4().hex}"
+    source = tmp_path / "source.txt"
+    source.write_text("x", encoding="utf-8")
+    call = {
+        "remove": lambda: os.remove(probe / "a"),
+        "rmdir": lambda: os.rmdir(probe / "a"),
+        "rmtree": lambda: shutil.rmtree(probe),
+        "copy2": lambda: shutil.copy2(source, probe / "a"),
+        "sqlite": lambda: sqlite3.connect(probe / "a.db"),
+    }[operation]
+
+    with pytest.raises((OSError, sqlite3.OperationalError)):
+        call()
+
+    assert guard.take(), "the attempt is recorded; consuming it keeps this test green"
+    assert not probe.exists()
 
 
 def test_reads_other_folders_and_the_bare_output_folder_are_left_alone(tmp_path: Path) -> None:

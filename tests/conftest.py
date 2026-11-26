@@ -49,7 +49,7 @@ def _refused_checkout_writes() -> str:
     if not writes:
         return ""
     return (
-        "tests wrote into the checkout (use tmp_path or the isolated_cwd fixture):\n  "
+        "tests wrote into or deleted from the checkout (use tmp_path or the isolated_cwd fixture):\n  "
         + "\n  ".join(sorted(set(writes)))
     )
 
