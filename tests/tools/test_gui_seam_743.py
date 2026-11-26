@@ -337,11 +337,38 @@ def test_exception_isolation_and_pending_id_release() -> None:
     invoker.schedule(lambda: ran.append("first"))
     invoker.schedule(bad)
     invoker.schedule(lambda: ran.append("after-error"))
-    pump(root)
+    # The 8 ms per-pump cap may end the first pump while the failure is being logged (Windows' monotonic clock
+    # moves in ~15.6 ms steps), correctly deferring "after-error" to the next pump; that made this test flaky.
+    # Isolation is the contract: a failure never drops or reorders the callbacks after it.
+    for _ in range(3):
+        pump(root)
+        if not invoker._pending:
+            break
     assert ran == ["first", "after-error"]
     assert not invoker._pending and not invoker._pending_ids
     invoker.schedule(bad)  # the same callable may be accepted again once it has run
     assert len(invoker._pending) == 1
+    invoker.dispose()
+
+
+def test_a_failure_that_exhausts_the_pump_budget_defers_the_rest_in_order(monkeypatch) -> None:
+    # Forces what Windows' coarse clock did by chance: the time budget runs out right after the failing callback.
+    root, invoker = armed(PumpConfig("Z", 5, 64, 8.0))
+    ticks = iter([0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    monkeypatch.setattr(gui_invoker.time, "monotonic", lambda: next(ticks, 1.0))
+    ran: list[str] = []
+
+    def bad() -> None:
+        raise RuntimeError("callback failure")
+
+    invoker.schedule(lambda: ran.append("first"))
+    invoker.schedule(bad)
+    invoker.schedule(lambda: ran.append("after-error"))
+    pump(root)
+    assert ran == ["first"] and len(invoker._pending) == 1  # deferred, not dropped
+    pump(root)
+    assert ran == ["first", "after-error"]
+    assert not invoker._pending and not invoker._pending_ids
     invoker.dispose()
 
 
