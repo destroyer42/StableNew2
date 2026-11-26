@@ -256,7 +256,16 @@ Rollback: point `/opt/review-gateway/current` back at the previous release and `
 5. `systemctl restart review-gateway`, then `review-gateway-admin immich-check` printed `Immich 3.4.2` and
    `the key has exactly the needed permissions`.
 
-The first real Keep from the phone proves the upload; that had not been done when this was written.
+## 11. Desktop sync and phone pairing
+
+In StableNew's Phone review gateway dialog the owner entered the sync address (`<gateway-ip>:9443`), the certificate
+fingerprint and the sync secret. Status showed `Synced` with 0 refused. Pair a phone gave a single-use code that the
+phone entered on the gateway page. Two Keeps from the phone then appeared in Immich in a new album named after the
+run, which proves the whole path: PC, gateway, phone and Immich.
+
+Each code allows 5 attempts in total, across all tries. The first code was refused after 5 tries that did not
+match, most likely because a character was misread (2/Z, 5/S, 8/B, 6/G and E/F are all valid code characters). A
+fresh code typed once worked.
 
 Immich is plain `http` on the LAN, so the key crosses the home network unencrypted. That is accepted for this home
 network; HTTPS for Immich would be a separate job.
@@ -274,5 +283,6 @@ Kept items then wait in the gateway's queue.
 - **RAM.** CT 110 has 11 GB of the host's 15 GiB, so there is no room for Forge on Proxmox (D8, about 16 GB) without
   more memory.
 - **Storage.** Two TrueNAS storage findings, for separate jobs, are in the owner's private copy.
-- **Still to do on the desktop:** pair the phone and enter the sync address, secret and fingerprint in StableNew (RG-120).
+- **RIFE duplicates.** With RIFE on, movie_clips publish both the un-smoothed and the smoothed clip. The owner wants only
+  the smoothed clip in Review, phone review and Immich, with the un-smoothed clip kept on the PC for retention.
 - No remote access to Immich was found or added.
