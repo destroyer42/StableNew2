@@ -690,3 +690,37 @@ def test_importing_the_executor_has_no_side_effects(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("subprocess.run", lambda *a, **k: called.append("run"))
     importlib.reload(physical)
     assert called == [] and isinstance(datetime.now(), datetime)
+
+
+def _run_with_temperature(staged, version: str, query):  # noqa: ANN001
+    """One Q1 case of the given plan version with a faked temperature query (CI has no GPU)."""
+
+    _, input_set, evidence = staged
+    plan = input_set.build_plan(version)
+    phase = plan.phase(PHASE_Q1)
+    case = phase.cases[0]
+    world = World(plan, case, "ok")
+    evidence.mkdir(exist_ok=True)
+    executor = PhysicalExecutor(
+        inputs=input_set.paths,
+        evidence_root=evidence,
+        seams=replace(world.seams(), gpu_temperature=query),
+    )
+    return executor.run_case(plan, phase, case)
+
+
+def test_the_1_0_0_plan_never_queries_gpu_temperature(staged) -> None:  # noqa: ANN001
+    def query() -> float:
+        raise FileNotFoundError("nvidia-smi")
+
+    obs = _run_with_temperature(staged, "1.0.0", query)
+    assert obs.completed and obs.telemetry_complete
+    assert obs.peak_gpu_temperature_c is None
+
+
+@pytest.mark.parametrize(("reading", "complete"), [(83.9, True), (None, False)])
+def test_the_trial_plan_records_temperature_and_needs_a_reading(staged, reading, complete) -> None:  # noqa: ANN001
+    obs = _run_with_temperature(staged, "1.1.0", lambda: reading)
+    assert not obs.stop_code
+    assert obs.peak_gpu_temperature_c == reading
+    assert obs.telemetry_complete is complete

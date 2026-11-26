@@ -25,6 +25,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from src.video.motion_source_readiness import driving_frame_consumption
+from src.video.workflow_conditioning import conditioning_projection
 from src.video.workflow_controls import operator_controls
 
 MODE_WAN22_PROMPT = "wan22_prompt_directed"
@@ -463,6 +464,7 @@ def motion_readiness_projection(spec: Any) -> dict[str, Any]:
             **({"requires_prepared_source": True} if consumption.requires_prepared_source else {}),
         },
         "guidance": _plain(asdict(motion_guidance(spec))),
+        "conditioning": conditioning_projection(spec),
     }
 
 

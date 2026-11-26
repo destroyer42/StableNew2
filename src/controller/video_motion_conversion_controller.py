@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from src.video.motion_conversion.batch import BatchRunner, scan_for_batch
@@ -64,6 +65,40 @@ class VideoMotionConversionControllerMixin:
         return self.motion_conversion_workbench().conditioning_preview(
             video_path, target_size=target_size, video_sha256=video_sha256, cancel=cancel
         )
+
+    def motion_conditioning_inspection(self, context: Any, cancel: threading.Event) -> Any:
+        """Approximate conditioning preview of the *effective* driving clip for the selected engine (worker-side).
+
+        Reads one file, writes nothing, queues nothing and never touches Comfy or the GPU."""
+
+        from dataclasses import replace
+
+        from src.video.conditioning_advisories import advisory_texts
+        from src.video.conditioning_inspection import context_notes
+
+        driver = context.driver
+        try:
+            file_bytes = Path(driver.path).stat().st_size
+        except OSError:
+            file_bytes = context.file_bytes
+        preview = self.motion_conversion_workbench().conditioning_preview(
+            driver.path,
+            target_size=context.target_size,
+            video_sha256=driver.sha256,
+            derivative_of_sha256=driver.derived_from_sha256 or "",
+            cancel=cancel,
+            contract=context.contract,
+            representation=context.representation,
+            generation_frames=context.generation_frames,
+            driver_viewpoint=context.driver_viewpoint,
+            source_viewpoint=context.source_viewpoint,
+            motion_category=context.motion_category,
+            file_bytes=file_bytes,
+        )
+        if not preview.ok:
+            return preview
+        advisories = (*context_notes(context), *preview.advisories)
+        return replace(preview, advisories=advisories, warnings=advisory_texts(advisories))
 
     def motion_conversion_ports(
         self, selected_workflow: Callable[[], tuple[str, str]]

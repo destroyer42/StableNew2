@@ -31,6 +31,7 @@ from src.video.video_eval_suite import (
     EvalSuite,
     file_sha256,
 )
+from src.video.workflow_conditioning import takes_motion_prompt
 
 RUN_SCHEMA = "stablenew.video-eval-run.v1"
 RUN_MANIFEST_NAME = "run.json"
@@ -150,7 +151,12 @@ def _frozen_inputs(
         )
     if facts.driver_original_sha256 != binding.driving_sha256:
         raise ValueError("the compiled job froze a different driving video than the case binds")
-    if facts.motion_prompt != binding.motion_prompt:
+    expected_prompt = (
+        binding.motion_prompt
+        if takes_motion_prompt(facts.workflow_id, facts.workflow_version)
+        else ""
+    )
+    if facts.motion_prompt != expected_prompt:
         raise ValueError("the compiled job froze a different motion prompt than the case")
     if facts.frame_count is None or facts.fps is None:
         raise ValueError(

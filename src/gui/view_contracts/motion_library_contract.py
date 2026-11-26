@@ -36,6 +36,7 @@ from src.video.motion_library.models import (
 from src.video.motion_library.relink import RelinkOutcome
 from src.video.motion_library.search import SearchQuery, known_tags, search_assets
 from src.video.motion_library.snapshot import LibrarySnapshot
+from src.video.motion_library.variants import variant_lines
 from src.video.motion_library.verification import (
     FILE_CHANGED,
     FILE_MISSING,
@@ -515,6 +516,7 @@ class MotionLibrarySession:
                     asset.derivation, source_present=snapshot.derivation_sources.get(asset.asset_id)
                 )
             )
+            origin_lines.extend(variant_lines(asset, snapshot.variants.get(asset.asset_id, ())))
         if asset.origin is not None:
             o = asset.origin
             subject = visibility_subject(asset)

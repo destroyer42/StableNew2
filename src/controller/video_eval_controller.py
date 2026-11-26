@@ -39,6 +39,7 @@ from src.video.video_eval_suite import (
     load_eval_suite,
 )
 from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
+from src.video.workflow_conditioning import takes_motion_prompt
 
 
 class VideoEvalControllerMixin:
@@ -152,7 +153,12 @@ class VideoEvalControllerMixin:
                     self._njr_builder.output_dir(),
                     getattr(self, "_motion_preparer", prepare_for_form),
                 )
-            form = motion_form(binding, form, prepared_record=record)
+            form = motion_form(
+                binding,
+                form,
+                prepared_record=record,
+                takes_motion_prompt=takes_motion_prompt(spec.workflow_id, spec.workflow_version),
+            )
         frozen = self._njr_builder.freeze_inputs(case.image_path, form)
         built = self._njr_builder.build_job(form, frozen)
         return BuiltEvalJob(njr=built.njr, seed=built.seed, frame_count=built.frame_count)

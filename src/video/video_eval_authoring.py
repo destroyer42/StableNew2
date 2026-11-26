@@ -55,6 +55,7 @@ from src.video.video_workflow_njr_builder import (
     PREPARED_MOTION_SOURCE_FIELD,
     VideoWorkflowNjrBuilder,
 )
+from src.video.workflow_conditioning import takes_motion_prompt
 from src.video.workflow_contracts import WorkflowSpec
 from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
 from src.video.workflow_input_integrity import requires_exact_motion
@@ -184,6 +185,19 @@ def bind_library_asset(store: Any, asset_id: str, cancel: Any = None) -> dict[st
             "end_frame": harvest.end_frame,
             "cadence": harvest.cadence,
         }
+    if getattr(asset, "derivation", None) is not None:
+        # PR-VID-MOTION-430: a converted clip states its representation and movement identity only when its own
+        # conversion record still proves them (it hashes to the catalog bytes and yields the same movement key).
+        from src.video.motion_conversion.representation import verify_variant
+
+        evidence = verify_variant(asset)
+        if evidence.verified:
+            binding["representation"] = {
+                "representation": evidence.representation,
+                "movement_key": evidence.movement_key,
+                "profile": evidence.profile,
+                "plan_digest": evidence.plan_digest,
+            }
     notes = {
         key: value
         for key, value in (
@@ -417,7 +431,11 @@ def _validate_workflow(
         if problem:
             return [problem]
         check_arm_form(arm.arm_id, arm.overrides)
-        form = motion_form(binding, form)
+        form = motion_form(
+            binding,
+            form,
+            takes_motion_prompt=takes_motion_prompt(spec.workflow_id, spec.workflow_version),
+        )
         prepared_by_case = binding.preparation_mode == PREP_WORKFLOW
     for key in ("camera_intent", "controlnet", "depth_input", "interpolation", "operator_controls"):
         if form.get(key) is not None and not isinstance(form[key], dict):

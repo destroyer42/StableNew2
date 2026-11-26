@@ -148,12 +148,16 @@ def test_workflow_projection_gains_one_key_and_keeps_every_existing_one(tmp_path
     }
     for record in records.values():
         assert set(record) == expected_existing | {"motion_readiness", "make_video_default"}
-        assert set(record["motion_readiness"]) == {
-            "source_preparation",
-            "accepts_driving_video",
-            "driving_frame_consumption",
-            "guidance",
-        }
+        assert (
+            set(record["motion_readiness"])
+            == {
+                "source_preparation",
+                "accepts_driving_video",
+                "driving_frame_consumption",
+                "guidance",
+                "conditioning",  # PR-VID-MOTION-430: additive; None for a workflow that takes no driving video
+            }
+        )
     # the offered version per workflow is still the newest registered one
     assert records[WAN_ANIMATE2_DRIVE_ID]["workflow_version"] == WAN_ANIMATE2_RUNTIME_VERSION
 

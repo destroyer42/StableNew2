@@ -4,10 +4,17 @@ Pure CPU, read-only: it decodes a few frames of one video with FFmpeg, runs a Nu
 Fun Control graph uses (low 0.1 / high 0.6 on a 0..1 grayscale image: 5x5 Gaussian sigma 1, Sobel, 45-degree non-maximum
 suppression, hysteresis), and reports bounded heuristic warnings.  It never calls Comfy, never edits a job and never gates one.
 
-**Exactness.**  The result is labeled ``approximate``: this implementation follows the documented algorithm of the node the
-workflow pins, but it has not been compared with that node's source revision or recorded test vectors, so it must not be read
-as the exact edges the model will see.  ``exact_parity_verified`` stays False until such evidence exists.  The warnings are
-heuristics, not quality scores: edge density says nothing about identity or whether the motion will transfer.
+**Operation order** (read from the pinned ComfyUI v0.38.0 graph and nodes, not assumed): the prepared clip is decoded, Canny runs
+on each frame *at the size the frame arrives*, and only then does ``Wan22FunControlToVideo`` centre-crop the edge image to the
+generation aspect and resize it bilinearly to width x height before VAE-encoding it.  The preview follows that order (edges first,
+then crop and resize); an earlier version cropped before detecting edges.
+
+**Exactness.**  The result is labeled ``approximate``.  The edge detector reproduces the pinned kornia Canny (exact 5-tap sigma-1
+Gaussian, reflect-padded blur, replicate-padded Sobel, 8-neighbour non-maximum suppression, hysteresis) and matches it bit for bit
+on four recorded synthetic vectors, but exact parity on real clips is not established: the preview analyses a reduced copy, runs on
+the CPU rather than the model's float32 path, and has not been compared on decoded production frames.
+``exact_parity_verified`` stays False until such evidence exists.  The advisories are labelled by basis; none is a quality score:
+edge density says nothing about identity or whether the motion will transfer.
 """
 
 from __future__ import annotations
@@ -23,6 +30,9 @@ from typing import Any
 import numpy as np
 
 from src.utils.managed_process import ProcessOutcome, run_bounded
+from src.video import conditioning_advisories as adv
+from src.video.conditioning_advisories import ConditioningAdvisory
+from src.video.workflow_conditioning import BASIS_HEURISTIC, ConditioningContract
 
 LOW_THRESHOLD = 0.1
 HIGH_THRESHOLD = 0.6
@@ -30,8 +40,21 @@ EXACTNESS_APPROXIMATE = "approximate"
 EXACTNESS_EXACT = "exact"
 EXACT_PARITY_VERIFIED = False
 EXACTNESS_REASON = (
-    "Approximation: the algorithm follows the documented Canny node, but it was not verified against the pinned node's "
-    "source or recorded test vectors. Advisory only."
+    "Approximation: the edge detector matches the pinned Canny node on four recorded synthetic vectors, but exact parity on "
+    "real clips is not verified (reduced-size analysis, CPU instead of the model's path). Advisory only."
+)
+#: Operation order of the Fun Control graph (pinned ComfyUI v0.38.0), which this preview follows.
+OPERATION_ORDER = (
+    "decode the prepared driving clip",
+    "Canny edge detection at the frame's own size",
+    "centre-crop to the generation aspect",
+    "bilinear resize to the generation size",
+    "VAE-encode as the control video",
+)
+FIDELITY_SOURCE = "Exact bytes of the verified driving file; the pictures shown are decoded at a reduced analysis size."
+FIDELITY_PREPARED = "Exact verified prepared frames when the driver is a Prepare Motion Source or Align Motion derivative."
+FIDELITY_CONDITIONING = (
+    "Approximate: not the model's conditioning tensor and not independently verified on real clips."
 )
 MAX_ANALYSIS_EDGE = 1280
 MAX_PREVIEW_EDGE = 320
@@ -45,9 +68,9 @@ BORDER_BAND = 0.04
 BORDER_EDGE_SHARE = 0.35
 ASPECT_TOLERANCE = 0.02
 
-_GAUSS_1D = np.array(
-    [1.0, 4.0, 6.0, 4.0, 1.0], dtype=np.float32
-)  # sigma ~1 (binomial approximation)
+# kornia ``gaussian_blur2d(kernel_size=(5, 5), sigma=(1, 1))``: exp(-x^2 / 2) over x = -2..2, normalised (the pinned node's own
+# kernel; it is not the binomial 1-4-6-4-1 approximation an earlier version of this preview used).
+_GAUSS_1D = np.exp(-0.5 * np.arange(-2, 3, dtype=np.float32) ** 2).astype(np.float32)
 _GAUSS_1D /= _GAUSS_1D.sum()
 # (dy, dx) of the neighbor along the gradient for angles 0, 45, ... 315 degrees (image rows grow downward).
 _NEIGHBOR_BY_OCTANT = ((0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1))
@@ -81,6 +104,11 @@ class ConditioningPreview:
     warnings: tuple[str, ...] = ()
     stats: dict[str, Any] = field(default_factory=dict)
     error: str = ""
+    advisories: tuple[ConditioningAdvisory, ...] = ()
+    fidelity: dict[str, str] = field(default_factory=dict)
+    operation_order: tuple[str, ...] = OPERATION_ORDER
+    representation: str = ""
+    workflow_key: tuple[str, str] | None = None
 
     @property
     def ok(self) -> bool:
@@ -117,7 +145,9 @@ def canny_edges(
     if gray.ndim != 2:
         raise ValueError("canny_edges needs a 2-D grayscale image")
     blurred = _blur(gray.astype(np.float32))
-    p = np.pad(blurred, 1, mode="reflect")
+    p = np.pad(
+        blurred, 1, mode="edge"
+    )  # kornia ``spatial_gradient`` pads with replicate; the blur above reflects
     h, w = blurred.shape
 
     def at(dy: int, dx: int) -> np.ndarray:
@@ -152,7 +182,7 @@ def canny_edges(
         if np.array_equal(updated, connected):
             break
         connected = updated
-    return connected
+    return np.asarray(connected, dtype=bool)
 
 
 # ------------------------------------------------------------------ PNG output (no imaging dependency)
@@ -369,6 +399,36 @@ def _iou(a: tuple[float, float, float, float], b: tuple[float, float, float, flo
     return inter / union if union > 0 else 0.0
 
 
+def resize_bilinear(a: np.ndarray, width: int, height: int) -> np.ndarray:
+    """``a`` (H, W) resized like ``torch.nn.functional.interpolate(mode="bilinear", align_corners=False)`` (no antialiasing)."""
+
+    h, w = a.shape
+    if (w, h) == (width, height):
+        return a.astype(np.float32)
+
+    def axis(size_in: int, size_out: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        coord = np.maximum(
+            (np.arange(size_out, dtype=np.float32) + 0.5) * (size_in / size_out) - 0.5, 0.0
+        )
+        low = np.minimum(coord.astype(np.int64), size_in - 1)
+        high = np.minimum(low + 1, size_in - 1)
+        return low, high, (coord - low).astype(np.float32)
+
+    y0, y1, wy = axis(h, height)
+    x0, x1, wx = axis(w, width)
+    af = a.astype(np.float32)
+    top = af[y0][:, x0] * (1 - wx) + af[y0][:, x1] * wx
+    bottom = af[y1][:, x0] * (1 - wx) + af[y1][:, x1] * wx
+    return np.asarray(top * (1 - wy)[:, None] + bottom * wy[:, None], dtype=np.float32)
+
+
+def conditioned_view(edges: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
+    """What follows Canny in the graph: centre-crop the edge image to the target aspect, then bilinear resize to it."""
+
+    cropped = center_crop_to_aspect(edges.astype(np.float32), target_size[0], target_size[1])
+    return resize_bilinear(cropped, target_size[0], target_size[1])
+
+
 def build_preview(
     video: str | Path,
     *,
@@ -382,12 +442,28 @@ def build_preview(
     reference_rgb: np.ndarray | None = None,
     runner: Runner = run_bounded,
     cancel: threading.Event | None = None,
+    contract: ConditioningContract | None = None,
+    representation: str | None = None,
+    generation_frames: int | None = None,
+    driver_viewpoint: str = "",
+    source_viewpoint: str = "",
+    motion_category: str = "",
+    file_bytes: int | None = None,
 ) -> ConditioningPreview:
-    """Preview ``window_frames`` frames from ``window_start`` of ``video`` (``facts`` from the existing inspector)."""
+    """Preview ``window_frames`` frames from ``window_start`` of ``video`` (``facts`` from the existing inspector).
+
+    ``video`` should be the *effective* driving clip (the prepared or aligned derivative the job would consume).  ``contract``,
+    ``representation`` and the remaining keywords only add labelled context advisories; they never change the detector."""
 
     total = int(getattr(facts, "frame_count", 0) or 0)
     width, height = int(facts.display_width), int(facts.display_height)
     fps = getattr(facts, "reported_fps", None)
+    fidelity = {
+        "source_frame": FIDELITY_SOURCE,
+        "prepared_driving_frame": FIDELITY_PREPARED,
+        "conditioning": FIDELITY_CONDITIONING,
+    }
+    workflow_key = contract.key if contract is not None else None
 
     def failed(message: str) -> ConditioningPreview:
         return ConditioningPreview(
@@ -405,6 +481,9 @@ def build_preview(
             window_start,
             window_frames,
             error=message,
+            fidelity=fidelity,
+            representation=representation or "",
+            workflow_key=workflow_key,
         )
 
     if total <= 0:
@@ -415,13 +494,18 @@ def build_preview(
     size = analysis_size(width, height)
     indices = sample_indices(window_start, count)
     try:
-        frames = decode_frames(ffmpeg, video, indices, size, runner=runner, cancel=cancel)
+        decoded = decode_frames(ffmpeg, video, indices, size, runner=runner, cancel=cancel)
     except RuntimeError as exc:
         return failed(str(exc))
-    frames = [center_crop_to_aspect(f, target_size[0], target_size[1]) for f in frames]
-    size = (frames[0].shape[1], frames[0].shape[0])
 
-    edges = [canny_edges(_gray(f)) for f in frames]
+    # Graph order: edges on the whole frame first, then crop and resize.  Statistics are taken on the cropped region because
+    # that is what the model receives.
+    gray_frames = [_gray(f) for f in decoded]
+    full_edges = [canny_edges(g) for g in gray_frames]
+    crops = [center_crop_to_aspect(f, target_size[0], target_size[1]) for f in decoded]
+    edges = [center_crop_to_aspect(e, target_size[0], target_size[1]) for e in full_edges]
+    cropped_gray = [center_crop_to_aspect(g, target_size[0], target_size[1]) for g in gray_frames]
+    size = (crops[0].shape[1], crops[0].shape[0])
     densities = [float(e.mean()) for e in edges]
     band_h, band_w = max(1, int(size[1] * BORDER_BAND)), max(1, int(size[0] * BORDER_BAND))
     shares = []
@@ -430,7 +514,7 @@ def build_preview(
         border = e.copy()
         border[band_h:-band_h, band_w:-band_w] = False
         shares.append(float(border.sum()) / total_edges if total_edges else 0.0)
-    gray_small = [_downscale(_gray(f), 160) for f in frames]
+    gray_small = [_downscale(g, 160) for g in cropped_gray]
     diffs = [
         float(np.abs(gray_small[i + 1] - gray_small[i]).mean()) for i in range(len(gray_small) - 1)
     ]
@@ -446,11 +530,51 @@ def build_preview(
     out_frames: list[PreviewFrame] = []
     for index, label in sorted(chosen.items()):
         slot = indices.index(index)
-        edge_img = _downscale((edges[slot] * 255).astype(np.uint8), MAX_PREVIEW_EDGE)
-        src_img = _downscale(frames[slot], MAX_PREVIEW_EDGE)
+        edge_img = _downscale(
+            (conditioned_view(full_edges[slot], target_size) * 255).astype(np.uint8),
+            MAX_PREVIEW_EDGE,
+        )
+        src_img = _downscale(crops[slot], MAX_PREVIEW_EDGE)
         out_frames.append(
             PreviewFrame(label, index, encode_png(src_img), encode_png(edge_img), densities[slot])
         )
+    advisories = (
+        ConditioningAdvisory("exactness", EXACTNESS_REASON, BASIS_HEURISTIC),
+        *adv.frame_advisories(
+            densities=densities,
+            border_shares=shares,
+            motion_diffs=diffs,
+            gray_frames=cropped_gray,
+            edge_frames=edges,
+            video_aspect=width / height,
+            target_aspect=target_size[0] / target_size[1],
+            reference_iou=iou,
+            downscaled=analysis_size(width, height) != (width, height),
+            min_density=MIN_EDGE_DENSITY,
+            max_density=MAX_EDGE_DENSITY,
+            border_edge_share=BORDER_EDGE_SHARE,
+            near_static=NEAR_STATIC_DIFF,
+            large_change=LARGE_CHANGE_DIFF,
+            aspect_tolerance=ASPECT_TOLERANCE,
+        ),
+        *adv.preparation_advisories(
+            contract=contract,
+            width=width,
+            height=height,
+            frames=count,
+            target_size=target_size,
+            file_bytes=file_bytes,
+        ),
+        *adv.context_advisories(
+            contract=contract,
+            representation=representation,
+            window_frames=count,
+            generation_frames=generation_frames,
+            driver_viewpoint=driver_viewpoint,
+            source_viewpoint=source_viewpoint,
+            motion_category=motion_category,
+        ),
+    )
     return ConditioningPreview(
         EXACTNESS_EXACT if EXACT_PARITY_VERIFIED else EXACTNESS_APPROXIMATE,
         EXACTNESS_REASON,
@@ -466,20 +590,17 @@ def build_preview(
         window_start,
         count,
         tuple(out_frames),
-        advisory_warnings(
-            densities=densities,
-            border_shares=shares,
-            motion_diffs=diffs,
-            video_aspect=width / height,
-            target_aspect=target_size[0] / target_size[1],
-            reference_iou=iou,
-            downscaled=analysis_size(width, height) != (width, height),
-        ),
+        adv.advisory_texts(advisories),
         {
             "thresholds": {"low": LOW_THRESHOLD, "high": HIGH_THRESHOLD},
             "analysis_size": list(size),
             "sampled_frames": indices,
             "edge_density": densities,
             "mean_sample_difference": diffs,
+            "operation_order": list(OPERATION_ORDER),
         },
+        advisories=advisories,
+        fidelity=fidelity,
+        representation=representation or "",
+        workflow_key=workflow_key,
     )
