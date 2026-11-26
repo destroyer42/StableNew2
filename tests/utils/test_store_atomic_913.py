@@ -17,7 +17,6 @@ from src.api import webui_process_manager
 from src.gui.prompt_pack_list_manager import PromptPackListManager
 from src.pipeline.executor import Pipeline
 from src.pipeline.last_run_store_v2_5 import LastRunConfigV2_5, LastRunStoreV2_5
-from src.services.config_service import ConfigService
 from src.utils import atomic_io
 from src.utils import config as config_module
 from src.utils.config import ConfigManager
@@ -203,30 +202,6 @@ def test_review_sidecar_round_trips(tmp_path: Path) -> None:
     assert write_review_sidecar(image, {"rating": 5}).success is True
     stored = json.loads(build_review_sidecar_path(image).read_text(encoding="utf-8"))
     assert stored[PORTABLE_REVIEW_KEY] == {"rating": 5}
-
-
-def test_config_service_pack_config_and_lists_survive_a_failed_write(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    service = ConfigService(tmp_path / "packs", tmp_path / "presets", tmp_path / "lists")
-    pack = _seed(service._resolve_pack_path("alpha"))
-    listing = _seed(service._resolve_list_path("mine"))
-    _fail_replace(monkeypatch)
-    with pytest.raises(OSError):
-        service.save_pack_config("alpha", {"steps": 9})
-    with pytest.raises(OSError):
-        service.save_list("mine", ["a"])
-    _assert_untouched(pack)
-    _assert_untouched(listing)
-
-
-def test_config_service_round_trips(tmp_path: Path) -> None:
-    service = ConfigService(tmp_path / "packs", tmp_path / "presets", tmp_path / "lists")
-    service.save_pack_config("alpha", {"steps": 9})
-    service.save_list("mine", ["a", "b"])
-    assert service.load_pack_config("alpha") == {"steps": 9}
-    assert service.load_list("mine") == ["a", "b"]
-    assert service.list_lists() == ["mine"]
 
 
 def test_prompt_pack_lists_survive_a_failed_save(

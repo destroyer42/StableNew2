@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.services.config_service import ConfigService
 from src.utils.config import ConfigManager
 
 DEFAULT_TXT2IMG_CFG = {
@@ -277,9 +276,7 @@ def gui_app_factory(monkeypatch: pytest.MonkeyPatch, tk_root: tk.Tk, tmp_path):
         reset_gui_test_mode,
     )
 
-    packs_dir = tmp_path / "packs"
     presets_dir = tmp_path / "presets"
-    lists_dir = tmp_path / "lists"
     output_dir = tmp_path / "output"
     monkeypatch.setattr("src.gui.main_window.tk.simpledialog", simpledialog_stub, raising=False)
 
@@ -312,7 +309,6 @@ def gui_app_factory(monkeypatch: pytest.MonkeyPatch, tk_root: tk.Tk, tmp_path):
             geometry="1024x720",
             **kwargs,
         )
-        app.config_service = ConfigService(packs_dir, presets_dir, lists_dir)
         app.structured_logger.output_dir = output_dir
         app.structured_logger.output_dir.mkdir(exist_ok=True)
         app.api_connected = True

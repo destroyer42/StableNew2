@@ -378,9 +378,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1170,
-      "S110": 456,
-      "S112": 34
+      "BLE001": 1153,
+      "S110": 451,
+      "S112": 31
     },
     "counts": {
       "src/api/client.py": {
@@ -514,11 +514,6 @@
       "src/gui/job_history_panel_v2.py": {
         "BLE001": 12,
         "S110": 7
-      },
-      "src/gui/learning_review_dialog_v2.py": {
-        "BLE001": 3,
-        "S110": 1,
-        "S112": 1
       },
       "src/gui/log_trace_panel_v2.py": {
         "BLE001": 2
@@ -731,10 +726,6 @@
         "BLE001": 3,
         "S110": 3
       },
-      "src/gui/widgets/image_thumbnail.py": {
-        "BLE001": 4,
-        "S110": 3
-      },
       "src/gui/widgets/lora_picker_panel.py": {
         "BLE001": 2
       },
@@ -750,10 +741,6 @@
         "BLE001": 2,
         "S110": 2
       },
-      "src/gui/widgets/thumbnail_widget_v2.py": {
-        "BLE001": 5,
-        "S110": 1
-      },
       "src/gui/zimage_optional_control_projection.py": {
         "BLE001": 1,
         "S110": 1
@@ -768,17 +755,10 @@
       "src/image_backends/forge_webui_backend.py": {
         "BLE001": 2
       },
-      "src/learning/dataset_builder.py": {
-        "BLE001": 2,
-        "S112": 2
-      },
       "src/learning/discovered_review_store.py": {
         "BLE001": 5
       },
       "src/learning/experiment_store.py": {
-        "BLE001": 1
-      },
-      "src/learning/feedback_manager.py": {
         "BLE001": 1
       },
       "src/learning/learning_analytics.py": {
@@ -827,9 +807,6 @@
         "BLE001": 2
       },
       "src/pipeline/model_synchronizer.py": {
-        "BLE001": 2
-      },
-      "src/pipeline/payload_builder.py": {
         "BLE001": 2
       },
       "src/pipeline/pipeline_runner.py": {
