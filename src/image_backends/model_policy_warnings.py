@@ -12,6 +12,7 @@ A positively identified non-checkpoint (a VAE or text encoder in the checkpoint 
 
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Mapping
 from pathlib import Path
@@ -47,16 +48,22 @@ def module_folder(role: str, webui_root: Path | str | None) -> str:
     return str(Path(webui_root).joinpath(*parts))
 
 
+#: Sentences of the old refusal wording that are no longer true under N1 (the fix replaces them).
+_REFUSAL_MARKERS = ("refuse", "required before it can run", "no exact qualified execution profile")
+
+
 def _why(readiness: ModelReadiness) -> str:
-    # The verdict's first reason describes the model; the last is the old refusal tail, which N1 replaces with a fix.
-    reasons = [reason for reason in readiness.reasons if reason]
-    described = reasons[:-1] if len(reasons) > 1 else reasons
-    text = " ".join(described)
-    return text.replace(
-        "StableNew has no exact qualified execution profile for it.", ""
-    ).strip() + (
-        " StableNew has no qualified profile for it, so nobody has confirmed it loads and renders correctly."
+    """What the model is and any recorded verdict, without the old "it is refused" sentences."""
+
+    text = " ".join(reason for reason in readiness.reasons if reason)
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+    kept = [
+        part for part in sentences if not any(marker in part.lower() for marker in _REFUSAL_MARKERS)
+    ]
+    kept.append(
+        "StableNew has no qualified profile for it, so nobody has confirmed it loads and renders correctly."
     )
+    return " ".join(kept)
 
 
 def _fix(readiness: ModelReadiness, webui_root: Path | str | None) -> str:

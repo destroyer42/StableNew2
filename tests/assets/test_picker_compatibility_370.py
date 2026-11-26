@@ -74,7 +74,11 @@ def test_resource_refresh_classifies_exact_served_paths(tmp_path):
     models = {entry.name: entry.picker for entry in resources["models"]}
     assert models[ordinary.stem].family == "sdxl"
     assert all(models[path.stem].excluded for path in (encoder, vae, preview))
-    assert models[klein.stem].refusal == flux_variant_refusal("flux2_klein_9b")
+    # N1: no longer refused; a warning that keeps the recorded NO-GO verdict and says what makes it work.
+    klein_warning = models[klein.stem]
+    assert klein_warning.warning and klein_warning.refusal.startswith(f"{klein.stem} is not qualified.")
+    assert flux_variant_refusal("flux2_klein_9b").split(" StableNew refuses")[0] in klein_warning.refusal
+    assert "refuses it" not in klein_warning.refusal and "Queue runs it anyway" in klein_warning.refusal
     assert not models[unknown.stem].recognized and not models[unknown.stem].excluded
 
     sdxl = vae_catalog(resources["vaes"], "sdxl")
@@ -128,6 +132,6 @@ def test_picker_explains_ambiguous_z_image_and_missing_flux_modules(tmp_path):
 
     resources = WebUIResourceService(client=Client(), webui_root=str(tmp_path)).refresh_all()
     models = {entry.name: entry.picker for entry in resources["models"]}
-    assert models[z_image.name].refusal == policy.refusal
+    assert models[z_image.name].warning and policy.refusal in models[z_image.name].refusal  # N1: a warning
     assert "clip_l.safetensors" in models[flux.name].refusal
     assert "t5xxl_fp8_e4m3fn.safetensors" in models[flux.name].refusal

@@ -62,7 +62,7 @@
 ## Surface assessment
 
 - Controller surface touched: Yes.
-  - `src/controller/video_workflow_controller.py` (+7 lines; not ratcheted).
+  - `src/controller/video_workflow_controller.py` (one line shorter than on `main`; projects `policy_warnings`; its test limit is under 260 lines).
   - `src/controller/pipeline_controller_services/queue_submission_service.py` (+7).
   - None of the four ratcheted controllers changed size.
 - Architecture authority changed: Yes. `AGENTS.md` section 2 gains the N1 bullet. `VIDEO_PIPELINE.md` invariants 3 and
