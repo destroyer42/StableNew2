@@ -97,9 +97,14 @@ your own `blender.exe` (4.2 or newer); the dialog verifies only the file you pic
   survives restart. Previews and unverified folders cannot be added.
 - **Existing MP4s** need no conversion and are never re-encoded: import them as in section 1. The Motion Library panel's **Preview Conditioning...**
   button shows the same advisory preview for any usable selected clip, and the conversion dialog offers it for a result.
-- **Preview Conditioning** is an advisory CPU Canny preview (first/middle/last frames) of what a Fun Control graph would see,
-  centre-cropped to the generation shape like the pinned node. It is labeled *approximate* (not verified against the node's
-  source or recorded vectors), shows bounded heuristic warnings, calls no Comfy and changes no job.
+- **Preview Conditioning** is an advisory CPU Canny preview (first/middle/last frames) of what a Fun Control graph would see. It follows the
+  pinned graph's order (Canny at the clip's own size, then centre-crop and bilinear resize), inspects the *effective* driving clip for the selected
+  engine (the verified prepared or aligned derivative when one exists for that engine and length, else the original), states which pictures are exact
+  and which approximate, and lists advisories tagged measured / runtime source / heuristic / historical. The edge detector matches the pinned kornia Canny
+  on four recorded vectors but the result stays labeled *approximate*; it calls no Comfy and changes no job (PR-VID-MOTION-430).
+- **Related variants** (PR-VID-MOTION-430): a converted clip records a `movement_key` (additive `derivation.movement_key`) over every conversion choice except
+  the render profile. The detail pane lists other clips with the same animation file and key (character, silhouette, skeleton). Each keeps its own identity and
+  bytes; a clip converted earlier has no key and is never grouped by name. Evaluation re-verifies the relationship against the conversion record.
 
 ### 4.2 Batch Convert Motion and failure diagnostics (PR-VID-MOTION-356)
 

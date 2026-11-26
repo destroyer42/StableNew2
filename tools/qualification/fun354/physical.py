@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -84,6 +85,21 @@ class Sample:
     available_ram_mib: float
     vram_used_mib: float
     vram_total_mib: float
+    #: Decimal degrees C (nvidia-smi may report ``83.9``); ``None`` when the driver gave no number.
+    gpu_temperature_c: float | None = None
+
+
+def parse_gpu_number(text: str) -> float | None:
+    """A non-negative number from one ``nvidia-smi`` CSV field.  Decimals are legal; ``[N/A]`` and junk are not numbers."""
+
+    value = str(text).strip()
+    if not value or value.startswith("["):
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) and number >= 0 else None
 
 
 def scan_log(text: str) -> str:
@@ -106,10 +122,18 @@ class StopGuard:
         self.peak_commit = 0.0
         self.min_available_mib: float | None = None
         self.peak_vram_mib = 0.0
+        self.peak_temperature_c: float | None = None
+        self.min_headroom_mib: float | None = None
 
     def observe(self, sample: Sample) -> str:
         self.peak_commit = max(self.peak_commit, sample.commit_fraction)
         self.peak_vram_mib = max(self.peak_vram_mib, sample.vram_used_mib)
+        headroom = sample.vram_total_mib - sample.vram_used_mib
+        self.min_headroom_mib = (
+            headroom if self.min_headroom_mib is None else min(self.min_headroom_mib, headroom)
+        )
+        if sample.gpu_temperature_c is not None:
+            self.peak_temperature_c = max(self.peak_temperature_c or 0.0, sample.gpu_temperature_c)
         self.min_available_mib = (
             sample.available_ram_mib
             if self.min_available_mib is None
@@ -229,7 +253,7 @@ def render_graph(
 ) -> dict[str, Any]:
     """The catalog template, rendered by the compiler's renderer for this case."""
 
-    template = deepcopy(fun_control_spec().backend_defaults["prompt_template"])
+    template = deepcopy(fun_control_spec(plan.workflow_version).backend_defaults["prompt_template"])
     context = {
         "input": {
             "source_image": reference_name,
@@ -249,10 +273,10 @@ def render_graph(
     return graph
 
 
-def template_digest() -> str:
+def template_digest(version: str = "1.0.0") -> str:
     import hashlib
 
-    template = fun_control_spec().backend_defaults["prompt_template"]
+    template = fun_control_spec(version).backend_defaults["prompt_template"]
     blob = json.dumps(template, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(blob).hexdigest()
 
@@ -386,6 +410,25 @@ def gpu_memory() -> tuple[float, float]:
     return used, total
 
 
+def gpu_temperature() -> float | None:
+    """GPU 0 temperature in degrees C (decimals preserved), or ``None`` when the driver reports no number."""
+
+    out = subprocess.run(
+        [
+            "nvidia-smi",
+            "-i",
+            "0",
+            "--query-gpu=temperature.gpu",
+            "--format=csv,noheader,nounits",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=True,
+    ).stdout
+    return parse_gpu_number(out.strip().splitlines()[0]) if out.strip() else None
+
+
 def system_memory() -> tuple[float, float]:
     from tools.qualification.vid160c.win_memory import read_system_commit
 
@@ -439,6 +482,7 @@ class Seams:
     manager_factory: Callable[[Any], Any] = real_manager
     client_factory: Callable[[str], Any] = real_client
     gpu_memory: Callable[[], tuple[float, float]] = gpu_memory
+    gpu_temperature: Callable[[], float | None] = gpu_temperature
     system_memory: Callable[[], tuple[float, float]] = system_memory
     git_head: Callable[[Path], str] = git_head
     event_log: Callable[[datetime], dict[str, Any]] = event_log
@@ -488,7 +532,7 @@ class PhysicalExecutor:
             problems.append(
                 f"ComfyUI source is {head[:12]}, the plan pins {plan.runtime_commit[:12]}"
             )
-        if template_digest() != plan.graph_sha256:
+        if template_digest(plan.workflow_version) != plan.graph_sha256:
             problems.append("the catalog template no longer hashes to the plan's graph digest")
         for flag in plan.launch_flags:
             if flag not in command:
@@ -574,10 +618,20 @@ class PhysicalExecutor:
             )
             client = self.seams.client_factory(base_url)
 
+            # Only a plan that declares the metric queries it, so the 1.0.0 plan samples as before.
+            wants_temperature = "gpu_temperature_peak_c" in plan.telemetry
+
             def sample() -> Sample:
                 commit, available = self.seams.system_memory()
                 used, total = self.seams.gpu_memory()
-                return Sample(self.seams.clock() - t0, commit, available, used, total)
+                return Sample(
+                    self.seams.clock() - t0,
+                    commit,
+                    available,
+                    used,
+                    total,
+                    self.seams.gpu_temperature() if wants_temperature else None,
+                )
 
             def logs() -> str:
                 return "\n".join(manager.get_stdout_tail() + manager.get_stderr_tail())
@@ -652,8 +706,15 @@ class PhysicalExecutor:
                     "commit": monitor.guard.peak_commit or None,
                     "ram": monitor.guard.min_available_mib,
                     "vram": monitor.guard.peak_vram_mib or None,
+                    "temp": monitor.guard.peak_temperature_c,
+                    "headroom": monitor.guard.min_headroom_mib,
                 }
                 state.telemetry_ok = state.telemetry_ok and monitor.complete
+                if "gpu_temperature_peak_c" in plan.telemetry and peak["temp"] is None:
+                    state.telemetry_ok = False
+                    state.notes.append(
+                        "GPU temperature was never reported, so telemetry is incomplete"
+                    )
                 if monitor.stop_code and not state.stop_code:
                     state.stop_code = monitor.stop_code
             else:
@@ -673,6 +734,8 @@ class PhysicalExecutor:
             peak_host_commit_fraction=peak["commit"],
             min_available_ram_mib=int(peak["ram"]) if peak["ram"] is not None else None,
             peak_vram_mib=int(peak["vram"]) if peak["vram"] is not None else None,
+            peak_gpu_temperature_c=peak["temp"],
+            min_vram_headroom_mib=int(peak["headroom"]) if peak["headroom"] is not None else None,
             wall_seconds=round(state.wall, 1),
             note=" | ".join(state.notes),
         )
