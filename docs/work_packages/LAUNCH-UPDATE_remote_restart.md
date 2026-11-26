@@ -1,7 +1,8 @@
 # LAUNCH-UPDATE — Remote update and restart: design, threat model and owner decisions
 
-Status: **design for owner decision, not built.** Docs only. Implementation waits on the owner decisions below and
-is split into LAUNCH-UPDATE-1 (PC side) and LAUNCH-UPDATE-2 (gateway and phone). The desktop shortcut and sign-in
+Status: **design accepted, not built.** The owner accepted decisions D1–D10 as recommended on 2026-11-26
+("Accept all ten"), including D7's automatic local rollback. Implementation is split into LAUNCH-UPDATE-1 (PC side)
+and LAUNCH-UPDATE-2 (gateway and phone, after RG-140's schema change merges). The desktop shortcut and sign-in
 autostart (LAUNCH-AUTOSTART-440) shipped separately and are not part of this package.
 
 ## Objective
@@ -120,7 +121,10 @@ that is not the owner's phone; anyone able to land a commit on `origin/main`.
 
 ## Owner decisions
 
-| # | Decision | Recommendation |
+All ten accepted as recommended, 2026-11-26 ("Accept all ten"). Under D4 the optional GitHub-signature check was not
+separately chosen; it is not part of LAUNCH-UPDATE-1 and can be proposed later.
+
+| # | Decision | Accepted answer |
 |---|---|---|
 | 1 | Trigger channel. | Option C (gateway admin request). Also a desktop menu item **Update and restart** that uses the same preflight and updater, for testing and for use at the desk. |
 | 2 | Authorization. | A new pairing scope `admin`, issued only by a dedicated desktop offer (separate from review and queue), **and** a PC-local switch **Allow remote update**, off by default. Both must be on. |
@@ -133,7 +137,7 @@ that is not the owner's phone; anyone able to land a commit on `origin/main`.
 | 9 | Updater form. | A detached PowerShell script started by the app, not a Scheduled Task or service. |
 | 10 | Slicing. | LAUNCH-UPDATE-1: PC preflight, drain hold, updater, rollback, receipt, desktop menu item and switch (no schema change; testable end to end at the desk). LAUNCH-UPDATE-2: schema bump, `admin` scope, `pc_status`, phone button and receipt display. |
 
-## Implementation acceptance contract (after the decisions)
+## Implementation acceptance contract
 
 LAUNCH-UPDATE-1:
 
