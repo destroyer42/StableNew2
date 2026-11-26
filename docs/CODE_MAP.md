@@ -944,6 +944,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `api_failure_store_v2.py`: Central store for recent API failure records
 - `atomic_io.py`: Crash-safe small-file writes (temp file in the same directory, fsync, atomic replace)
 - `cgroup_v2.py`: Manage a Linux cgroup v2 process container with enforced limits and teardown
+- `checkpoint_identity.py`: N12: the one canonical checkpoint key, derived at read time from any stored or displayed spelling
 - `config.py`: Configuration management utilities
 - `config_helpers.py`: Helpers for logging when default configuration values are used
 - `contention_lock.py`: A lock that reports the operation that held it, or waited for it, long enough to stall other threads

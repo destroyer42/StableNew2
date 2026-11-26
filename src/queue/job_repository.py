@@ -1042,6 +1042,9 @@ class JobRepository(JobHistoryStore):
     ) -> tuple[tuple[str, ...], int, bool]:
         """NJR snapshots of *completed* jobs whose snapshot text contains ``needle``, in one bounded rowid window.
 
+        The match is ASCII case-insensitive and literal (``%`` and ``_`` in a checkpoint name are not wildcards), as
+        the N12 canonical checkpoint key is case-insensitive.
+
         N1b observed-execution evidence (``src/history/observed_execution.py``). Newest rowids first; returns
         ``(snapshots, next_cursor, exhausted)``. A file-backed repository reads on its own short-lived read-only
         connection without the shared lock (a WAL reader never blocks the writer), as
@@ -1051,8 +1054,10 @@ class JobRepository(JobHistoryStore):
         size = max(1, int(window))
         sql = (
             "SELECT njr_snapshot FROM jobs WHERE rowid > ? AND rowid <= ? AND status = 'completed' "
-            "AND instr(njr_snapshot, ?) > 0 ORDER BY rowid DESC"
+            "AND njr_snapshot LIKE ? ESCAPE '!' ORDER BY rowid DESC"
         )
+        escaped = str(needle).replace("!", "!!").replace("%", "!%").replace("_", "!_")
+        pattern = f"%{escaped}%"
 
         def read(connection: sqlite3.Connection) -> tuple[tuple[str, ...], int]:
             if before_cursor is None:
@@ -1060,7 +1065,7 @@ class JobRepository(JobHistoryStore):
             else:
                 top = int(before_cursor)
             low = max(0, top - size)
-            rows = connection.execute(sql, (low, top, str(needle))).fetchall()
+            rows = connection.execute(sql, (low, top, pattern)).fetchall()
             return tuple(str(row[0] or "") for row in rows), low
 
         if self.path is None:

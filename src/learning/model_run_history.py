@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from src.image_backends.model_readiness_probe import checkpoint_key
+from src.utils.checkpoint_identity import checkpoint_key
 
 #: Stages whose ``model`` names the checkpoint the job generated with.
 _GENERATION_STAGES = ("txt2img", "img2img")

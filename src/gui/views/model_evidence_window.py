@@ -63,7 +63,6 @@ from src.gui.views.probe_verdict_dialog import ProbeVerdictDialog
 from src.gui_v2.next_test_view import build_view, route_for
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import RegistryFamilyLookup
-from src.image_backends.model_readiness_probe import checkpoint_key
 from src.learning.evidence_autopilot import (
     EvidenceProposalPlanner,
     ProposalPlan,
@@ -92,6 +91,7 @@ from src.learning.probe_verdict import (
 from src.learning.qualification_batch import BatchOutcome
 from src.learning.setting_evidence import inspect_experiment
 from src.utils.atomic_io import atomic_write_text
+from src.utils.checkpoint_identity import checkpoint_key
 from src.utils.thread_registry import get_thread_registry
 
 logger = logging.getLogger(__name__)

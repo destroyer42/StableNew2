@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from src.utils.atomic_io import atomic_write_text
+from src.utils.checkpoint_identity import checkpoint_key
 
 _EVIDENCE_LOCKS: dict[str, threading.RLock] = {}
 _EVIDENCE_LOCKS_GUARD = threading.Lock()
@@ -136,6 +137,12 @@ class LearningRecord:
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True)
+
+    @property
+    def checkpoint_key(self) -> str:
+        """N12 canonical checkpoint key of ``primary_model``; derived on read, never serialised."""
+
+        return checkpoint_key(self.primary_model)
 
     @staticmethod
     def extract_rating_detail(metadata: dict[str, Any]) -> dict[str, Any]:

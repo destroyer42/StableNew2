@@ -323,7 +323,7 @@ class EvidenceProposalPlanner:
                     except (ValueError, TypeError) as exc:
                         reasons.append(str(exc))
                 backend = baseline["backend_options"]["image"]["backend_id"]
-                from src.image_backends.model_readiness_probe import checkpoint_key
+                from src.utils.checkpoint_identity import checkpoint_key
 
                 for setting, resource in (
                     ("model", "models"),

@@ -22,6 +22,7 @@ from typing import Any, TypedDict
 from src.learning.evidence_revision import evidence_revision
 from src.learning.learning_record import DISPOSITION_SOFT_SCORES, current_rating_revisions
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
+from src.utils.checkpoint_identity import checkpoint_key
 from src.utils.experiment_snapshot_ref import (
     ExperimentSnapshotError,
     SnapshotLookup,
@@ -614,8 +615,9 @@ class RecommendationEngine:
             weight -= 0.35
             rationale_bits.append("stage-mismatch")
 
-        query_model = str(query_context.get("model", "")).strip().lower()
-        record_model = str(record.get("model", "")).strip().lower()
+        # N12: one canonical checkpoint key, derived at read time, so every stored spelling joins.
+        query_model = checkpoint_key(query_context.get("model", ""))
+        record_model = checkpoint_key(record.get("model", ""))
         if query_model and record_model:
             if query_model == record_model:
                 weight += 0.3

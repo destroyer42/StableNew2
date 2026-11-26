@@ -301,7 +301,7 @@ class _Journey:
 
     def _match_active_model(self, card: Any) -> None:
         """Use the model A1111 already has loaded; never switch the operator's checkpoint."""
-        from src.image_backends.model_readiness_probe import checkpoint_key
+        from src.utils.checkpoint_identity import checkpoint_key
 
         active = self.backend_info.active_checkpoint
         if not active:
