@@ -14,6 +14,26 @@ from src.controller.pipeline_controller_services.preview_admission import (
 from src.pipeline.config_contract_v26 import attach_config_layers
 
 
+def queue_refusal_text(refusal: BaseException | str) -> str:
+    """The on-screen wording of a Queue-time refusal: that nothing was queued, why, and what to do.
+
+    Admission blocks write their own why and fix into the message; this only frames it.
+    """
+
+    reason = str(refusal).strip() or f"{type(refusal).__name__} (see the log)"
+    if "nothing was queued" not in reason.lower():
+        reason = f"Nothing was queued. {reason}"
+    return f"{reason}\nFix this, then queue again."
+
+
+def report_queue_refusal(app_state: Any, refusal: BaseException | str | None) -> None:
+    """Publish (or, with ``None``, clear) the refusal the Preview panel shows. Safe on a worker thread."""
+
+    publish = getattr(app_state, "set_queue_refusal", None)
+    if callable(publish):
+        publish(None if refusal is None else queue_refusal_text(refusal))
+
+
 class QueueRunSubmissionService:
     """Own the queue-backed run bridge used by AppController."""
 
@@ -31,10 +51,12 @@ class QueueRunSubmissionService:
 
         A compile that the draft outran is refused: nothing is returned (so nothing is queued) and the operator is told.
         """
+        report_queue_refusal(app_state, None)  # a new Run: the previous refusal no longer applies
         try:
             return accepted_preview_records(app_state, pipeline_controller.get_preview_jobs)
         except PreviewSupersededError as exc:
             self._append_log(f"[controller] Run not submitted: {exc}")
+            report_queue_refusal(app_state, exc)
             return []
 
     @staticmethod
@@ -172,6 +194,7 @@ def launch_preview_queue_submission(app: Any, *, expected_preview: PreviewWitnes
             records = list(current[1])
         try:
             app._queue_submit_in_progress = True
+            report_queue_refusal(state, None)
             log(
                 f"Queueing preview jobs in background (count={len(records) if records else 'draft'})"
             )
