@@ -140,7 +140,7 @@ def test_publish_sends_manifests_and_media_without_any_path(env, tmp_path):
     large = env.gateway.manifests[large_id]
     assert set(large["media"]) == {"thumb_320", "preview_1080", "original"}
     assert large["media"]["preview_1080"]["width"] == 1080
-    assert set(env.gateway.manifests[small_id]["media"]) == {"thumb_320", "original"}
+    assert env.gateway.manifests[small_id]["media"]["preview_1080"]["width"] == 64
     assert env.gateway.media[large_sha] == env.large.read_bytes()
     assert large["run_id"] == RUN and large["kind"] == "image"
     text = json.dumps(env.gateway.manifests)

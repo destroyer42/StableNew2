@@ -120,13 +120,12 @@ def _display(item: LibraryItem) -> dict[str, Any]:
 
 
 def encode_preview_1080(stream: BinaryIO, mime: str) -> tuple[bytes, str, int, int] | None:
-    """A 1080 px (long edge) WebP, or JPEG when WebP is unavailable; ``None`` when not needed or not decodable."""
+    """The phone rendition: a WebP (JPEG when WebP is unavailable) with a long edge of at most 1080 px, never
+    enlarged; ``None`` when the image cannot be decoded."""
 
     try:
         with Image.open(stream) as image:
             if image.width * image.height > site_library_video.MAX_PIXELS:
-                return None
-            if max(image.width, image.height) <= PREVIEW_EDGE:
                 return None
             image.thumbnail((PREVIEW_EDGE, PREVIEW_EDGE))
             rgb = ImageOps.exif_transpose(image).convert("RGB")
@@ -437,9 +436,51 @@ class GatewayPublisher:
                     self.defer(key, version)
             else:
                 result.skipped += 1
+        if newer_than is None and not hold_unlabelled_video and len(rows) < limit:
+            self._add_renditions(client, limit - len(rows), cancel, result)
         return result
 
+    def _add_renditions(
+        self, client: GatewayClient, limit: int, cancel: Event, result: PublishResult
+    ) -> None:
+        """Images published before every image had a phone rendition are sent again, a few at a time when idle.
+
+        Only ever adds: a row that is gone, changed or now excluded is marked done and stays as it was.
+        """
+
+        for key in self._ledger.without_rendition(limit):
+            if cancel.is_set():
+                return
+            with self._library.store.connection() as db:
+                row = db.execute(
+                    "SELECT body, version FROM media WHERE key = ? AND enriched = 1", (key,)
+                ).fetchone()
+            known = self._ledger.published(key)
+            item = LibraryItem.from_row(row) if row is not None else None
+            if (
+                item is None
+                or known is None
+                or known["version"] != row["version"]
+                or not os.path.lexists(self.root / item.path)
+                or self._sources.exclusion(item)
+            ):
+                self._ledger.set_rendition(key)
+                continue
+            try:
+                state = self._publish_one(client, key, item, cancel, lambda: False)
+            except (GatewayConflict, GatewayRejected, SiteOutputError, OSError):
+                self._ledger.set_rendition(
+                    key
+                )  # it stays as published; the phone shows the original
+                continue
+            if state == "published":
+                result.published += 1
+
     def _skip(self, key: str, item: LibraryItem, state: str) -> str:
+        known = self._ledger.published(key)
+        if known is not None and known["state"] == "published":
+            self.defer(key, json.dumps(list(item.version)), MAX_DEFER_S)
+            return state  # already on the phone: its row still resolves the owner's decisions
         self._ledger.mark_published(
             key,
             json.dumps(list(item.version)),
@@ -520,6 +561,8 @@ class GatewayPublisher:
         self._ledger.mark_published(
             key, version, item.path, digest, item.kind, "published", utc_text(self._now())
         )
+        if item.kind == "image":
+            self._ledger.set_rendition(key)
         return "published"
 
     @contextmanager
