@@ -820,6 +820,8 @@ class ConfigManager:
             "global_positive_enabled": False,
             "global_negative_enabled": True,
             "output_dir": str(Path("output")),
+            # VID-FRAME (owner decision 2026-11-27): remove a clip's PNG frames a day after the clip exists.
+            "video_frame_cleanup_enabled": True,
             "eval_plans_dir": "",
             "model_dir": str(Path("models")),
             "prompt_optimizer": dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS),
