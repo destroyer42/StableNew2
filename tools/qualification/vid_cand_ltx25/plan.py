@@ -36,7 +36,7 @@ PLAN_FILE = "vid_cand_ltx25_plan.v1.json"
 FAIRNESS_RULES = (
     "Sources, prompts, negative prompts and seeds are VID-CAND-382's frozen stage 1 and stage 2 cases, unchanged.",
     "LTX-2.5 makes non-explicit clips only: every prompt is non-explicit, and the only sources are the 16 VID-CAND-382 "
-    "images the owner confirmed non-explicit on 2026-11-27. Any other source needs his confirmation first.",
+    "images the owner confirmed non-explicit on 2026-11-27. Any other source needs the owner's confirmation first.",
     "Equal clip duration at native frame rates: A14B 81 frames at 16 fps (5.06 s), Hunyuan and LTX-2.5 121 frames at "
     "24 fps (5.04 s). RIFE smoothing is OFF for every arm.",
     "Each engine runs at its own practical size and the report states it: A14B 480x832, Hunyuan 480x848, LTX-2.5 "

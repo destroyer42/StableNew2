@@ -41,7 +41,7 @@ LTX25_AUDIO_ID = "ltx25_distilled_i2v_audio_v1"
 LTX25_IDS = (LTX25_ID, LTX25_AUDIO_ID)
 LTX25_VERSION = "1.0.0"
 
-# Gated repository (the owner accepts its terms himself); revision read from the Hub API on 2026-11-27.
+# Gated repository (the owner accepts its terms, never an agent); revision read from the Hub API on 2026-11-27.
 LTX25_REPO = "Lightricks/LTX-2.5"
 LTX25_REVISION = "69ecadd4932572caf956135d41cbcdbd697aa442"
 LTX25_TRANSFORMER = "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"

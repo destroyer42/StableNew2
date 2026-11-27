@@ -1,8 +1,9 @@
 # VID-CAND-LTX25: LTX-2.5 distilled image-to-video candidate and three-way comparison
 
-Status: researched and built offline on 2026-11-27. **Nothing has been downloaded and nothing has run on the target
-host.** The two workflows are `experimental`, never the Make Video default, never preselected and not QUALIFIED. The
-licence, the download, every GPU job and every rating are the owner's (sections 1, 5 and 7).
+Status: researched, built offline and the model files downloaded and verified on 2026-11-27. **No LTX-2.5 clip has been
+generated and neither graph has been validated by the real ComfyUI.** The two workflows are `experimental`, never the
+Make Video default, never preselected and not QUALIFIED. The owner has approved the download and the section 7 run for
+non-explicit clips only; every rating is the owner's (sections 1, 5 and 7).
 
 Owner's words (2026-11-27): "Let's do both and compare. Still do the ltx-2.5 as well." The comparison is LTX-2.5
 against HunyuanVideo 1.5 (VID-CAND-382) and the current default, Wan2.2 I2V-A14B 4-step 1.0.0.
@@ -30,16 +31,16 @@ official model card links `https://github.com/Lightricks/LTX-2/blob/main/LICENSE
   (description, notes, fixed settings) and as a typed N1 warning (`video_licence_restriction`, declared by the catalog
   entry's `licence_warning`) that shows beside Queue and is recorded on each job.
 - **Owner decision, 2026-11-27 (relayed by the orchestrator session):** still wanted, **for non-explicit clips only**.
-  He approved downloading the five files of section 5 after he accepts the gate himself, and the section 7 run once the
-  GPU is free and the app, Forge and ComfyUI are closed. Every suite prompt and source must be non-explicit: verified
-  safe-for-work subjects, never the output library.
+  The owner approved downloading the five files of section 5 after accepting the gate themselves, and the section 7 run
+  once the GPU is free and the app, Forge and ComfyUI are closed. Every suite prompt and source must be non-explicit:
+  verified safe-for-work subjects, never the output library.
 - **Owner confirmation of the sources, 2026-11-27 (relayed by the orchestrator session):** all 16 source images in
   VID-CAND-382's stage 1 and stage 2 suites come from the output library. Asked to choose between a new safe-for-work set
-  and reusing them, he chose "I'll vouch for the 16": he confirms they are non-explicit and allows them for LTX-2.5. They
-  are reused exactly as frozen (same paths and hashes). No agent opened them to check. This covers these 16 files only;
-  every prompt must still be non-explicit.
-- **Download, 2026-11-27:** the owner accepted the gate himself and the five files of section 5 were downloaded at the
-  pinned revision (13:22-13:30 UTC), each matching its size and SHA-256, and placed as section 5 says. Nothing has run.
+  and reusing them, the owner chose "I'll vouch for the 16", confirming they are non-explicit and allowing them for
+  LTX-2.5. They are reused exactly as frozen (same paths and hashes). No agent opened them to check. This covers these 16
+  files only; every prompt must still be non-explicit.
+- **Download, 2026-11-27:** the owner accepted the gate and the five files of section 5 were downloaded at the pinned
+  revision (13:22-13:30 UTC), each matching its size and SHA-256, and placed as section 5 says.
 
 Other terms: free below USD 10M annual revenue (personal use free); the licensee must not remove or disable provenance
 marks or watermarks and must disclose that disseminated content is machine generated; the licensor reserves the right
@@ -52,13 +53,15 @@ with Lightricks. The text encoder's base model, Gemma 4 12B, is Apache-2.0
 - **Objective:** an experimental, catalog-registered LTX-2.5 I2V workflow (silent and with audio) that runs through the
   normal Video Workflow path, and one blind comparison with VID-CAND-382's arms.
 - **Explicit exclusions:** no promotion; no change to A14B, Hunyuan specs or VID-CAND-382's frozen suites; no custom
-  ComfyUI nodes; no runtime change; no download, licence acceptance or GPU work.
+  ComfyUI nodes; no runtime change. The build did no download, licence acceptance or GPU work; the download and the
+  section 7 run come under the owner's later approval (section 1).
 - **Execution class:** Standard (one catalog spec module, two picker-tier rows, one read-only tool package).
 - **Model recommendation:** Claude Code Sonnet 5.5 High; Codex GPT-6.1 Sol High (`docs/AI_MODEL_SELECTION.md`).
 - **Controller Surface Assessment:** no controller or coordinator file touched; no ratchet ceiling moved.
 - **Token-efficient validation plan:** the two new test files, the catalog and picker tests, ruff, then
   `python tools/ci/run_pr_gate.py` and `tests/system tests/tools`.
-- **Base:** `origin/main` `4a702000`; branch `claude/vid-cand-ltx25`.
+- **Base:** `origin/main` `4a702000`, later merged with VID-FRAME (both the licence and the cropped-source warnings are
+  kept); branch `claude/vid-cand-ltx25`.
 - **Task start and session:** 2026-11-27T11:21Z; Claude Code session `local_31f44c29-0d98-4204-bd5a-15b788a5ac6a` with
   two web-reading subagents.
 
@@ -120,10 +123,10 @@ stage 2 uses the template's fixed seed 42; `--disable-pinned-memory`; VRAM floor
 (**unmeasured**); history timeout 2400 s; keep-warm 120 s. The template's long-side resize node is not used because
 admission already prepares the source at the target size. Longer clips (the model's 10-15 s) are a later version.
 
-## 5. Download list (owner gate; nothing downloaded)
+## 5. Download list (downloaded and verified 2026-11-27)
 
-Source: `https://huggingface.co/Lightricks/LTX-2.5` at revision `69ecadd4932572caf956135d41cbcdbd697aa442`. **The owner
-reads section 1, then accepts the gated terms himself.**
+Source: `https://huggingface.co/Lightricks/LTX-2.5` at revision `69ecadd4932572caf956135d41cbcdbd697aa442`. The gated
+terms were accepted by the owner, not by an agent.
 
 | File (repository path) | Bytes | Destination |
 |---|---|---|
@@ -153,7 +156,7 @@ c52733d37f6a7fb7949c3dc0fb468c6cb2169e4d836983a73babb9f0d54837a5
 How they were established: the Hub masks digests of a gated repository but publishes each file's Git LFS pointer id.
 Each digest was read from a public copy and confirmed by rebuilding the pointer
 (`version https://git-lfs.github.com/spec/v1`, `oid sha256:<digest>`, `size <bytes>`) and matching its Git blob id to
-the official one. Check the downloaded files against this list before any run.
+the official one. All five downloaded files matched their size and SHA-256 from this list.
 
 ## 6. Shared three-way comparison
 
@@ -190,10 +193,14 @@ Rules, thresholds, stop rules and budget are in `tools/qualification/vid_cand_lt
 - **Audio:** reported, not gated (present, usable, in step with the motion, extra time and memory).
 - **Recorded per job:** cold and warm wall time, VRAM, host commit and available RAM peaks, and failures.
 
-## 7. Physical run plan (for the owner's OK; not authorized)
+## 7. Physical run plan (approved by the owner for non-explicit clips; not yet run)
 
-Before any of it: the owner's answer on section 1; the section 5 files present with matching SHA-256; VID-CAND-382
-finished and its session says the GPU is free; StableNew closed, Forge not generating, no ComfyUI running.
+Before any of it: the section 5 files present with matching SHA-256; VID-CAND-382 reports the GPU free; VID-FRAME's GPU
+test, which is queued first, has finished; StableNew, Forge and ComfyUI closed; and a one-line go/no-go check to the
+owner (relayed by the orchestrator session) before the run starts.
+
+VID-CAND-382's stage 1 has run. Its stage 2 has not (it waits on the owner's choice of 8 or 12 steps), so the LTX stage 2
+three-way sheet can be built only after it does.
 
 1. **Offline, no GPU.** From a clean worktree at the accepted commit, build the suites and plan. This writes four new
    suite files into the owner's `<Output>\eval_plans\video` folder and a plan into a private folder; report the digest.
@@ -231,10 +238,9 @@ finished and its session says the GPU is free; StableNew closed, Forge not gener
 | Implementation | Spec module and registration, picker tier, `tools/qualification/vid_cand_ltx25`, this record, VIDEO_PIPELINE, CODEX_MAP, CODE_MAP and tools README entries |
 | Demonstration | `tests/video/test_vid_cand_ltx25.py` and `tests/tools/test_vid_cand_ltx25_eval.py`: registry, opt-in, pins, graphs, probe, fake-Comfy runs, eval-kit admission, three-way sheet, all on synthetic data. Graph inputs were checked by reading the installed node sources; **the real ComfyUI has not validated either graph** |
 | Qualification | None. No ledger entry |
-| Held or unverified | The licence decision, the download, all physical stages, ratings, and every value marked unmeasured |
+| Held or unverified | All physical stages, ratings, and every value marked unmeasured |
 
 ## 9. Recommendation and smallest next step
 
-Decide section 1 first: it is the one fact that can end this candidate without spending a download or a GPU hour. If
-LTX-2.5 is still wanted for non-explicit work (it adds audio and, later, longer clips), the next step is the download
-and stage 0 alone: two jobs that show whether it loads and decodes on 12 GB, and how long it takes.
+LTX-2.5 stays a candidate for non-explicit work only, whatever its quality (section 1). The smallest next step that can
+change the decision is stage 0: two jobs that show whether it loads and decodes on 12 GB, and how long it takes.
