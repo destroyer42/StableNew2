@@ -25,7 +25,9 @@ PROMPT = "a woman on a balcony at dusk"
 @pytest.fixture
 def env(tk_root, tmp_path):
     app, controller, service = make_app(tmp_path)
-    controller.rife_available = lambda: True
+    # Hermetic: no RIFE. With RIFE "found" the form suggests smoothing on, and admission then needs a real RIFE
+    # executable, which this host may have and CI does not.
+    controller.rife_available = lambda: False
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=app, app_state=SimpleNamespace())
     app.main_window = make_window(tab)
     tab.prompt_text.insert("1.0", PROMPT)
@@ -36,6 +38,13 @@ def env(tk_root, tmp_path):
 
 def _stage(njr):
     return thaw_json(next(s for s in njr.stage_chain if s.stage_type == "video_workflow").extra)
+
+
+def _queue(env):
+    count = len(env.service.submitted)
+    env.tab._on_submit()
+    assert len(env.service.submitted) == count + 1, env.tab.status_var.get()
+    return env.service.submitted[-1]
 
 
 def _frames(tab):
@@ -63,8 +72,7 @@ def test_an_untouched_form_submits_what_it_always_did(env):
     assert record["preset"] is None and record["duration"]["frames"] == 81
     assert record["basis"]["workflow_id"].startswith("Recommended")
     assert record["basis"][FIELD_LENGTH] == "The engine's default length."
-    tab._on_submit()
-    njr = env.service.submitted[-1]
+    njr = _queue(env)
     assert njr.positive_prompt == PROMPT
     assert _stage(njr)["frame_count"] == 81
     assert njr.extra_metadata["video_workflow"][MOTION_INTENT_FIELD]["preset"] is None
@@ -89,8 +97,7 @@ def test_a_preset_sets_duration_and_phrase_and_the_preview_is_what_is_sent(env):
     composed = f"{PROMPT}, {walk.prompt_only.motion_phrase}"
     assert panel.composed_var.get() == f"Sends: {composed}"
     tab.seed_var.set("3")
-    tab._on_submit()
-    njr = env.service.submitted[-1]
+    njr = _queue(env)
     assert njr.positive_prompt == composed
     assert njr.extra_metadata["video_workflow"][MOTION_INTENT_FIELD]["preset"] == {
         "id": "walk",
