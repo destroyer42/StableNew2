@@ -67,6 +67,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
 - `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)
+- `review_gateway_sources.py`: Which Output Library items are a job's authoritative outputs, for phone publishing (PHONE-FAST)
 - `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
 - `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
