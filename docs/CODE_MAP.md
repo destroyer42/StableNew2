@@ -69,6 +69,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
 - `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)
+- `review_gateway_scrub.py`: Take PC paths out of the metadata of an image that is about to be published (PHONE-FAST, RG-100 invariant 3)
 - `review_gateway_sources.py`: Which Output Library items are a job's authoritative outputs, for phone publishing (PHONE-FAST)
 - `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
 - `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
@@ -1129,6 +1130,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_catalog.py`: Assemble the versioned Comfy catalog with governance, dependencies, and runtime policies
 - `workflow_catalog_fun_control.py`: Pinned stock-node Fun Control graph; no installation or physical qualification
 - `workflow_catalog_hunyuan15.py`: HunyuanVideo 1.5 480p image-to-video, step-distilled FP8: an EXPERIMENTAL eval candidate (VID-CAND-382)
+- `workflow_catalog_ltx25.py`: LTX-2.5 22B distilled image-to-video: an EXPERIMENTAL eval candidate (VID-CAND-LTX25)
 - `workflow_catalog_wan_a14b.py`: Wan2.2 I2V-A14B lightx2v 4-step workflow spec (VID-CLIP-370; approved by VID-CLIP-372)
 - `workflow_catalog_wan_a14b_svi.py`: Experimental Wan2.2 I2V-A14B + SVI 2.0 workflow for multi-segment sequences (VID-A14B-SVI-375)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
@@ -1146,7 +1148,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_registry.py`: Resolve exact workflow versions and list offerable entries under the catalog's governance rules
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
 - `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
-- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow: experimental, and a cropped source (``policy_warnings.py``)
+- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow: experimental, licence and a cropped source (``policy_warnings.py`…
 
 ## src/video/motion/
 

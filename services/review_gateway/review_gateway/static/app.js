@@ -63,6 +63,7 @@ const DETAILS = {
   compile_failed: "the PC could not prepare it",
 };
 const ACTION_POLL_MS = 1000;
+const PREFETCH = 4;
 const ACTION_WAIT_MS = 10 * 60 * 1000;
 let scopes = null; // the session's grants, read once
 const REFRESH_MS = 20000;
@@ -705,9 +706,17 @@ function renderItem() {
     ]),
   );
   updateTriageStatus();
-  for (const ahead of list.slice(index + 1, index + 3)) {
-    new Image().src = mediaUrl(ahead, ahead.kind === "image" && ahead.variants.includes("preview") ? "preview" : "thumb");
-  }
+  prefetch(list.slice(index + 1, index + 1 + PREFETCH));
+}
+
+// The next few phone renditions, held so the browser does not drop the requests. Originals are never fetched ahead.
+let ahead = [];
+function prefetch(items) {
+  ahead = items.map((item) => {
+    const image = new Image();
+    image.src = mediaUrl(item, item.kind === "image" && item.variants.includes("preview") ? "preview" : "thumb");
+    return image;
+  });
 }
 
 // --- phone actions (RG-140) ---------------------------------------------------------------------------------------

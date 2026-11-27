@@ -277,6 +277,55 @@ class Store:
                 if all(self.media.size(row["digest"]) is not None for row in needed):
                     self._mark_ready(db, key)
 
+    def withdraw(self, library_ids: list[str]) -> int:
+        """Stop showing items that should never have been published (PHONE-FAST). Returns how many.
+
+        Not a decision: nothing is recorded in the outbox or sent to Immich, and an item with a decision or a request
+        the PC has not refused stays as it is. A withdrawn item is purged, so publishing it again does nothing.
+        """
+
+        now = stamp(self.clock())
+        marks = ",".join("?" * len(library_ids))
+        with self.write() as db:
+            keys = [
+                (row["library_id"], row["sha256"])
+                for row in db.execute(
+                    f"SELECT library_id, sha256 FROM item WHERE library_id IN ({marks})"
+                    " AND purged_at IS NULL AND NOT EXISTS ("
+                    "   SELECT 1 FROM outbox WHERE outbox.library_id = item.library_id"
+                    "   AND outbox.sha256 = item.sha256"
+                    "   AND outbox.status NOT IN ('refused', 'superseded'))",
+                    library_ids,
+                )
+            ]
+            db.executemany(
+                "UPDATE item SET purged_at = ? WHERE library_id = ? AND sha256 = ?",
+                [(now, *key) for key in keys],
+            )
+            self._release(db, keys)
+        return len(keys)
+
+    def _release(self, db: sqlite3.Connection, purged: list[tuple[str, str]]) -> int:
+        """Remove the cached files only the just purged items used, and stale unreferenced ones. Call under the
+        write lock, so no publish can count on a file while it is being removed."""
+
+        referenced = {
+            row["digest"]
+            for row in db.execute(
+                "SELECT digest FROM item_media JOIN item USING (library_id, sha256)"
+                " WHERE item.purged_at IS NULL"
+            )
+        }
+        released = {
+            row["digest"]
+            for key in purged
+            for row in db.execute(
+                "SELECT digest FROM item_media WHERE library_id = ? AND sha256 = ?", key
+            )
+        } - referenced
+        removed = self.media.delete(released)
+        return removed + self.media.sweep(referenced, STALE_FILE_S, self.clock().timestamp())
+
     # --- the phone's view ---------------------------------------------------------------------------------------
 
     def runs(self) -> list[dict[str, Any]]:
@@ -928,24 +977,8 @@ class Store:
                 "UPDATE item SET purged_at = ? WHERE library_id = ? AND sha256 = ?",
                 [(stamp(now), *key) for key in expired],
             )
-            referenced = {
-                row["digest"]
-                for row in db.execute(
-                    "SELECT digest FROM item_media JOIN item USING (library_id, sha256)"
-                    " WHERE item.purged_at IS NULL"
-                )
-            }
-            released = {
-                row["digest"]
-                for key in expired
-                for row in db.execute(
-                    "SELECT digest FROM item_media WHERE library_id = ? AND sha256 = ?", key
-                )
-            } - referenced
-            # Under the write lock, so no publish can count on a file while it is being removed. If this stops
-            # before the commit, the same items are simply purged again next time.
-            removed = self.media.delete(released)
-            removed += self.media.sweep(referenced, STALE_FILE_S, now.timestamp())
+            # If this stops before the commit, the same items are simply purged again next time.
+            removed = self._release(db, expired)
         return {"items_purged": len(expired), "files_removed": removed}
 
 

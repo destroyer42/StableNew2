@@ -22,6 +22,7 @@ from src.video.comfy_process_manager import get_global_comfy_process_manager
 logger = logging.getLogger(__name__)
 
 SHUTDOWN_BUDGET_SECONDS = 14.0
+REPOSITORY_FINALIZE_FLOOR_SECONDS = 1.0  # granted even when an earlier step spent the budget
 QUEUE_QUIESCE_TIMEOUT_SECONDS = 10.0
 
 
@@ -202,10 +203,13 @@ def shutdown_app(controller: Any, reason: str) -> ShutdownOutcome:
         return worker, result
 
     def finish_step(
-        phase: str, step: tuple[threading.Thread, list[Any]], default: Any = False
+        phase: str,
+        step: tuple[threading.Thread, list[Any]],
+        default: Any = False,
+        floor: float = 0.0,
     ) -> Any:
         worker, result = step
-        worker.join(remaining())
+        worker.join(max(remaining(), floor))
         if worker.is_alive():
             active_steps.append((worker, phase))
         elif result:
@@ -310,10 +314,6 @@ def shutdown_app(controller: Any, reason: str) -> ShutdownOutcome:
         and not active_steps
     )
     if owners_stopped:
-        outcome.persistence_drained = (
-            attempt("persistence", lambda: shutdown_persistence_worker(timeout=remaining())) is True
-        )
-
         # Each runtime still goes through its original process owner.
         outcome.webui = bounded(
             "webui-release", lambda: controller._shutdown_webui(remaining()), "incomplete"
@@ -322,16 +322,34 @@ def shutdown_app(controller: Any, reason: str) -> ShutdownOutcome:
             "comfy-release", lambda: release_owned_comfy(remaining()), "incomplete"
         )
 
+        def attempt_save() -> None:
+            try:
+                controller._save_queue_state()
+            except Exception:
+                outcome.failures.append("queue-state")
+                logger.exception(
+                    "[shutdown] queue-state save failed; closing the repository anyway"
+                )
+
         def finalize_repository() -> str:
-            controller._save_queue_state()
+            attempt_save()
             if getattr(job_service, "history_store", None) is None:
                 return "absent"
             return "closed" if close_repository_when_quiescent(job_service) else "left_open"
 
-        if outcome.persistence_drained:
-            outcome.repository = bounded("repository", finalize_repository, "incomplete")
+        # The repository does not depend on the file writer or on a slow runtime release: always finalize it.
+        outcome.repository = finish_step(
+            "repository",
+            start_step("repository", finalize_repository),
+            "incomplete",
+            floor=REPOSITORY_FINALIZE_FLOOR_SECONDS,
+        )
         if not active_steps:
             attempt("api-client", controller._close_shutdown_api_client)
+        # Last, so a stuck write cannot spend the time the steps above need.
+        outcome.persistence_drained = (
+            attempt("persistence", lambda: shutdown_persistence_worker(timeout=remaining())) is True
+        )
     if outcome.repository == "left_open":
         logger.error("[shutdown] Job repository NOT closed: cleanup dependencies have not quiesced")
     if is_debug_shutdown_inspector_enabled():

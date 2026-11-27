@@ -71,7 +71,7 @@ from src.video.workflow_source_preparation import (
     passthrough_declared_workflow_source,
     prepare_declared_workflow_source,
 )
-from src.video.workflow_warnings import experimental_workflow_warning, source_crop_warning
+from src.video.workflow_warnings import accepted_workflow_warnings, source_crop_warning
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 # Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
@@ -856,10 +856,11 @@ class VideoWorkflowNjrBuilder:
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
         # N1: the operator's Queue on a summary that showed these warnings accepts them.
-        accepted = []
-        warning = experimental_workflow_warning(spec)
-        if warning is not None and extra_metadata["video_workflow"]["experimental_opt_in"] is True:
-            accepted.append(warning)
+        accepted = list(
+            accepted_workflow_warnings(
+                spec, opted_in=extra_metadata["video_workflow"]["experimental_opt_in"] is True
+            )
+        )
         size = (source_preparation or {}).get("source_dimensions")
         if size:
             crop = source_crop_warning(spec, size["width"], size["height"])
