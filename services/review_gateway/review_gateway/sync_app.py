@@ -30,6 +30,7 @@ PAGE_LIMIT = 500
 #: ``item_parent``: the manifest's ``parent`` (PHONE-FAST rework lineage). ``item_withdraw``: the withdrawals route.
 #: ``item_source``: the manifest's ``source`` and the item-sources route (PHONE-FAST review sections).
 #: ``rating_tasks``: the RG-170 rating routes. ``item_info``: the manifest's ``info`` (NAME-INFO "More info").
+#: ``item_file_name``: ``info.file_name``, the descriptive name Immich uploads under.
 FEATURES = (
     "item_batch",
     "item_parent",
@@ -37,6 +38,7 @@ FEATURES = (
     "item_source",
     "rating_tasks",
     "item_info",
+    "item_file_name",
 )
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
