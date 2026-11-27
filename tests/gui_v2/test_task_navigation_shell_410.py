@@ -44,7 +44,12 @@ TAB_ATTRIBUTES = {
     "svd": "svd_tab",
     "video_workflow": "video_workflow_tab",
     "storyboard": "storyboard_tab",
+    "generate": "generate_tab",
 }
+
+# N6: PR-GUI-410's full navigation is the Advanced workspace; the Simple default is covered in
+# test_generate_workspace_n6.py. A stored state without a workspace entry gets Advanced here.
+ADVANCED = {"workspace": {"mode": "advanced"}}
 
 
 @pytest.fixture
@@ -52,8 +57,11 @@ def build(tk_root):
     harnesses: list[GuiV2Harness] = []
 
     def _build(stored_state: dict | None = None) -> GuiV2Harness:
+        store = get_ui_state_store()
         if stored_state is not None:
-            assert get_ui_state_store().save_state(dict(stored_state))
+            assert store.save_state({**ADVANCED, **dict(stored_state)})
+        elif store.load_state() is None:
+            assert store.save_state(dict(ADVANCED))
         harness = GuiV2Harness(tk_root)
         harness.controller.main_window = harness.window
         harnesses.append(harness)
@@ -525,7 +533,7 @@ def test_a_tab_that_fails_to_be_added_is_not_registered_and_is_visibly_unavailab
         return real_add(self, child, **kwargs)
 
     monkeypatch.setattr(ttk.Notebook, "add", add)
-    assert get_ui_state_store().save_state({"tabs": {"selected_tab_id": "review"}})
+    assert get_ui_state_store().save_state({**ADVANCED, "tabs": {"selected_tab_id": "review"}})
     harness = GuiV2Harness(tk_root)
     try:
         window = harness.window
@@ -533,7 +541,7 @@ def test_a_tab_that_fails_to_be_added_is_not_registered_and_is_visibly_unavailab
         assert "review" not in window._tab_registry  # noqa: SLF001
         assert "cannot add review" in window.tab_failures()["review"]
         assert window.review_tab is not None  # the legacy attribute is still set
-        assert len(window.center_notebook.tabs()) == 9
+        assert len(window.center_notebook.tabs()) == 10
         bar = window.task_navigation
         assert bar.destination_button("review").instate(["disabled"])
         assert not bar.destination_button("pipeline").instate(["disabled"])

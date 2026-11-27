@@ -228,6 +228,10 @@ button {
 .sheet-body h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
 .sheet-body p { margin: 0.35rem 0; }
 .sheet-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.8rem; }
+.sheet-body input { width: 100%; box-sizing: border-box; margin: 0.4rem 0; }
+.choices { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.5rem 0; }
+.choices button { text-align: left; overflow-wrap: anywhere; }
+.choices button[aria-pressed="true"] { border-color: var(--favorite); }
 .warning { margin: 0.6rem 0; padding: 0.5rem 0.6rem; border-left: 3px solid var(--favorite); background: var(--bg); }
 .warning-title { font-weight: 600; color: var(--favorite); }
 

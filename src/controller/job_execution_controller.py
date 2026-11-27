@@ -263,7 +263,12 @@ class JobExecutionController:
                 else:
                     cb(job, status)
             except Exception:
-                pass
+                logger.warning(
+                    "Job status callback raised for job %s (%s)",
+                    job.job_id,
+                    status.value,
+                    exc_info=True,
+                )
 
     def get_history_store(self) -> JobHistoryStore:
         return self._history_store
@@ -286,7 +291,10 @@ class JobExecutionController:
                 if self._started or previous.is_running():
                     previous.stop()
             except Exception:
-                pass
+                logger.warning(
+                    "Previous queue runner did not stop cleanly",
+                    exc_info=True,
+                )
             self._runner = runner
             self._started = False
             self._worker_thread_name = None

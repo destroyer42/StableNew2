@@ -176,11 +176,13 @@ def prepare_review_batch(
     group_by_model: bool = False,
     guided: GuidedReprocess | None = None,
     adetailer_passes: AdetailerPasses | None = None,
+    model_override: str | None = None,
 ) -> ReviewBatchPreview:
     """Compile every source with the existing builder; report every refusal before admission.
 
     ``adetailer_passes`` sets which of the executor's ADetailer passes run, over whatever the source recorded
-    (RG-140 phone fixes: face, hands or both on that exact image).
+    (RG-140 phone fixes: face, hands or both on that exact image). ``model_override`` runs the re-work with that
+    checkpoint instead of the recorded one, with the checkpoint's own VAE choice (RG-140 slice 2 "another model").
     """
     if not image_paths or not stages:
         raise ValueError("Images and target stages are required for reprocessing")
@@ -205,6 +207,8 @@ def prepare_review_batch(
         or not (adetailer_passes.face or adetailer_passes.hands)
     ):
         raise ValueError("ADetailer passes need the ADetailer stage alone and at least one pass.")
+    if model_override is not None and (guided is not None or not model_override.strip()):
+        raise ValueError("A model override names one checkpoint and is not a guided correction.")
     batch_id = str(uuid.uuid4())
     builder, sources, rows, jobs = ReprocessJobBuilder(), [], [], []
     output_dir = review_output_dir(controller)
@@ -294,9 +298,16 @@ def prepare_review_batch(
                     dict(config.get("adetailer") or {}),
                     dict(fallback_config.get("adetailer") or {}),
                 )
+            vae = baseline.get("vae")
+            if model_override is not None:  # the recorded VAE belongs to the recorded checkpoint
+                model, vae = model_override.strip(), None
+                for block in (config, config.get("img2img"), config.get("txt2img")):
+                    if isinstance(block, dict):
+                        block.pop("vae", None)
+                        block.pop("sd_vae", None)
             source = ReprocessSourceItem(
                 input_image_path=str(path), prompt=prompt, negative_prompt=negative,
-                model=model or None, vae=baseline.get("vae"), config=config,
+                model=model or None, vae=vae, config=config,
                 metadata=metadata,
             )
             plan = builder.build_grouped_reprocess_jobs(

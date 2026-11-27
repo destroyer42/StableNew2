@@ -1,6 +1,6 @@
 """Task-first navigation contract (PR-GUI-410).
 
-A pure, toolkit-independent description of how the nine workspace tabs are presented as operator task groups.
+A pure, toolkit-independent description of how the workspace tabs are presented as operator task groups.
 A group is a presentation category only: it owns no tab, job, queue or selection state. The single
 ``MainWindowV2.center_notebook`` stays the selection authority and ``_tab_registry`` the tab-identity authority; the
 Tk shell binds this contract to them.
@@ -16,6 +16,13 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from src.gui.view_contracts.workspace_mode_contract import (
+    SIMPLE_DEFAULT_TAB_ID,
+    SIMPLE_TAB_IDS,
+    WORKSPACE_ADVANCED,
+    is_simple,
+)
+
 # Notebook creation order. Historic saved ``tabs.selected_index`` values index this tuple, so it must not be reordered.
 LEGACY_TAB_ORDER: tuple[str, ...] = (
     "prompt",
@@ -28,9 +35,11 @@ LEGACY_TAB_ORDER: tuple[str, ...] = (
     "svd",
     "video_workflow",
     "storyboard",
+    "generate",  # N6: appended, so historic indices 0-9 keep their meaning
 )
 
-# Today's effective first tab: the Pipeline workspace is raised once the panels are attached.
+# The Advanced workspace's first tab: the Pipeline workspace is raised once the panels are attached. The Simple
+# workspace (N6) opens on ``SIMPLE_DEFAULT_TAB_ID`` (Generate) instead.
 DEFAULT_TAB_ID = "pipeline"
 
 HOLD_LABEL_SUFFIX = "HOLD"
@@ -73,6 +82,7 @@ TASK_GROUPS: tuple[NavGroup, ...] = (
         "create",
         "Create",
         (
+            NavDestination("generate", "Generate", "create"),
             NavDestination("prompt", "Prompt", "create"),
             NavDestination("pipeline", "Pipeline", "create"),
         ),
@@ -166,26 +176,53 @@ def legacy_tab_id_for_index(index: Any) -> str | None:
     return None
 
 
-def resolve_startup_tab_id(tabs_state: Any, available: Collection[str]) -> str:
+def visible_tab_ids(mode: str) -> tuple[str, ...]:
+    """Tab ids navigation shows in workspace ``mode``, in navigation order (every tab in Advanced)."""
+
+    if not is_simple(mode):
+        return all_tab_ids()
+    return tuple(tab_id for tab_id in all_tab_ids() if tab_id in SIMPLE_TAB_IDS)
+
+
+def visible_group_ids(mode: str) -> tuple[str, ...]:
+    """Groups that have at least one destination shown in ``mode``."""
+
+    shown = set(visible_tab_ids(mode))
+    return tuple(group.group_id for group in TASK_GROUPS if shown.intersection(group.tab_ids))
+
+
+def default_tab_for_mode(mode: str) -> str:
+    """Where ``mode`` opens when no stored tab applies."""
+
+    return SIMPLE_DEFAULT_TAB_ID if is_simple(mode) else DEFAULT_TAB_ID
+
+
+def resolve_startup_tab_id(
+    tabs_state: Any, available: Collection[str], *, mode: str = WORKSPACE_ADVANCED
+) -> str:
     """Pick the tab to show at startup from a stored ``tabs`` payload.
 
     Order: a stored ``selected_tab_id`` that is known and present, then a historic ``selected_index`` translated
-    through :data:`LEGACY_TAB_ORDER` (only when no valid id is stored), then :data:`DEFAULT_TAB_ID`, then the first
-    present tab in navigation order. Corrupt, unknown or absent entries never raise. Returns ``""`` only when no
-    navigation tab is available at all.
+    through :data:`LEGACY_TAB_ORDER` (only when no valid id is stored), then the mode's default tab
+    (:data:`DEFAULT_TAB_ID` in Advanced, Generate in Simple), then the first present tab in navigation order. In the
+    Simple workspace (N6) a stored tab it does not show is skipped. Corrupt, unknown or absent entries never raise.
+    Returns ``""`` only when no navigation tab is available at all.
     """
 
     present = set(available)
+    shown = set(visible_tab_ids(mode))
     payload: Mapping[str, Any] = tabs_state if isinstance(tabs_state, Mapping) else {}
     stored_id = payload.get("selected_tab_id")
     if isinstance(stored_id, str) and stored_id in _DESTINATIONS and stored_id in present:
-        return stored_id
-    if "selected_tab_id" not in payload or not isinstance(stored_id, str):
+        if stored_id in shown:
+            return stored_id
+    elif "selected_tab_id" not in payload or not isinstance(stored_id, str):
         legacy_id = legacy_tab_id_for_index(payload.get("selected_index"))
-        if legacy_id is not None and legacy_id in present:
+        if legacy_id is not None and legacy_id in present and legacy_id in shown:
             return legacy_id
-    if DEFAULT_TAB_ID in present:
-        return DEFAULT_TAB_ID
+    for tab_id in (default_tab_for_mode(mode), DEFAULT_TAB_ID):
+        if tab_id in present:
+            return tab_id
     for tab_id in all_tab_ids():
         if tab_id in present:
             return tab_id
@@ -218,6 +255,7 @@ __all__ = [
     "NavGroup",
     "all_tab_ids",
     "default_tab_for_group",
+    "default_tab_for_mode",
     "get_destination",
     "get_group",
     "group_for_tab",
@@ -225,4 +263,6 @@ __all__ = [
     "legacy_tab_id_for_index",
     "merge_tabs_state",
     "resolve_startup_tab_id",
+    "visible_group_ids",
+    "visible_tab_ids",
 ]

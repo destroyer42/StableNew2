@@ -158,6 +158,8 @@ class GatewayClient:
     def __init__(self, transport: Transport, secret: str) -> None:
         self._transport = transport
         self._secret = secret
+        #: Optional contract parts the gateway accepts, read by ``health`` (empty until then).
+        self.features: frozenset[str] = frozenset()
 
     def _call(
         self,
@@ -197,12 +199,21 @@ class GatewayClient:
         except ProtocolError as error:
             raise GatewayError("invalid_gateway_response") from error
 
-    def health(self) -> None:
-        """Preflight each cycle: checks the secret and the contract version before any large upload."""
+    def health(self) -> frozenset[str]:
+        """Preflight each cycle: checks the secret and the contract version before any large upload.
+
+        Returns (and keeps in ``features``) the optional contract parts the gateway lists, such as ``item_batch``;
+        a gateway from before the list has none, so nothing optional is sent to it.
+        """
 
         reply = self._json(self._require(self._call("GET", ROUTES["health"]), 200))
         if not isinstance(reply, dict) or reply.get("schema_version") != SCHEMA_VERSION:
             raise GatewayError("schema_mismatch")
+        listed = reply.get("features", [])
+        self.features = frozenset(
+            name for name in (listed if isinstance(listed, list) else []) if isinstance(name, str)
+        )
+        return self.features
 
     # -- publish ---------------------------------------------------------------------------------------------------
 

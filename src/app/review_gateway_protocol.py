@@ -83,6 +83,8 @@ UPDATE_REASONS = frozenset(
         "target_moved",
         "already_current",
         "not_fast_forward",
+        "not_github_signed",
+        "github_unavailable",
         "environment_drift",
         "queue_unavailable",
         "busy_timeout",
@@ -122,6 +124,17 @@ REASON_CODES = frozenset(
 
 #: RG-140 slice 1; the other actions stay reserved and are refused as ``invalid_record``.
 SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
+#: RG-140 slice 2. ``rerun_clip`` and ``continue_clip`` (N8) stay reserved: they will call V1's shared functions.
+SLICE_TWO_ACTIONS = frozenset({"another_model", "aspect_ratio", "prompt_tweak", "make_video"})
+PHONE_ACTIONS = SLICE_ONE_ACTIONS | SLICE_TWO_ACTIONS
+#: Actions whose prepare names one of the PC's options (``params.choice``); without one the PC lists them.
+CHOICE_ACTIONS = frozenset({"another_model", "aspect_ratio"})
+#: Actions whose prepare carries one line of the owner's words (``params.text``): required for ``prompt_tweak``.
+TEXT_ACTIONS = frozenset({"prompt_tweak", "make_video"})
+CHOICE_ID = re.compile(r"[A-Za-z0-9_.-]{1,64}")
+_PLAIN_LINE = re.compile(r"[^\x00-\x1f\x7f]+")
+MAX_TEXT = 200
+MAX_CHOICES = 100
 STEPS = frozenset({"prepare", "confirm"})
 MAX_SEEDS = 8
 #: Why an action could not be prepared or admitted (``receipt.detail``): closed codes, never compiler text.
@@ -136,6 +149,11 @@ DETAILS = frozenset(
         "adetailer_unavailable",
         "detector_unavailable",
         "operation_unsupported",
+        "choice_unavailable",
+        "no_change",
+        "prompt_required",
+        "size_unsupported",
+        "video_unavailable",
         "app_busy",
         "app_shutting_down",
         "compile_failed",
@@ -278,6 +296,18 @@ class ActionRequest:
     count: int | None = None
     prepared_record: str = ""
     summary_revision: str = ""
+    #: Slice 2, on prepare only: an option id the PC listed (``CHOICE_ACTIONS``), and the owner's words
+    #: (``TEXT_ACTIONS``). Untrusted: the text is one bounded line of plain text, used only as prompt text.
+    choice: str = ""
+    text: str = ""
+
+
+@dataclass(frozen=True)
+class ActionInput:
+    """What a slice-2 prepare chose: an option id and the owner's words. A confirm reuses the prepare's own."""
+
+    choice: str = ""
+    text: str = ""
 
 
 @dataclass(frozen=True)
@@ -339,8 +369,24 @@ def _decision(value: Any) -> Decision:
 def _action_request(value: Any) -> ActionRequest:
     body = _object(value, {"action", "params"})
     action = _choice(body["action"], ACTIONS)
-    params = _object(body["params"], {"step"}, {"count", "prepared_record", "summary_revision"})
+    params = _object(
+        body["params"],
+        {"step"},
+        {"count", "prepared_record", "summary_revision", "choice", "text"},
+    )
     step = _choice(params["step"], STEPS)
+    choice = params.get("choice")
+    text = params.get("text")
+    if (choice is not None and (action not in CHOICE_ACTIONS or step != "prepare")) or (
+        text is not None and (action not in TEXT_ACTIONS or step != "prepare")
+    ):
+        raise _fail()
+    if action == "prompt_tweak" and step == "prepare" and text is None:
+        raise _fail()
+    if text is not None and not (
+        isinstance(text, str) and len(text) <= MAX_TEXT and _PLAIN_LINE.fullmatch(text)
+    ):
+        raise _fail()
     count = params.get("count")
     if count is not None and (
         action != "more_like_this"
@@ -361,7 +407,13 @@ def _action_request(value: Any) -> ActionRequest:
         )
     if {"prepared_record", "summary_revision"} & params.keys():
         raise _fail()
-    return ActionRequest(action, step, count)
+    return ActionRequest(
+        action,
+        step,
+        count,
+        choice=_text(choice, CHOICE_ID) if choice is not None else "",
+        text=text or "",
+    )
 
 
 def record_id_of(value: Any) -> str | None:
@@ -515,8 +567,14 @@ def item_manifest(
     media: Mapping[str, MediaVariant],
     duration_s: float | None = None,
     display: Mapping[str, Any] | None = None,
+    batch: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a manifest; refuses anything the contract does not allow rather than trimming silently."""
+    """Build a manifest; refuses anything the contract does not allow rather than trimming silently.
+
+    ``batch`` (the job's N5 batch: ``batch_id``, ``name`` and optionally ``cell`` with ``pack`` and ``model``) is
+    display and grouping text: it is bounded and scrubbed like ``display``, and left out when it has no valid id or
+    no name, so an unreadable batch never holds an item back.
+    """
 
     _text(item.library_id, LIBRARY_ID)
     _text(item.sha256, SHA256)
@@ -549,6 +607,30 @@ def item_manifest(
     shown = _display(display or {})
     if shown:
         body["display"] = shown
+    grouped = _batch(batch or {})
+    if grouped:
+        body["batch"] = grouped
+    return body
+
+
+def _batch(values: Mapping[str, Any]) -> dict[str, Any] | None:
+    try:
+        batch_id = parse_uuid(str(values.get("batch_id") or "").lower())
+    except ProtocolError:
+        return None
+    name = scrub_text(values.get("name"), 120) if isinstance(values.get("name"), str) else ""
+    if not name:
+        return None
+    body: dict[str, Any] = {"batch_id": batch_id, "name": name}
+    cell = values.get("cell")
+    if isinstance(cell, Mapping):
+        shown = {
+            key: scrub_text(cell[key], limit)  # a checkpoint path is reduced to its file name
+            for key, limit in (("pack", 120), ("model", 200))
+            if isinstance(cell.get(key), str) and cell[key].strip()
+        }
+        if shown:
+            body["cell"] = shown
     return body
 
 
@@ -591,6 +673,7 @@ def acknowledgement(
     if receipt:
         allowed = {
             "review_evidence_id",
+            "choices",  # RG-140 slice 2
             "archived",
             "job_ids",
             "action_summary",
@@ -684,6 +767,35 @@ class ActionSummary:
             "warnings": [item.payload() for item in self.warnings[:MAX_SUMMARY_WARNINGS]],
             "expires_at": utc_text(self.expires_at),
         }
+
+
+@dataclass(frozen=True)
+class ActionChoices:
+    """What the phone may pick for a ``CHOICE_ACTIONS`` action (RG-140 slice 2): ``(id, label, current)`` items.
+
+    Labels are PC-written (a checkpoint's file name, an aspect ratio's name) and reduced like every summary text; ids
+    are the PC's own (``CHOICE_ID``). At most ``MAX_CHOICES`` are listed.
+    """
+
+    action: str
+    items: tuple[tuple[str, str, bool], ...]
+    selected: str = ""
+
+    def payload(self) -> dict[str, Any]:
+        if self.action not in CHOICE_ACTIONS or not self.items:
+            raise ProtocolError("invalid_choices")
+        listed = []
+        for choice_id, label, current in self.items[:MAX_CHOICES]:
+            if not CHOICE_ID.fullmatch(choice_id):
+                raise ProtocolError("invalid_choices")
+            entry: dict[str, Any] = {"id": choice_id, "label": scrub_text(label, 120) or choice_id}
+            if current:
+                entry["current"] = True
+            listed.append(entry)
+        body: dict[str, Any] = {"action": self.action, "items": listed}
+        if self.selected and CHOICE_ID.fullmatch(self.selected):
+            body["selected"] = self.selected
+        return body
 
 
 def device_revocation(device_id: str, *, at: datetime | None = None) -> dict[str, Any]:

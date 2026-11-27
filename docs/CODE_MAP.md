@@ -62,7 +62,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `live_update_remote.py`: The phone side of a live update, on the PC (LAUNCH-UPDATE-2): the ``pc_status`` publish and ``admin_request``
 - `live_update_service.py`: The running app's side of a live update (LAUNCH-UPDATE-1): switch, rate limit, drain, hand-off and receipt
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
-- `review_gateway_actions.py`: Phone actions from the review gateway (RG-140 slice 1): prepare a summary, then admit what it showed
+- `review_gateway_actions.py`: Phone actions from the review gateway (RG-140 slices 1 and 2): prepare a summary, then admit what it showed
 - `review_gateway_apply.py`: Validate and apply review gateway outbox records on the PC (RG-120)
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
@@ -216,6 +216,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `pack_model_batch_recipes.py`: N5 owner decision 3: in a packs x models batch, a model with a saved recipe uses its own settings
 - `pack_model_batch_service.py`: N5: packs x models batch builder - plan, count, estimate and queue one named batch on the existing path
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
+- `queue_projection.py`: Build the queue projection, converting each job's immutable NJR into its summary only once (RUN-LEAN)
 - `run_submission_service.py`: Bridge GUI run requests and witnessed previews to the queue submission worker
 - `runtime_projection_coordinator.py`: Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink
 - `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
@@ -431,6 +432,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workspace_contract.py`: Format selected media and workflow capability summaries for Video Workflow and Movie Clips
 - `window_layout_contract.py`: Screen-aware main-window geometry policy (PR-GUI-100)
 - `workspace_density_contract.py`: Pure sizing/disclosure rules for the focused operator workspace (PR-GUI-110)
+- `workspace_mode_contract.py`: N6: the Simple / Advanced workspace mode, a Tk-free presentation contract
 
 ## src/gui/views/
 
@@ -443,6 +445,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `embedding_experiment_design_frame.py`: Embedding experiment authoring inside the existing scrollable Learning Design surface
 - `error_modal_v2.py`: Modal that presents structured error envelopes to the user
 - `experiment_design_panel.py`: Present Learning study selection, experiment inputs, and Preview controls
+- `generate_tab_frame_v2.py`: N6 Generate workspace: the Packs x Models batch builder, the Queue and Recent outputs on one page
 - `grid_design_frame.py`: Edit the two axes of a Learning grid and show proposed cell and image counts
 - `learning_analytics_panel.py`: Analytics display panel for learning system
 - `learning_baseline_editor.py`: Editor for Learning's own experiment baseline (the fixed settings every variant shares)
@@ -496,6 +499,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
 - `video_workflow_layout_v2.py`: Layout scaffolding for the Video Workflow tab (VID-UX-384)
 - `video_workflow_media_pane_v2.py`: Right-pane media and status column of the Video Workflow tab (VID-UX-384)
+- `video_workflow_motion_intent_v2.py`: Motion preset, motion phrase and duration rows of the Video Workflow tab (V1-1)
 - `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
@@ -926,6 +930,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `duration_stats_service.py`: Duration statistics service for queue ETA estimation
 - `operator_readiness_service.py`: Read-only operator readiness projection built from existing authorities
 - `persistence_worker.py`: PR-HB-004: Async Persistence Worker
+- `queue_idle_report.py`: Log why nothing is running while jobs are queued (RUN-LEAN)
 - `runtime_transition_service.py`: PR-RUNTIME-100: coordinate release of conflicting StableNew-owned GPU runtimes
 - `runtime_warm_hold.py`: One idle warm hold of a StableNew-owned runtime between consecutive jobs (VID-WARM-373)
 - `ui_state_store.py`: UI state persistence for StableNew v2.6
@@ -1024,6 +1029,8 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `motion_alignment_compatibility.py`: Source / driving-motion compatibility advisories (PR-VID-MOTION-420)
 - `motion_alignment_preparation.py`: Prepare the driving frames a workflow will consume with one explicit spatial alignment (PR-VID-MOTION-420)
 - `motion_alignment_support.py`: Which registered workflows can honestly be offered spatial alignment (PR-VID-MOTION-420)
+- `motion_intent.py`: The task-first motion intent layer (V1, ``docs/work_packages/V1_motion_controls.md`` sections 5.3, 5.4, 5.9 a…
+- `motion_presets.py`: Versioned motion presets for the task-first Video Workflow (V1, ``docs/work_packages/V1_motion_controls.md``…
 - `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
 - `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories

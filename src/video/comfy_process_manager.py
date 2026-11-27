@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import subprocess
@@ -25,6 +26,8 @@ from src.video.managed_comfy_runtime import (
     verify_a14b_launch_args,
     workflow_launch_requirements,
 )
+
+logger = logging.getLogger(__name__)
 
 # Anchored to the repository, not the working directory, and size-rotated by ``ManagedProcess``.
 _MANAGED_COMFY_LOG_PATH = (
@@ -384,7 +387,10 @@ class ComfyProcessManager:
             except CancellationError:
                 raise
             except Exception:
-                pass
+                logger.warning(
+                    "Comfy health check raised before start; starting the runtime",
+                    exc_info=True,
+                )
             if cancel_token is not None:
                 cancel_token.check_cancelled()
             self.stop()

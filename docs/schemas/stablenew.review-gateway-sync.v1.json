@@ -112,6 +112,40 @@
         }
       }
     },
+    "item_batch": {
+      "description": "The named batch (N5 packs x models) the job that made this item was queued in, from its provenance.metadata.batch. Display and grouping only: the phone inbox groups by batch when there is one, and by run_id otherwise. A PC sends it only to a gateway whose health lists the 'item_batch' feature.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batch_id",
+        "name"
+      ],
+      "properties": {
+        "batch_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "cell": {
+          "description": "This item's cell of the batch: the PromptPack name and the checkpoint file name (never a path).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pack": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "model": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        }
+      }
+    },
     "item_manifest": {
       "description": "PC to gateway: one publishable item. Media bodies are uploaded separately and addressed by their sha256. Idempotent by (library_id, sha256).",
       "type": "object",
@@ -173,6 +207,9 @@
               "$ref": "#/$defs/media_variant"
             }
           }
+        },
+        "batch": {
+          "$ref": "#/$defs/item_batch"
         },
         "display": {
           "description": "Display-only text, rendered as text on the phone (S7). Never used for decisions.",
@@ -252,7 +289,7 @@
       ]
     },
     "action_request": {
-      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this.",
+      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this, slice 2 another_model, aspect_ratio, prompt_tweak and make_video. rerun_clip and continue_clip stay reserved.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -287,6 +324,17 @@
             },
             "summary_revision": {
               "$ref": "#/$defs/sha256"
+            },
+            "choice": {
+              "description": "another_model and aspect_ratio only, on prepare: one id from the action_choices the PC listed. Without it the PC answers with the list.",
+              "$ref": "#/$defs/choice_id"
+            },
+            "text": {
+              "description": "prompt_tweak (required: words added to the prompt) and make_video (optional: the motion prompt) only, on prepare. One line of plain text; the PC scrubs anything it shows back.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
             }
           },
           "allOf": [
@@ -304,8 +352,22 @@
                   "summary_revision"
                 ],
                 "not": {
-                  "required": [
-                    "count"
+                  "anyOf": [
+                    {
+                      "required": [
+                        "count"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "choice"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "text"
+                      ]
+                    }
                   ]
                 }
               },
@@ -348,6 +410,81 @@
                     "count"
                   ]
                 }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "not": {
+                  "enum": [
+                    "another_model",
+                    "aspect_ratio"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "not": {
+                  "required": [
+                    "choice"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "not": {
+                  "enum": [
+                    "prompt_tweak",
+                    "make_video"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "not": {
+                  "required": [
+                    "text"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "prompt_tweak"
+              },
+              "params": {
+                "properties": {
+                  "step": {
+                    "const": "prepare"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "required": [
+                  "text"
+                ]
               }
             }
           }
@@ -440,6 +577,54 @@
         },
         "expires_at": {
           "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "choice_id": {
+      "description": "An option id the PC made (RG-140 slice 2): a checkpoint's id or an aspect ratio such as 2x3. Never a path.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+    },
+    "action_choices": {
+      "description": "PC to gateway, inside an acknowledgement receipt (RG-140 slice 2): what the phone may pick for another_model (the PC's checkpoints) or aspect_ratio. Labels are PC-written and scrubbed of paths; 'current' marks the image's own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "items"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/action_name"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/choice_id"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "current": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "selected": {
+          "$ref": "#/$defs/choice_id"
         }
       }
     },
@@ -701,6 +886,8 @@
             "target_moved",
             "already_current",
             "not_fast_forward",
+            "not_github_signed",
+            "github_unavailable",
             "environment_drift",
             "queue_unavailable",
             "busy_timeout",
@@ -732,6 +919,9 @@
                 "maxLength": 64
               }
             },
+            "choices": {
+              "$ref": "#/$defs/action_choices"
+            },
             "action_summary": {
               "$ref": "#/$defs/action_summary"
             },
@@ -747,6 +937,11 @@
                 "adetailer_unavailable",
                 "detector_unavailable",
                 "operation_unsupported",
+                "choice_unavailable",
+                "no_change",
+                "prompt_required",
+                "size_unsupported",
+                "video_unavailable",
                 "app_busy",
                 "app_shutting_down",
                 "compile_failed"
@@ -1144,6 +1339,8 @@
         "target_moved",
         "already_current",
         "not_fast_forward",
+        "not_github_signed",
+        "github_unavailable",
         "environment_drift",
         "queue_unavailable",
         "busy_timeout",

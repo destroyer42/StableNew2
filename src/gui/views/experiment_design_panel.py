@@ -547,11 +547,13 @@ class ExperimentDesignPanel(ttk.Frame):
         self._objective_status: dict[str, tk.StringVar] = {}
         self._objective_labels: dict[str, ttk.Label] = {}
         self.objective_choices: dict[str, ttk.Widget] = {}
+        self._objective_headings: dict[str, ttk.Label] = {}
+        self._hidden_studies: frozenset[str] = frozenset()
         row = 0
         for objective in study_catalog.OBJECTIVES:
-            ttk.Label(body, text=objective.label, font=("TkDefaultFont", 10, "bold")).grid(
-                row=row, column=0, sticky="w", pady=(6, 0)
-            )
+            heading = ttk.Label(body, text=objective.label, font=("TkDefaultFont", 10, "bold"))
+            heading.grid(row=row, column=0, sticky="w", pady=(6, 0))
+            self._objective_headings[objective.key] = heading
             row += 1
             for descriptor in (d for d in study_catalog.STUDIES if d.objective_group == objective.key):
                 if descriptor.slug == "compatibility_probe":
@@ -575,6 +577,43 @@ class ExperimentDesignPanel(ttk.Frame):
                 self._objective_status[descriptor.slug] = status
                 self._objective_labels[descriptor.slug] = label
                 row += 2
+        # N6: a hidden study shows while it is the selected one (a restored draft) and hides again after.
+        self.study_type_var.trace_add("write", lambda *_: self._sync_hidden_studies())
+
+    def set_hidden_studies(self, slugs: Any) -> None:
+        """N6 Simple workspace: hide these study entries (and a heading left empty); the selected study stays shown.
+
+        Presentation only: every study stays in the catalog, and saved experiments of any type still open."""
+        self._hidden_studies = frozenset(slugs)
+        self._sync_hidden_studies()
+
+    def _is_study_hidden(self, slug: str) -> bool:
+        if slug not in getattr(self, "_hidden_studies", frozenset()):
+            return False
+        descriptor = study_catalog.lookup(slug)
+        return descriptor is None or descriptor.label != self.study_type_var.get()
+
+    def _sync_hidden_studies(self) -> None:
+        if not getattr(self, "objective_choices", None):
+            return
+        for slug, choice in self.objective_choices.items():
+            if self._is_study_hidden(slug):
+                choice.grid_remove()
+                self._objective_labels[slug].grid_remove()
+            else:
+                choice.grid()
+                if self._objective_status[slug].get():
+                    self._objective_labels[slug].grid()
+        for objective in study_catalog.OBJECTIVES:
+            heading = self._objective_headings[objective.key]
+            if any(
+                not self._is_study_hidden(d.slug)
+                for d in study_catalog.STUDIES
+                if d.objective_group == objective.key
+            ):
+                heading.grid()
+            else:
+                heading.grid_remove()
 
     def choose_study(self, slug: str) -> None:
         """Open the existing design frame of one study (the only way any objective reaches a form)."""
@@ -649,7 +688,7 @@ class ExperimentDesignPanel(ttk.Frame):
                     text = f"{text}\n{study.note}" if text else study.note
             status.set(text)
             label = self._objective_labels[slug]
-            if text:
+            if text and not self._is_study_hidden(slug):
                 label.grid()
             else:
                 label.grid_remove()

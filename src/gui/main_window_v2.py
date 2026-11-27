@@ -30,8 +30,10 @@ from src.gui.ui_dispatcher import TkUiDispatcher, release_tk_dispatcher, tk_disp
 from src.gui.view_contracts.task_navigation_contract import (
     DEFAULT_TAB_ID,
     all_tab_ids,
+    default_tab_for_mode,
     merge_tabs_state,
     resolve_startup_tab_id,
+    visible_tab_ids,
 )
 from src.gui.view_contracts.window_layout_contract import (
     WINDOW_SENTINEL_OFFSCREEN,
@@ -40,7 +42,15 @@ from src.gui.view_contracts.window_layout_contract import (
     normalize_saved_geometry,
     parse_geometry,
 )
+from src.gui.view_contracts.workspace_mode_contract import (
+    WORKSPACE_ADVANCED,
+    WORKSPACE_STATE_KEY,
+    normalize_workspace_mode,
+    workspace_mode_from_state,
+    workspace_state_payload,
+)
 from src.gui.views.character_training_frame import CharacterTrainingFrame
+from src.gui.views.generate_tab_frame_v2 import GenerateTabFrameV2
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
@@ -431,8 +441,22 @@ class MainWindowV2:
             "storyboard", self._support_tab_title("storyboard", "Storyboard"), _make_storyboard
         )
 
+        # N6: the simple Generate workspace (Packs x Models builder, Queue, Recent outputs); appended last so the
+        # historic notebook indices keep their meaning.
+        def _make_generate(parent: tk.Misc) -> GenerateTabFrameV2:
+            return GenerateTabFrameV2(
+                parent,
+                app_state=self.app_state,
+                app_controller=self.app_controller,
+                sidebar_provider=lambda: getattr(getattr(self, "pipeline_tab", None), "sidebar", None),
+            )
+
+        self.generate_tab = self.add_tab("generate", "Generate", _make_generate)
+
         # PR-GUI-410: task-first navigation over the one notebook (the stored tab is restored after the panels attach)
+        self.workspace_mode = workspace_mode_from_state(get_ui_state_store().load_state())
         self._install_task_navigation()
+        self._apply_workspace_mode_to_tabs()
 
         self.left_zone = None
         self.right_zone = None
@@ -875,6 +899,8 @@ class MainWindowV2:
                 self.root,
                 on_select=self.select_tab,
                 is_available=self._tab_registry.__contains__,
+                mode=self.workspace_mode,
+                on_mode_change=self.set_workspace_mode,
             )
         except tk.TclError:
             logger.exception("Task navigation could not be built; the notebook's own tabs stay visible")
@@ -921,6 +947,32 @@ class MainWindowV2:
         tab_id = self._current_tab_id()
         if bar is not None and tab_id is not None:
             bar.show_selected(tab_id)
+
+    # N6: Simple / Advanced workspace. Presentation only: hidden tabs stay built, registered and selectable.
+    def set_workspace_mode(self, mode: str) -> None:
+        """Show the Simple or Advanced workspace, persist the choice and leave a tab the mode no longer shows."""
+
+        self.workspace_mode = normalize_workspace_mode(mode)
+        bar = getattr(self, "task_navigation", None)
+        if bar is not None:
+            bar.set_mode(self.workspace_mode)
+        self._apply_workspace_mode_to_tabs()
+        store = get_ui_state_store()
+        existing = (store.load_state() or {}).get(WORKSPACE_STATE_KEY)
+        store.update_state({WORKSPACE_STATE_KEY: workspace_state_payload(existing, self.workspace_mode)})
+        current = self._current_tab_id()
+        if current not in visible_tab_ids(self.workspace_mode):
+            self.select_tab(default_tab_for_mode(self.workspace_mode))
+        else:
+            self._sync_task_navigation()
+
+    def _apply_workspace_mode_to_tabs(self) -> None:
+        apply = getattr(getattr(self, "learning_tab", None), "set_workspace_mode", None)
+        if callable(apply):
+            try:
+                apply(self.workspace_mode)
+            except tk.TclError:
+                logger.warning("Learning could not apply the %s workspace", self.workspace_mode)
 
     def _install_ui_heartbeat(self):
         """Install UI heartbeat ticker that runs every 250ms.
@@ -1373,6 +1425,7 @@ class MainWindowV2:
             getattr(self, "photo_optimize_tab", None),
             getattr(self, "movie_clips_tab", None),
             getattr(self, "video_workflow_tab", None),
+            getattr(self, "generate_tab", None),
         ]
         pipeline_tab = getattr(self, "pipeline_tab", None)
         if pipeline_tab is not None:
@@ -1770,6 +1823,10 @@ class MainWindowV2:
                 "content_visibility": ContentVisibilitySettings.from_payload(
                     {"mode": getattr(self.app_state, "content_visibility_mode", "nsfw")}
                 ).to_payload(),
+                WORKSPACE_STATE_KEY: workspace_state_payload(
+                    existing_state.get(WORKSPACE_STATE_KEY),
+                    getattr(self, "workspace_mode", workspace_mode_from_state(existing_state)),
+                ),
             }
             try:
                 learning_tab = getattr(self, "learning_tab", None)
@@ -1839,11 +1896,13 @@ class MainWindowV2:
             logger.warning(f"Failed to save UI state: {e}")
 
     def _restore_tab_selection(self) -> None:
-        """Show the stored tab: by stable id, else by the historic index; an unusable choice falls back to Pipeline."""
+        """Show the stored tab: by stable id, else by the historic index; an unusable choice (or, in the Simple
+        workspace, a tab it does not show) falls back to the mode's default (Generate, or Pipeline in Advanced)."""
 
         state = get_ui_state_store().load_state() or {}
-        stored = resolve_startup_tab_id(state.get("tabs"), self._tab_registry.keys())
-        for tab_id in (stored, DEFAULT_TAB_ID, *all_tab_ids()):
+        mode = getattr(self, "workspace_mode", WORKSPACE_ADVANCED)
+        stored = resolve_startup_tab_id(state.get("tabs"), self._tab_registry.keys(), mode=mode)
+        for tab_id in (stored, default_tab_for_mode(mode), DEFAULT_TAB_ID, *all_tab_ids()):
             if tab_id and self.select_tab(tab_id):
                 logger.debug("Restored tab selection: %s", tab_id)
                 return
