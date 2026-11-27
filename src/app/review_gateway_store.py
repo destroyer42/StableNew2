@@ -200,7 +200,12 @@ CREATE TABLE IF NOT EXISTS published (
 CREATE INDEX IF NOT EXISTS published_digest ON published (sha256);
 -- PHONE-FAST: images whose phone rendition has been sent (a table, so an older app's inserts still work).
 CREATE TABLE IF NOT EXISTS renditions (library_id TEXT PRIMARY KEY);
--- PHONE-FAST: a video is sent without its metadata, so the gateway knows it by other bytes than the PC's file.
+-- PHONE-FAST: which admitted job reworks which item, and which published result came from which original.
+CREATE TABLE IF NOT EXISTS rework_jobs (job_id TEXT PRIMARY KEY, library_id TEXT NOT NULL, sha256 TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS rework_result (
+    library_id TEXT PRIMARY KEY, original_id TEXT NOT NULL, original_sha256 TEXT NOT NULL
+);
+-- PHONE-FAST: media is sent without PC paths in its metadata, so the gateway may know it by other bytes than the file.
 CREATE TABLE IF NOT EXISTS public_digest (
     library_id TEXT PRIMARY KEY, public_sha256 TEXT NOT NULL, file_sha256 TEXT NOT NULL
 );
@@ -435,6 +440,36 @@ class SyncLedger:
             (limit,),
         )
         return [str(row["library_id"]) for row in rows]
+
+    def remember_rework(self, job_ids: Sequence[str], library_id: str, sha256: str) -> None:
+        with self._transaction() as db:
+            db.executemany(
+                "INSERT OR REPLACE INTO rework_jobs VALUES (?, ?, ?)",
+                [(job_id, library_id, sha256) for job_id in job_ids],
+            )
+
+    def has_rework(self) -> bool:
+        return bool(self._read("SELECT 1 FROM rework_jobs LIMIT 1"))
+
+    def rework_original(self, job_id: str) -> tuple[str, str] | None:
+        """``(library_id, sha256)`` of the item this job reworks."""
+
+        rows = self._read("SELECT library_id, sha256 FROM rework_jobs WHERE job_id = ?", (job_id,))
+        return (str(rows[0]["library_id"]), str(rows[0]["sha256"])) if rows else None
+
+    def remember_result(self, library_id: str, original_id: str, original_sha256: str) -> None:
+        with self._transaction() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO rework_result VALUES (?, ?, ?)",
+                (library_id, original_id, original_sha256),
+            )
+
+    def rework_original_of(self, library_id: str) -> tuple[str, str] | None:
+        rows = self._read(
+            "SELECT original_id, original_sha256 FROM rework_result WHERE library_id = ?",
+            (library_id,),
+        )
+        return (str(rows[0][0]), str(rows[0][1])) if rows else None
 
     def publish_counts(self) -> dict[str, int]:
         rows = self._read("SELECT state, count(*) AS n FROM published GROUP BY state")

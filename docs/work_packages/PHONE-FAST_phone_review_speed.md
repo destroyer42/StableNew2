@@ -68,8 +68,8 @@ waits for a gateway that offers it.
 
 ### (d) Sent for rework, then compare
 
-- Rework actions are Fix face, Fix hands and Fix both (they replace an image). More like this makes variations and does
-  not change the original's state.
+- Rework actions are those with one result to compare: Fix face, Fix hands, Fix both, Another model and Aspect ratio
+  (default pending the owner's answer). More like this, Tweak prompt and Make video do not change the original's state.
 - Once the phone has queued a rework, the original counts as reviewed ("sent for rework") and leaves the unreviewed
   stream. A refused request returns it. It can still be decided from the run grid.
 - The PC records which admitted job made which original's rework, and names the original (`parent`) in the result's
@@ -77,6 +77,7 @@ waits for a gateway that offers it.
 - A result whose original is still on the gateway and not deleted is shown with it: tap to flip between the two, then
   "Keep original" or "Keep rework". The pick is kept and the other is discarded (to the archive), as two ordinary
   decisions.
+- A result joins the original's batch group (its run folder group when it has no batch).
 - Lineage stays in the PC ledger (`rework_result`) and on the gateway item.
 
 ### (e) Continuous triage (PR 2)
