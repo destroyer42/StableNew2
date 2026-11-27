@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -363,7 +364,7 @@ class GatewayPublisher:
             self._note_caught_up(since)
         return found
 
-    def _retry(self, known: Mapping[str, Any]) -> bool:
+    def _retry(self, known: sqlite3.Row) -> bool:
         if known["state"] != MISSING:
             return False
         age = self._now() - datetime.fromisoformat(str(known["at"]).replace("Z", "+00:00"))

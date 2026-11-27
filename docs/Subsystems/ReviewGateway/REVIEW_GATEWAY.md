@@ -105,7 +105,8 @@ Rules:
   device row, so revocation applies to the next request. Every data and media route needs an enrolled device with the
   `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
 - JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata
-  is put on screen with `textContent` only. Originals are `private, no-store`; derivatives `private, max-age=3600`.
+  is put on screen with `textContent` only. Originals are `private, no-store`; thumbnails and image renditions `private, max-age=604800, immutable`; other
+  derivatives `private, max-age=3600`.
 - Inbox grouped by named batch, else by run folder, with counts (section 3.1); a group's grid; triage with Keep,
   Favorite, Delete buttons and swipes (right, up, left) and the six reason tags. A refused item counts as "to review"
   again.
@@ -115,6 +116,23 @@ Rules:
   with Try again and Dismiss; it is never dropped silently. The unsent list is shared safely between tabs.
 - The decision buttons and swipes stay off until the item has loaded. If it cannot load, the owner may retry or choose
   to decide without seeing it.
+
+- The phone prefetches the next 4 image renditions while triaging.
+
+### 3.0 What the PC publishes (PHONE-FAST)
+
+- **Only authoritative outputs** (`src/app/review_gateway_sources.py`). An image under `movie_clips`, an image a video
+  manifest lists as a frame, and a retained un-smoothed clip are never published. While a job runs, an image that may
+  be one of its frames waits.
+- **Nothing blocks the rest.** A row whose file is gone is recorded as `missing` and looked at again after a day; a row
+  that fails for another reason is set aside for a while, longer each time (up to 10 minutes). A published item's
+  ledger row is never overwritten.
+- **Window.** The last 3 days, or back to when the publisher last caught up if that is older; never before the first
+  window.
+- **Rate.** Up to 8 items per cycle while idle; one item per 30 s while a job runs, with nothing transcoded. When a job
+  completes, its new outputs publish at once even if the next job is already running.
+- **Phone rendition.** Every image is sent with a WebP (JPEG where WebP is unavailable) of at most 1080 px on its long
+  side, never enlarged. Images published before this get one a few at a time while the PC is idle.
 
 ### 3.1 Inbox grouped by batch
 
