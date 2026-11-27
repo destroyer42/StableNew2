@@ -34,6 +34,22 @@ DISCARD_UNDO = timedelta(hours=48)
 KEEP_AFTER_ANSWER = timedelta(days=14)
 STALE_FILE_S = 24 * 3600
 _SEEN_RESOLUTION = timedelta(hours=1)
+#: The phone inbox's group key for a named batch (N5); every other group is an output run folder name.
+BATCH_GROUP = "batch:"
+#: RG-140 slices 1 and 2. The schema reserves the others (N8's clip actions); the PC refuses anything it does not
+#: implement, so an older PC answers a slice-2 request with ``invalid_record``.
+PHONE_ACTIONS = frozenset(
+    {
+        "fix_face",
+        "fix_hands",
+        "fix_both",
+        "more_like_this",
+        "another_model",
+        "aspect_ratio",
+        "prompt_tweak",
+        "make_video",
+    }
+)
 #: RG-140: not a quota (the owner set none, 2026-11-26). A technical bound on one phone's *unanswered* action requests,
 #: far above a person's use (a whole 300-item batch fixed while the PC sleeps fits). It protects the outbox and the PC's
 #: next sync from a phone stuck resending in a loop with fresh keys; answered requests never count.
@@ -48,6 +64,7 @@ CREATE TABLE IF NOT EXISTS item (
     library_id TEXT NOT NULL, sha256 TEXT NOT NULL,
     run_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL, duration_s REAL,
     display TEXT NOT NULL, ready_at TEXT, purged_at TEXT, latest_record_id TEXT,
+    batch_id TEXT, batch TEXT,
     PRIMARY KEY (library_id, sha256)
 );
 CREATE INDEX IF NOT EXISTS item_run ON item (run_id, created_at, library_id);
@@ -179,6 +196,7 @@ class Store:
         display = dict(manifest.get("display", {}))
         if "seed" in display:
             display["seed"] = str(int(display["seed"]))  # beyond JavaScript's exact integers
+        batch = manifest.get("batch")
         with self.write() as db:
             row = db.execute(
                 "SELECT purged_at FROM item WHERE library_id = ? AND sha256 = ?", key
@@ -186,10 +204,12 @@ class Store:
             if row is not None and row["purged_at"] is not None:
                 return "purged", []
             db.execute(
-                "INSERT INTO item (library_id, sha256, run_id, kind, created_at, duration_s, display)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (library_id, sha256) DO UPDATE SET"
+                "INSERT INTO item (library_id, sha256, run_id, kind, created_at, duration_s, display,"
+                " batch_id, batch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT (library_id, sha256) DO UPDATE SET"
                 " run_id = excluded.run_id, kind = excluded.kind, created_at = excluded.created_at,"
-                " duration_s = excluded.duration_s, display = excluded.display",
+                " duration_s = excluded.duration_s, display = excluded.display,"
+                " batch_id = excluded.batch_id, batch = excluded.batch",
                 (
                     *key,
                     manifest["run_id"],
@@ -197,6 +217,8 @@ class Store:
                     stamp(_instant(manifest["created_at"])),
                     manifest.get("duration_s"),
                     json.dumps(display),
+                    batch["batch_id"].lower() if batch else None,
+                    json.dumps(batch) if batch else None,
                 ),
             )
             db.execute("DELETE FROM item_media WHERE library_id = ? AND sha256 = ?", key)
@@ -258,21 +280,33 @@ class Store:
     # --- the phone's view ---------------------------------------------------------------------------------------
 
     def runs(self) -> list[dict[str, Any]]:
+        """The inbox: one group per named batch (N5), and per output run folder for everything else.
+
+        A group's ``run_id`` is what the phone opens: the run folder, or ``batch:<batch_id>``. Groups come newest
+        activity first (their latest item), then by that key.
+        """
+
         with self.connection() as db:
             rows = db.execute(
                 _ITEMS_WITH_STATE + " ORDER BY item.run_id DESC, item.created_at, item.library_id"
             ).fetchall()
         runs: dict[str, dict[str, Any]] = {}
+        latest: dict[str, str] = {}
         for row in rows:
+            batch = json.loads(row["batch"]) if row["batch_id"] else None
+            group = f"{BATCH_GROUP}{row['batch_id']}" if batch else row["run_id"]
             run = runs.setdefault(
-                row["run_id"],
+                group,
                 {
-                    "run_id": row["run_id"],
+                    "run_id": group,
+                    "kind": "batch" if batch else "run",
+                    "name": batch["name"] if batch else None,
                     **dict.fromkeys(("total", "undecided", "keep", "delete", "favorite"), 0),
                     **dict.fromkeys(("pending", "applied", "refused"), 0),
                     "covers": [],
                 },
             )
+            latest[group] = max(latest.get(group, ""), row["created_at"])
             state, decision, _reason = _outcome(row)
             run["total"] += 1
             run[state] += 1
@@ -281,19 +315,39 @@ class Store:
                 run["favorite"] += decision["favorite"]
             if len(run["covers"]) < 4:
                 run["covers"].append({"library_id": row["library_id"], "sha256": row["sha256"]})
-        return list(runs.values())
+        return sorted(
+            runs.values(), key=lambda run: (latest[run["run_id"]], run["run_id"]), reverse=True
+        )
+
+    def group_name(self, run_id: str) -> str | None:
+        """The batch name of a ``batch:<id>`` group (``None`` for a run folder or an unknown batch)."""
+
+        batch_id = run_id.removeprefix(BATCH_GROUP)
+        if batch_id == run_id:
+            return None
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT batch FROM item WHERE batch_id = ? AND ready_at IS NOT NULL"
+                " AND purged_at IS NULL ORDER BY created_at DESC LIMIT 1",
+                (batch_id.lower(),),
+            ).fetchone()
+        return json.loads(row["batch"])["name"] if row is not None else None
 
     def run_items(self, run_id: str) -> list[dict[str, Any]]:
+        batch_id = run_id.removeprefix(BATCH_GROUP)
+        if batch_id != run_id:
+            where, value = "item.batch_id = ?", batch_id.lower()
+        else:
+            where, value = "item.run_id = ? AND item.batch_id IS NULL", run_id
         with self.connection() as db:
             rows = db.execute(
-                _ITEMS_WITH_STATE
-                + " AND item.run_id = ? ORDER BY item.created_at, item.library_id",
-                (run_id,),
+                _ITEMS_WITH_STATE + f" AND {where} ORDER BY item.created_at, item.library_id",
+                (value,),
             ).fetchall()
             variants = db.execute(
                 "SELECT item_media.library_id, item_media.sha256, variant, digest FROM item_media"
-                " JOIN item USING (library_id, sha256) WHERE item.run_id = ?",
-                (run_id,),
+                f" JOIN item USING (library_id, sha256) WHERE {where}",
+                (value,),
             ).fetchall()
         names = {"thumb_320": "thumb", "preview_1080": "preview", "mobile_video": "video"}
         available: dict[tuple[str, str], list[str]] = {}
@@ -312,6 +366,7 @@ class Store:
                     "created_at": row["created_at"],
                     "duration_s": row["duration_s"],
                     "display": json.loads(row["display"]),
+                    "batch": json.loads(row["batch"]) if row["batch_id"] else None,
                     "variants": sorted(available.get((row["library_id"], row["sha256"]), [])),
                     "state": state,
                     "decision": decision,
@@ -452,7 +507,7 @@ class Store:
             self.contract.validate("outbox_record", record)
         except ContractError as error:
             raise GatewayError(422, "invalid_record") from error
-        if action_request["action"] not in SLICE_ONE_ACTIONS:
+        if action_request["action"] not in PHONE_ACTIONS:
             raise GatewayError(422, "invalid_record")
         key = (target["library_id"], target["sha256"])
         with self.write() as db:
@@ -912,6 +967,12 @@ def _migrate(db: sqlite3.Connection) -> None:
     if "created_at" not in columns:
         db.execute("ALTER TABLE outbox ADD COLUMN created_at TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS outbox_device_kind ON outbox (device_id, kind, seq)")
+    # The batch an item was queued in (N5), for grouping the inbox; items published before it have none.
+    item_columns = {row[1] for row in db.execute("PRAGMA table_info(item)")}
+    for column in ("batch_id", "batch"):
+        if column not in item_columns:
+            db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")
+    db.execute("CREATE INDEX IF NOT EXISTS item_batch ON item (batch_id, created_at, library_id)")
 
 
 def _action_view(row: sqlite3.Row) -> dict[str, Any]:

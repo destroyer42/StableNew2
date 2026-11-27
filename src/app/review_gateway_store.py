@@ -24,6 +24,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from src.app.review_gateway_protocol import ActionInput
 from src.app.site_phone_credentials import protect_for_current_user, unprotect_for_current_user
 from src.utils.atomic_io import atomic_write_bytes
 
@@ -200,9 +201,17 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS action_prepares (
     record_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, library_id TEXT NOT NULL, sha256 TEXT NOT NULL,
     action TEXT NOT NULL, seeds INTEGER, revision TEXT NOT NULL, at TEXT NOT NULL,
-    admitted_by TEXT, receipt TEXT
+    admitted_by TEXT, receipt TEXT, options TEXT
 );
 """
+
+
+def _add_prepare_options(db: sqlite3.Connection) -> None:
+    """RG-140 slice 2: a prepare remembers its choice and text; a ledger from slice 1 gains the column."""
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(action_prepares)")}
+    if "options" not in columns:
+        db.execute("ALTER TABLE action_prepares ADD COLUMN options TEXT")
 
 
 @dataclass(frozen=True)
@@ -273,6 +282,7 @@ class SyncLedger:
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("PRAGMA synchronous=FULL")
             db.executescript(_LEDGER_SCHEMA)
+            _add_prepare_options(db)
             _grant_queue_once(db)
             self._db = db
         return self._db
@@ -429,16 +439,36 @@ class SyncLedger:
         seeds: int | None,
         revision: str,
         at: str,
+        *,
+        options: Mapping[str, str] | None = None,
     ) -> None:
         with self._transaction() as db:
             db.execute(
-                "INSERT OR IGNORE INTO action_prepares VALUES (?,?,?,?,?,?,?,?,NULL,NULL)",
-                (record_id, device_id, library_id, sha256, action, seeds, revision, at),
+                "INSERT OR IGNORE INTO action_prepares (record_id, device_id, library_id, sha256,"
+                " action, seeds, revision, at, options) VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    record_id,
+                    device_id,
+                    library_id,
+                    sha256,
+                    action,
+                    seeds,
+                    revision,
+                    at,
+                    json.dumps(dict(options)) if options else None,
+                ),
             )
 
     def prepared(self, record_id: str) -> sqlite3.Row | None:
         rows = self._read("SELECT * FROM action_prepares WHERE record_id = ?", (record_id,))
         return rows[0] if rows else None
+
+    @staticmethod
+    def prepare_options(row: sqlite3.Row) -> ActionInput:
+        """The choice and text a prepare was made with (none for slice-1 prepares)."""
+
+        stored = json.loads(row["options"]) if row["options"] else {}
+        return ActionInput(str(stored.get("choice") or ""), str(stored.get("text") or ""))
 
     def mark_prepare_admitted(
         self, record_id: str, confirm_id: str, receipt: Mapping[str, Any]

@@ -1,4 +1,9 @@
-"""Phone actions from the review gateway (RG-140 slice 1): prepare a summary, then admit what it showed.
+"""Phone actions from the review gateway (RG-140 slices 1 and 2): prepare a summary, then admit what it showed.
+
+Slice 1: fix face, fix hands, fix both, more like this. Slice 2: run through another model, change the aspect ratio,
+a small prompt tweak and Make Video; "more like this" also re-runs a whole multi-stage recipe with new seeds. A picker
+action (another model, aspect ratio) first answers with the PC's options (``receipt.choices``) and is prepared again
+with one of them. The clip actions (re-run, continue) stay reserved for V1's shared functions (N8).
 
 An ``action_request`` outbox record is untrusted input. ``RecordApplier`` has already checked its closed lists, the
 device and its ``queue`` scope, and resolved the target by library id through this PC's publish ledger with the file
@@ -26,7 +31,7 @@ import json
 import logging
 import secrets
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path, PureWindowsPath
 from typing import Any, Protocol
@@ -34,12 +39,15 @@ from typing import Any, Protocol
 from src.app.review_gateway_protocol import (
     ACTION_UNAVAILABLE,
     ADMISSION_REFUSED,
+    CHOICE_ACTIONS,
     DETAILS,
     INVALID_RECORD,
     MAX_SEEDS,
+    PHONE_ACTIONS,
     PREPARE_REQUIRED,
-    SLICE_ONE_ACTIONS,
     SUMMARY_CHANGED,
+    ActionChoices,
+    ActionInput,
     ActionSummary,
     OutboxRecord,
     SummaryWarning,
@@ -63,6 +71,10 @@ _TITLES = {
     "fix_hands": "Fix hands",
     "fix_both": "Fix face and hands",
     "more_like_this": "More like this",
+    "another_model": "Run through another model",
+    "aspect_ratio": "Change the aspect ratio",
+    "prompt_tweak": "Tweak the prompt",
+    "make_video": "Make a video",
 }
 _PASSES = {"fix_face": (True, False), "fix_hands": (False, True), "fix_both": (True, True)}
 #: Compiler and admission refusals that keep their own name on the phone; anything else is ``compile_failed``.
@@ -85,6 +97,8 @@ class CompiledAction:
     reprocess: bool
     kind: str
     require_current: Callable[[], None] = lambda: None
+    #: Slice 2: for a ``CHOICE_ACTIONS`` action, the options with the one compiled selected, so the phone can change it.
+    choices: ActionChoices | None = None
 
 
 class ActionRefused(Exception):
@@ -97,8 +111,15 @@ class ActionRefused(Exception):
 
 class ActionCompiler(Protocol):
     def compile(
-        self, action: str, path: Path, digest: str, seeds: tuple[int, ...]
+        self,
+        action: str,
+        path: Path,
+        digest: str,
+        seeds: tuple[int, ...],
+        options: ActionInput | None = None,
     ) -> CompiledAction: ...
+
+    def choices(self, action: str, path: Path, digest: str) -> ActionChoices: ...
 
 
 #: ``(owner, receipt id, compiled action, warnings shown, runs next) -> admitted job ids``.
@@ -167,8 +188,8 @@ class GatewayActions:
     def handle(self, record: OutboxRecord, path: Path) -> ActionOutcome:
         request = record.action_request
         assert request is not None
-        if request.action not in SLICE_ONE_ACTIONS:
-            return _refused(INVALID_RECORD)  # reserved for a later slice
+        if request.action not in PHONE_ACTIONS:
+            return _refused(INVALID_RECORD)  # reserved for a later slice (N8's clip actions)
         now = self._clock()
         if request.step == "prepare":
             return self._prepare(record, path, now)
@@ -177,14 +198,15 @@ class GatewayActions:
     # -- steps -----------------------------------------------------------------------------------------------------
 
     def _seed_count(self, action: str, requested: int | None) -> int:
-        return (requested or DEFAULT_SEEDS) if action == "more_like_this" else 0
+        if action == "more_like_this":
+            return requested or DEFAULT_SEEDS
+        return 1 if action == "make_video" else 0  # one clip, with a fresh seed at each step
 
-    def _compile(
-        self, action: str, path: Path, digest: str, count: int, now: datetime
-    ) -> tuple[CompiledAction, ActionSummary]:
-        seeds = tuple(self._seeds() for _ in range(count))
+    def _guarded(self, compile_step: Callable[[], Any]) -> Any:
+        """Run a compiler call; every failure becomes a closed ``ActionRefused`` code, never its text."""
+
         try:
-            compiled = self._compiler.compile(action, path, digest, seeds)
+            return compile_step()
         except ActionRefused:
             raise
         except (SiteOutputError, ValueError, OSError) as error:
@@ -192,6 +214,20 @@ class GatewayActions:
         except Exception as error:  # noqa: BLE001 - one bad record must never stall the outbox behind it
             log.error("A phone action could not be compiled (%s)", type(error).__name__)
             raise ActionRefused("compile_failed") from error
+
+    def _compile(
+        self,
+        action: str,
+        path: Path,
+        digest: str,
+        count: int,
+        options: ActionInput,
+        now: datetime,
+    ) -> tuple[CompiledAction, ActionSummary]:
+        seeds = tuple(self._seeds() for _ in range(count))
+        compiled: CompiledAction = self._guarded(
+            lambda: self._compiler.compile(action, path, digest, seeds, options)
+        )
         # The compilers make one job per fix and one per seed; anything else is a compiler fault, not a request.
         if len(compiled.records) != max(count, 1):
             raise ActionRefused("compile_failed")
@@ -203,14 +239,29 @@ class GatewayActions:
         count = self._seed_count(request.action, request.count)
         if count > MAX_SEEDS:  # already refused by the codec; an input bound, not a quota
             return _refused(INVALID_RECORD)
+        options = ActionInput(request.choice, request.text.strip())
+        if request.action == "prompt_tweak" and not options.text:
+            return _refused(ACTION_UNAVAILABLE, detail="prompt_required")
+        if request.action in CHOICE_ACTIONS and not options.choice:
+            # Slice 2: first the PC's options; the phone prepares again with one of them. Nothing to confirm yet.
+            try:
+                listed: ActionChoices = self._guarded(
+                    lambda: self._compiler.choices(request.action, path, record.target.sha256)
+                )
+                return ActionOutcome("applied", receipt={"choices": listed.payload()})
+            except ActionRefused as refusal:
+                return _refused(ACTION_UNAVAILABLE, detail=refusal.detail)
         try:
-            _compiled, summary = self._compile(
-                request.action, path, record.target.sha256, count, now
+            compiled, summary = self._compile(
+                request.action, path, record.target.sha256, count, options, now
             )
         except ActionRefused as refusal:
             return _refused(ACTION_UNAVAILABLE, detail=refusal.detail)
-        self._remember(record, request.action, count, summary, now)
-        return ActionOutcome("applied", receipt={"action_summary": summary.payload()})
+        self._remember(record, request.action, count, options, summary, now)
+        receipt: dict[str, Any] = {"action_summary": summary.payload()}
+        if compiled.choices is not None:
+            receipt["choices"] = replace(compiled.choices, selected=options.choice).payload()
+        return ActionOutcome("applied", receipt=receipt)
 
     def _confirm(self, record: OutboxRecord, path: Path, now: datetime) -> ActionOutcome:
         request = record.action_request
@@ -230,16 +281,17 @@ class GatewayActions:
             return ActionOutcome("duplicate", receipt=json.loads(prepared["receipt"] or "{}"))
         if prepared["revision"] != request.summary_revision:
             return _refused(SUMMARY_CHANGED)
-        count = int(prepared["seeds"] or 0)
+        count = self._seed_count(request.action, int(prepared["seeds"] or 0) or None)
+        options = self._ledger.prepare_options(prepared)
         try:
             compiled, summary = self._compile(
-                request.action, path, record.target.sha256, count, now
+                request.action, path, record.target.sha256, count, options, now
             )
         except ActionRefused as refusal:
             return _refused(ACTION_UNAVAILABLE, detail=refusal.detail)
         if summary.revision != prepared["revision"]:
             # The phone shows this one instead; confirming this record admits it (it acts as a prepare).
-            self._remember(record, request.action, count, summary, now)
+            self._remember(record, request.action, count, options, summary, now)
             return _refused(SUMMARY_CHANGED, action_summary=summary.payload())
         receipt_id = str(prepared["record_id"]).replace("-", "")
         try:
@@ -266,7 +318,13 @@ class GatewayActions:
     # -- summary ---------------------------------------------------------------------------------------------------
 
     def _remember(
-        self, record: OutboxRecord, action: str, count: int, summary: ActionSummary, now: datetime
+        self,
+        record: OutboxRecord,
+        action: str,
+        count: int,
+        options: ActionInput,
+        summary: ActionSummary,
+        now: datetime,
     ) -> None:
         self._ledger.remember_prepare(
             record.record_id,
@@ -274,9 +332,12 @@ class GatewayActions:
             record.target.library_id,
             record.target.sha256,
             action,
-            count or None,
+            count if action == "more_like_this" else None,
             summary.revision,
             utc_text(now),
+            options={"choice": options.choice, "text": options.text}
+            if options != ActionInput()
+            else None,
         )
 
     def _summary(self, action: str, compiled: CompiledAction, now: datetime) -> ActionSummary:
@@ -318,23 +379,107 @@ _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 _HASH_LIMIT = 256 * 1024 * 1024
 
 
-class AppActionCompiler:
-    """Slice-1 compiles on the running application, through the existing phone Preview and follow-up services."""
+#: ``aspect_ratio`` choices: id, label, width and height of the ratio. Outpainting only adds space around the image.
+ASPECT_RATIOS = (
+    ("1x1", "Square 1:1", 1, 1),
+    ("4x5", "Portrait 4:5", 4, 5),
+    ("2x3", "Portrait 2:3", 2, 3),
+    ("9x16", "Tall 9:16", 9, 16),
+    ("5x4", "Landscape 5:4", 5, 4),
+    ("3x2", "Landscape 3:2", 3, 2),
+    ("16x9", "Wide 16:9", 16, 9),
+)
 
-    def __init__(self, host: Any, repository: Any, output_root: Path) -> None:
+
+def model_choice_id(name: str) -> str:
+    """A checkpoint's choice id: stable for the name, and never the name or a path itself."""
+
+    return hashlib.sha256(name.encode("utf-8")).hexdigest()[:16]
+
+
+def _same_model(left: str, right: str) -> bool:
+    def key(value: str) -> str:
+        return PureWindowsPath(value.split(" [", 1)[0].strip()).name.casefold()
+
+    return bool(left) and key(left) == key(right)
+
+
+GatewayVideo = Callable[[Path, Path, str, str, int], tuple[Any, Any]]
+
+
+def _default_video(root: Path, path: Path, digest: str, prompt: str, seed: int) -> tuple[Any, Any]:
+    from src.app.site_phone_video import gateway_make_video
+
+    return gateway_make_video(root, path, digest, prompt, seed)
+
+
+class AppActionCompiler:
+    """Phone action compiles on the running application, through the existing Preview, follow-up and video services.
+
+    Slice 1: the ADetailer fixes and "more like this". Slice 2: another model and a prompt tweak (the Review img2img
+    re-work), an aspect ratio (Review's canvas extension) and Make Video (the desktop's Make Video hand-off), and
+    "more like this" of a whole multi-stage recipe (a reseeded Replay).
+    """
+
+    def __init__(
+        self,
+        host: Any,
+        repository: Any,
+        output_root: Path,
+        *,
+        video: GatewayVideo = _default_video,
+    ) -> None:
         self._host = host
         self._repository = repository
         self._root = output_root
+        self._video = video
 
     def compile(
-        self, action: str, path: Path, digest: str, seeds: tuple[int, ...]
+        self,
+        action: str,
+        path: Path,
+        digest: str,
+        seeds: tuple[int, ...],
+        options: ActionInput | None = None,
     ) -> CompiledAction:
+        options = options or ActionInput()
         if path.suffix.lower() not in _IMAGE_SUFFIXES:
             raise ActionRefused("not_an_image")
         if action in _PASSES:
             return self._fix(action, path, digest)
         if action == "more_like_this":
             return self._more(path, digest, seeds)
+        if action == "another_model":
+            return self._another_model(path, digest, options.choice)
+        if action == "aspect_ratio":
+            return self._aspect_ratio(path, digest, options.choice)
+        if action == "prompt_tweak":
+            return self._prompt_tweak(path, digest, options.text)
+        if action == "make_video":
+            return self._make_video(path, digest, seeds, options.text)
+        raise ActionRefused("compile_failed")
+
+    def choices(self, action: str, path: Path, digest: str) -> ActionChoices:
+        """What the phone may pick for ``another_model`` (this PC's checkpoints) or ``aspect_ratio``."""
+
+        if path.suffix.lower() not in _IMAGE_SUFFIXES:
+            raise ActionRefused("not_an_image")
+        if action == "another_model":
+            return self._models(path)[0]
+        if action == "aspect_ratio":
+            from PIL import Image, ImageOps
+
+            from src.pipeline.outpaint_canvas import has_aspect
+
+            with Image.open(path) as image:
+                size = ImageOps.exif_transpose(image).size
+            return ActionChoices(
+                action,
+                tuple(
+                    (key, label, has_aspect(size, (width, height)))
+                    for key, label, width, height in ASPECT_RATIOS
+                ),
+            )
         raise ActionRefused("compile_failed")
 
     def _fix(self, action: str, path: Path, digest: str) -> CompiledAction:
@@ -376,30 +521,58 @@ class AppActionCompiler:
         )
 
     def _more(self, path: Path, digest: str, seeds: tuple[int, ...]) -> CompiledAction:
+        """New seeds for this image's recipe.
+
+        A single-stage txt2img recipe goes through the History variation compiler, as in slice 1. Anything else whose
+        whole recipe can be re-run (a multi-stage chain, an N5 batch member) is a Replay with a new seed per job
+        (``reseed_refusals``): every frozen value is kept, the stages after txt2img included.
+        """
+
         from src.app.site_media_files import open_scoped
-        from src.app.site_phone_followup import verified_history_source
+        from src.app.site_phone_followup import verified_history_source, verified_recipe_source
         from src.image_backends.model_policy_warnings import shown_model_warnings
         from src.pipeline.history_variation_compiler import (
             HistoryVariationDraft,
             HistoryVariationRefused,
             compile_history_variation,
         )
+        from src.pipeline.replay_njr_compiler import (
+            ReplayIntent,
+            compile_replay_intent,
+            reseed_refusals,
+        )
 
         if not seeds:
             raise ActionRefused("compile_failed")
 
-        def source() -> tuple[NormalizedJobRecord, str]:
+        def source() -> tuple[NormalizedJobRecord, str, bool]:
             with open_scoped(self._root, path) as stream:
                 raw = stream.read(_HASH_LIMIT + 1)
             if len(raw) > _HASH_LIMIT or hashlib.sha256(raw).hexdigest() != digest:
                 raise ActionRefused("source_changed")
-            return verified_history_source(self._repository, path, raw)
+            try:
+                return (*verified_history_source(self._repository, path, raw), True)
+            except SiteOutputError:
+                return (*verified_recipe_source(self._repository, path, raw), False)
 
-        record, snapshot = source()
+        record, snapshot, variable = source()
+        artifact = f"sha256:{digest}"
         try:
-            draft = HistoryVariationDraft.from_source(record, parent_artifact_id=f"sha256:{digest}")
-            jobs = tuple(compile_history_variation(draft.with_edits(seed=seed)) for seed in seeds)
-        except HistoryVariationRefused as error:
+            if variable:
+                draft = HistoryVariationDraft.from_source(record, parent_artifact_id=artifact)
+                jobs = tuple(
+                    compile_history_variation(draft.with_edits(seed=seed)) for seed in seeds
+                )
+            elif reseed_refusals(record):
+                raise ActionRefused("recipe_not_variable")
+            else:
+                jobs = tuple(
+                    compile_replay_intent(
+                        ReplayIntent(record, parent_artifact_id=artifact, seed=seed)
+                    )
+                    for seed in seeds
+                )
+        except (HistoryVariationRefused, ValueError, RuntimeError) as error:
             raise ActionRefused("recipe_not_variable") from error
 
         def require_current() -> None:
@@ -407,16 +580,182 @@ class AppActionCompiler:
                 raise ActionRefused("source_changed")
 
         count = len(jobs)
+        plural = "s" if count != 1 else ""
+        chain = " → ".join(record.stage_chain_labels)
+        how = (
+            ("Same prompt, checkpoint and settings as this image.",)
+            if variable
+            else (
+                f"Re-runs this image's whole recipe ({chain}) with only the seed changed.",
+                "Same prompt, checkpoint and settings in every stage.",
+            )
+        )
         return CompiledAction(
             jobs,
             (
-                f"{count} new image{'s' if count != 1 else ''}, each with a new seed.",
-                "Same prompt, checkpoint and settings as this image.",
+                f"{count} new image{plural}, each with a new seed.",
+                *how,
                 f"Checkpoint {model_name(record)}.",
             ),
             tuple(shown_model_warnings(record)),
-            ("more_like_this", record.job_id, snapshot, str(count)),
+            (
+                "more_like_this",
+                record.job_id,
+                snapshot,
+                str(count),
+                "variation" if variable else "recipe",
+            ),
             reprocess=False,
             kind="followup",
             require_current=require_current,
+        )
+
+    # -- slice 2 -------------------------------------------------------------------------------------------------------
+
+    def _rework(
+        self,
+        action: str,
+        draft: Any,
+        lines: tuple[str, ...],
+        identity: tuple[str, ...],
+        choices: ActionChoices | None = None,
+    ) -> CompiledAction:
+        from src.image_backends.model_policy_warnings import shown_model_warnings
+
+        [job] = draft.records  # one job per re-work
+        return CompiledAction(
+            tuple(draft.records),
+            (
+                *lines,
+                "The original stays as it is; the result is a new image in Reprocess.",
+                f"Checkpoint {model_name(job)}.",
+            ),
+            tuple(shown_model_warnings(job)),
+            (action, str(job.base_model or ""), ",".join(job.stage_chain_labels), *identity),
+            reprocess=True,
+            kind="rework",
+            require_current=draft.require_current,
+            choices=choices,
+        )
+
+    @staticmethod
+    def _denoise(job: NormalizedJobRecord) -> str:
+        block = job.config.get("img2img")
+        value = block.get("denoising_strength") if isinstance(block, Mapping) else None
+        return f" at denoise {value:g}" if isinstance(value, int | float) else ""
+
+    def _models(self, path: Path) -> tuple[ActionChoices, dict[str, str], str]:
+        """This PC's checkpoints as choices, by choice id, and the image's own checkpoint."""
+
+        models = self._host.gateway_models()
+        if not models:
+            raise ActionRefused("model_unavailable")
+        current = str(self._host.image_baseline(path).get("model") or "")
+        ordered = sorted(models, key=str.casefold)
+        listed = ActionChoices(
+            "another_model",
+            tuple(
+                (
+                    model_choice_id(name),
+                    PureWindowsPath(name).name or name,
+                    _same_model(current, name),
+                )
+                for name in ordered
+            ),
+        )
+        return listed, {model_choice_id(name): name for name in ordered}, current
+
+    def _another_model(self, path: Path, digest: str, choice: str) -> CompiledAction:
+        listed, by_id, current = self._models(path)
+        name = by_id.get(choice)
+        if name is None:
+            raise ActionRefused("choice_unavailable")
+        if _same_model(current, name):
+            raise ActionRefused("no_change")
+        draft = self._host.compile_gateway_img2img(path, digest, model=name)
+        [job] = draft.records
+        return self._rework(
+            "another_model",
+            draft,
+            (f"img2img of this exact image through {model_name(job)}{self._denoise(job)}.",),
+            (choice, digest),
+            listed,
+        )
+
+    def _aspect_ratio(self, path: Path, digest: str, choice: str) -> CompiledAction:
+        listed = self.choices("aspect_ratio", path, digest)
+        ratio = next((entry for entry in ASPECT_RATIOS if entry[0] == choice), None)
+        if ratio is None:
+            raise ActionRefused("choice_unavailable")
+        key, label, width, height = ratio
+        draft = self._host.compile_gateway_outpaint(path, digest, ratio=(width, height))
+        [job] = draft.records
+        block = job.config.get("img2img")
+        stage = block if isinstance(block, Mapping) else {}
+        size = (
+            f" ({stage['width']} × {stage['height']})"
+            if isinstance(stage.get("width"), int) and isinstance(stage.get("height"), int)
+            else ""
+        )
+        return self._rework(
+            "aspect_ratio",
+            draft,
+            (
+                f"Extends the canvas to {label}{size}: every original pixel is kept and only the new space is "
+                "generated.",
+                "The new space follows the image's own prompt.",
+            ),
+            (key, size, digest),
+            listed,
+        )
+
+    def _prompt_tweak(self, path: Path, digest: str, text: str) -> CompiledAction:
+        words = " ".join(text.split())
+        if not words:
+            raise ActionRefused("prompt_required")
+        draft = self._host.compile_gateway_img2img(path, digest, prompt_add=words)
+        [job] = draft.records
+        return self._rework(
+            "prompt_tweak",
+            draft,
+            (
+                f"Adds to the prompt: “{words}”.",
+                f"img2img of this exact image{self._denoise(job)}, same checkpoint.",
+            ),
+            (words, digest),
+        )
+
+    def _make_video(
+        self, path: Path, digest: str, seeds: tuple[int, ...], text: str
+    ) -> CompiledAction:
+        if len(seeds) != 1:
+            raise ActionRefused("compile_failed")
+        words = " ".join(text.split())
+        prompt = words or " ".join(str(self._host.image_baseline(path).get("prompt") or "").split())
+        if not prompt:
+            raise ActionRefused("prompt_required")
+        from src.video.workflow_frame_count import frame_count_policy
+
+        spec, draft = self._video(self._root, path, digest, prompt, seeds[0])
+
+        frames = frame_count_policy(spec) or {}
+        count, fps = frames.get("default"), frames.get("fps")
+        length = (
+            f", about {count / fps:.1f} s at {fps:g} fps"
+            if isinstance(count, int) and isinstance(fps, int | float) and fps
+            else ""
+        )
+        return CompiledAction(
+            tuple(draft.records),
+            (
+                f"{spec.display_name}: a {count}-frame clip from this image{length}.",
+                f"Motion prompt: “{words}”." if words else "Motion prompt: the image's own prompt.",
+                "Negative prompt: the workflow's default.",
+                "The clip comes back to the inbox when it is published.",
+            ),
+            (),
+            ("make_video", *spec.registry_key, str(count), prompt, digest),
+            reprocess=False,
+            kind="video",
+            require_current=draft.require_current,
         )
