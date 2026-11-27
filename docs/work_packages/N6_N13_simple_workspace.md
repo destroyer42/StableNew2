@@ -107,7 +107,7 @@ These counts come from read-only `grep` over `StableNew-main/data/learning`. Not
   Generate in Simple mode and on Pipeline in Advanced mode. That is today's rule with a mode-specific fallback.
 - **Advanced.** It shows exactly today's groups, destinations, labels and order. The one addition is Generate, listed
   first under Create, so switching modes never moves the operator off the tab they are on.
-- **The switch.** It is a checkbutton, **Advanced**, at the right end of the navigation bar. It is persisted as
+- **The switch.** It is a checkbutton, **Advanced**, right after the group buttons on the navigation bar, so a narrow window never clips it. It is persisted as
   `workspace.mode` (`simple` or `advanced`) in the UI state file. It is written when toggled and again on close. A
   missing or unknown value means Simple.
 - **Nothing blocked.** Hidden tabs are still built, registered and selectable. A handoff (Make Video, Send to Movie

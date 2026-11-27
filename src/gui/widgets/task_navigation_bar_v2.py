@@ -154,16 +154,6 @@ class TaskNavigationBar(ttk.Frame):
         self._show_group_destinations(self._active_group_id)
 
     def _build(self) -> None:
-        # N6: the Simple / Advanced switch sits at the right end of the bar.
-        self.advanced_check = ttk.Checkbutton(
-            self,
-            text=SWITCH_LABEL,
-            variable=self.advanced_var,
-            command=self._on_advanced_toggled,
-            style="Dark.TCheckbutton",
-        )
-        self.advanced_check.pack(side=tk.RIGHT, padx=(0, 12), pady=4)
-        attach_tooltip(self.advanced_check, SWITCH_TOOLTIP)
         groups = ttk.Frame(self)
         groups.pack(side=tk.LEFT, padx=(8, 0), pady=4)
         for group in TASK_GROUPS:
@@ -178,6 +168,17 @@ class TaskNavigationBar(ttk.Frame):
             button.pack(side=tk.LEFT, padx=(0, 2))
             self._group_buttons[group.group_id] = button
         self._bind_arrow_keys(list(self._group_buttons.values()))
+
+        # N6: the Simple / Advanced switch follows the groups, so it stays on screen in a narrow window.
+        self.advanced_check = ttk.Checkbutton(
+            self,
+            text=SWITCH_LABEL,
+            variable=self.advanced_var,
+            command=self._on_advanced_toggled,
+            style="Dark.TCheckbutton",
+        )
+        self.advanced_check.pack(side=tk.LEFT, padx=(10, 0), pady=4)
+        attach_tooltip(self.advanced_check, SWITCH_TOOLTIP)
 
         self._divider = ttk.Separator(self, orient=tk.VERTICAL)
         self._divider.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=6)
