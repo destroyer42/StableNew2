@@ -342,3 +342,38 @@ def build_live_update_service(
         repo_root=root,
         pid=os.getpid(),
     )
+
+
+def build_remote_update(app: Any, service: Any, *, spawn: Callable[..., None] | None = None) -> Any:
+    """Compose the phone side of a live update (LAUNCH-UPDATE-2) around a ``LiveUpdateService``; nothing starts here.
+
+    The status probe reads the same checkout as the service, under the service's Git lock. The queue view is counts
+    only: idle, running or paused, and how many jobs wait.
+    """
+
+    from src.app import live_update as lu
+    from src.app.live_update_remote import CheckoutProbe, RemoteUpdate
+    from src.review.archive import job_queue_of
+
+    queue = job_queue_of(app)
+
+    def queue_state() -> tuple[str, int]:
+        if queue is None:
+            return "unknown", 0
+        queued = len(queue.list_jobs(status_filter=JobStatus.QUEUED))
+        runner = getattr(getattr(app, "job_service", None), "runner", None)
+        running = bool(getattr(runner, "current_job_id", None)) or bool(
+            queue.list_jobs(status_filter=JobStatus.RUNNING)
+        )
+        if running:
+            return "running", queued
+        paused = getattr(queue, "is_paused", None)
+        return ("paused" if callable(paused) and paused() else "idle"), queued
+
+    if spawn is None:
+        probe = CheckoutProbe(lu.subprocess_git(service.repo_root), git_lock=service.git_lock)
+        return RemoteUpdate(service, checkout=probe, queue_state=queue_state)
+    probe = CheckoutProbe(
+        lu.subprocess_git(service.repo_root), git_lock=service.git_lock, spawn=spawn
+    )
+    return RemoteUpdate(service, checkout=probe, queue_state=queue_state, spawn=spawn)
