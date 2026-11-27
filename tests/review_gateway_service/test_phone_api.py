@@ -60,6 +60,7 @@ def test_the_inbox_groups_items_by_run_newest_first_with_counts(rig) -> None:
         "pending": 1,
         "applied": 0,
         "refused": 1,
+        "rework": 0,
     }
     assert {cover["library_id"] for cover in runs[1]["covers"]} <= {
         i["library_id"] for i in items(rig)

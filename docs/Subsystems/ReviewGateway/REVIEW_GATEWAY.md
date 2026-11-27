@@ -95,8 +95,8 @@ Rules:
     `action_summary`, `job_ids` and `detail` (section 7).
 13. `features` in the health reply lists the optional parts of v1 this gateway accepts. The PC sends an optional part
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
-    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1);
-    `item_withdraw`, the withdrawals route (section 3.0).
+    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch`
+    (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`, the withdrawals route (section 3.0).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -174,13 +174,43 @@ A packs × models batch (N5) writes many run folders, but the owner queued it as
   new to an older gateway. Items published before both sides were updated are not published again, so they keep
   their run folder groups.
 
+### 3.2 Sent for rework, then compare (PHONE-FAST)
+
+- **Rework** actions are those with one result to compare: Fix face, Fix hands, Fix both, Another model and Aspect
+  ratio. More like this, Tweak prompt and Make video do not change the original.
+- A queued rework (a `confirm`, or a one-step `queue`, that the PC has not refused and the phone has not cancelled)
+  gives an undecided original the state `rework`: it counts as reviewed and can still be decided from the grid. A
+  refusal returns it. The state is derived from the outbox and is not a decision.
+- **PC.** Every admitted rework job is recorded with its original (`rework_jobs`). When an image of such a job is
+  published, the lineage is kept (`rework_result`) and the manifest names `parent`, only to a gateway that lists
+  `item_parent`.
+- **Gateway.** A result sits beside its original: it takes the original's batch, or its run folder group when the
+  original has no batch (so a kept result goes to the original's Immich album).
+- **Phone.** While the original is on the gateway and not deleted, the result is shown beside it. Tap one to see it
+  alone and tap or swipe to flip, then **Keep original** or **Keep rework**. The pick is two ordinary decisions: keep
+  one, delete (archive) the other. The kept one keeps its Favorite mark and tags.
+
+### 3.3 Triage and status (PHONE-FAST)
+
+- **One stream.** "Review all" goes through everything still to review, across runs and batches: the group with the
+  newest activity first, oldest first within it (`GET /api/runs/all`).
+- **Undo.** The last decision (or a compare's pair) is held on the phone for 8 seconds and can be undone. The next
+  decision, hiding or closing the page, or the time running out sends it. The gateway has no "undecide".
+- **Run grid.** "Keep the rest" keeps what is left to review. "Delete this run" asks first, then deletes everything not
+  kept; items sent for rework stay.
+- **Status.** `GET /api/status` gives every review phone the PC's last reported queue (state and number queued, with
+  when it arrived) and the cache size. A PC reports it only where live update is available. This is the one status
+  route.
+
 ## 4. Retention (D4)
 
 Hourly, and by `review-gateway-admin purge`. An item is purged only when it has no unanswered record and its latest
 record was answered: 48 hours after an applied discard, 14 days after anything else (including a refusal). A kept
-item is purged only after Immich has it: nothing is purged while an upload is owed or failing. Undecided items are never
-purged, so the cache grows until they are decided (and until Immich is configured and reachable). An unanswered
-action request also keeps the item's media. Purging removes cached media only (shared files stay
+item is purged only after Immich has it: nothing is purged while an upload is owed or failing. An item nobody has decided is purged 30 days after
+it arrived (`undecided_days`, 0 for never), counted again from any later action request, and never while a request
+waits for the PC; the PC's file is not touched. A kept item waits for Immich to be configured and reachable. An
+unanswered action request also keeps the item's media. A cache over `cache_warn_gib` (20 by default, 0 for never) is
+reported to the phone and the log; nothing is refused or removed for it. Purging removes cached media only (shared files stay
 while another item needs them); the item row and records remain, so republishing does not bring it back. Abandoned
 partial uploads and unreferenced files older than a day are swept.
 

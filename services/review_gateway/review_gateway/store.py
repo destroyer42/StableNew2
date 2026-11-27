@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import sqlite3
 import uuid
@@ -26,6 +27,7 @@ from .errors import GatewayError
 from .media import MediaStore, MediaWriter
 
 Clock = Callable[[], datetime]
+_LOG = logging.getLogger("review_gateway")
 
 OFFER_LIFETIME = timedelta(minutes=5)
 DEFAULT_ATTEMPTS = 5
@@ -36,6 +38,8 @@ STALE_FILE_S = 24 * 3600
 _SEEN_RESOLUTION = timedelta(hours=1)
 #: The phone inbox's group key for a named batch (N5); every other group is an output run folder name.
 BATCH_GROUP = "batch:"
+#: PHONE-FAST: not a group but every item still to be reviewed, across all groups (no run folder name looks like it).
+STREAM = "all"
 #: RG-140 slices 1 and 2. The schema reserves the others (N8's clip actions); the PC refuses anything it does not
 #: implement, so an older PC answers a slice-2 request with ``invalid_record``.
 PHONE_ACTIONS = frozenset(
@@ -56,6 +60,10 @@ PHONE_ACTIONS = frozenset(
 MAX_PENDING_ACTIONS = 1000
 #: RG-140 slice 1. The schema reserves the others for later slices; the PC refuses anything it does not implement.
 SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
+#: PHONE-FAST: actions that make one replacement of an image (the PC's ``REWORK_ACTIONS``). Once one is queued the
+#: original counts as reviewed until the owner compares the two.
+REWORK_ACTIONS = ("fix_face", "fix_hands", "fix_both", "another_model", "aspect_ratio")
+_VARIANT_NAMES = {"thumb_320": "thumb", "preview_1080": "preview", "mobile_video": "video"}
 #: LAUNCH-UPDATE-2: how many of its own update requests an admin phone is shown.
 ADMIN_HISTORY = 5
 
@@ -64,7 +72,7 @@ CREATE TABLE IF NOT EXISTS item (
     library_id TEXT NOT NULL, sha256 TEXT NOT NULL,
     run_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL, duration_s REAL,
     display TEXT NOT NULL, ready_at TEXT, purged_at TEXT, latest_record_id TEXT,
-    batch_id TEXT, batch TEXT,
+    batch_id TEXT, batch TEXT, parent_library_id TEXT, parent_sha256 TEXT,
     PRIMARY KEY (library_id, sha256)
 );
 CREATE INDEX IF NOT EXISTS item_run ON item (run_id, created_at, library_id);
@@ -152,8 +160,17 @@ def normalize_code(code: str) -> str:
 
 class Store:
     def __init__(
-        self, database: Path, media: MediaStore, contract: Contract, clock: Clock = utc_now
+        self,
+        database: Path,
+        media: MediaStore,
+        contract: Contract,
+        clock: Clock = utc_now,
+        *,
+        undecided_days: int = 30,
+        cache_warn_bytes: int = 20 * 1024**3,
     ) -> None:
+        self.undecided_days = undecided_days
+        self.cache_warn_bytes = cache_warn_bytes
         self.database = Path(database)
         self.database.parent.mkdir(parents=True, exist_ok=True)
         self.media = media
@@ -197,28 +214,49 @@ class Store:
         if "seed" in display:
             display["seed"] = str(int(display["seed"]))  # beyond JavaScript's exact integers
         batch = manifest.get("batch")
+        parent = manifest.get("parent") or {}
         with self.write() as db:
             row = db.execute(
-                "SELECT purged_at FROM item WHERE library_id = ? AND sha256 = ?", key
+                "SELECT purged_at, parent_library_id, parent_sha256 FROM item"
+                " WHERE library_id = ? AND sha256 = ?",
+                key,
             ).fetchone()
             if row is not None and row["purged_at"] is not None:
                 return "purged", []
+            run_id = manifest["run_id"]
+            batch_id = batch["batch_id"].lower() if batch else None
+            batch_text = json.dumps(batch) if batch else None
+            # A rework result sits beside its original: it joins the original's batch, or its run folder group.
+            origin = db.execute(
+                "SELECT run_id, batch_id, batch FROM item WHERE library_id = ? AND sha256 = ?",
+                (
+                    parent.get("library_id") or (row["parent_library_id"] if row else None),
+                    parent.get("sha256") or (row["parent_sha256"] if row else None),
+                ),
+            ).fetchone()
+            if origin is not None:
+                run_id, batch_id, batch_text = origin["run_id"], origin["batch_id"], origin["batch"]
             db.execute(
                 "INSERT INTO item (library_id, sha256, run_id, kind, created_at, duration_s, display,"
-                " batch_id, batch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " batch_id, batch, parent_library_id, parent_sha256)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT (library_id, sha256) DO UPDATE SET"
                 " run_id = excluded.run_id, kind = excluded.kind, created_at = excluded.created_at,"
                 " duration_s = excluded.duration_s, display = excluded.display,"
-                " batch_id = excluded.batch_id, batch = excluded.batch",
+                " batch_id = excluded.batch_id, batch = excluded.batch,"
+                " parent_library_id = COALESCE(excluded.parent_library_id, parent_library_id),"
+                " parent_sha256 = COALESCE(excluded.parent_sha256, parent_sha256)",
                 (
                     *key,
-                    manifest["run_id"],
+                    run_id,
                     manifest["kind"],
                     stamp(_instant(manifest["created_at"])),
                     manifest.get("duration_s"),
                     json.dumps(display),
-                    batch["batch_id"].lower() if batch else None,
-                    json.dumps(batch) if batch else None,
+                    batch_id,
+                    batch_text,
+                    parent.get("library_id"),
+                    parent.get("sha256"),
                 ),
             )
             db.execute("DELETE FROM item_media WHERE library_id = ? AND sha256 = ?", key)
@@ -339,6 +377,7 @@ class Store:
             rows = db.execute(
                 _ITEMS_WITH_STATE + " ORDER BY item.run_id DESC, item.created_at, item.library_id"
             ).fetchall()
+            reworked = _reworked(db)
         runs: dict[str, dict[str, Any]] = {}
         latest: dict[str, str] = {}
         for row in rows:
@@ -351,12 +390,12 @@ class Store:
                     "kind": "batch" if batch else "run",
                     "name": batch["name"] if batch else None,
                     **dict.fromkeys(("total", "undecided", "keep", "delete", "favorite"), 0),
-                    **dict.fromkeys(("pending", "applied", "refused"), 0),
+                    **dict.fromkeys(("pending", "applied", "refused", "rework"), 0),
                     "covers": [],
                 },
             )
             latest[group] = max(latest.get(group, ""), row["created_at"])
-            state, decision, _reason = _outcome(row)
+            state, decision, _reason = _item_state(row, reworked)
             run["total"] += 1
             run[state] += 1
             if decision is not None and state != "refused":
@@ -384,7 +423,9 @@ class Store:
 
     def run_items(self, run_id: str) -> list[dict[str, Any]]:
         batch_id = run_id.removeprefix(BATCH_GROUP)
-        if batch_id != run_id:
+        if run_id == STREAM:
+            where, value = "? = ''", ""
+        elif batch_id != run_id:
             where, value = "item.batch_id = ?", batch_id.lower()
         else:
             where, value = "item.run_id = ? AND item.batch_id IS NULL", run_id
@@ -398,15 +439,18 @@ class Store:
                 f" JOIN item USING (library_id, sha256) WHERE {where}",
                 (value,),
             ).fetchall()
-        names = {"thumb_320": "thumb", "preview_1080": "preview", "mobile_video": "video"}
-        available: dict[tuple[str, str], list[str]] = {}
-        for entry in variants:
-            if self.media.size(entry["digest"]) is not None:
-                key = (entry["library_id"], entry["sha256"])
-                available.setdefault(key, []).append(names.get(entry["variant"], "original"))
+            reworked = _reworked(db)
+            originals = {
+                (row["library_id"], row["sha256"]): self._original(
+                    db, row["parent_library_id"], row["parent_sha256"], reworked
+                )
+                for row in rows
+                if row["parent_library_id"]
+            }
+        available = self._available(variants)
         items = []
         for row in rows:
-            state, decision, reason = _outcome(row)
+            state, decision, reason = _item_state(row, reworked)
             items.append(
                 {
                     "library_id": row["library_id"],
@@ -420,9 +464,75 @@ class Store:
                     "state": state,
                     "decision": decision,
                     "reason_code": reason,
+                    # A rework result still to be judged is shown beside the original it was made from.
+                    "compare": originals.get((row["library_id"], row["sha256"]))
+                    if state in ("undecided", "refused")
+                    else None,
                 }
             )
+        if run_id == STREAM:
+            return _stream(items, rows)
         return items
+
+    def phone_status(self) -> dict[str, Any]:
+        """What every review phone shows: the PC's last reported queue and how large the cache is."""
+
+        with self.connection() as db:
+            status = db.execute(
+                "SELECT payload, received_at FROM pc_status WHERE id = 1"
+            ).fetchone()
+            size = _cached_bytes(db)
+        queue = json.loads(status["payload"])["queue"] if status else None
+        return {
+            "now": stamp(self.clock()),
+            "pc": {**queue, "received_at": status["received_at"]} if queue else None,
+            "cache": {
+                "bytes": size,
+                "warn_bytes": self.cache_warn_bytes,
+                "over": bool(self.cache_warn_bytes) and size > self.cache_warn_bytes,
+            },
+        }
+
+    def _available(self, variants: list[sqlite3.Row]) -> dict[tuple[str, str], list[str]]:
+        available: dict[tuple[str, str], list[str]] = {}
+        for entry in variants:
+            if self.media.size(entry["digest"]) is not None:
+                key = (entry["library_id"], entry["sha256"])
+                name = _VARIANT_NAMES.get(entry["variant"], "original")
+                available.setdefault(key, []).append(name)
+        return available
+
+    def _original(
+        self,
+        db: sqlite3.Connection,
+        library_id: str,
+        sha256: str,
+        reworked: set[tuple[str, str]],
+    ) -> dict[str, Any] | None:
+        """A result's original while it is still on the gateway and not deleted."""
+
+        key = (library_id, sha256)
+        row = db.execute(
+            _ITEMS_WITH_STATE + " AND item.library_id = ? AND item.sha256 = ?", key
+        ).fetchone()
+        if row is None:
+            return None
+        state, decision, _reason = _item_state(row, reworked)
+        if decision is not None and decision["verdict"] == "delete" and state != "refused":
+            return None
+        variants = db.execute(
+            "SELECT library_id, sha256, variant, digest FROM item_media"
+            " WHERE library_id = ? AND sha256 = ?",
+            key,
+        ).fetchall()
+        return {
+            "library_id": library_id,
+            "sha256": sha256,
+            "kind": row["kind"],
+            "variants": sorted(self._available(variants).get(key, [])),
+            "state": state,
+            "decision": decision,
+        }
 
     def media_file(self, library_id: str, sha256: str, variant: str) -> tuple[Path, str]:
         with self.connection() as db:
@@ -973,13 +1083,71 @@ class Store:
                 window = DISCARD_UNDO if discarded else KEEP_AFTER_ANSWER
                 if now - _instant(row["answered_at"]) >= window:
                     expired.append((row["library_id"], row["sha256"]))
+            expired += self._stale_undecided(db, now)
             db.executemany(
                 "UPDATE item SET purged_at = ? WHERE library_id = ? AND sha256 = ?",
                 [(stamp(now), *key) for key in expired],
             )
+            size = _cached_bytes(db)
             # If this stops before the commit, the same items are simply purged again next time.
             removed = self._release(db, expired)
+        if self.cache_warn_bytes and size > self.cache_warn_bytes:
+            _LOG.warning(
+                "the media cache holds %d MB, over its %d MB warning level",
+                size // 1_000_000,
+                self.cache_warn_bytes // 1_000_000,
+            )
         return {"items_purged": len(expired), "files_removed": removed}
+
+    def _stale_undecided(self, db: sqlite3.Connection, now: datetime) -> list[tuple[str, str]]:
+        """Items nobody has decided, older than ``undecided_days``, with no request waiting for the PC (PHONE-FAST).
+
+        Any action request restarts the clock, so a rework's original outlives the wait for its result.
+        """
+
+        if not self.undecided_days:
+            return []
+        before = stamp(now - timedelta(days=self.undecided_days))
+        return [
+            (row["library_id"], row["sha256"])
+            for row in db.execute(
+                "SELECT library_id, sha256 FROM item WHERE purged_at IS NULL"
+                " AND latest_record_id IS NULL AND ready_at < ? AND NOT EXISTS ("
+                "   SELECT 1 FROM outbox WHERE outbox.library_id = item.library_id"
+                "   AND outbox.sha256 = item.sha256 AND (outbox.status = 'pending'"
+                "   OR COALESCE(outbox.answered_at, outbox.created_at) >= ?))",
+                (before, before),
+            )
+        ]
+
+
+def _stream(items: list[dict[str, Any]], rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    """The items still to review, the group with the newest activity first, oldest first within a group."""
+
+    groups = {(row["library_id"], row["sha256"]): row["batch_id"] or row["run_id"] for row in rows}
+    latest: dict[str, str] = {}
+    for row in rows:
+        group = groups[(row["library_id"], row["sha256"])]
+        latest[group] = max(latest.get(group, ""), row["created_at"])
+    todo = [item for item in items if item["state"] in ("undecided", "refused")]
+    todo.sort(key=lambda item: (item["created_at"], item["library_id"]))
+    todo.sort(
+        key=lambda item: (
+            latest[groups[(item["library_id"], item["sha256"])]],
+            groups[(item["library_id"], item["sha256"])],
+        ),
+        reverse=True,
+    )
+    return todo
+
+
+def _cached_bytes(db: sqlite3.Connection) -> int:
+    """The size of the media the items still use, from their manifests (shared files counted once)."""
+
+    return db.execute(
+        "SELECT COALESCE(SUM(bytes), 0) FROM (SELECT MAX(item_media.bytes) AS bytes FROM item_media"
+        " JOIN item USING (library_id, sha256) WHERE item.purged_at IS NULL GROUP BY digest)"
+    ).fetchone()[0]
 
 
 def _migrate(db: sqlite3.Connection) -> None:
@@ -1006,6 +1174,10 @@ def _migrate(db: sqlite3.Connection) -> None:
         if column not in item_columns:
             db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS item_batch ON item (batch_id, created_at, library_id)")
+    # PHONE-FAST: the original a rework result was made from.
+    for column in ("parent_library_id", "parent_sha256"):
+        if column not in item_columns:
+            db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")
 
 
 def _action_view(row: sqlite3.Row) -> dict[str, Any]:
@@ -1040,6 +1212,32 @@ def _admin_view(row: sqlite3.Row) -> dict[str, Any]:
 
 def _state(status: str) -> str:
     return "applied" if status == "duplicate" else status
+
+
+def _reworked(db: sqlite3.Connection) -> set[tuple[str, str]]:
+    """Items with a queued rework: a confirm (or a one-step ``queue``, RG-160) the PC has not refused and the phone has
+    not cancelled. Derived from the outbox, so an older PC counts."""
+
+    marks = ",".join("?" * len(REWORK_ACTIONS))
+    rows = db.execute(
+        "SELECT library_id, sha256 FROM outbox WHERE kind = 'action_request'"
+        " AND status NOT IN ('refused', 'superseded')"
+        " AND json_extract(record, '$.action_request.params.step') IN ('confirm', 'queue')"
+        f" AND json_extract(record, '$.action_request.action') IN ({marks})",
+        REWORK_ACTIONS,
+    ).fetchall()
+    return {(row["library_id"], row["sha256"]) for row in rows}
+
+
+def _item_state(
+    row: sqlite3.Row, reworked: set[tuple[str, str]]
+) -> tuple[str, dict[str, Any] | None, str | None]:
+    """``_outcome``, except that an undecided item sent for rework counts as reviewed."""
+
+    state, decision, reason = _outcome(row)
+    if state in ("undecided", "refused") and (row["library_id"], row["sha256"]) in reworked:
+        return "rework", decision, None
+    return state, decision, reason
 
 
 def _outcome(row: sqlite3.Row) -> tuple[str, dict[str, Any] | None, str | None]:

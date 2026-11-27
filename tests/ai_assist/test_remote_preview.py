@@ -28,6 +28,8 @@ from src.ai_assist.remote_preview import (
     ENDPOINT,
     RUNTIME_VERSION,
     SETTINGS_NAME,
+    UNCENSORED_MODEL,
+    VISION_MODELS,
     RemoteApproval,
     disable_remote_preview,
     enable_remote_preview,
@@ -841,3 +843,51 @@ def test_cancel_before_connect_and_reject_non_capability_paths(monkeypatch):
     with pytest.raises(TransportFailure, match="cancelled"):
         loopback_request("/api/version", None, token, 1.0, 64)
     socket_factory.assert_not_called()
+
+
+def test_the_uncensored_model_can_be_approved_without_replacing_the_default(tmp_path):
+    other = RemoteApproval(ENDPOINT, UNCENSORED_MODEL, "c" * 64, RUNTIME_VERSION)
+    write_remote_approval(tmp_path, APPROVAL)
+    write_remote_approval(tmp_path, other)
+    assert read_remote_settings(tmp_path).approval == APPROVAL
+    select_remote_model(tmp_path, other)
+    assert read_remote_settings(tmp_path).approval == other
+    assert UNCENSORED_MODEL not in VISION_MODELS
+
+
+def test_a_one_off_uses_another_approval_once_without_changing_the_selection(installation):
+    worker = Worker()
+    service, _spy, remote = service_for(installation, worker)
+    other = RemoteApproval(ENDPOINT, UNCENSORED_MODEL, "c" * 64, RUNTIME_VERSION)
+    write_remote_approval(installation.root, other)
+    selected = remote.settings().approval
+    worker.reply_model = other.model_reference
+    worker.other_models = [{"name": other.model, "digest": other.digest}]
+    done: list = []
+    assert service.submit(assist_request(), done.append, one_off=other).accepted
+    assert service._worker is not None
+    service._worker.join(5)
+    outcome = done[0]
+    assert outcome.ok, outcome.reason
+    assert outcome.details["model_name"] == UNCENSORED_MODEL and outcome.details["one_off"]
+    sent = [json.loads(body)["model"] for path, body in worker.calls if path == "/api/generate"]
+    assert sent == [other.model_reference]
+    assert remote.settings().approval == selected
+    assert remote.validate_delivery(outcome).ok
+    revoke_remote_approval(installation.root, UNCENSORED_MODEL)
+    assert remote.validate_delivery(outcome).code is OutcomeCode.INTEGRITY_FAILED
+    refused = service.submit(assist_request(), done.append, one_off=other)
+    assert not refused.accepted and refused.outcome.reason == "remote_approval_required"
+
+
+def test_a_one_off_never_falls_back_to_the_local_runtime(installation):
+    worker = Worker()
+    service, spy, _remote = service_for(installation, worker)
+    other = RemoteApproval(ENDPOINT, UNCENSORED_MODEL, "c" * 64, RUNTIME_VERSION)
+    write_remote_approval(installation.root, other)
+    worker.failures["/api/version"] = "disconnected"
+    done: list = []
+    assert service.submit(assist_request(), done.append, one_off=other).accepted
+    service._worker.join(5)
+    assert done[0].reason == "remote_disconnected" and not done[0].ok
+    assert not spy.calls

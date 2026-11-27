@@ -64,6 +64,7 @@ def test_decisions_receipts_and_sessions_survive_a_restart(rig) -> None:
 
 
 def test_nothing_is_purged_before_the_pc_answers(rig) -> None:
+    rig.gateway.store.undecided_days = 0  # the 30-day purge of undecided items has its own tests
     rig.pair()
     undecided = rig.publish("undecided")
     waiting = decided(rig, "waiting", "delete", outcome=None)
