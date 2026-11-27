@@ -227,13 +227,18 @@ def test_framing_declares_the_goal_as_data_and_the_schema_is_closed() -> None:
     prompt = render_prompt(REQUEST)
     assert "GOAL:" in prompt and "Allowed stages: txt2img | img2img | video" in prompt
     assert "Allowed targets: model-a | model-b" in prompt and "POSITIVE_PROMPT:" not in prompt
-    ok_branch = build_json_schema(REQUEST)["oneOf"][0]
+    ok_branch = build_json_schema(REQUEST)
     items = ok_branch["properties"]["steps"]["items"]
     assert ok_branch["properties"]["steps"]["maxItems"] == MAX_PLAN_STEPS
-    assert items["properties"]["stage"]["enum"] == list(STAGES)
-    assert items["properties"]["target"]["enum"] == [*TARGETS, None]
-    assert items["properties"]["count"]["maximum"] == MAX_STEP_COUNT
-    assert items["additionalProperties"] is False and ok_branch["additionalProperties"] is False
+    image, video = items["oneOf"]
+    assert image["properties"]["stage"]["enum"] + video["properties"]["stage"]["enum"] == list(
+        STAGES
+    )
+    assert image["properties"]["target"]["enum"] == list(TARGETS)
+    assert video["properties"]["target"]["enum"] == [None]
+    assert image["properties"]["count"]["maximum"] == MAX_STEP_COUNT
+    assert image["additionalProperties"] is False and video["additionalProperties"] is False
+    assert ok_branch["additionalProperties"] is False
     assert render_prompt(REQUEST) == render_prompt(REQUEST)
 
 

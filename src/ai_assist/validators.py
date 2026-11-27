@@ -18,6 +18,7 @@ from typing import Any
 
 from src.ai_assist.contracts import (
     CHANGE_CODES,
+    MAX_MOTION_PHRASE_CHARS,
     MAX_PHRASE_SLOTS,
     MAX_PHRASE_VALUES,
     MAX_PLAN_STEPS,
@@ -61,6 +62,7 @@ _ALLOWED_KEYS = frozenset(
         "slots",
         "proposals",
         "phrase_slots",
+        "phrase",
     }
 )
 _PROPOSAL_KEYS = frozenset({"slot_name", "values", "insertion_point", "rationale"})
@@ -96,6 +98,24 @@ def looks_like_refusal(text: str) -> bool:
     """Whether non-schema model text opens like a refusal (first 240 characters only)."""
 
     return bool(_REFUSAL_OPENERS.match((text or "").strip()[:240]))
+
+
+def _refusal_in_content(suggestion: AssistSuggestion, request: AssistRequest) -> bool:
+    """Whether the model wrote a refusal into the payload itself, which the answer shape cannot rule out (D5).
+
+    Same conservative openers as :func:`looks_like_refusal`. A rewrite of a prompt that itself opens that way is not
+    called a refusal."""
+
+    texts: list[str] = [suggestion.motion_phrase] if suggestion.motion_phrase else []
+    if suggestion.positive_text and not looks_like_refusal(request.positive_text):
+        texts.append(suggestion.positive_text)
+    for entry in suggestion.slot_values:
+        texts.extend(entry.values)
+    for proposal in suggestion.slot_proposals:
+        texts.extend(proposal.values)
+    for phrase in suggestion.phrase_slots:
+        texts.extend(phrase.values)
+    return any(looks_like_refusal(text) for text in texts)
 
 
 def protected_tokens(text: str) -> Counter[str]:
@@ -346,7 +366,28 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
         return _malformed("unexpected_phrase_slots_field")
     slot_proposals: tuple[SlotProposal, ...] = ()
     phrase_slots: tuple[PhraseSlot, ...] = ()
-    if request.kind is SuggestionKind.PHRASE_SLOT:
+    motion_phrase: str | None = None
+    if "phrase" in document and request.kind is not SuggestionKind.MOTION_PHRASE:
+        return _malformed("unexpected_phrase_field")
+    if request.kind is SuggestionKind.MOTION_PHRASE:
+        if (
+            positive is not None
+            or negative is not None
+            or target is not None
+            or workflow is not None
+        ):
+            return _malformed("unexpected_text_field")
+        motion_phrase, problem = _text_field(
+            document.get("phrase"), "phrase", limit=MAX_MOTION_PHRASE_CHARS
+        )
+        if problem:
+            return _malformed(problem)
+        motion_phrase = (motion_phrase or "").strip()
+        if not motion_phrase:
+            return _malformed("phrase_missing")
+        if any(char in motion_phrase for char in "\n\r\t<>[]"):
+            return _malformed("phrase_not_plain")
+    elif request.kind is SuggestionKind.PHRASE_SLOT:
         if (
             positive is not None
             or negative is not None
@@ -429,7 +470,10 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
         slot_values=slot_values,
         slot_proposals=slot_proposals,
         phrase_slots=phrase_slots,
+        motion_phrase=motion_phrase,
     )
+    if _refusal_in_content(suggestion, request):
+        return ValidationResult(OutcomeCode.REFUSED_BY_MODEL, "refusal_in_content")
     return ValidationResult(OutcomeCode.SUGGESTION, "", suggestion)
 
 
