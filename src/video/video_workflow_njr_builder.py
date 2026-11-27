@@ -67,10 +67,11 @@ from src.video.workflow_input_integrity import (
     workflow_identity,
 )
 from src.video.workflow_source_preparation import (
+    discarded_fraction,
     passthrough_declared_workflow_source,
     prepare_declared_workflow_source,
 )
-from src.video.workflow_warnings import experimental_workflow_warning
+from src.video.workflow_warnings import experimental_workflow_warning, source_crop_warning
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 # Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
@@ -751,7 +752,9 @@ class VideoWorkflowNjrBuilder:
         # Optional RIFE smoothing of the finished clip (PR-VID-SMOOTH-302). Validated here, so a missing
         # runtime or an unsupported factor is refused at admission, and frozen as resolved values so the queued
         # job and any replay smooth the same way.
-        smoothing = normalize_interpolation_request(form_data.get("interpolation"))
+        # VID-FRAME: a sequence smooths its assembled cut (``cut_interpolation``), never a segment's clip.
+        interpolation_key = "interpolation" if sequence_plan is None else "cut_interpolation"
+        smoothing = normalize_interpolation_request(form_data.get(interpolation_key))
         frozen_interpolation: dict[str, Any] | None = None
         if smoothing is not None:
             resolved_executable = find_rife_executable(smoothing.executable_path)
@@ -765,7 +768,7 @@ class VideoWorkflowNjrBuilder:
                 else str(resolved_executable),
                 "model_dir": smoothing.model_dir,
             }
-            workflow_config["interpolation"] = frozen_interpolation
+            workflow_config[interpolation_key] = frozen_interpolation
         if sequence_plan is not None:
             # One NJR, N sequential segments (PR-VID-SEQ-330-CORE): the plan was frozen at admission and the
             # runner executes it inside this single job.
@@ -793,6 +796,15 @@ class VideoWorkflowNjrBuilder:
             extra_metadata["video_workflow"]["depth_input"] = depth_input
         if source_preparation:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
+            # VID-FRAME: how much of the source the chosen size cuts away (absent: the whole picture).
+            source_size = source_preparation["source_dimensions"]
+            target_size = source_preparation["target_dimensions"]
+            cut = discarded_fraction(
+                (source_size["width"], source_size["height"]),
+                (target_size["width"], target_size["height"]),
+            )
+            if round(cut, 4) > 0:
+                extra_metadata["video_workflow"]["source_crop_fraction"] = round(cut, 4)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
         if frozen_interpolation is not None:
@@ -843,11 +855,19 @@ class VideoWorkflowNjrBuilder:
             }
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
+        # N1: the operator's Queue on a summary that showed these warnings accepts them.
+        accepted = []
         warning = experimental_workflow_warning(spec)
         if warning is not None and extra_metadata["video_workflow"]["experimental_opt_in"] is True:
-            # N1: the job's opt-in is the operator's Queue on a summary that showed this warning.
+            accepted.append(warning)
+        size = (source_preparation or {}).get("source_dimensions")
+        if size:
+            crop = source_crop_warning(spec, size["width"], size["height"])
+            if crop is not None:
+                accepted.append(crop)
+        if accepted:
             surface = str(form_data.get(WARNING_SURFACE_FIELD) or SURFACE_DESKTOP)
-            extra_metadata = merge_accepted_warnings(extra_metadata, (warning,), surface=surface)
+            extra_metadata = merge_accepted_warnings(extra_metadata, accepted, surface=surface)
         trusted_lineage = {
             key: str((lineage or {}).get(key) or "").strip()
             for key in ("source_job_id", "source_artifact_id")

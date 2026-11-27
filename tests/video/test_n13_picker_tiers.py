@@ -17,6 +17,7 @@ from src.video.workflow_tasks import TASK_ANIMATE, TASK_FOLLOW_CLIP, choose_work
 PROMPT_MODE = "wan_animate2_prompt_i2v_v1"
 ARMS = {
     "wan22_i2v_a14b_4step_ck_v1",
+    "wan22_i2v_a14b_4step_full_picture_v1",
     "wan22_i2v_a14b_svi",
     "hunyuan_video15_i2v_480p_8step_v1",
     "hunyuan_video15_i2v_480p_12step_v1",
