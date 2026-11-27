@@ -19,6 +19,8 @@ the desktop rating pages write.
 6. A follow-up pick (for example 8 or 12 steps) is registered only after the reveal.
 7. A harness registers a sitting with one call or one JSON file in a known folder. No gateway code per eval.
 8. Arm identities do not reach the gateway before submission, including through file names or media metadata.
+9. Eval outputs are not published to the Review inbox, and any already there are withdrawn without recording a
+   decision; Immich is untouched.
 
 Exclusions: no queueing or job creation from a rating, no report rebuild or threshold verdict (the eval session's
 `verify` command still does that), no change to review decisions, no offline queue (RG-160), no deployment here.
@@ -86,14 +88,24 @@ nothing; the phone shows the reason and the task opens again. A `ratings.csv` ro
 clip file that no longer matches the key's digest, is refused (`clip_changed`). A task whose sheet was completed at
 the desk is published as done.
 
-### Owner-visible decisions (defaults built; change on request)
+### Eval outputs stay out of the Review inbox
 
-| # | Question | Default |
+An eval output is anything under the `video_eval` run folders, or any output whose run manifest names a job that
+an eval's `run.json` lists (`src/app/review_gateway_sources.py`). Eval clips are ordinary jobs written into the normal
+output folders, so the job id is the only provenance they carry. The publisher skips them. For clips sent before
+this rule, the PC asks the gateway to withdraw each (`item_withdrawal`, `src/app/review_gateway_withdraw.py`): it
+leaves the inbox with no decision record and nothing changes in Immich; one with an unanswered decision or an owed
+upload stays until that is settled. Comparison clips that a session queued as ordinary jobs, with no eval run (for
+example VID-FRAME's six app jobs), carry no eval provenance and are not recognised.
+
+### Owner-visible decisions (accepted 2026-11-27; Q4 changed)
+
+| # | Question | Decision |
 |---|---|---|
 | Q1 | Send each case's prompt and source picture to the phone? Needed to judge "did the action happen" and "looks like the source". | Yes. Same private gateway that already holds prompt excerpts and review media. |
 | Q2 | Submit once, final, with the arm reveal shown on the phone afterwards? | Yes. |
 | Q3 | A value already filled in at the desk differs from the phone's answer. | Refuse the whole submission, keep the desk value. |
-| Q4 | Eval run clips are ordinary video outputs, so the review tab may already show them with their model and workflow, which weakens blinding. | Leave as is; say so in each sitting's instructions. Hiding them from review is a separate change. |
+| Q4 | Eval run clips are ordinary video outputs, so the review tab would show them with their model and workflow. | **Changed:** never publish eval outputs to the inbox, and withdraw any already there. They reach the phone only through To rate. |
 
 ### Files
 

@@ -73,6 +73,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `review_gateway_sources.py`: Which Output Library items are a job's authoritative outputs, for phone publishing (PHONE-FAST)
 - `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
 - `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
+- `review_gateway_withdraw.py`: Take eval clips that were already published out of the phone's Review inbox (RG-170)
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
 - `site_desktop_approval.py`: Current-user persistence for the loopback browser's remembered approval
 - `site_library_index.py`: Rebuildable, root-local SQLite projection for Operator Site browsing

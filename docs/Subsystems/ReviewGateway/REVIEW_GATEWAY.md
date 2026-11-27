@@ -63,7 +63,7 @@ section 9). Errors are `{"error": "<code>"}`.
 | `GET /sync/v1/immich-receipts?cursor=` | - | `immich_receipt_page` (section 5); 400 `invalid_cursor` |
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
 
-The four rating routes are in section 9.
+The rating routes and `POST /sync/v1/item-withdrawals` are in section 9.
 
 Rules:
 
@@ -437,4 +437,10 @@ Rules:
    an unanswered submission is never purged.
 4. A gateway lists `rating_tasks` in health; a PC sends nothing about ratings to one that does not. Deploy the gateway
    first, then update the PC.
+
+**Eval outputs are not review items.** The publisher skips anything under `video_eval` and any output whose run
+manifest names a job an eval's `run.json` lists. Clips published before that rule are withdrawn from the inbox with
+`POST /sync/v1/item-withdrawals` (health feature `item_withdrawal`; reply `withdrawn`, `kept` or `unknown`): no
+decision is recorded, Immich is untouched, and an item with an unanswered record or an owed upload is `kept` and asked
+again 10 minutes later.
 
