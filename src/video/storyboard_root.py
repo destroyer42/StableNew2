@@ -37,6 +37,7 @@ from typing import Any, Final, Literal
 
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.pipeline.njr_core_v26 import thaw_json
+from src.video.frame_retention import frames_were_removed
 from src.video.frames_out import frames_output_fps, natural_frame_order
 from src.video.sequence_admission import read_still_size, workflow_segment_errors
 from src.video.sequence_frames import (
@@ -505,6 +506,16 @@ def _unsmoothed_clip(
     return None
 
 
+def _removed_by_retention(artifact: Mapping[str, Any], clip: Path) -> bool:
+    paths = [Path(str(item)) for item in artifact.get("frame_paths") or () if item]
+    return (
+        clip.is_file()
+        and bool(paths)
+        and frames_were_removed(paths[0].parent)
+        and not all(path.is_file() for path in paths)
+    )
+
+
 def _recorded_digest(job: _ClipJob, record: Mapping[str, Any]) -> tuple[str, list[str]]:
     """The backend's ``frame_sha256_digest`` and per-frame hashes (the manifest file holds the full record)."""
 
@@ -659,6 +670,17 @@ def prepare_clip_root(
         if frames_output_fps(job.spec) is not None:
 
             def build_frames_out(staging: Path, final: Path) -> CutManifest:
+                if unsmoothed is not None and _removed_by_retention(artifact, unsmoothed):
+                    # VID-FRAME: the PNGs were removed after the clip was made; decode its own clip instead.
+                    return _decoded_root(
+                        job,
+                        unsmoothed,
+                        staging,
+                        final,
+                        decode_clip=decode_clip,
+                        hash_file=hash_file,
+                        cancel_token=cancel_token,
+                    )
                 return _frames_out_root(
                     job,
                     artifact,

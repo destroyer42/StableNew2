@@ -59,6 +59,7 @@ from src.video.workflow_source_preparation import (
     prepared_source_destination,
     resolve_declared_target,
 )
+from src.video.workflow_warnings import source_crop_warning
 
 MAX_BATCH_SOURCES = 25
 BATCH_SCHEMA = "stablenew.batch.v1"
@@ -340,6 +341,22 @@ def _plan_digest(batch_id: str, jobs: Sequence[BatchJobPreview]) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _crop_texts(spec: Any, rows: Sequence[SourceAssessment]) -> list[str]:
+    """One line per distinct crop warning, naming the sources it applies to."""
+
+    grouped: dict[str, list[int]] = {}
+    for row in rows:
+        if spec is None or row.width is None or row.height is None:
+            continue
+        warning = source_crop_warning(spec, row.width, row.height)
+        if warning is not None:
+            grouped.setdefault(warning.text(), []).append(row.index + 1)
+    return [
+        f"{'Source' if len(found) == 1 else 'Sources'} {', '.join(map(str, found))}: {text}"
+        for text, found in grouped.items()
+    ]
+
+
 def _nearest_existing(path: Path) -> Path:
     candidate = path
     while not candidate.exists() and candidate.parent != candidate:
@@ -438,6 +455,7 @@ class VideoWorkflowBatchService:
                     f"Sources {joined} have identical image content; they will produce "
                     "separate jobs with the same input."
                 )
+        warnings.extend(_crop_texts(spec, rows_t))
         if duplicates_omitted:
             notes.append(f"{duplicates_omitted} duplicate path(s) were omitted from the selection.")
 
