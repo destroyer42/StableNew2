@@ -27,7 +27,17 @@ official model card links `https://github.com/Lightricks/LTX-2/blob/main/LICENSE
 - The 2026-11-27 value assessment recorded "worldwide and free for personal use" and listed the use restrictions as not
   read. Both statements about territory and price hold; the use restriction was missing.
 - This package adds no content filter and blocks nothing in StableNew. It states the restriction on the workflow
-  (description, notes, fixed settings) so the operator sees it.
+  (description, notes, fixed settings) and as a typed N1 warning (`video_licence_restriction`, declared by the catalog
+  entry's `licence_warning`) that shows beside Queue and is recorded on each job.
+- **Owner decision, 2026-11-27 (relayed by the orchestrator session):** still wanted, **for non-explicit clips only**.
+  He approved downloading the five files of section 5 after he accepts the gate himself, and the section 7 run once the
+  GPU is free and the app, Forge and ComfyUI are closed. Every suite prompt and source must be non-explicit: verified
+  safe-for-work subjects, never the output library.
+- **Owner confirmation of the sources, 2026-11-27 (relayed by the orchestrator session):** all 16 source images in
+  VID-CAND-382's stage 1 and stage 2 suites come from the output library. Asked to choose between a new safe-for-work set
+  and reusing them, he chose "I'll vouch for the 16": he confirms they are non-explicit and allows them for LTX-2.5. They
+  are reused exactly as frozen (same paths and hashes). No agent opened them to check. This covers these 16 files only;
+  every prompt must still be non-explicit.
 
 Other terms: free below USD 10M annual revenue (personal use free); the licensee must not remove or disable provenance
 marks or watermarks and must disclose that disseminated content is machine generated; the licensor reserves the right
@@ -172,8 +182,9 @@ Rules, thresholds, stop rules and budget are in `tools/qualification/vid_cand_lt
   cases.
 - **As good or better:** no NO-GO, stage 1 means within 0.25 of A14B, and LTX-2.5 ranked above A14B in at least half of
   the blind rankings.
-- **Speed:** reported, no "faster" verdict. LTX-2.5 runs in another session, so its cold and warm times are labelled
-  cross-session. A verdict needs an A14B re-run in the same session, which is the owner's call and a new plan.
+- **Speed:** LTX-2.5's cold and warm times are reported as measured, with no cross-model verdict (orchestrator ruling,
+  2026-11-27): it runs at 768x1344 against A14B's own size, and quality ranking comes first. No A14B re-run for speed
+  in this package; if LTX-2.5 wins the blind ranking, a matched speed run is a follow-up with its own plan.
 - **Audio:** reported, not gated (present, usable, in step with the motion, extra time and memory).
 - **Recorded per job:** cold and warm wall time, VRAM, host commit and available RAM peaks, and failures.
 

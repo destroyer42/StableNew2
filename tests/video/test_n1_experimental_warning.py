@@ -10,6 +10,7 @@ import pytest
 from src.pipeline.policy_warnings import (
     ACCEPTED_WARNINGS_KEY,
     CODE_VIDEO_EXPERIMENTAL,
+    CODE_VIDEO_LICENCE_RESTRICTION,
     SURFACE_DESKTOP,
     SURFACE_PHONE,
     accepted_warning_records,
@@ -85,7 +86,12 @@ def test_the_workflow_records_expose_the_warning_as_data_for_every_surface(tmp_p
     for item in records.values():
         warnings = item["policy_warnings"]
         if item["experimental"]:
-            assert [warning["code"] for warning in warnings] == [CODE_VIDEO_EXPERIMENTAL]
+            # LTX-2.5 also declares its licence restriction as a second warning (VID-CAND-LTX25).
+            licensed = item["workflow_id"].startswith("ltx25_")
+            assert [warning["code"] for warning in warnings] == [
+                CODE_VIDEO_EXPERIMENTAL,
+                *([CODE_VIDEO_LICENCE_RESTRICTION] if licensed else []),
+            ]
             assert warnings[0]["why"] and "Queue runs it anyway" in warnings[0]["fix"]
         else:
             assert warnings == []

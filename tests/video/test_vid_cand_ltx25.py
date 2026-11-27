@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from src.controller.video_workflow_controller import VideoWorkflowController
+from src.pipeline.policy_warnings import CODE_VIDEO_EXPERIMENTAL, CODE_VIDEO_LICENCE_RESTRICTION
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.workflow_catalog_ltx25 import (
     LTX25_AUDIO_ID,
@@ -37,6 +38,7 @@ from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import frame_count_projection, legal_frame_counts
 from src.video.workflow_picker import recommended_workflow_id
 from src.video.workflow_registry import build_default_workflow_registry
+from src.video.workflow_warnings import accepted_workflow_warnings, workflow_warning_records
 from tests.video.test_vid_clip_370_candidate_specs import (
     _a14b_backend,
     _a14b_request,
@@ -153,6 +155,23 @@ def test_the_licence_restriction_is_visible_to_the_operator(workflow_id: str) ->
         in spec.backend_defaults["operator_projection"]["fixed_settings"]["licence"]
     )
 
+    # N1: a typed warning beside Queue and recorded on the job, not a block.
+    records = workflow_warning_records(spec)
+    assert [r["code"] for r in records] == [CODE_VIDEO_EXPERIMENTAL, CODE_VIDEO_LICENCE_RESTRICTION]
+    licence = records[1]
+    assert "sexually explicit" in licence["title"] and licence["why"] and licence["fix"]
+    assert licence["subject"] == f"{workflow_id}@{LTX25_VERSION}"
+    assert [w.code for w in accepted_workflow_warnings(spec, opted_in=False)] == [
+        CODE_VIDEO_LICENCE_RESTRICTION
+    ]
+
+
+def test_a_workflow_without_a_declared_licence_warning_gets_none() -> None:
+    a14b = build_default_workflow_registry().get(WAN_A14B_ID, WAN_A14B_VERSION)
+
+    assert workflow_warning_records(a14b) == []
+    assert accepted_workflow_warnings(a14b, opted_in=False) == ()
+
 
 # --- pinned files and provenance --------------------------------------------------------------
 
@@ -183,8 +202,8 @@ def test_every_model_file_is_pinned_by_sha256_size_folder_revision_and_loader_in
 # sha256 of json.dumps(spec.to_dict(), sort_keys=True, ensure_ascii=False, default=str), pinned from the first
 # registration; ``test_pr_vid_196_readiness_and_guidance.py`` pins the graphs with the rest of the catalog.
 PINNED_SPEC_SHA256 = {
-    LTX25_ID: "be6dc00e0b69f46876807210130d6997bb201282cba5e45fd0d8dd91c76dd0a0",
-    LTX25_AUDIO_ID: "b9add8800b01eaa18baea0eee5cfa5b0167b834e0d5be8146e76f7a01218bbc7",
+    LTX25_ID: "e607b620403b6749614396f6ffb902115993ece80be59cc03b23b20399f5a5ce",
+    LTX25_AUDIO_ID: "4027c4e95071b226bd29ecd9820c639460407de54d10cfe33e623904cf579cff",
 }
 
 

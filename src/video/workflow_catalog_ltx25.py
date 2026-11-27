@@ -169,6 +169,16 @@ LTX25_LICENSE = (
 )
 
 
+LTX25_LICENCE_WARNING = {
+    "title": "LTX-2.5's licence forbids sexually explicit content.",
+    "why": (
+        "The LTX-2.x Community License incorporates Lightricks' Acceptable Use Policy (updated 3 Nov 2026), which "
+        "forbids generating sexually explicit content with the model."
+    ),
+    "fix": "Use LTX-2.5 only for non-explicit clips; for anything else choose another engine.",
+}
+
+
 def _files(audio: bool) -> tuple[tuple[str, str, str, str, int, str], ...]:
     return tuple(row for row in LTX25_MODEL_FILES if audio or row[1] not in _AUDIO_ONLY_FILES)
 
@@ -377,6 +387,8 @@ def build_ltx25_spec(workflow_id: str = LTX25_ID) -> WorkflowSpec:
             "file_bytes": {row[1]: row[4] for row in _files(audio)},
         },
         "resource_readiness": dict(LTX25_RESOURCE_READINESS),
+        # Shown beside Queue and recorded on the job (src/video/workflow_warnings.py); a warning, never a block.
+        "licence_warning": dict(LTX25_LICENCE_WARNING),
         "source_preparation": {
             "resize_policy": "cover_resize_center_crop",
             "portrait_target": dict(LTX25_PORTRAIT_TARGET),

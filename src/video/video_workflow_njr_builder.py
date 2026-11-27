@@ -70,7 +70,7 @@ from src.video.workflow_source_preparation import (
     passthrough_declared_workflow_source,
     prepare_declared_workflow_source,
 )
-from src.video.workflow_warnings import experimental_workflow_warning
+from src.video.workflow_warnings import accepted_workflow_warnings
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 # Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
@@ -843,11 +843,13 @@ class VideoWorkflowNjrBuilder:
             }
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
-        warning = experimental_workflow_warning(spec)
-        if warning is not None and extra_metadata["video_workflow"]["experimental_opt_in"] is True:
-            # N1: the job's opt-in is the operator's Queue on a summary that showed this warning.
+        # N1: the job's opt-in is the operator's Queue on a summary that showed these warnings.
+        accepted = accepted_workflow_warnings(
+            spec, opted_in=extra_metadata["video_workflow"]["experimental_opt_in"] is True
+        )
+        if accepted:
             surface = str(form_data.get(WARNING_SURFACE_FIELD) or SURFACE_DESKTOP)
-            extra_metadata = merge_accepted_warnings(extra_metadata, (warning,), surface=surface)
+            extra_metadata = merge_accepted_warnings(extra_metadata, accepted, surface=surface)
         trusted_lineage = {
             key: str((lineage or {}).get(key) or "").strip()
             for key in ("source_job_id", "source_artifact_id")

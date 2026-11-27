@@ -35,6 +35,8 @@ PLAN_FILE = "vid_cand_ltx25_plan.v1.json"
 
 FAIRNESS_RULES = (
     "Sources, prompts, negative prompts and seeds are VID-CAND-382's frozen stage 1 and stage 2 cases, unchanged.",
+    "LTX-2.5 makes non-explicit clips only: every prompt is non-explicit, and the only sources are the 16 VID-CAND-382 "
+    "images the owner confirmed non-explicit on 2026-11-27. Any other source needs his confirmation first.",
     "Equal clip duration at native frame rates: A14B 81 frames at 16 fps (5.06 s), Hunyuan and LTX-2.5 121 frames at "
     "24 fps (5.04 s). RIFE smoothing is OFF for every arm.",
     "Each engine runs at its own practical size and the report states it: A14B 480x832, Hunyuan 480x848, LTX-2.5 "
@@ -64,7 +66,8 @@ THRESHOLDS: dict[str, Any] = {
         "verdict": "none: VID-CAND-382's warm-time ratio is not applied across sessions",
         "reported": "LTX-2.5 cold and warm wall times, labelled cross-session beside VID-CAND-382's",
         "wall_time_source": "job repository started_at to completed_at",
-        "for_a_verdict": "an owner-authorized A14B re-run in the same host session, as a new plan",
+        "follow_up": "no A14B re-run in this package (orchestrator ruling, 2026-11-27); if LTX-2.5 wins the blind "
+        "ranking, a matched speed run is a follow-up with its own plan for the owner",
     },
     "audio": "reported, not gated: whether the audio is present, usable and in step with the motion, and its extra time "
     "and memory",

@@ -149,6 +149,8 @@ def test_the_eval_kit_previews_and_admits_the_ltx_suite(
         config = job.njr.config["video_workflow"]
         assert (config["frame_count"], config["fps"]) == (121, 24)
         assert config["video_execution"]["experimental_opt_in"] is True
+        accepted = {w["code"] for w in job.njr.extra_metadata["accepted_warnings"]}
+        assert accepted == {"video_experimental_workflow", "video_licence_restriction"}
         target = config["source_preparation"]["target_dimensions"]
         assert (target["width"], target["height"]) in {(768, 1344), (1344, 768)}
     controller.submit_eval_run(plan)
