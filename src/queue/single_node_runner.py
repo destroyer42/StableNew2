@@ -358,9 +358,9 @@ class SingleNodeJobRunner:
         operator Cancel was committed before that, so its job is no longer RUNNING and stays cancelled.
         """
         if self._shutting_down:
-            settled = self.job_queue.requeue_for_app_close(job.job_id) or self.job_queue.get_job(job.job_id) or job
-            self._notify(settled, settled.status)
-            return settled
+            closed = self.job_queue.requeue_for_app_close(job.job_id) or self.job_queue.get_job(job.job_id) or job
+            self._notify(closed, closed.status)
+            return closed
         evidence = (
             self._return_evidence(job, result=result, exc=exc) if self._cancel_return_to_queue else None
         )
