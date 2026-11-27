@@ -89,6 +89,26 @@ waits for a gateway that offers it.
 - Undecided cached items purge after 30 days (configurable). A cache size cap warns. Every paired phone sees the PC's
   status and queue length.
 
+### (g) Folder sections (owner request 2026-11-27)
+
+A home screen with one folder per source (Pipeline, Learning, Reprocess and rework, Movie clips, others as the data
+shows), each with a badge: unreviewed items, or new since the folder was last opened, the owner's choice per phone.
+Only a category id leaves the PC. Evaluation runs are not a section (RG-170).
+
+### (h) Compare view modes
+
+Original and rework as flip (one at a time), side by side, or a before/after slider; toggled in the view and
+remembered on the phone.
+
+### (i) Scroll position
+
+Returning to a home, section or run list restores where it was scrolled.
+
+### (j) Double-tap for full resolution
+
+Double-tapping an image shows the full-resolution original with pinch zoom and pan; double-tapping again returns to
+fit, and from fit closes it. The rendition stays the default.
+
 ## Compatibility
 
 - Additive only: `schema_version` unchanged, new SQLite columns and tables, new optional manifest field behind a health

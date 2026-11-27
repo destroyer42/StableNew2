@@ -21,7 +21,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .errors import GatewayError
 from .media import is_digest
-from .store import Clock, Device, Store
+from .rating_routes import phone_rating_routes
+from .rating_store import RatingStore
+from .store import SOURCES, Clock, Device, Store
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
 COOKIE = "rg_session"
@@ -51,6 +53,8 @@ _PAGES = {
     "/static/app.js": ("app.js", "text/javascript"),
     "/static/queued.js": ("queued.js", "text/javascript"),
     "/static/app.css": ("app.css", "text/css"),
+    "/static/rating.js": ("rating.js", "text/javascript"),
+    "/static/rating.css": ("rating.css", "text/css"),
     "/static/icon.svg": ("icon.svg", "image/svg+xml"),
 }
 _VARIANTS = {
@@ -68,6 +72,8 @@ _DECISION_FIELDS = {"library_id", "sha256", "verdict", "favorite", "tags", "idem
 _ACTION_FIELDS = {"library_id", "sha256", "action", "params", "idempotency_key"}
 _UPDATE_FIELDS = {"action", "expected_sha", "idempotency_key"}
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+#: A gateway timestamp, as the phone sends back when it last opened a section.
+_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T[0-9:.]{8,15}(Z|\+00:00)")
 
 
 class _Guard:
@@ -98,7 +104,7 @@ class _Guard:
         await self.app(scope, receive, guarded)
 
 
-def build_phone_app(store: Store, clock: Clock) -> Starlette:
+def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlette:
     failures: deque = deque()
 
     async def session(request: Request, *, review: bool = True) -> Device:
@@ -153,7 +159,19 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
 
     async def runs(request: Request) -> Response:
         await session(request)
-        return JSONResponse({"runs": await run_in_threadpool(store.runs)})
+        source = request.query_params.get("source")
+        if source is not None and source not in SOURCES:
+            raise GatewayError(422, "invalid_request")
+        return JSONResponse({"runs": await run_in_threadpool(store.runs, source)})
+
+    async def sections(request: Request) -> Response:
+        await session(request)
+        seen = {
+            name: value
+            for name, value in request.query_params.items()
+            if name in SOURCES and _STAMP.fullmatch(value)
+        }
+        return JSONResponse(await run_in_threadpool(store.sections, seen))
 
     async def run(request: Request) -> Response:
         await session(request)
@@ -303,6 +321,7 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
             Route("/api/pair", pair, methods=["POST"]),
             Route("/api/session", whoami, methods=["GET"]),
             Route("/api/runs", runs, methods=["GET"]),
+            Route("/api/sections", sections, methods=["GET"]),
             Route("/api/runs/{run_id}", run, methods=["GET"]),
             Route("/api/status", status, methods=["GET"]),
             Route("/api/decisions", decisions, methods=["POST"]),
@@ -316,6 +335,7 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
             Route("/api/admin/updates", update_requests, methods=["POST"]),
             Route("/api/admin/updates/{record_id}", update_request, methods=["GET"]),
             Route("/media/{library_id}/{sha256}/{variant}", media, methods=["GET"]),
+            *phone_rating_routes(ratings, session),
         ],
         middleware=[Middleware(_Guard)],
         exception_handlers=EXCEPTION_HANDLERS,

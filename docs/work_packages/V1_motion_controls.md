@@ -452,5 +452,7 @@ reversed. D2, D3, D5, D6 and D8 stand. D7's slice order is replaced by the table
 **Supersedes sections 4.2 and 8** only as far as slice B: one new workflow id and version using a stock ComfyUI node
 on the installed A14B experts. No new engine, model, download, custom node or evaluation layer.
 
+**Slice B as built.** Continuing a clip toward a chosen end image did not fall out cheaply: multi-shot sequences and Storyboard takes refuse end anchors (`unsupported_controls`), so it is **noted for V1-6**. The workflow uses A14B 1.0.0's two sizes (480x832 / 832x480), not the unmeasured VID-FRAME full-picture sizes; a crop of either picture above 5% warns.
+
 **Not in slice A** (left for later, not silently dropped): the compact tag-filtered driver picker (G9) and a separate
 Motion Library window; the library stays inline behind a button.

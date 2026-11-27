@@ -34,7 +34,9 @@ MOTION_PHRASE_MAX: Final = 300
 _BASIS_TEXT_MAX: Final = 300
 _BASIS_ENTRIES_MAX: Final = 16
 _BASIS_KEY = re.compile(r"^[a-z][a-z0-9_:]{0,39}$")
-_KNOWN_INTENTS: Final = frozenset({"animate", "follow_clip", "continue_clip", "sequence", "batch"})
+_KNOWN_INTENTS: Final = frozenset(
+    {"animate", "follow_clip", "between_images", "continue_clip", "sequence", "batch"}
+)
 
 #: The short list of durations a form offers (about 2, 3 and 5 s), plus the engine's longest (5.3).
 DURATION_TARGETS: Final[tuple[float, ...]] = (2.0, 3.0, 5.0)

@@ -113,8 +113,39 @@ const mediaUrl = (item, variant) =>
 // A group is a named batch ("batch:<id>", N5) or an output run folder; batch names come from the server.
 const groupNames = new Map();
 
+// PHONE-FAST: the review sections, by the category id the PC sends. Evaluation sittings are not a section here.
+const SECTIONS = {
+  pipeline: "Pipeline runs",
+  learning: "Learning runs",
+  reprocess: "Reprocess and rework",
+  video: "Movie clips",
+  testing: "Test runs",
+  other: "Other",
+};
+const SEEN_KEY = "rg.seen"; // section -> the gateway's time when this phone last opened it
+const COUNT_KEY = "rg.count"; // "new" shows what arrived since then; otherwise what is left to review
+const isStream = (runId) => runId === "all" || runId.startsWith("all:");
+let section = ""; // the section being looked in, where "back" from one of its runs returns to
+
+// Per-phone settings; a phone without storage just keeps the default.
+function readSetting(name, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(name)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeSetting(name, value) {
+  try {
+    localStorage.setItem(name, JSON.stringify(value));
+  } catch {
+    /* private browsing */
+  }
+}
+
 function runName(runId) {
-  if (runId === "all") return "To review";
+  if (isStream(runId)) return runId === "all" ? "To review" : `To review: ${SECTIONS[runId.slice(4)] || "Other"}`;
   if (runId.startsWith("batch:")) return groupNames.get(runId) || "Batch";
   const match = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}_(.*)$/.exec(runId);
   if (!match) return runId;
@@ -453,6 +484,42 @@ async function loadRun(runId) {
   return items;
 }
 
+// --- scroll position (PHONE-FAST) ---------------------------------------------------------------------------------
+// The home, section and run lists come back where they were left. A place is remembered by the entries on screen, so
+// it holds when reviewed ones have left the list; the pixel offset is the fallback.
+
+const places = new Map(); // list address -> { y, seen: [[entry id, distance from the top of the window]] }
+let listed = null; // the address of the list on screen ("" is home), null for any other view
+
+const listName = (hash) => hash.replace(/^#\/?/, "");
+const entries = () => [...view.querySelectorAll("[data-anchor]")];
+
+function savePlace() {
+  if (listed === null) return;
+  const header = document.getElementById("bar")?.offsetHeight || 0;
+  const seen = entries()
+    .map((node) => [node.getAttribute("data-anchor"), node.getBoundingClientRect()])
+    .filter(([, box]) => box.bottom > header)
+    .slice(0, 12)
+    .map(([id, box]) => [id, box.top]);
+  places.set(listed, { y: window.scrollY, seen });
+}
+
+function restorePlace(name) {
+  listed = name;
+  const place = places.get(name);
+  window.scrollTo(0, place ? place.y : 0);
+  if (!place) return;
+  const present = new Map(entries().map((node) => [node.getAttribute("data-anchor"), node]));
+  for (const [id, top] of place.seen) {
+    const node = present.get(id);
+    if (node) {
+      window.scrollBy(0, node.getBoundingClientRect().top - top);
+      return;
+    }
+  }
+}
+
 // --- views --------------------------------------------------------------------------------------------------------
 
 function show(heading, canGoBack, ...nodes) {
@@ -531,7 +598,7 @@ function runCard(run) {
       })
     : null;
   if (run.kind === "batch" && run.name) groupNames.set(run.run_id, run.name);
-  return el("section", { class: "run", tabindex: "0", onclick: open }, [
+  return el("section", { class: "run", tabindex: "0", "data-anchor": run.run_id, onclick: open }, [
     el("h2", { text: runName(run.run_id) }),
     run.kind === "batch" ? el("p", { class: "muted", text: "Batch" }) : null,
     el("div", { class: "counts" }, [
@@ -551,23 +618,79 @@ function runCard(run) {
 
 const needsReview = (item) => ["undecided", "refused", "rejected"].includes(item.state);
 
-async function showInbox(serial) {
-  const { runs } = await api("/api/runs");
+function reviewAllButton(count, runId) {
+  if (!count) return null;
+  const open = () => {
+    filter = "todo";
+    location.hash = `#/triage/${runId}`;
+  };
+  return el("button", { type: "button", class: "primary wide", text: `Review all (${count})`, onclick: open });
+}
+
+function sectionRow(entry, countNew) {
+  const count = countNew ? entry.new : entry.unreviewed;
+  const label = SECTIONS[entry.id] || "Other";
+  return el(
+    "button",
+    {
+      type: "button",
+      class: "folder",
+      "data-anchor": entry.id,
+      "aria-label": `${label}, ${count} ${countNew ? "new" : "to review"}`,
+      onclick: () => (location.hash = `#/section/${entry.id}`),
+    },
+    [
+      el("span", { class: "folder-icon", "aria-hidden": "true", text: "📁" }),
+      el("span", { class: "folder-name", text: label }),
+      count ? el("span", { class: "chip todo", text: String(count) }) : null,
+    ],
+  );
+}
+
+// The home screen: one row per source of outputs. The top row is where other review tabs sit.
+async function showHome(serial) {
+  const seen = readSetting(SEEN_KEY, {});
+  const query = new URLSearchParams(seen).toString();
+  const { sections } = await api(`/api/sections${query ? `?${query}` : ""}`);
   await loadScopes();
-  const status = await api("/api/status").catch(() => null); // extra: the inbox shows without it
+  const status = await api("/api/status").catch(() => null); // extra: the home screen shows without it
   await Queued.sync();
   if (serial !== renderSerial) return;
-  const waiting = runs.reduce((sum, run) => sum + run.undecided + run.refused, 0);
-  const content = runs.length
-    ? runs.map(runCard)
-    : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
+  const countNew = readSetting(COUNT_KEY, "todo") === "new";
+  const counting = (value, text) =>
+    el("button", {
+      type: "button",
+      text,
+      "aria-pressed": String((value === "new") === countNew),
+      onclick: () => {
+        writeSetting(COUNT_KEY, value);
+        route();
+      },
+    });
+  const waiting = sections.reduce((sum, entry) => sum + entry.unreviewed, 0);
   const update = canUpdate()
     ? el("button", { type: "button", class: "pc-link", text: "Update the PC…", onclick: () => (location.hash = "#/update") })
     : null;
-  const stream = waiting
-    ? el("button", { type: "button", class: "primary", text: `Review all (${waiting})`, onclick: () => (location.hash = "#/triage/all") })
-    : null;
-  show("Review", false, ...[...statusLines(status), Queued.line(status), stream, update, ...content].filter(Boolean));
+  const content = sections.length
+    ? [
+        el("div", { class: "tools counting" }, [counting("todo", "To review"), counting("new", "New since opened")]),
+        ...sections.map((entry) => sectionRow(entry, countNew)),
+      ]
+    : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
+  // RG-170: ratings sit above the folders. Eval clips are rated there and are never a folder here.
+  const rate = Rating.entry(() => rate.remove());
+  show("Review", false, ...[...statusLines(status), Queued.line(status), rate, reviewAllButton(waiting, "all"), ...content, update].filter(Boolean));
+}
+
+async function showSection(name, serial) {
+  const clock = await api("/api/status").catch(() => null); // asked first: nothing arriving meanwhile counts as seen
+  const { runs } = await api(`/api/runs?source=${encodeURIComponent(name)}`);
+  if (serial !== renderSerial) return;
+  section = name;
+  if (clock) writeSetting(SEEN_KEY, { ...readSetting(SEEN_KEY, {}), [name]: clock.now });
+  const waiting = runs.reduce((sum, run) => sum + run.undecided + run.refused, 0);
+  const content = runs.length ? runs.map(runCard) : [el("p", { class: "muted", text: "Nothing here any more." })];
+  show(SECTIONS[name], true, ...[reviewAllButton(waiting, `all:${name}`), ...content].filter(Boolean));
 }
 
 const STATE_BADGES = { unsent: "…", pending: "⏳", applied: "✓", refused: "!", rejected: "!", rework: "↻" };
@@ -583,6 +706,7 @@ function tile(runId, item) {
     {
       type: "button",
       class: classes.join(" "),
+      "data-anchor": item.library_id,
       "aria-label": `${item.kind}, ${label}`,
       onclick: () => (location.hash = `#/triage/${encodeURIComponent(runId)}/${item.library_id}`),
     },
@@ -649,6 +773,119 @@ async function showRun(runId, serial) {
   if (serial === renderSerial) renderGrid(runId);
 }
 
+// --- full resolution (PHONE-FAST) ---------------------------------------------------------------------------------
+// A double tap on a picture shows the original with pinch zoom and pan. A double tap returns to fit, and from fit
+// closes it. The rendition stays the default.
+
+const DOUBLE_TAP_MS = 300;
+const TAP_REACH = 40; // px between the two taps
+
+// Tell one tap from two on the same spot; the single tap waits to see whether a second one comes.
+function doubleTaps() {
+  let last = null;
+  return (x, y, single, double) => {
+    if (last && Math.hypot(x - last.x, y - last.y) < TAP_REACH) {
+      clearTimeout(last.timer);
+      last = null;
+      double();
+      return;
+    }
+    const timer = setTimeout(() => {
+      last = null;
+      single();
+    }, DOUBLE_TAP_MS);
+    last = { x, y, timer };
+  };
+}
+
+function closeViewer() {
+  document.querySelector(".viewer")?.remove();
+}
+
+function openViewer(item) {
+  closeViewer();
+  const image = el("img", { src: mediaUrl(item, "original"), alt: "Full resolution", draggable: "false" });
+  const status = el("p", { class: "viewer-status", role: "status", text: "Loading full resolution…" });
+  const close = el("button", { type: "button", class: "viewer-close", text: "Close", onclick: closeViewer });
+  const node = el("div", { class: "viewer", role: "dialog", "aria-modal": "true" }, [image, status, close]);
+  image.addEventListener("load", () => (status.hidden = true), { once: true });
+  image.addEventListener("error", () => (status.textContent = "Could not load the full-resolution image."), {
+    once: true,
+  });
+  attachZoom(node, image);
+  document.body.append(node);
+}
+
+function attachZoom(node, image) {
+  const view = { scale: 1, x: 0, y: 0 }; // the picture's zoom and its offset from the middle
+  const fingers = new Map();
+  const taps = doubleTaps();
+  let from = null; // the view and fingers a gesture started from
+  let moved = false;
+  const clamp = (value, limit) => Math.min(limit, Math.max(-limit, value));
+  const apply = () => {
+    const box = node.getBoundingClientRect();
+    const most = Math.max(4, (2 * (image.naturalWidth || 0)) / (image.offsetWidth || 1));
+    view.scale = Math.min(most, Math.max(1, view.scale));
+    view.x = clamp(view.x, Math.max(0, (image.offsetWidth * view.scale - box.width) / 2));
+    view.y = clamp(view.y, Math.max(0, (image.offsetHeight * view.scale - box.height) / 2));
+    image.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+  };
+  const gesture = () => {
+    const box = node.getBoundingClientRect();
+    const points = [...fingers.values()];
+    const [a, b = a] = points;
+    return {
+      x: (a.x + b.x) / 2 - box.left - box.width / 2,
+      y: (a.y + b.y) / 2 - box.top - box.height / 2,
+      spread: Math.hypot(a.x - b.x, a.y - b.y),
+    };
+  };
+  const begin = () => (from = fingers.size ? { scale: view.scale, left: view.x, top: view.y, at: gesture() } : null);
+  node.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".viewer-close")) return;
+    if (!fingers.size) moved = false;
+    fingers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
+    if (fingers.size > 1) moved = true;
+    node.setPointerCapture?.(event.pointerId);
+    begin();
+  });
+  node.addEventListener("pointermove", (event) => {
+    const finger = fingers.get(event.pointerId);
+    if (!finger || !from) return;
+    finger.x = event.clientX;
+    finger.y = event.clientY;
+    if (Math.hypot(finger.x - finger.startX, finger.y - finger.startY) >= 8) moved = true;
+    const now = gesture();
+    const factor = fingers.size > 1 && from.at.spread ? now.spread / from.at.spread : 1;
+    view.scale = from.scale * factor;
+    // The spot under the fingers stays under them.
+    view.x = now.x - ((from.at.x - from.left) / from.scale) * view.scale;
+    view.y = now.y - ((from.at.y - from.top) / from.scale) * view.scale;
+    apply();
+  });
+  const lift = (event) => {
+    if (!fingers.delete(event.pointerId)) return;
+    begin();
+    if (fingers.size || moved || event.type === "pointercancel") return;
+    taps(
+      event.clientX,
+      event.clientY,
+      () => {},
+      () => {
+        if (view.scale > 1.01) {
+          Object.assign(view, { scale: 1, x: 0, y: 0 });
+          apply();
+        } else {
+          closeViewer();
+        }
+      },
+    );
+  };
+  node.addEventListener("pointerup", lift);
+  node.addEventListener("pointercancel", lift);
+}
+
 // --- triage -------------------------------------------------------------------------------------------------------
 
 async function showTriage(runId, libraryId, serial) {
@@ -712,11 +949,13 @@ function infoPanel(item) {
     line("Seed", display.seed),
     line("Duration", item.duration_s ? `${item.duration_s} s` : ""),
     line("Prompt", display.prompt_excerpt),
+    item.kind === "image" ? el("p", { class: "muted", text: "Double-tap the picture for full resolution." }) : null,
     el("a", { href: mediaUrl(item, "original"), target: "_blank", rel: "noopener", text: "Open full size" }),
   ]);
 }
 
-function attachSwipe(stage, media, info) {
+function attachSwipe(stage, media, info, item) {
+  const taps = doubleTaps();
   const hint = el("div", { class: "hint", hidden: "" });
   stage.append(hint);
   let start = null;
@@ -759,7 +998,9 @@ function attachSwipe(stage, media, info) {
     const choice = choose(dx, dy);
     reset();
     if (choice) decide(choice === "delete" ? "delete" : "keep", choice === "favorite");
-    else if (Math.abs(dx) < 8 && Math.abs(dy) < 8 && media.tagName === "IMG") info.hidden = !info.hidden;
+    else if (Math.abs(dx) < 8 && Math.abs(dy) < 8 && media.tagName === "IMG") {
+      taps(event.clientX, event.clientY, () => (info.hidden = !info.hidden), () => openViewer(item));
+    }
   });
   stage.addEventListener("pointercancel", () => {
     pointers = Math.max(0, pointers - 1);
@@ -777,7 +1018,7 @@ function renderItem() {
   const media = mediaElement(item);
   const info = infoPanel(item);
   const stage = el("div", { class: "stage" }, [media, info]);
-  attachSwipe(stage, media, info);
+  attachSwipe(stage, media, info, item);
 
   const tags = el(
     "div",
@@ -853,7 +1094,14 @@ function renderItem() {
 }
 
 // --- compare a rework with its original (PHONE-FAST) --------------------------------------------------------------
-// Side by side first; tap one to see it alone, then tap or swipe to flip. Picking keeps one and discards the other.
+// Three views, the phone's choice: side by side (tap one to see it alone), flip (tap or swipe) and a before/after
+// slider. Picking keeps one and discards the other.
+const COMPARE_KEY = "rg.compare";
+const COMPARE_MODES = [
+  ["side", "Side by side"],
+  ["flip", "Flip"],
+  ["slider", "Slider"],
+];
 
 function renderCompare(item) {
   const { list, index, runId } = triage;
@@ -873,23 +1121,51 @@ function renderCompare(item) {
   const figures = sides.map(([name], position) =>
     el("figure", {}, [el("figcaption", { text: name }), images[position]]),
   );
-  const stage = el("div", { class: "stage compare" }, figures);
-  const layout = el("button", { type: "button", text: "Side by side" });
+  const divider = el("div", { class: "divider", "aria-hidden": "true" });
+  const stage = el("div", { class: "stage compare" }, [...figures, divider]);
+  let mode = "side";
   let shown = 1;
+  let split = 50; // the slider: the original left of it, the rework right of it
+  const toggles = COMPARE_MODES.map(([value, text]) =>
+    el("button", {
+      type: "button",
+      text,
+      onclick: () => {
+        writeSetting(COMPARE_KEY, value);
+        setMode(value);
+      },
+    }),
+  );
   const showSide = (position) => {
     shown = position;
-    stage.classList.add("single");
     figures.forEach((figure, i) => figure.classList.toggle("shown", i === shown));
-    layout.hidden = false;
   };
-  layout.hidden = true;
-  layout.addEventListener("click", () => {
-    stage.classList.remove("single");
-    layout.hidden = true;
-  });
+  const slide = (percent) => {
+    split = Math.min(100, Math.max(0, percent));
+    figures[1].style.clipPath = mode === "slider" ? `inset(0 0 0 ${split}%)` : "";
+    divider.style.left = `${split}%`;
+  };
+  const setMode = (value) => {
+    mode = value;
+    stage.className = `stage compare ${mode}`;
+    toggles.forEach((toggle, i) => toggle.setAttribute("aria-pressed", String(COMPARE_MODES[i][0] === mode)));
+    divider.hidden = mode !== "slider";
+    showSide(shown);
+    slide(split);
+  };
+  const saved = readSetting(COMPARE_KEY, "side");
+  setMode(COMPARE_MODES.some(([value]) => value === saved) ? saved : "side");
+  const across = (event) => {
+    const box = stage.getBoundingClientRect();
+    return ((event.clientX - box.left) / (box.width || 1)) * 100;
+  };
+  const taps = doubleTaps();
   let start = null;
   stage.addEventListener("pointerdown", (event) => {
     start = event.isPrimary ? { x: event.clientX, y: event.clientY, target: event.target } : null;
+  });
+  stage.addEventListener("pointermove", (event) => {
+    if (start && mode === "slider" && Math.abs(event.clientX - start.x) >= 8) slide(across(event));
   });
   stage.addEventListener("pointercancel", () => (start = null));
   stage.addEventListener("pointerup", (event) => {
@@ -902,11 +1178,21 @@ function renderCompare(item) {
     if (zoomed) return;
     const tap = Math.abs(dx) < 8 && Math.abs(dy) < 8;
     const swipe = Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy);
-    if (stage.classList.contains("single")) {
-      if (tap || swipe) showSide(1 - shown);
-    } else if (tap && touched >= 0) {
-      showSide(touched);
-    }
+    if (mode === "flip" && swipe) return showSide(1 - shown);
+    if (!tap) return;
+    const at = across(event);
+    // The picture under the finger.
+    const side = mode === "slider" ? Number(at >= split) : mode === "flip" ? shown : touched;
+    if (side < 0) return;
+    const single = () => {
+      if (mode === "slider") slide(at);
+      else if (mode === "flip") showSide(1 - shown);
+      else {
+        shown = side;
+        setMode("flip"); // one alone for a closer look; the saved view stays side by side
+      }
+    };
+    taps(event.clientX, event.clientY, single, () => openViewer(sides[side][1]));
   });
 
   const button = (className, text, onclick) =>
@@ -950,9 +1236,9 @@ function renderCompare(item) {
     el("div", { class: "triage" }, [
       el("div", { class: "status" }, [
         el("span", { id: "state", role: "status" }),
-        layout,
         el("button", { type: "button", text: `${index + 1} / ${list.length} · info`, onclick: () => (info.hidden = !info.hidden) }),
       ]),
+      el("div", { class: "modes", role: "group", "aria-label": "Compare view" }, toggles),
       stage,
       actionRow(item),
       el("div", { class: "actions compare-actions" }, [previous, ...choices, next]),
@@ -1543,17 +1829,28 @@ function advance() {
     renderItem();
     triage.lockedUntil = Date.now() + 250; // a double tap must not decide the next item unseen
   } else {
-    toast(triage.runId === "all" ? "Nothing more to review" : "End of this run");
-    location.hash = triage.runId === "all" ? "" : `#/run/${encodeURIComponent(triage.runId)}`;
+    toast(isStream(triage.runId) ? "Nothing more to review" : "End of this run");
+    location.hash = leaving(triage.runId);
   }
 }
 
 // --- routing ------------------------------------------------------------------------------------------------------
 
+// Where "back" goes from a run or from reviewing it: the grid, else the section it was opened from, else home.
+function leaving(runId, fromTriage = true) {
+  if (fromTriage && !isStream(runId)) return `#/run/${encodeURIComponent(runId)}`;
+  const name = runId.startsWith("all:") ? runId.slice(4) : runId === "all" ? "" : section;
+  return name ? `#/section/${name}` : "#/";
+}
+
 async function route() {
   const serial = ++renderSerial;
   const [, page, run, libraryId] = location.hash.split("/");
+  const name = listName(location.hash);
+  savePlace();
+  listed = null;
   triage = null;
+  closeViewer();
   closeSheet();
   try {
     if (page === "triage" && run) await showTriage(decodeURIComponent(run), libraryId, serial);
@@ -1561,7 +1858,11 @@ async function route() {
     else if (page === "rejected") showRejected();
     else if (page === "update") await showUpdate(serial);
     else if (page === "requests") await Queued.show(serial);
-    else await showInbox(serial);
+    else if (page === "rate") await Rating.route(run, libraryId, serial);
+    else if (page === "section" && SECTIONS[run]) await showSection(run, serial);
+    else await showHome(serial);
+    const isList = !page || page === "run" || page === "section";
+    if (isList && serial === renderSerial) restorePlace(name);
   } catch (error) {
     if (serial !== renderSerial) return;
     if (error.status === 401) showPairing();
@@ -1603,8 +1904,11 @@ async function refresh() {
     } else if (page === "update") {
       await showUpdate(serial);
       window.scrollTo(0, scroll);
+    } else if (page === "section" && SECTIONS[run]) {
+      await showSection(run, serial);
+      window.scrollTo(0, scroll);
     } else if (!page) {
-      await showInbox(serial);
+      await showHome(serial);
       window.scrollTo(0, scroll);
     }
   } catch (error) {
@@ -1614,7 +1918,7 @@ async function refresh() {
 
 back.addEventListener("click", () => {
   const [, page, run] = location.hash.split("/");
-  location.hash = page === "triage" && run && run !== "all" ? `#/run/${run}` : "";
+  location.hash = (page === "triage" || page === "run") && run ? leaving(decodeURIComponent(run), page === "triage") : page === "rate" && run ? "#/rate" : "#/";
 });
 window.addEventListener("hashchange", route);
 window.addEventListener("online", () => flush());
@@ -1629,6 +1933,7 @@ document.addEventListener("visibilitychange", () => document.hidden && releaseHe
 window.addEventListener("pagehide", releaseHeld);
 setInterval(refresh, REFRESH_MS);
 
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 showBadges();
 flush();
 route();

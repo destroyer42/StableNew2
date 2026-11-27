@@ -78,6 +78,10 @@ MISSING = "missing"
 #: The one-time withdrawal of frames published earlier: ledger rows per request, and requests per pass.
 WITHDRAW_PAGE = 500
 WITHDRAW_PAGES = 10
+#: Ledger keys of that sweep. They are renamed when the source filter excludes more (RG-170: eval outputs), so a PC
+#: that already swept looks through its ledger once again.
+_SWEEP_DONE = "sources_withdrawn_v2"
+_SWEEP_CURSOR = "sources_withdraw_cursor_v2"
 _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
@@ -110,6 +114,30 @@ def run_id_for(rel_path: str, created_at: datetime) -> str:
             return part
     top = _RUN_SAFE.sub("_", parts[0]).strip(" .")[:64] if parts else ""
     return f"{created_at.astimezone(UTC):%Y%m%d}_000000_{top or 'output'}"
+
+
+#: Top output folder (casefolded) -> the phone's review section. A folder not listed is "other".
+_SECTION_OF_FOLDER = {
+    "pipeline": "pipeline",
+    "learning": "learning",
+    "reprocess": "reprocess",
+    "testing": "testing",
+    "movie_clips": "video",
+    "svd": "video",
+    "animatediff": "video",
+}
+
+
+def source_of(rel_path: str, kind: str) -> str:
+    """The phone's review section for an output: learning runs stay together, every other video is a movie clip,
+    and an image goes by its output route. Only this category id leaves the PC."""
+
+    parts = Path(rel_path).parts
+    folder = parts[0].casefold() if len(parts) > 1 else ""
+    section = _SECTION_OF_FOLDER.get(folder, "other")
+    if kind == "video" and section != "learning":
+        return "video"
+    return section
 
 
 def _display(item: LibraryItem) -> dict[str, Any]:
@@ -471,22 +499,23 @@ class GatewayPublisher:
         self._deferred[key] = (version, failures, self._monotonic() + seconds)
 
     def withdraw_unpublishable(self, client: GatewayClient, cancel: Event) -> None:
-        """Once per ledger: ask the gateway to stop showing frames and un-smoothed clips published earlier.
+        """Once per ledger: ask the gateway to stop showing eval outputs, frames and un-smoothed clips published
+        earlier.
 
         Kept in steps, so a stop or an unreachable gateway resumes where it was.
         """
 
         if "item_withdraw" not in client.features or not self.root.is_dir():
             return
-        if self._ledger.get_meta("sources_withdrawn") == "done":
+        if self._ledger.get_meta(_SWEEP_DONE) == "done":
             return
-        cursor = int(self._ledger.get_meta("sources_withdraw_cursor") or 0)
+        cursor = int(self._ledger.get_meta(_SWEEP_CURSOR) or 0)
         for _ in range(WITHDRAW_PAGES):
             if cancel.is_set():
                 return
             rows = self._ledger.published_after(cursor, WITHDRAW_PAGE)
             if not rows:
-                self._ledger.set_meta({"sources_withdrawn": "done"})
+                self._ledger.set_meta({_SWEEP_DONE: "done"})
                 return
             unwanted = [
                 str(row["library_id"])
@@ -494,10 +523,36 @@ class GatewayPublisher:
                 if self._sources.exclusion_of(str(row["rel_path"]), str(row["kind"]))
             ]
             if unwanted and not client.withdraw_items(unwanted):
-                log.info("Review gateway did not accept the withdrawal of earlier frames")
+                log.info("Review gateway did not accept the withdrawal of earlier items")
                 return
             cursor = int(rows[-1]["rowid"])
-            self._ledger.set_meta({"sources_withdraw_cursor": str(cursor)})
+            self._ledger.set_meta({_SWEEP_CURSOR: str(cursor)})
+
+    def label_published(self, client: GatewayClient, cancel: Event) -> None:
+        """Once per ledger: tell the gateway the sections of items published before it kept them. Resumes like
+        ``withdraw_unpublishable``."""
+
+        if "item_source" not in client.features:
+            return
+        if self._ledger.get_meta("sections_labelled") == "done":
+            return
+        cursor = int(self._ledger.get_meta("sections_label_cursor") or 0)
+        for _ in range(WITHDRAW_PAGES):
+            if cancel.is_set():
+                return
+            rows = self._ledger.published_after(cursor, WITHDRAW_PAGE)
+            if not rows:
+                self._ledger.set_meta({"sections_labelled": "done"})
+                return
+            named = [
+                (str(row["library_id"]), source_of(str(row["rel_path"]), str(row["kind"])))
+                for row in rows
+            ]
+            if not client.label_items(named):
+                log.info("Review gateway did not accept the sections of earlier items")
+                return
+            cursor = int(rows[-1]["rowid"])
+            self._ledger.set_meta({"sections_label_cursor": str(cursor)})
 
     def publish(
         self,
@@ -677,6 +732,7 @@ class GatewayPublisher:
                 batch=self._batch(client, path),
                 # Only for a gateway that takes it: an older one's schema refuses the field.
                 parent=ItemRef(*parent) if parent and "item_parent" in client.features else None,
+                source=source_of(item.path, item.kind) if "item_source" in client.features else "",
             )
             # The file must still be the bytes the manifest names when the gateway records it.
             self._library.path_for(item)

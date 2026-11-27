@@ -149,7 +149,12 @@ def plan_driver_clip(
     return DriverPlan(choice, window_seconds, line)
 
 
+#: V1 end frame: what a start-and-end job sends when the prompt box is empty, shown before Queue.  Untested wording.
+DEFAULT_BETWEEN_PROMPT = "smooth, natural motion from the first image to the last"
+
+
 __all__ = [
+    "DEFAULT_BETWEEN_PROMPT",
     "DEFAULT_DRIVER_PROMPT",
     "WHOLE_MOVEMENT_LABEL",
     "DriverPlan",

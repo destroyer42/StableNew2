@@ -25,6 +25,7 @@ from src.app.review_gateway_protocol import (
     SHA256,
     ProtocolError,
     encode_json,
+    item_sources,
     item_withdrawal,
     parse_json,
 )
@@ -44,7 +45,12 @@ ROUTES = {
     "deploy_requests": "/sync/v1/deploy-requests",
     "deploy_status": "/sync/v1/deploy-status",
     "pc_status": "/sync/v1/pc-status",
+    "rating_tasks": "/sync/v1/rating-tasks",
+    "rating_media": "/sync/v1/rating-media/{sha256}",
+    "rating_submissions": "/sync/v1/rating-submissions",
+    "rating_acknowledgements": "/sync/v1/rating-acknowledgements",
     "withdrawals": "/sync/v1/withdrawals",
+    "item_sources": "/sync/v1/item-sources",
     "choice_catalog": "/sync/v1/choice-catalog",
 }
 #: The gateway's refusal codes for a deploy request (DEPLOY-2) that the operator tool explains.
@@ -286,6 +292,15 @@ class GatewayClient:
         self._require(response, 200, 201)
         return True
 
+    def label_items(self, items: Sequence[tuple[str, str]]) -> bool:
+        """PHONE-FAST: name the sections of items published earlier; ``False`` when the gateway did not accept it."""
+
+        response = self._post("item_sources", item_sources(items))
+        if response.status in (404, 422):
+            return False
+        self._require(response, 200, 201)
+        return True
+
     # -- pull ------------------------------------------------------------------------------------------------------
 
     def outbox(self, cursor: str | None, limit: int = 100) -> Any:
@@ -369,3 +384,61 @@ class GatewayClient:
             return False
         self._require(response, 200, 201)
         return True
+
+    # -- rating (RG-170) -------------------------------------------------------------------------------------------
+
+    def post_rating_task(self, manifest: Mapping[str, Any]) -> tuple[str, frozenset[str]]:
+        """Declare a rating set; returns the gateway's state and the declared digests it still needs."""
+
+        response = self._post("rating_tasks", manifest)
+        if response.status == 422:
+            raise GatewayRejected("gateway_rejected_rating_task")
+        reply = self._json(self._require(response, 200))
+        if (
+            not isinstance(reply, dict)
+            or reply.get("status") not in ITEM_STATES
+            or not isinstance(reply.get("missing", []), list)
+            or not all(
+                isinstance(digest, str) and SHA256.fullmatch(digest)
+                for digest in reply.get("missing", [])
+            )
+        ):
+            raise GatewayError("invalid_gateway_response")
+        return str(reply["status"]), frozenset(reply.get("missing", []))
+
+    def upload_rating_media(self, sha256: str, body: BinaryIO, size: int) -> None:
+        if not SHA256.fullmatch(sha256):
+            raise GatewayError("invalid_digest")
+        response = self._call(
+            "PUT",
+            ROUTES["rating_media"].format(sha256=sha256),
+            body=body,
+            content_type="application/octet-stream",
+            length=size,
+            timeout=UPLOAD_TIMEOUT,
+        )
+        if response.status == 422:
+            raise GatewayRejected("gateway_rejected_media")
+        self._require(response, 200, 201)
+
+    def rating_submissions(self) -> list[Any]:
+        """Submitted ratings waiting for this PC; each is checked again by the caller."""
+
+        response = self._call("GET", ROUTES["rating_submissions"], limit=MAX_PAGE_BYTES)
+        reply = self._json(self._require(response, 200))
+        if (
+            not isinstance(reply, dict)
+            or reply.get("schema_version") != SCHEMA_VERSION
+            or reply.get("type") != "rating_submission_page"
+            or not isinstance(reply.get("submissions"), list)
+        ):
+            raise GatewayError("invalid_gateway_response")
+        submissions: list[Any] = reply["submissions"]
+        return submissions
+
+    def acknowledge_rating(self, payload: Mapping[str, Any]) -> None:
+        """Settled on 200; a 404 means the gateway no longer holds the submission."""
+
+        response = self._post("rating_acknowledgements", payload)
+        if response.status != 404:
+            self._require(response, 200, 201)

@@ -95,6 +95,7 @@ class Rig:
         kind: str = "image",
         extra: dict[str, bytes] | None = None,
         batch: dict | None = None,
+        source: str | None = None,
     ) -> tuple[dict, dict[str, bytes]]:
         """Return ``(item_manifest, {digest: bytes})`` for a small synthetic item."""
 
@@ -128,6 +129,8 @@ class Rig:
             manifest["duration_s"] = 5.0
         if batch is not None:
             manifest["batch"] = batch
+        if source is not None:
+            manifest["source"] = source
         return manifest, {sha(data): data for data in blobs.values()}
 
     def publish(self, name: str = "one", **options) -> dict[str, str]:

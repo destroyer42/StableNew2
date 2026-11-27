@@ -61,6 +61,7 @@ def test_list_workflow_specs_offers_the_approved_a14b_and_ti2v_and_the_experimen
         "wan22_i2v_a14b_4step_ck_v1",
         "wan22_i2v_a14b_4step_full_picture_v1",
         "wan22_i2v_a14b_4step_v1",
+        "wan22_i2v_a14b_flf_v1",  # V1 end frame
         "wan22_i2v_a14b_svi",
         "wan22_ti2v_5b_i2v_720p_v1",
         "wan22_ti2v_5b_i2v_v1",
@@ -76,6 +77,7 @@ def test_list_workflow_specs_offers_the_approved_a14b_and_ti2v_and_the_experimen
         "wan22_i2v_a14b_4step_ck_v1": True,
         "wan22_i2v_a14b_4step_full_picture_v1": True,
         "wan22_i2v_a14b_4step_v1": False,
+        "wan22_i2v_a14b_flf_v1": True,
         "wan22_i2v_a14b_svi": True,
         "wan22_ti2v_5b_i2v_720p_v1": False,
         "wan22_ti2v_5b_i2v_v1": False,

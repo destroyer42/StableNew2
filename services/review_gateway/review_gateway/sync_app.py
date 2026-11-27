@@ -18,6 +18,8 @@ from .contract import SCHEMA_VERSION, Contract, ContractError
 from .deploy_inbox import DeployInbox
 from .errors import GatewayError
 from .media import is_digest
+from .rating_routes import sync_rating_routes
+from .rating_store import RatingStore
 from .store import Store
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
@@ -26,8 +28,17 @@ PAGE_LIMIT = 500
 #: Optional parts of the v1 contract this gateway accepts, listed by health so a PC sends them only here (an older
 #: gateway's schema would refuse the whole payload). ``item_batch``: the manifest's ``batch`` (N5 inbox grouping).
 #: ``item_parent``: the manifest's ``parent`` (PHONE-FAST rework lineage). ``item_withdraw``: the withdrawals route.
+#: ``item_source``: the manifest's ``source`` and the item-sources route (PHONE-FAST review sections).
+#: ``rating_tasks``: the RG-170 rating routes.
 #: ``deferred_actions``: the choice catalog route (RG-160 requests made while the PC is away).
-FEATURES = ("item_batch", "item_parent", "item_withdraw", "deferred_actions")
+FEATURES = (
+    "item_batch",
+    "item_parent",
+    "item_withdraw",
+    "item_source",
+    "rating_tasks",
+    "deferred_actions",
+)
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
 
@@ -60,7 +71,11 @@ async def _drain(stream: AsyncIterator[bytes]) -> None:
 
 
 def build_sync_app(
-    store: Store, contract: Contract, secret: bytes, deploys: DeployInbox | None = None
+    store: Store,
+    contract: Contract,
+    secret: bytes,
+    deploys: DeployInbox | None,
+    ratings: RatingStore,
 ) -> Starlette:
     async def payload(request: Request, name: str) -> dict:
         body = await read_json(request)
@@ -157,6 +172,11 @@ def build_sync_app(
         await run_in_threadpool(store.set_choice_catalog, await payload(request, "choice_catalog"))
         return JSONResponse({"status": "stored"})
 
+    async def item_sources(request: Request) -> Response:
+        body = await payload(request, "item_sources")
+        pairs = [(entry["library_id"], entry["source"]) for entry in body["items"]]
+        return JSONResponse({"labelled": await run_in_threadpool(store.label_sources, pairs)})
+
     async def immich_receipts(request: Request) -> Response:
         cursor = request.query_params.get("cursor", "")
         return JSONResponse(await run_in_threadpool(store.immich_receipts, cursor))
@@ -191,7 +211,9 @@ def build_sync_app(
             Route("/sync/v1/deploy-requests", deploy_requests, methods=["POST"]),
             Route("/sync/v1/deploy-status", deploy_status, methods=["GET"]),
             Route("/sync/v1/pc-status", pc_status, methods=["PUT"]),
+            *sync_rating_routes(ratings),
             Route("/sync/v1/withdrawals", withdrawals, methods=["POST"]),
+            Route("/sync/v1/item-sources", item_sources, methods=["POST"]),
             Route("/sync/v1/choice-catalog", choice_catalog, methods=["PUT"]),
         ],
         middleware=[Middleware(_SyncSecret, secret=secret)],

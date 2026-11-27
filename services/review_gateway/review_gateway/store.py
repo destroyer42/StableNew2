@@ -39,7 +39,11 @@ _SEEN_RESOLUTION = timedelta(hours=1)
 #: The phone inbox's group key for a named batch (N5); every other group is an output run folder name.
 BATCH_GROUP = "batch:"
 #: PHONE-FAST: not a group but every item still to be reviewed, across all groups (no run folder name looks like it).
+#: ``all:<source>`` is the same within one review section.
 STREAM = "all"
+#: PHONE-FAST review sections, in the order the phone lists them. An item without one counts as "other".
+SOURCES = ("pipeline", "learning", "reprocess", "video", "testing", "other")
+_SOURCE = "COALESCE(item.source, 'other')"
 #: RG-140 slices 1 and 2. The schema reserves the others (N8's clip actions); the PC refuses anything it does not
 #: implement, so an older PC answers a slice-2 request with ``invalid_record``.
 PHONE_ACTIONS = frozenset(
@@ -227,9 +231,11 @@ class Store:
             run_id = manifest["run_id"]
             batch_id = batch["batch_id"].lower() if batch else None
             batch_text = json.dumps(batch) if batch else None
-            # A rework result sits beside its original: it joins the original's batch, or its run folder group.
+            source = manifest.get("source")
+            # A rework result sits beside its original: it joins the original's batch, or its run folder group, and
+            # its review section.
             origin = db.execute(
-                "SELECT run_id, batch_id, batch FROM item WHERE library_id = ? AND sha256 = ?",
+                "SELECT run_id, batch_id, batch, source FROM item WHERE library_id = ? AND sha256 = ?",
                 (
                     parent.get("library_id") or (row["parent_library_id"] if row else None),
                     parent.get("sha256") or (row["parent_sha256"] if row else None),
@@ -237,16 +243,18 @@ class Store:
             ).fetchone()
             if origin is not None:
                 run_id, batch_id, batch_text = origin["run_id"], origin["batch_id"], origin["batch"]
+                source = origin["source"] or source
             db.execute(
                 "INSERT INTO item (library_id, sha256, run_id, kind, created_at, duration_s, display,"
-                " batch_id, batch, parent_library_id, parent_sha256)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " batch_id, batch, parent_library_id, parent_sha256, source)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT (library_id, sha256) DO UPDATE SET"
                 " run_id = excluded.run_id, kind = excluded.kind, created_at = excluded.created_at,"
                 " duration_s = excluded.duration_s, display = excluded.display,"
                 " batch_id = excluded.batch_id, batch = excluded.batch,"
                 " parent_library_id = COALESCE(excluded.parent_library_id, parent_library_id),"
-                " parent_sha256 = COALESCE(excluded.parent_sha256, parent_sha256)",
+                " parent_sha256 = COALESCE(excluded.parent_sha256, parent_sha256),"
+                " source = COALESCE(excluded.source, source)",
                 (
                     *key,
                     run_id,
@@ -258,6 +266,7 @@ class Store:
                     batch_text,
                     parent.get("library_id"),
                     parent.get("sha256"),
+                    source,
                 ),
             )
             db.execute("DELETE FROM item_media WHERE library_id = ? AND sha256 = ?", key)
@@ -367,16 +376,59 @@ class Store:
 
     # --- the phone's view ---------------------------------------------------------------------------------------
 
-    def runs(self) -> list[dict[str, Any]]:
+    def label_sources(self, items: list[tuple[str, str]]) -> int:
+        """Name the review sections of items published without one (PHONE-FAST). Returns how many it named."""
+
+        with self.write() as db:
+            named = db.executemany(
+                "UPDATE item SET source = ? WHERE library_id = ? AND source IS NULL",
+                [(source, library_id) for library_id, source in items],
+            ).rowcount
+            # A rework result belongs to its original's section, whatever folder the PC wrote it to.
+            db.execute(
+                "UPDATE item SET source = COALESCE((SELECT original.source FROM item AS original"
+                " WHERE original.library_id = item.parent_library_id"
+                " AND original.sha256 = item.parent_sha256), source)"
+                " WHERE parent_library_id IS NOT NULL"
+            )
+        return named
+
+    def sections(self, seen: dict[str, str]) -> dict[str, Any]:
+        """Each review section that holds anything: how many items are left to review, and how many arrived since
+        the phone last opened it (``seen``, by section; a section never opened counts what is left to review)."""
+
+        with self.connection() as db:
+            rows = db.execute(_ITEMS_WITH_STATE).fetchall()
+            reworked = _reworked(db)
+        counts: dict[str, dict[str, int]] = {}
+        for row in rows:
+            source = row["source"] or "other"
+            count = counts.setdefault(source, {"total": 0, "unreviewed": 0, "new": 0})
+            state, _decision, _reason = _item_state(row, reworked)
+            todo = state in ("undecided", "refused")
+            count["total"] += 1
+            count["unreviewed"] += todo
+            since = seen.get(source)
+            count["new"] += row["ready_at"] > since if since else todo
+        return {
+            "now": stamp(self.clock()),
+            "sections": [{"id": name, **counts[name]} for name in SOURCES if name in counts],
+        }
+
+    def runs(self, source: str | None = None) -> list[dict[str, Any]]:
         """The inbox: one group per named batch (N5), and per output run folder for everything else.
 
         A group's ``run_id`` is what the phone opens: the run folder, or ``batch:<batch_id>``. Groups come newest
-        activity first (their latest item), then by that key.
+        activity first (their latest item), then by that key. ``source`` limits it to one review section.
         """
 
+        where, values = (f" AND {_SOURCE} = ?", (source,)) if source else ("", ())
         with self.connection() as db:
             rows = db.execute(
-                _ITEMS_WITH_STATE + " ORDER BY item.run_id DESC, item.created_at, item.library_id"
+                _ITEMS_WITH_STATE
+                + where
+                + " ORDER BY item.run_id DESC, item.created_at, item.library_id",
+                values,
             ).fetchall()
             reworked = _reworked(db)
         runs: dict[str, dict[str, Any]] = {}
@@ -424,8 +476,11 @@ class Store:
 
     def run_items(self, run_id: str) -> list[dict[str, Any]]:
         batch_id = run_id.removeprefix(BATCH_GROUP)
+        stream, _, source = run_id.partition(":")
         if run_id == STREAM:
             where, value = "? = ''", ""
+        elif stream == STREAM:
+            where, value = f"{_SOURCE} = ?", source
         elif batch_id != run_id:
             where, value = "item.batch_id = ?", batch_id.lower()
         else:
@@ -474,7 +529,7 @@ class Store:
                     else None,
                 }
             )
-        if run_id == STREAM:
+        if stream == STREAM:
             return _stream(items, rows)
         return items
 
@@ -1221,8 +1276,8 @@ def _migrate(db: sqlite3.Connection) -> None:
         if column not in item_columns:
             db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS item_batch ON item (batch_id, created_at, library_id)")
-    # PHONE-FAST: the original a rework result was made from.
-    for column in ("parent_library_id", "parent_sha256"):
+    # PHONE-FAST: the original a rework result was made from, and the item's review section.
+    for column in ("parent_library_id", "parent_sha256", "source"):
         if column not in item_columns:
             db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")
 
