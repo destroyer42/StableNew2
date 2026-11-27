@@ -263,10 +263,16 @@ def test_low_available_ram_is_recorded_but_never_blocks(monkeypatch: pytest.Monk
     assert "warnings" not in evidence["host_memory_before_dispatch"]
 
 
-def test_an_unavailable_module_fails_before_generation() -> None:
+def test_an_unavailable_module_fails_before_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+    import src.image_backends.forge_klein_assets as assets_module
+
+    waited: list[float] = []  # the bounded catalog re-read runs on a fake clock
+    monkeypatch.setattr(assets_module, "_monotonic", lambda: sum(waited))
+    monkeypatch.setattr(assets_module, "_sleep", waited.append)
     transport = FakeWebUITransport(flavor="forge", checkpoint=KLEIN, modules=MODULES[:1])  # no flux2-vae
     entry = _run(_t2i_njr(job_id="klein-nomodule"), transport)
     assert entry.status is JobStatus.FAILED
+    assert sum(waited) == pytest.approx(assets_module.CATALOG_SETTLE_TIMEOUT_S)  # waited, bounded, then refused
     assert "does not list the required module(s)" in str(entry.error_message)
     assert "install_forge_klein_assets.ps1" in str(entry.error_message)
     assert transport.generation_calls == []

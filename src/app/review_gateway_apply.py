@@ -17,6 +17,11 @@ services only:
   which prepares a summary or admits through the phone admission service. Without one they are refused
   (``not_granted``). This module itself still has no reference to the queue, the runner or ``JobService`` (RG-100
   invariant 6).
+* **Admin requests** (LAUNCH-UPDATE-2) need the device's ``admin`` scope, issued only by the desktop's dedicated
+  remote-update pairing offer (D2). They name no item; the injected ``AdminRequests`` handler
+  (``src/app/live_update_remote.py``) runs them through the LAUNCH-UPDATE-1 service, which also requires the
+  PC-local "Allow remote update" switch. While an update is under way the record is left unanswered
+  (``in_progress``) and asked again on later cycles, across the restart, until the update has a receipt.
 
 Each outcome is written to the ledger before it is acknowledged, so a re-sent record gets the same answer and is never
 applied twice.
@@ -28,7 +33,7 @@ import logging
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from src.app.review_gateway_protocol import (
     ARCHIVE_FAILED,
@@ -38,6 +43,7 @@ from src.app.review_gateway_protocol import (
     NOT_GRANTED,
     REVOKED_DEVICE,
     UNKNOWN_ITEM,
+    AdminRecord,
     OutboxRecord,
     ProtocolError,
     parse_record,
@@ -65,6 +71,9 @@ log = logging.getLogger(__name__)
 
 _HASH_LIMIT = max(VIDEO_LIMIT, 64 * 1024 * 1024)
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
+#: An answer that is not final yet: the record is neither recorded nor acknowledged and is asked again later.
+IN_PROGRESS = "in_progress"
+UPDATE_UNAVAILABLE = "update_unavailable"
 
 
 @dataclass(frozen=True)
@@ -73,6 +82,12 @@ class Applied:
     outcome: str
     reason: str = ""
     receipt: Mapping[str, Any] = field(default_factory=dict)
+
+
+class AdminRequests(Protocol):
+    """Runs an ``admin_request``; ``None`` while it is still in progress (nothing is recorded or acknowledged)."""
+
+    def handle(self, record: AdminRecord) -> Applied | None: ...
 
 
 class ApplyDeferred(Exception):
@@ -94,12 +109,14 @@ class RecordApplier:
         *,
         active_inputs: Callable[[], Collection[str]] | None,
         actions: GatewayActions | None = None,
+        admin: AdminRequests | None = None,
     ) -> None:
         self._ledger = ledger
         self._root = output_root
         self._records_path = records_path
         self._active_inputs = active_inputs
         self._actions = actions
+        self.admin = admin
 
     def handle(self, raw: Any) -> Applied | None:
         """The outcome for one raw outbox record; ``None`` when it has no acknowledgeable record id.
@@ -119,12 +136,14 @@ class RecordApplier:
             key = record.idempotency_key
             first = self._ledger.outcome_for_key(key)
             if first is not None:
-                # An action's duplicate repeats the first receipt, so the phone still sees its job ids (S8).
-                receipt = first.receipt if record.kind == "action_request" else {}
+                # A request's duplicate repeats the first receipt, so the phone still sees its job ids (S8).
+                receipt = first.receipt if record.kind != "decision" else {}
                 result = Applied(record_id, "duplicate", receipt=receipt)
                 key = None  # the key already names the first record
             else:
                 result = self._apply(record)
+                if result.outcome == IN_PROGRESS:
+                    return result  # not final: nothing recorded, nothing acknowledged
         except ProtocolError:
             result = Applied(record_id, "refused", INVALID_RECORD)
         except _Refused as refusal:
@@ -140,7 +159,7 @@ class RecordApplier:
 
     # -- checks ----------------------------------------------------------------------------------------------------
 
-    def _authorize(self, record: OutboxRecord, scope: str) -> None:
+    def _authorize(self, record: OutboxRecord | AdminRecord, scope: str) -> None:
         device = self._ledger.device(record.device_id)
         if device is None or device.revoked:
             raise _Refused(REVOKED_DEVICE)
@@ -173,7 +192,9 @@ class RecordApplier:
 
     # -- apply -----------------------------------------------------------------------------------------------------
 
-    def _apply(self, record: OutboxRecord) -> Applied:
+    def _apply(self, record: OutboxRecord | AdminRecord) -> Applied:
+        if isinstance(record, AdminRecord):
+            return self._admin(record)
         if record.kind == "action_request":
             return self._action(record)
         decision = record.decision
@@ -187,6 +208,16 @@ class RecordApplier:
         if decision.verdict == "keep":
             return self._keep(record, path)
         return self._discard(record, path, rel_path)
+
+    def _admin(self, record: AdminRecord) -> Applied:
+        self._authorize(record, "admin")
+        handler = self.admin
+        if handler is None:
+            raise _Refused(UPDATE_UNAVAILABLE)
+        result = handler.handle(record)
+        if result is None:
+            return Applied(record.record_id, IN_PROGRESS)
+        return Applied(record.record_id, result.outcome, result.reason, dict(result.receipt))
 
     def _action(self, record: OutboxRecord) -> Applied:
         self._authorize(record, "queue")
