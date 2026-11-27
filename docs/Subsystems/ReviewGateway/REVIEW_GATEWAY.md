@@ -47,7 +47,8 @@ The schema fixes payloads; this fixes how they travel. A change here must be agr
 The port speaks TLS with a self-signed certificate made at install. The PC pins it by SHA-256 over its DER bytes (64
 lowercase hex) before it sends anything; no CA or host name is checked. A non-loopback `sync_host` without a certificate
 is refused at startup, so there is no plain-HTTP LAN mode. Every request carries `Authorization: Bearer <sync secret>`
-(401 otherwise). JSON bodies are one schema payload, UTF-8, at most 64 KiB. Errors are `{"error": "<code>"}`.
+(401 otherwise). JSON bodies are one schema payload, UTF-8, at most 64 KiB (256 KiB for the rating payloads of
+section 9). Errors are `{"error": "<code>"}`.
 
 | Method and path | Body | Success |
 |---|---|---|
@@ -63,6 +64,8 @@ is refused at startup, so there is no plain-HTTP LAN mode. Every request carries
 | `POST /sync/v1/withdrawals` | `item_withdrawal` | `{"withdrawn": n}` (section 3.0) |
 | `GET /sync/v1/immich-receipts?cursor=` | - | `immich_receipt_page` (section 5); 400 `invalid_cursor` |
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
+
+The rating routes are in section 9.
 
 Rules:
 
@@ -144,7 +147,8 @@ Rules:
   touched. A changed item is known to the gateway and Immich by the SHA-256 of the bytes sent; the PC maps a decision
   back to its file (`public_digest`). Media that cannot be cleaned is not sent. Items sent before this are not sent
   again, so they keep their metadata.
-- **One-time withdrawal.** Frames and un-smoothed clips published before the rule above are withdrawn once: the PC
+- **One-time withdrawal.** Frames, un-smoothed clips and eval outputs (section 9) published before the rules above
+  are withdrawn once: the PC
   classifies its publish ledger and posts `item_withdrawal` to a gateway listing `item_withdraw`. The gateway purges
   those items without recording a decision or touching Immich, and leaves any item with a decision or a request the
   PC has not refused. No PC file changes.
@@ -471,3 +475,63 @@ while a request is pending or an update is in progress.
 and it refuses an offer with `admin` (the desktop's code then does not work). Install the gateway release first, then
 update the PC app. SAFE-UPDATE adds the `not_github_signed` and `github_unavailable` codes the same way: an older
 gateway rejects a status or receipt carrying them, so deploy the gateway before updating the PC.
+
+## 9. Ratings: the "To rate" tab (RG-170)
+
+Built and tested hermetically; not deployed, and no sitting has been rated on the live phone.
+[Design and decisions](../../work_packages/RG-170_phone_rating_tab.md).
+
+**What.** **To rate**, a button above the review folders, lists every rating sitting and question the owner has been asked, with
+its state: to rate, partly done, waiting for the PC, done, or not accepted with the reason. Kinds: A/B pairs, 1-5 and
+yes/no scores per clip, an N-way ordering, and a pick-one question. Answers are saved per item as they are given.
+**Submit** is explicit and final; the PC then writes the eval's own file and sends back the reveal.
+
+**Navigation hook** (`static/rating.js`). `Rating.entry(unavailable)` returns the full-width "To rate" button with its
+open-count badge; the home screen puts it above the review folders. On a gateway without rating tasks it hides itself
+and calls `unavailable`. The hash routes under `#/rate` belong to ratings. Evaluation runs appear only here, never
+as a review folder.
+
+**Register a sitting** on the PC (nothing else is needed on the gateway):
+
+```powershell
+python -m tools.review_gateway_rating pairs <blind folder> --task-id <id> --title "<title>"
+python -m tools.review_gateway_rating scores <blind folder> --task-id <id> --title "<title>" --pick "<value>=<label>" --pick "<value>=<label>"
+python -m tools.review_gateway_rating choice --task-id <id> --title "<title>" --question "<question>" --option "<value>=<label>" --option "<value>=<label>" --recommended <value>
+python -m tools.review_gateway_rating register <rating set.json>
+python -m tools.review_gateway_rating list
+python -m tools.review_gateway_rating withdraw <id>
+```
+
+A registration is one `stablenew.rating-set.v1` file in `%LOCALAPPDATA%\StableNew\review-gateway\rating_tasks`
+(`src/video/video_eval_rating_task.py`, `register_rating_task()` from code). The sync worker
+(`src/app/review_gateway_ratings.py`) publishes it, re-sends it every 10 minutes, and withdraws it when the file is
+removed. It encodes at most four clips per cycle and none while a job runs.
+
+| Route | Use |
+|---|---|
+| `POST /sync/v1/rating-tasks` | `rating_task` to `{status, missing}`; 409 `task_conflict` when a used task id changes shape |
+| `PUT`/`HEAD /sync/v1/rating-media/{sha256}` | rating clip and picture bytes, stored in `<media_dir>/rating/` |
+| `GET /sync/v1/rating-submissions` | `rating_submission_page`: submitted, unanswered ratings |
+| `POST /sync/v1/rating-acknowledgements` | `rating_acknowledgement`: applied (with reveal tables) or refused |
+| `GET /api/rating/tasks`, `GET /api/rating/tasks/{id}` | the phone's list and one task with its saved answers |
+| `POST /api/rating/tasks/{id}/answers`, `.../submit` | save one item; submit all |
+| `GET /rating-media/{id}/{sha256}` | a task's media, enrolled `review` phones only |
+
+Rules:
+
+1. Only ids, text and media leave the PC: no path, file name, case id or key file. Clips are re-encoded (H.264 CRF 18,
+   at most 1280 px) and pictures re-saved with **all metadata dropped**; StableNew clips otherwise carry their workflow,
+   backend and a PC path, which would also unblind the rating.
+2. A submission is a request. The PC refuses it from an unpaired or revoked phone, checks every answer again, and writes
+   all or nothing: a different value already in the eval's file refuses it (`already_rated`) and the task reopens. The
+   key file must give an arm for every clip of every item: registration refuses it otherwise, such a set is not
+   published, and a key that breaks later refuses the submission with nothing written.
+3. Gateway retention: a finished task and its media go 14 days after the PC answered, a withdrawn one after 48 hours;
+   an unanswered submission is never purged.
+4. A gateway lists `rating_tasks` in health; a PC sends nothing about ratings to one that does not. Deploy the gateway
+   first, then update the PC.
+
+**Eval outputs are not review items.** The publisher skips anything under `video_eval` and any output whose run
+manifest names a job an eval's `run.json` lists. Clips published before that rule are withdrawn by the one-time
+withdrawal of section 3.0, which runs once more for this rule.
+

@@ -18,6 +18,8 @@ from .contract import SCHEMA_VERSION, Contract, ContractError
 from .deploy_inbox import DeployInbox
 from .errors import GatewayError
 from .media import is_digest
+from .rating_routes import sync_rating_routes
+from .rating_store import RatingStore
 from .store import Store
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
@@ -27,7 +29,8 @@ PAGE_LIMIT = 500
 #: gateway's schema would refuse the whole payload). ``item_batch``: the manifest's ``batch`` (N5 inbox grouping).
 #: ``item_parent``: the manifest's ``parent`` (PHONE-FAST rework lineage). ``item_withdraw``: the withdrawals route.
 #: ``item_source``: the manifest's ``source`` and the item-sources route (PHONE-FAST review sections).
-FEATURES = ("item_batch", "item_parent", "item_withdraw", "item_source")
+#: ``rating_tasks``: the RG-170 rating routes.
+FEATURES = ("item_batch", "item_parent", "item_withdraw", "item_source", "rating_tasks")
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
 
@@ -60,7 +63,11 @@ async def _drain(stream: AsyncIterator[bytes]) -> None:
 
 
 def build_sync_app(
-    store: Store, contract: Contract, secret: bytes, deploys: DeployInbox | None = None
+    store: Store,
+    contract: Contract,
+    secret: bytes,
+    deploys: DeployInbox | None,
+    ratings: RatingStore,
 ) -> Starlette:
     async def payload(request: Request, name: str) -> dict:
         body = await read_json(request)
@@ -192,6 +199,7 @@ def build_sync_app(
             Route("/sync/v1/deploy-requests", deploy_requests, methods=["POST"]),
             Route("/sync/v1/deploy-status", deploy_status, methods=["GET"]),
             Route("/sync/v1/pc-status", pc_status, methods=["PUT"]),
+            *sync_rating_routes(ratings),
             Route("/sync/v1/withdrawals", withdrawals, methods=["POST"]),
             Route("/sync/v1/item-sources", item_sources, methods=["POST"]),
         ],

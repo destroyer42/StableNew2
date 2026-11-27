@@ -140,7 +140,10 @@ def test_the_schema_is_a_valid_2020_12_schema() -> None:
 def test_every_top_level_payload_in_the_schema_has_a_sample() -> None:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 
-    assert [entry["$ref"].rsplit("/", 1)[1] for entry in schema["oneOf"]] == list(KINDS)
+    # The RG-170 payloads have their samples and checks in test_rating.py.
+    rating = ["rating_task", "rating_submission_page", "rating_acknowledgement"]
+    listed = [entry["$ref"].rsplit("/", 1)[1] for entry in schema["oneOf"]]
+    assert sorted(listed) == sorted([*KINDS, *rating])
 
 
 @pytest.mark.parametrize("kind", KINDS)
