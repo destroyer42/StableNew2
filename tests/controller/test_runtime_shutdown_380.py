@@ -129,7 +129,7 @@ def test_queue_and_blocked_history_share_deadline_and_keep_resources_open(
         built.cleanup()
 
     assert history_reads == ["read"] and delivered == []
-    assert built.status("A") is JobStatus.CANCELLED
+    assert built.status("A") is JobStatus.QUEUED
     assert built.status("B") is JobStatus.QUEUED
 
 

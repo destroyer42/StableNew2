@@ -14,7 +14,7 @@ Every function here is blocking (it reads the repository and the file system): c
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
@@ -116,6 +116,21 @@ def repository_of(controller: Any) -> JobRepository | None:
         if isinstance(repository, JobRepository):
             return repository
     return None
+
+
+def batch_of_job_reader(
+    repository: Any, identity: Callable[[Any], Mapping[str, Any] | None]
+) -> Callable[[str], Mapping[str, Any] | None]:
+    """The named batch of a job id, read from the repository's immutable snapshot (read only).
+
+    ``identity`` is N5's ``batch_identity``, injected so this module stays free of controller services.
+    """
+
+    def read(job_id: str) -> Mapping[str, Any] | None:
+        entry = repository.get_job(job_id)
+        return identity(getattr(entry, "snapshot", None) or {})
+
+    return read
 
 
 def _batch_id(row: BatchCandidateRow) -> str:
