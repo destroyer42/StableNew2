@@ -5,7 +5,8 @@ delivered), pulls pending outbox records page by page, applies each through ``Re
 stores Immich receipts once the gateway offers them (RG-130), publishes the PC's checkout and queue status for admin
 phones (LAUNCH-UPDATE-2, once a ``RemoteUpdate`` is attached), and publishes a few new Output Library items. While a
 job is running it publishes at most one item every ``BUSY_PUBLISH_SECONDS`` and never transcodes, so it does not
-compete with generation.
+compete with generation. Registered rating sets (RG-170, ``review_gateway_ratings.py``) are sent and submitted
+ratings applied once a ``RatingTaskSync`` is attached.
 
 The worker is registered with ``src/utils/thread_registry.py`` and stops on application shutdown. The desktop dialog
 calls the public methods from the Tk thread; they only record intent and wake the worker, and ``status()`` returns an
@@ -140,6 +141,7 @@ class ReviewGatewaySync:
         self._follow_until = -1.0
         self._last_full_cycle = -interval
         self._status_source: Callable[[], dict[str, Any] | None] | None = None
+        self._ratings: Any = None
         self._last_status: dict[str, Any] | None = None
         self._last_status_at = 0.0
         self._status_retry_at = 0.0
@@ -201,6 +203,14 @@ class ReviewGatewaySync:
 
         self._applier.admin = remote
         self._status_source = remote.status_payload
+
+    def attach_rating_tasks(self, ratings: Any) -> None:
+        """RG-170: send registered rating sets and apply submitted ratings through ``ratings`` each full cycle.
+
+        Called once on the Tk thread before the worker starts.
+        """
+
+        self._ratings = ratings
 
     def create_pairing(
         self, label: str = "", *, allow_queue: bool = True, allow_update: bool = False
@@ -310,6 +320,8 @@ class ReviewGatewaySync:
             self._pull_immich(client)
             self._send_status(client)
             self._publish(client)
+            if self._ratings is not None:
+                self._ratings.step(client, busy=self._busy(), cancel=self._stop)
             self._last_full_cycle = now
         except GatewayPinMismatch:
             return self._fail("certificate_mismatch")

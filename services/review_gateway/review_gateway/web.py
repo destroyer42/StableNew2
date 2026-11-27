@@ -17,11 +17,11 @@ def refusal(status: int, code: str) -> JSONResponse:
     return JSONResponse({"error": code}, status_code=status)
 
 
-async def read_json(request: Request) -> dict[str, Any]:
+async def read_json(request: Request, *, limit: int = JSON_LIMIT) -> dict[str, Any]:
     body = bytearray()
     async for chunk in request.stream():
         body += chunk
-        if len(body) > JSON_LIMIT:
+        if len(body) > limit:
             raise GatewayError(413, "too_large")
     return Contract.parse(bytes(body))
 

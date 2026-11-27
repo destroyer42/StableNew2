@@ -438,7 +438,7 @@ async function showInbox(serial) {
   const update = canUpdate()
     ? el("button", { type: "button", class: "pc-link", text: "Update the PC…", onclick: () => (location.hash = "#/update") })
     : null;
-  show("Review", false, ...[update, ...content].filter(Boolean));
+  show("Review", false, ...[Rating.tab(), update, ...content].filter(Boolean));
 }
 
 const STATE_BADGES = { unsent: "…", pending: "⏳", applied: "✓", refused: "!", rejected: "!" };
@@ -1202,6 +1202,7 @@ async function route() {
     else if (page === "run" && run) await showRun(decodeURIComponent(run), serial);
     else if (page === "rejected") showRejected();
     else if (page === "update") await showUpdate(serial);
+    else if (page === "rate") await Rating.route(run, libraryId, serial);
     else await showInbox(serial);
   } catch (error) {
     if (serial !== renderSerial) return;
@@ -1251,7 +1252,7 @@ async function refresh() {
 
 back.addEventListener("click", () => {
   const [, page, run] = location.hash.split("/");
-  location.hash = page === "triage" && run ? `#/run/${run}` : "";
+  location.hash = page === "triage" && run ? `#/run/${run}` : page === "rate" && run ? "#/rate" : "";
 });
 window.addEventListener("hashchange", route);
 window.addEventListener("online", () => flush());

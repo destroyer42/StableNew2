@@ -9,6 +9,7 @@ from .contract import Contract
 from .deploy_inbox import DeployInbox
 from .media import MediaStore
 from .phone_app import build_phone_app
+from .rating_store import RatingStore
 from .store import Clock, Store, utc_now
 from .sync_app import build_sync_app
 from .uploader import Uploader
@@ -25,9 +26,10 @@ class Gateway:
             self.contract,
             clock,
         )
+        self.ratings = RatingStore(self.store)
 
     def phone_app(self) -> Starlette:
-        return build_phone_app(self.store, self.clock)
+        return build_phone_app(self.store, self.clock, self.ratings)
 
     def sync_app(self) -> Starlette:
         deploys = DeployInbox(
@@ -36,11 +38,15 @@ class Gateway:
             self.settings.release_dir or running_release(),
         )
         return build_sync_app(
-            self.store, self.contract, read_secret(self.settings.secret_file), deploys
+            self.store,
+            self.contract,
+            read_secret(self.settings.secret_file),
+            deploys,
+            self.ratings,
         )
 
     def uploader(self) -> Uploader:
         return Uploader(self.store, self.settings.immich_url, self.settings.immich_key_path)
 
     def retention(self) -> dict[str, int]:
-        return self.store.retention()
+        return {**self.store.retention(), **self.ratings.retention()}

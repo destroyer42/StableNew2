@@ -68,6 +68,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
 - `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)
+- `review_gateway_ratings.py`: PC side of RG-170: registered rating sets to the review gateway, submitted ratings back into the eval's files
 - `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
 - `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
@@ -1102,6 +1103,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_eval_motion_html.py`: HTML fragments for controlled-motion evidence in the eval contact sheet (PR-VID-MOTION-410)
 - `video_eval_motion_metrics.py`: Global image-motion diagnostics: driving reference versus generated result (PR-VID-MOTION-410)
 - `video_eval_motion_review.py`: Read-only data for reviewing a controlled-motion eval run (PR-VID-MOTION-410)
+- `video_eval_rating_task.py`: Registered rating sets and their result contracts (RG-170)
 - `video_eval_ratings_store.py`: Safe, lossless persistence for an eval run's ``ratings.csv`` (PR-VID-QUALITY-351)
 - `video_eval_report.py`: Measure an admitted eval run and write its contact sheet (PR-VID-EVAL-320)
 - `video_eval_rubric.py`: Identity and continuity rubric for eval-suite ratings (PR-VID-QUALITY-351)

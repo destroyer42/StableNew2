@@ -30,6 +30,15 @@
     },
     {
       "$ref": "#/$defs/pc_status"
+    },
+    {
+      "$ref": "#/$defs/rating_task"
+    },
+    {
+      "$ref": "#/$defs/rating_submission_page"
+    },
+    {
+      "$ref": "#/$defs/rating_acknowledgement"
     }
   ],
   "$defs": {
@@ -1494,6 +1503,394 @@
         },
         "last_result": {
           "$ref": "#/$defs/update_receipt"
+        }
+      }
+    },
+    "rating_id": {
+      "description": "A rating task id chosen on the PC (RG-170). Never a path.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "rating_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+    },
+    "rating_criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "criterion_id",
+        "label",
+        "type",
+        "required"
+      ],
+      "properties": {
+        "criterion_id": {
+          "$ref": "#/$defs/rating_key"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "type": {
+          "enum": [
+            "choice",
+            "score",
+            "rank",
+            "enum"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value",
+              "label"
+            ],
+            "properties": {
+              "value": {
+                "$ref": "#/$defs/rating_key"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "recommended": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "rating_clip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clip_id",
+        "label",
+        "media"
+      ],
+      "properties": {
+        "clip_id": {
+          "$ref": "#/$defs/rating_key"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "media": {
+          "$ref": "#/$defs/media_variant"
+        }
+      }
+    },
+    "rating_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id"
+      ],
+      "properties": {
+        "item_id": {
+          "$ref": "#/$defs/rating_key"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "context": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "reference": {
+          "$ref": "#/$defs/media_variant"
+        },
+        "clips": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/rating_clip"
+          }
+        }
+      }
+    },
+    "rating_task": {
+      "description": "PC to gateway (RG-170): one rating sitting or feedback question. Opaque ids and SHA-256 media only; no paths, file names or arm identities. Sent only to a gateway whose health lists 'rating_tasks'.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "task_id",
+        "title",
+        "kind",
+        "state",
+        "created_at",
+        "criteria",
+        "items"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "rating_task"
+        },
+        "task_id": {
+          "$ref": "#/$defs/rating_id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "kind": {
+          "enum": [
+            "pairs",
+            "scores",
+            "ranking",
+            "choice"
+          ]
+        },
+        "state": {
+          "enum": [
+            "open",
+            "done",
+            "withdrawn"
+          ]
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "follow_up_of": {
+          "$ref": "#/$defs/rating_id"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/rating_criterion"
+          }
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 60,
+          "items": {
+            "$ref": "#/$defs/rating_item"
+          }
+        }
+      }
+    },
+    "rating_answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "clip_id",
+        "values"
+      ],
+      "properties": {
+        "item_id": {
+          "$ref": "#/$defs/rating_key"
+        },
+        "clip_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{0,40}$"
+        },
+        "values": {
+          "type": "object",
+          "maxProperties": 16
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    },
+    "rating_submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "submission_id",
+        "task_id",
+        "device_id",
+        "created_at",
+        "answers"
+      ],
+      "properties": {
+        "submission_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "task_id": {
+          "$ref": "#/$defs/rating_id"
+        },
+        "device_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,64}$"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "answers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 360,
+          "items": {
+            "$ref": "#/$defs/rating_answer"
+          }
+        }
+      }
+    },
+    "rating_submission_page": {
+      "description": "Gateway to PC (RG-170): submitted ratings the PC has not answered yet. Requests the PC validates, applies or refuses.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "submissions"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "rating_submission_page"
+        },
+        "submissions": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/rating_submission"
+          }
+        }
+      }
+    },
+    "rating_reveal_table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "columns",
+        "rows"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 60
+          }
+        },
+        "rows": {
+          "type": "array",
+          "maxItems": 60,
+          "items": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 120
+            }
+          }
+        }
+      }
+    },
+    "rating_acknowledgement": {
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "outcome"
+            ],
+            "properties": {
+              "outcome": {
+                "const": "refused"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason_code"
+            ]
+          }
+        }
+      ],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "submission_id",
+        "outcome",
+        "acknowledged_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "rating_acknowledgement"
+        },
+        "submission_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "outcome": {
+          "enum": [
+            "applied",
+            "refused"
+          ]
+        },
+        "acknowledged_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "reason_code": {
+          "enum": [
+            "already_rated",
+            "clip_changed",
+            "unknown_task",
+            "revoked_device",
+            "not_granted",
+            "invalid_record",
+            "write_failed"
+          ]
+        },
+        "reveal": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/rating_reveal_table"
+          }
         }
       }
     }
