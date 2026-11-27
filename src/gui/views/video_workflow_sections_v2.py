@@ -57,19 +57,6 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
         visible, text="Why these settings?", style="Dark.TButton", command=tab._toggle_reasons
     )
     tab.why_button.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
-    # N13: unrated speed arms and superseded arms are listed only when this is on.
-    tab.show_experimental_check = ttk.Checkbutton(
-        adv,
-        text="Show experimental",
-        variable=tab.show_experimental_var,
-        style="Dark.TCheckbutton",
-    )
-    tab.show_experimental_check.grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
-    attach_tooltip(
-        tab.show_experimental_check,
-        "Also list unrated speed arms and superseded engine arms (A14B CK attention and SVI, "
-        "HunyuanVideo 1.5). They stay experimental: Queue warns and records your opt-in.",
-    )
     reasons_label = ttk.Label(
         visible, textvariable=tab.suggestion_reasons_var, style="Muted.TLabel", justify="left"
     )
@@ -92,6 +79,19 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
     adv = tab.advanced_section.body
     tab._advanced_frame = adv
     configure_grid_columns(adv, tab._form_columns)
+    # N13 (beside the engine picker, under Advanced since V1-1): unrated speed arms and superseded arms are listed only when this is on.
+    tab.show_experimental_check = ttk.Checkbutton(
+        adv,
+        text="Show experimental",
+        variable=tab.show_experimental_var,
+        style="Dark.TCheckbutton",
+    )
+    tab.show_experimental_check.grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
+    attach_tooltip(
+        tab.show_experimental_check,
+        "Also list unrated speed arms and superseded engine arms (A14B CK attention and SVI, "
+        "HunyuanVideo 1.5). They stay experimental: Queue warns and records your opt-in.",
+    )
     tab.workflow_combo = cast(
         ttk.Combobox,
         tab._add_labeled_entry(
