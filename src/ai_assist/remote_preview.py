@@ -22,6 +22,8 @@ MODEL_LABELS = {
     "lfm3:1.7b": "LFM3-1.7B",
 }
 MODELS = tuple(MODEL_LABELS)
+#: Approved models that accept a picture (ASSIST-FIX motion phrase). Any other model is never sent one.
+VISION_MODELS = frozenset({DEFAULT_MODEL})
 _DEFAULT_SELECTION = "default"
 REMOTE_PREVIEW_LABEL = "Remote AI Assist Preview (unqualified)"
 REMOTE_DISCLOSURE = "Request content is sent through the operator-managed encrypted SSH tunnel."

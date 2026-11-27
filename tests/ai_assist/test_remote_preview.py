@@ -383,6 +383,7 @@ def test_active_generation_and_local_quarantine_do_not_gate_remote(installation,
         "model_name": APPROVAL.model,
         "runtime_build_id": f"ollama-{RUNTIME_VERSION}",
         "fallback": False,
+        "attempts": 1,
     }
     activity.assert_not_called()
     memory.assert_not_called()
@@ -394,8 +395,8 @@ def test_active_generation_and_local_quarantine_do_not_gate_remote(installation,
     assert payload["think"] is False and payload["stream"] is False
     assert isinstance(payload["format"], dict)
     assert PROMPT in payload["prompt"]
-    assert 'set status to "ok"' in payload["prompt"]
-    assert '"refusal_reason": "..."' not in payload["prompt"]
+    assert 'Set status to "ok"' in payload["prompt"]
+    assert "refus" not in payload["prompt"].lower()
     event = EventLog(events_path(installation.root)).tail(1)[0]
     assert event["provider"] == "remote" and event["strict_offline"] is False
     assert event["model_sha256_prefix"] == APPROVAL.digest[:12]
@@ -493,7 +494,12 @@ def test_invalid_registry_backed_remote_plan_is_rejected_without_repair(
     outcome = service.run(request)
     assert outcome.code is OutcomeCode.MALFORMED and outcome.reason == reason
     assert outcome.suggestion is None and outcome.details["fallback"] is False
-    assert [path for path, _body in worker.calls] == ["/api/version", "/api/tags", "/api/generate"]
+    # A malformed answer is retried once (ASSIST-FIX); the retry never repairs it.
+    assert [path for path, _body in worker.calls] == [
+        "/api/version",
+        "/api/tags",
+        "/api/generate",
+    ] * 2
     assert spy.calls == 0
 
 

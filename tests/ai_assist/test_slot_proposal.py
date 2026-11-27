@@ -164,7 +164,7 @@ def test_a_line_break_in_a_name_or_point_is_refused(where) -> None:
 
 
 def test_the_schema_is_closed_and_pins_the_insertion_point_to_the_list() -> None:
-    ok = build_json_schema(REQUEST)["oneOf"][0]
+    ok = build_json_schema(REQUEST)
     assert ok["required"][3:] == ["proposals"]
     proposals = ok["properties"]["proposals"]
     assert (proposals["minItems"], proposals["maxItems"]) == (1, MAX_PROPOSALS)
