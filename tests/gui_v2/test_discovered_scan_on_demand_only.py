@@ -34,7 +34,9 @@ def test_only_the_rescan_button_scans_the_output_folder(tk_root, tmp_path: Path)
             lambda _self, output_root, on_complete=None: scans.append(output_root),
         ),
     ):
-        tab = LearningTabFrame(tk_root, app_state=AppStateV2(), pipeline_controller=_StubPipelineController())
+        tab = LearningTabFrame(
+            tk_root, app_state=AppStateV2(), pipeline_controller=_StubPipelineController()
+        )
         try:
             notebook = tab._mode_notebook
             for mode in (WORKSPACE_ADVANCED, WORKSPACE_SIMPLE, WORKSPACE_ADVANCED):

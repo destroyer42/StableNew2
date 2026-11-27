@@ -146,7 +146,9 @@ def test_closing_twice_re_queues_once(stack: Stack) -> None:
 
 def test_the_interrupted_job_leads_a_queue_the_operator_had_reordered(stack: Stack) -> None:
     _run_first(stack)
-    assert stack.queue.move_to_front("C") is True  # renumbers the queued rows around the running one
+    assert (
+        stack.queue.move_to_front("C") is True
+    )  # renumbers the queued rows around the running one
 
     _close_app(stack.service)
     _settle(stack)
@@ -159,7 +161,9 @@ def test_the_interrupted_job_leads_a_queue_the_operator_had_reordered(stack: Sta
 def test_finished_stage_checkpoints_are_dropped_so_the_job_runs_whole_again(stack: Stack) -> None:
     _run_first(stack)
     live = stack.queue.get_job("A")
-    live.execution_metadata.stage_checkpoints = [StageCheckpoint(stage_name="txt2img", output_paths=["x.png"])]
+    live.execution_metadata.stage_checkpoints = [
+        StageCheckpoint(stage_name="txt2img", output_paths=["x.png"])
+    ]
     stack.queue.persist_runtime_state(live)
 
     _close_app(stack.service)
@@ -202,7 +206,9 @@ def test_the_next_start_runs_the_interrupted_job_first(stack: Stack) -> None:
     queue = JobQueue(repository=repository)
     ran: list[str] = []
     runner = SingleNodeJobRunner(
-        queue, lambda job: ran.append(job.job_id) or {"success": True, "variants": []}, poll_interval=0.005
+        queue,
+        lambda job: ran.append(job.job_id) or {"success": True, "variants": []},
+        poll_interval=0.005,
     )
     service = JobService(queue, runner=runner, require_normalized_records=True)
     try:
@@ -211,7 +217,9 @@ def test_the_next_start_runs_the_interrupted_job_first(stack: Stack) -> None:
         assert ran == ["A", "B", "C"]
         finished = repository.get_job_model("A")
         assert finished.status is JobStatus.COMPLETED
-        assert finished.execution_metadata.last_control_action == ACTION  # the interruption stays on record
+        assert (
+            finished.execution_metadata.last_control_action == ACTION
+        )  # the interruption stays on record
     finally:
         runner.stop()
         service.stop()
