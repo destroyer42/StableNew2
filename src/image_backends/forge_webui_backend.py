@@ -81,6 +81,7 @@ from src.image_backends.forge_flux1_profile import (
 )
 from src.image_backends.forge_klein_assets import (
     _active_manager,
+    await_listed_catalogs,
     verify_flux1_assets,
     verify_klein_assets,
     verify_zimage_assets,
@@ -881,22 +882,38 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             "Install the exact qualified files with scripts/install_forge_klein_assets.ps1 "
             "(-SourceDir <folder holding them>)."
         )
-        list_modules = getattr(client, "get_vae_models", None)
-        if callable(list_modules):
-            listed = {_name_key(str(m.get("model_name") or "")) for m in list_modules() or []}
-            missing = [a.filename for a in profile.modules if _name_key(a.filename) not in listed]
+        checks_modules = callable(getattr(client, "get_vae_models", None)) or callable(
+            getattr(client, "get_module_catalog", None)
+        )
+
+        def missing_modules(modules: Any) -> list[str]:
+            listed = {_name_key(str(m.get("model_name") or "")) for m in modules or [] if isinstance(m, dict)}
+            return [a.filename for a in profile.modules if _name_key(a.filename) not in listed]
+
+        def lists_transformer(models: Any) -> bool:
+            return not models or any(
+                is_klein_transformer_name(str(entry.get(key) or ""))
+                for entry in models
+                if isinstance(entry, dict)
+                for key in ("title", "model_name", "filename")
+            )
+
+        def pending(models: Any, modules: Any) -> str | None:
+            missing = missing_modules(modules) if checks_modules else []
+            if not lists_transformer(models if isinstance(models, list) else []):
+                missing.append(profile.transformer.filename)
+            return f"Forge does not list {', '.join(missing)} yet" if missing else None
+
+        # Forge rebuilds these catalogs in place after a (re)start; a file not listed yet is re-read, bounded.
+        models, modules = await_listed_catalogs(client, pending, label="Klein")
+        if checks_modules:
+            missing = missing_modules(modules)
             if missing:
                 raise KleinProfileError(
                     f"Forge does not list the required module(s) {missing} ({SD_MODULES_ENDPOINT}). "
                     + install_hint
                 )
-        list_models = getattr(client, "get_models", None)
-        models = list_models() if callable(list_models) else []
-        if models and not any(
-            is_klein_transformer_name(str(entry.get(key) or ""))
-            for entry in models
-            for key in ("title", "model_name", "filename")
-        ):
+        if not lists_transformer(models if isinstance(models, list) else []):
             raise KleinProfileError(
                 f"Forge does not list the checkpoint {profile.transformer.filename}. " + install_hint
             )

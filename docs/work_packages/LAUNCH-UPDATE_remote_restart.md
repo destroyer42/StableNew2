@@ -1,8 +1,11 @@
 # LAUNCH-UPDATE — Remote update and restart: design, threat model and owner decisions
 
-Status: **design accepted, not built.** The owner accepted decisions D1–D10 as recommended on 2026-11-26
-("Accept all ten"), including D7's automatic local rollback. Implementation is split into LAUNCH-UPDATE-1 (PC side)
-and LAUNCH-UPDATE-2 (gateway and phone, after RG-140's schema change merges). The desktop shortcut and sign-in
+Status: **built, not yet run on the owner's checkout.** The owner accepted decisions D1–D10 as recommended on
+2026-11-26 ("Accept all ten"), including D7's automatic local rollback. LAUNCH-UPDATE-1 (PC side, PR #445) and
+LAUNCH-UPDATE-2 (gateway and phone) are implemented; the phone side is described in
+`docs/Subsystems/ReviewGateway/REVIEW_GATEWAY.md` section 8. LAUNCH-UPDATE-2 keeps `schema_version` at v1 with
+additive changes, as RG-140 did, instead of D8's version bump: a bump would stop every older PC and gateway from
+syncing until both were updated, while every addition is refused or ignored by an older peer. The desktop shortcut and sign-in
 autostart (LAUNCH-AUTOSTART-440) shipped separately and are not part of this package.
 
 ## Objective

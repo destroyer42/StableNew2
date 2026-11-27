@@ -1,4 +1,4 @@
-"""Gateway state in SQLite: items, the decision outbox, pairing offers, devices and owed Immich uploads.
+"""Gateway state in SQLite: items, the outbox, pairing offers, devices, owed Immich uploads and the PC's status.
 
 Everything here is a projection or a request (RG-100 invariants 2 and 4). It is WAL with ``synchronous=FULL`` (S9),
 and retention only ever removes cached media for items whose latest decision the PC has answered, and never a kept
@@ -40,6 +40,8 @@ _SEEN_RESOLUTION = timedelta(hours=1)
 MAX_PENDING_ACTIONS = 1000
 #: RG-140 slice 1. The schema reserves the others for later slices; the PC refuses anything it does not implement.
 SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
+#: LAUNCH-UPDATE-2: how many of its own update requests an admin phone is shown.
+ADMIN_HISTORY = 5
 
 _TABLES = """
 CREATE TABLE IF NOT EXISTS item (
@@ -75,6 +77,9 @@ CREATE TABLE IF NOT EXISTS offer (
 CREATE TABLE IF NOT EXISTS device (
     device_id TEXT PRIMARY KEY, token_sha256 TEXT NOT NULL UNIQUE, offer_id TEXT NOT NULL,
     label TEXT, scopes TEXT NOT NULL, enrolled_at TEXT NOT NULL, seen_at TEXT, revoked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS pc_status (
+    id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL, received_at TEXT NOT NULL
 );
 """
 
@@ -523,6 +528,118 @@ class Store:
             ).fetchall()
         return [_action_view(row) for row in rows]
 
+    # --- remote update (LAUNCH-UPDATE-2) -----------------------------------------------------------------------
+
+    def set_pc_status(self, status: dict[str, Any]) -> None:
+        """Keep the latest validated ``pc_status``; it is only ever shown to admin phones."""
+
+        with self.write() as db:
+            db.execute(
+                "INSERT INTO pc_status VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET"
+                " payload = excluded.payload, received_at = excluded.received_at",
+                (json.dumps(status), stamp(self.clock())),
+            )
+
+    def admin_view(self, device_id: str) -> dict[str, Any]:
+        """What an admin phone shows: the PC's last status and this phone's recent update requests."""
+
+        with self.connection() as db:
+            status = db.execute(
+                "SELECT payload, received_at FROM pc_status WHERE id = 1"
+            ).fetchone()
+            rows = db.execute(
+                "SELECT record, status, acknowledgement FROM outbox WHERE device_id = ?"
+                " AND kind = 'admin_request' ORDER BY seq DESC LIMIT ?",
+                (device_id, ADMIN_HISTORY),
+            ).fetchall()
+        return {
+            "pc_status": json.loads(status["payload"]) if status else None,
+            "received_at": status["received_at"] if status else None,
+            "now": stamp(self.clock()),
+            "requests": [_admin_view(row) for row in rows],
+        }
+
+    def admin_record(self, device_id: str, record_id: str) -> dict[str, Any] | None:
+        """One of this device's update requests with the PC's answer; ``None`` for anyone else's."""
+
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT record, status, acknowledgement FROM outbox WHERE record_id = ?"
+                " AND device_id = ? AND kind = 'admin_request'",
+                (record_id, device_id),
+            ).fetchone()
+        return _admin_view(row) if row is not None else None
+
+    def request_update(
+        self, device_id: str, admin_request: dict[str, Any], idempotency_key: str
+    ) -> tuple[str, str]:
+        """Record an admin phone's update request. Returns ``(record_id, state)``.
+
+        Only a request (invariant 4): the PC checks the grant against its own ledger, its own switch and its own
+        fetch of origin, and answers. The gateway refuses early what the PC would refuse anyway: a phone without the
+        ``admin`` grant, and a commit other than the ``origin/main`` the PC last reported (``status_changed``).
+        """
+
+        record = {
+            "record_id": str(uuid.uuid4()),
+            "idempotency_key": idempotency_key,
+            "device_id": device_id,
+            "created_at": stamp(self.clock()),
+            "kind": "admin_request",
+            "admin_request": admin_request,
+        }
+        try:
+            self.contract.validate("outbox_record", record)
+        except ContractError as error:
+            raise GatewayError(422, "invalid_record") from error
+        with self.write() as db:
+            # Checked inside the write: the body may have arrived after a revocation (S11).
+            device = db.execute(
+                "SELECT scopes FROM device WHERE device_id = ? AND revoked_at IS NULL", (device_id,)
+            ).fetchone()
+            if device is None:
+                raise GatewayError(401, "not_enrolled")
+            if "admin" not in json.loads(device["scopes"]):
+                raise GatewayError(403, "not_granted")
+            previous = db.execute(
+                "SELECT record_id, record, status FROM outbox"
+                " WHERE device_id = ? AND idempotency_key = ?",
+                (device_id, idempotency_key),
+            ).fetchone()
+            if previous is not None:
+                if json.loads(previous["record"]).get("admin_request") != admin_request:
+                    raise GatewayError(409, "idempotency_conflict")
+                return previous["record_id"], _state(previous["status"])
+            status = db.execute("SELECT payload FROM pc_status WHERE id = 1").fetchone()
+            shown = json.loads(status["payload"])["checkout"] if status else {}
+            if shown.get("origin_main_sha") != admin_request["expected_sha"]:
+                raise GatewayError(409, "status_changed")
+            waiting = db.execute(
+                "SELECT record_id, delivered_at FROM outbox WHERE device_id = ?"
+                " AND kind = 'admin_request' AND status = 'pending'",
+                (device_id,),
+            ).fetchall()
+            if any(row["delivered_at"] is not None for row in waiting):
+                raise GatewayError(409, "update_pending")  # the PC has it; its answer comes first
+            # A request the PC has never seen is simply replaced by the newer one.
+            db.executemany(
+                "UPDATE outbox SET status = 'superseded' WHERE record_id = ?",
+                [(row["record_id"],) for row in waiting],
+            )
+            db.execute(
+                "INSERT INTO outbox (record_id, idempotency_key, device_id, library_id, sha256,"
+                " record, status, kind, created_at)"
+                " VALUES (?, ?, ?, '', '', ?, 'pending', 'admin_request', ?)",
+                (
+                    record["record_id"],
+                    idempotency_key,
+                    device_id,
+                    json.dumps(record),
+                    record["created_at"],
+                ),
+            )
+        return record["record_id"], "pending"
+
     def outbox_page(self, after: int, limit: int) -> dict[str, Any]:
         with self.write() as db:
             rows = db.execute(
@@ -554,7 +671,8 @@ class Store:
         record_id = acknowledgement["record_id"].lower()
         with self.write() as db:
             row = db.execute(
-                "SELECT library_id, sha256, status FROM outbox WHERE record_id = ?", (record_id,)
+                "SELECT library_id, sha256, status, kind FROM outbox WHERE record_id = ?",
+                (record_id,),
             ).fetchone()
             if row is None:
                 raise GatewayError(404, "unknown_record")
@@ -570,7 +688,8 @@ class Store:
                     record_id,
                 ),
             )
-            self._reconcile_upload(db, (row["library_id"], row["sha256"]))
+            if row["kind"] != "admin_request":  # an admin request names no item
+                self._reconcile_upload(db, (row["library_id"], row["sha256"]))
         return "recorded"
 
     # --- Immich (D3) --------------------------------------------------------------------------------------------
@@ -809,6 +928,19 @@ def _action_view(row: sqlite3.Row) -> dict[str, Any]:
         "state": _state(row["status"]),
         "reason_code": answer.get("reason_code") if row["status"] == "refused" else None,
         "receipt": answer.get("receipt"),
+    }
+
+
+def _admin_view(row: sqlite3.Row) -> dict[str, Any]:
+    record = json.loads(row["record"])
+    answer = json.loads(row["acknowledgement"]) if row["acknowledgement"] else {}
+    return {
+        "record_id": record["record_id"],
+        "expected_sha": record["admin_request"]["expected_sha"],
+        "created_at": record["created_at"],
+        "state": _state(row["status"]),
+        "reason_code": answer.get("reason_code") if row["status"] == "refused" else None,
+        "update": (answer.get("receipt") or {}).get("update"),
     }
 
 

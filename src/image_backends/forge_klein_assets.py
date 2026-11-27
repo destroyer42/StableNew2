@@ -15,16 +15,32 @@ hashed, any observed change forces a rehash, so ~12.45 GB is not re-read on ever
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from src.image_backends.forge_klein_profile import KleinAsset, KleinProfile, KleinProfileError
 
+logger = logging.getLogger(__name__)
+
 _DATA_DIR_FLAG = "--data-dir"
 _VERIFIED: dict[tuple[Any, ...], str] = {}
 _LOCK = threading.Lock()
+
+#: Forge rebuilds ``/sd-models`` and ``/sd-modules`` in place (``sd_models.list_models`` clears the checkpoint list and
+#: re-walks every model directory; ``main_entry.refresh_models`` does the same for the module list). That happens when
+#: its UI page loads (Forge opens it in a browser on start by default) or on a refresh, so right after a launch a
+#: READY Forge can briefly list no checkpoints or only some modules. StableNew's own client also answers ``[]``/``None``
+#: while a catalog read is deferred or on cooldown. A pinned file that is not listed yet is therefore re-read within
+#: this bound before the exact-profile check refuses; two real matches still refuse at once.
+CATALOG_SETTLE_TIMEOUT_S = 20.0
+CATALOG_POLL_INTERVAL_S = 1.0
+_monotonic: Callable[[], float] = time.monotonic
+_sleep: Callable[[float], None] = time.sleep
 
 
 def clear_verified_cache() -> None:
@@ -150,6 +166,76 @@ def verify_klein_assets(
     return {asset.role: _verify_one(root, asset) for asset in profile.assets}
 
 
+def _read_module_catalog(client: Any) -> Any:
+    """Forge's module catalog: the tri-state ``get_module_catalog`` when the client has it, else ``get_vae_models``."""
+
+    reader = getattr(client, "get_module_catalog", None)
+    if not callable(reader):
+        reader = getattr(client, "get_vae_models", None)
+    return reader() if callable(reader) else None
+
+
+def await_listed_catalogs(
+    client: Any, pending: Callable[[Any, Any], str | None], *, label: str
+) -> tuple[Any, Any]:
+    """Read Forge's checkpoint and module catalogs, re-reading (bounded) while a required file is not listed yet.
+
+    ``pending(models, modules)`` names what is still missing (an unreadable catalog, a pinned file with no entry) or
+    returns ``None`` once every required file has at least one entry. Two or more entries are never waited for: the
+    caller's strict binding refuses them at once. After ``CATALOG_SETTLE_TIMEOUT_S`` the last reads are returned and
+    the caller refuses exactly as before. Read-only: no refresh, selection or other write is sent to Forge.
+    """
+
+    deadline = _monotonic() + max(float(CATALOG_SETTLE_TIMEOUT_S), 0.0)
+    waited = False
+    list_models = getattr(client, "get_models", None)
+    while True:
+        models = list_models() if callable(list_models) else None
+        modules = _read_module_catalog(client)
+        missing = pending(models, modules)
+        if missing is None:
+            if waited:
+                logger.info("[forge/catalog] %s: Forge's catalogs now list the required files", label)
+            return models, modules
+        remaining = deadline - _monotonic()
+        if remaining <= 0:
+            if waited:
+                logger.warning(
+                    "[forge/catalog] %s: %s after waiting %.0fs for Forge's catalogs",
+                    label, missing, CATALOG_SETTLE_TIMEOUT_S,
+                )
+            return models, modules
+        if not waited:
+            logger.info(
+                "[forge/catalog] %s: %s; Forge may still be listing its models, re-reading for up to %.0fs",
+                label, missing, remaining,
+            )
+            waited = True
+        _sleep(min(float(CATALOG_POLL_INTERVAL_S), remaining))
+
+
+def _matching_paths(entries: Any, name: str) -> set[str]:
+    """Distinct served filenames of the catalog entries whose name, title or filename is ``name``."""
+
+    from src.utils.checkpoint_identity import checkpoint_key
+
+    if not isinstance(entries, list):
+        return set()
+    key = checkpoint_key(name)
+    return {
+        str(item.get("filename") or "") for item in entries if isinstance(item, dict)
+        and key in {checkpoint_key(item.get(k)) for k in ("model_name", "title", "filename")}
+    }
+
+
+def _unlisted(models: Any, modules: Any, model_names: list[str], module_names: list[str]) -> str | None:
+    if not isinstance(models, list) or not isinstance(modules, list):
+        return "a catalog could not be read"
+    missing = [name for name in model_names if not _matching_paths(models, name)]
+    missing += [name for name in module_names if not _matching_paths(modules, name)]
+    return f"Forge does not list {', '.join(missing)} yet" if missing else None
+
+
 def verify_zimage_assets(profile: Any, *, client: Any) -> dict[str, Any]:
     """Use the existing owned-runtime, catalog and fingerprint hash authorities for Z-Image.
 
@@ -165,17 +251,16 @@ def verify_zimage_assets(profile: Any, *, client: Any) -> dict[str, Any]:
         manager.launch_session_command, str(getattr(manager._config, "working_dir", "") or ""),
         profile.forge_revision,
     )
-    models = client.get_models()
-    modules = client.get_module_catalog()
+    model_names = [a.filename for a in profile.assets if a.role == "transformer"]
+    module_names = [a.filename for a in profile.assets if a.role != "transformer"]
+    models, modules = await_listed_catalogs(
+        client, lambda m, n: _unlisted(m, n, model_names, module_names), label="Z-Image"
+    )
     if not isinstance(models, list) or not isinstance(modules, list):
         raise KleinProfileError("Z-Image requires readable Forge checkpoint and module catalogs")
     result: dict[str, Any] = {"forge": pin}
     for asset in profile.assets:
-        entries = models if asset.role == "transformer" else modules
-        paths = {
-            str(item.get("filename") or "") for item in entries if isinstance(item, dict)
-            and checkpoint_key(asset.filename) in {checkpoint_key(item.get(k)) for k in ("model_name", "title", "filename")}
-        }
+        paths = _matching_paths(models if asset.role == "transformer" else modules, asset.filename)
         if len(paths) != 1 or not next(iter(paths), ""):
             raise KleinProfileError(f"Forge must list one unambiguous served file for {asset.filename}")
         path = Path(next(iter(paths)))
@@ -186,12 +271,7 @@ def verify_zimage_assets(profile: Any, *, client: Any) -> dict[str, Any]:
 
 
 def _served_path(entries: list[Any], name: str, label: str) -> Path:
-    from src.utils.checkpoint_identity import checkpoint_key
-
-    paths = {
-        str(item.get("filename") or "") for item in entries if isinstance(item, dict)
-        and checkpoint_key(name) in {checkpoint_key(item.get(k)) for k in ("model_name", "title", "filename")}
-    }
+    paths = _matching_paths(entries, name)
     if len(paths) != 1 or not next(iter(paths), ""):
         raise KleinProfileError(f"Forge must list one unambiguous served file for {label}")
     path = Path(next(iter(paths)))
@@ -241,8 +321,10 @@ def verify_flux1_assets(
         manager.launch_session_command, str(getattr(manager._config, "working_dir", "") or ""),
         profile.forge_revision,
     )
-    models = client.get_models()
-    modules = client.get_module_catalog()
+    module_names = [asset.filename for asset in profile.modules]
+    models, modules = await_listed_catalogs(
+        client, lambda m, n: _unlisted(m, n, [model_name], module_names), label=profile.display_name
+    )
     if not isinstance(models, list) or not isinstance(modules, list):
         raise KleinProfileError(f"{profile.display_name} requires readable Forge checkpoint and module catalogs")
     transformer = _served_path(models, model_name, f"the checkpoint {model_name}")
@@ -280,6 +362,7 @@ def verify_flux1_assets(
 
 
 __all__ = [
+    "await_listed_catalogs",
     "clear_verified_cache",
     "data_dir_from_launch_command",
     "resolve_owned_forge_data_dir",

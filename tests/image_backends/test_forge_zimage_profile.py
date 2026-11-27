@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.image_backends import forge_klein_assets
 from src.image_backends.exact_model_profile import model_profile_for_model, resolve_model_profile
 from src.image_backends.forge_klein_assets import verify_zimage_assets
 from src.image_backends.forge_klein_profile import (
@@ -123,6 +124,22 @@ def test_wire_contract_uses_only_the_pinned_api_shift_key_and_leaves_other_model
         project_zimage_wire_payload({}, payload, prompt=data["prompt"])
 
 
+@pytest.fixture(autouse=True)
+def fake_clock(monkeypatch):
+    """Catalog re-reads advance a fake clock instead of sleeping; ``naps`` records each wait."""
+
+    now = [0.0]
+    naps: list[float] = []
+
+    def sleep(seconds):
+        naps.append(seconds)
+        now[0] += seconds
+
+    monkeypatch.setattr(forge_klein_assets, "_monotonic", lambda: now[0])
+    monkeypatch.setattr(forge_klein_assets, "_sleep", sleep)
+    return naps
+
+
 def _tiny_assets(tmp_path, monkeypatch):
     assets = []
     for asset in P.assets:
@@ -163,6 +180,53 @@ def test_catalog_binding_refuses_missing_ambiguous_or_substituted_paths(tmp_path
         client.get_models = lambda: [{**entries[0], "filename": str(tmp_path / "different.safetensors")}]
     with pytest.raises(KleinProfileError):
         verify_zimage_assets(profile, client=client)
+
+
+def _settling(*reads):
+    """A catalog reader that answers ``reads`` in order, then keeps answering the last one."""
+
+    calls = iter(reads)
+    last = [reads[-1]]
+
+    def read():
+        last[0] = next(calls, last[0])
+        return last[0]
+
+    return read
+
+
+@pytest.mark.parametrize("rebuilding", ["checkpoints", "modules"])
+def test_catalogs_still_loading_after_a_forge_start_are_waited_for_not_failed(
+    tmp_path, monkeypatch, fake_clock, rebuilding
+):
+    # 2026-11-26: the first Z-Image job after a restart read /sd-models while Forge was still rebuilding it and
+    # failed with "Forge must list one unambiguous served file"; the next job, seconds later, ran normally.
+    profile, client, entries = _tiny_assets(tmp_path, monkeypatch)
+    if rebuilding == "checkpoints":  # list_models() empties the checkpoint list while it re-walks the model dirs
+        client.get_models = _settling([], [], entries[:1])
+    else:  # an unread (deferred / cooldown) module read, then a partially rebuilt module list
+        client.get_module_catalog = _settling(None, entries[1:2], entries[1:])
+    identity = verify_zimage_assets(profile, client=client)
+    assert identity["transformer"]["sha256"] == profile.transformer.sha256
+    assert identity["vae"]["sha256"] == profile.vae.sha256
+    assert fake_clock == [forge_klein_assets.CATALOG_POLL_INTERVAL_S] * 2
+
+
+def test_an_ambiguous_catalog_refuses_at_once_without_waiting(tmp_path, monkeypatch, fake_clock):
+    profile, client, entries = _tiny_assets(tmp_path, monkeypatch)
+    second = {**entries[0], "filename": str(tmp_path / "elsewhere" / P.transformer.filename)}
+    client.get_models = lambda: [entries[0], second]
+    with pytest.raises(KleinProfileError, match="one unambiguous served file"):
+        verify_zimage_assets(profile, client=client)
+    assert fake_clock == []
+
+
+def test_a_file_forge_never_lists_still_refuses_within_the_bound(tmp_path, monkeypatch, fake_clock):
+    profile, client, entries = _tiny_assets(tmp_path, monkeypatch)
+    client.get_models = lambda: []
+    with pytest.raises(KleinProfileError, match="one unambiguous served file for " + P.transformer.filename):
+        verify_zimage_assets(profile, client=client)
+    assert sum(fake_clock) == pytest.approx(forge_klein_assets.CATALOG_SETTLE_TIMEOUT_S)
 
 
 def test_zimage_policy_is_limited_not_generic_family_qualification():

@@ -719,6 +719,16 @@ def main() -> None:
             live_update = install_live_update_control(root, app_controller, window)
         except OSError:
             logging.getLogger(__name__).warning("Live update is unavailable (no local application data folder)")
+        if live_update is not None:
+            # LAUNCH-UPDATE-2: admin phones request the same update through the gateway; the worker starts later.
+            try:
+                from src.app.runtime_stack import build_remote_update
+
+                review_gateway.sync.attach_remote_update(
+                    build_remote_update(app_controller, live_update.service)
+                )
+            except Exception:  # noqa: BLE001 - remote update is optional; the app must still start
+                logging.getLogger(__name__).exception("Remote update from the phone is unavailable")
 
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(

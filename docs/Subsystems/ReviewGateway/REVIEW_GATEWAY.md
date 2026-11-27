@@ -10,6 +10,9 @@ Phone actions (RG-140 slice 1) are built and tested hermetically only, against a
 They have not been run on the live phone or with a real Forge ADetailer pass. See section 7 and
 [RG-140](../../work_packages/RG-140_phone_actions.md).
 
+Remote update and restart from the phone (LAUNCH-UPDATE-2) is built and tested hermetically only, against a fake
+gateway, fake Git and the real update service with an injected updater; no real checkout was updated. See section 8.
+
 Decisions, invariants and security controls: [RG-100](../../work_packages/RG-100_phone_review_gateway.md). Payloads:
 [`stablenew.review-gateway-sync.v1`](../../schemas/stablenew.review-gateway-sync.v1.json). Deploy and operate:
 [runbook](../../runbooks/review_gateway.md).
@@ -56,6 +59,7 @@ is refused at startup, so there is no plain-HTTP LAN mode. Every request carries
 | `POST /sync/v1/pairing-offers` | `pairing_offer` | `{"status":"accepted"}`; 409 `offer_conflict`; 422 `offer_expired` |
 | `POST /sync/v1/device-revocations` | `device_revocation` | `{"status":"revoked"\|"unknown_device"}` |
 | `GET /sync/v1/immich-receipts?cursor=` | - | `immich_receipt_page` (section 5); 400 `invalid_cursor` |
+| `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
 
 Rules:
 
@@ -84,6 +88,10 @@ Rules:
     an item's decision. They never change `latest_record_id`, an Immich upload or the decision state, and they are
     never superseded. Their answer is the ordinary acknowledgement; its `receipt` may carry `action_summary`,
     `job_ids` and `detail` (section 7).
+
+13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
+    pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
+    so it is listed again every cycle until the PC acknowledges it. Its receipt carries `update` (section 8).
 
 `immich_receipt` has no place in `outbox_page`, so it has its own route (section 5).
 
@@ -254,3 +262,72 @@ The phone polls every 2 s while the summary sheet is open.
 
 **Store migration.** A gateway database made before RG-140 gains `outbox.kind` (existing rows are `decision`) and
 `outbox.created_at` the first time it is opened.
+
+## 8. Remote update and restart (LAUNCH-UPDATE-2)
+
+**What.** A phone with the `admin` grant shows the PC's commit, `origin/main` and the queue, and can ask the PC to
+fast-forward its live checkout to that `origin/main` commit and restart StableNew. The PC does all of it through the
+LAUNCH-UPDATE-1 service: preflight, wait for the running job, update, restart, roll back on a failed start. Design and
+owner decisions D1–D10: [LAUNCH-UPDATE](../../work_packages/LAUNCH-UPDATE_remote_restart.md).
+
+**Two switches (D2).** Both must be on:
+
+- The `admin` grant. Only the desktop's **Pair for remote update** button issues it, after a confirmation, in an
+  offer with `review`, `queue` (unless unticked) and `admin`. Normal pairing never includes it. A phone already paired
+  replaces its pairing when it enters the new code; revoke the old entry in the desktop list. Revoking a phone removes
+  the grant.
+- **Allow remote update** in the desktop Update dialog, off by default. With it off the PC answers
+  `remote_update_disabled`.
+
+**Status (D3).** Each sync cycle the PC sends `pc_status` when it changed, and at least every 60 s: `HEAD`, the fetched
+`origin/main`, how many commits that is ahead, when origin was last fetched, the queue state (`idle`, `running`,
+`paused`) and how many jobs wait, the switch, whether an update is in progress and the last update's receipt. Commit
+ids and counts only, no paths and no commit text. The PC fetches origin at most every 15 minutes for it, on its own
+thread and never while an update is using Git, and again right after any update attempt. The gateway keeps the latest
+one and shows it only to admin phones.
+
+**Request.** The phone sends `{action: "update_and_restart", expected_sha, idempotency_key}` with the `origin/main` it
+showed. The gateway refuses early:
+
+| Code | When |
+|---|---|
+| 403 `not_granted` | The phone has no `admin` grant. |
+| 401 `not_enrolled` | The phone is not enrolled or was revoked. |
+| 422 `invalid_record` | Not 40 lowercase hex characters, another action, or another field. |
+| 409 `status_changed` | Not the `origin/main` the PC last reported, or no status yet. |
+| 409 `update_pending` | The PC already has this phone's previous request and has not answered it. |
+| 409 `idempotency_conflict` | The key was used for a different request. |
+
+A request the PC has not listed yet is replaced by a newer one (`superseded`).
+
+**On the PC.** The record applier checks the device against the PC's own ledger (`revoked_device`, `not_granted`).
+`src/app/live_update_remote.py` then runs `LiveUpdateService.update(source="remote")` on a worker thread. A request
+first seen more than an hour after the tap is refused `request_expired`. Until the update has a receipt the record is
+not acknowledged. After the restart, the new app answers it from `last_result.json`.
+
+**Receipt.** `receipt.update` holds `status` (`applied`, `refused`, `already_current`), `reason_code`, `old_sha`,
+`new_sha`, `target_sha` and `health`. Git and launcher text never cross; the desktop dialog still shows it. `health`
+is the updater's start check of the new app:
+
+- `confirmed`: the new app reported in;
+- `unconfirmed`: the app was started but did not report within 180 s, so the phone says to check it;
+- `exited`: a launch ended early (shown with `rolled_back`).
+
+Refusal codes are the LAUNCH-UPDATE ones (`target_moved`, `environment_drift`, `busy_timeout`, `rolled_back` and the
+others in `update_reason`), plus `request_expired` and `update_unavailable` (no update service on this PC).
+
+**Phone API.**
+
+| Route | Use |
+|---|---|
+| `GET /api/admin` | `{pc_status, received_at, now, requests}`: the PC's last status and the phone's last 5 update requests. |
+| `POST /api/admin/updates` | Body `{action, expected_sha, idempotency_key}`. Answers `{record_id, state}`. |
+| `GET /api/admin/updates/{record_id}` | One of the phone's own requests and the PC's answer. |
+
+The inbox shows **Update the PC…** on an admin phone. The update screen asks for a confirmation and polls every 5 s
+while a request is pending or an update is in progress.
+
+**Rollout.** The changes are additive and `schema_version` is unchanged. An older PC refuses an `admin_request`
+(`invalid_record`). An older gateway answers 404 to `pc_status`, so the PC sends nothing and asks again after 10 minutes,
+and it refuses an offer with `admin` (the desktop's code then does not work). Install the gateway release first, then
+update the PC app.

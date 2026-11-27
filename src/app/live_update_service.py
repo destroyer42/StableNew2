@@ -73,6 +73,7 @@ class LiveUpdateService:
         max_wait_seconds: float = 3600.0,
         rate_limit_seconds: float = 600.0,
         poll_seconds: float = 5.0,
+        git_lock: threading.Lock | None = None,
     ) -> None:
         self.store = store
         self.repo_root = Path(repo_root)
@@ -87,6 +88,9 @@ class LiveUpdateService:
         self._rate_limit = float(rate_limit_seconds)
         self._poll = float(poll_seconds)
         self._lock = threading.Lock()
+        #: Serializes Git on the live checkout with the phone status probe (LAUNCH-UPDATE-2), so two fetches never
+        #: race for the same ref lock.
+        self.git_lock = git_lock or threading.Lock()
         self._running = False
         self._exit_requested = threading.Event()
         self.phase = ""
@@ -119,7 +123,8 @@ class LiveUpdateService:
     def check(self) -> lu.Preflight:
         """The preflight alone (fetches origin; changes nothing else)."""
 
-        return self._preflight(None)
+        with self.git_lock:
+            return self._preflight(None)
 
     # -- update -----------------------------------------------------------------------------------------------------
 
@@ -161,7 +166,8 @@ class LiveUpdateService:
         if self._queue is None:
             return self._refused(source, record_id, lu.QUEUE_UNAVAILABLE)
         self.phase = "checking"
-        check = self._preflight(expected_sha)
+        with self.git_lock:
+            check = self._preflight(expected_sha)
         if check.reason == lu.ALREADY_CURRENT:
             self._record(
                 source, record_id, "already_current", check.reason, check.old_sha, check.target_sha
