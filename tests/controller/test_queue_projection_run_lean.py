@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from src.controller.app_controller import AppController
+from src.pipeline.job_models_v2 import UnifiedJobSummary
 from src.queue.job_model import Job, JobStatus
 from tests.helpers.job_helpers import make_test_job_from_njr, make_test_njr
 
@@ -51,3 +52,35 @@ def test_projection_follows_a_status_change_and_a_removed_job() -> None:
 
     assert items == ["one"]
     assert [(s.job_id, s.status) for s in summaries] == [("a", "RUNNING")]
+
+
+def test_a_job_already_projected_is_not_converted_again(monkeypatch) -> None:
+    converted: list[str] = []
+    original = UnifiedJobSummary.from_normalized_record.__func__
+
+    def counting(cls, record, **kwargs):
+        converted.append(record.job_id)
+        return original(cls, record, **kwargs)
+
+    monkeypatch.setattr(UnifiedJobSummary, "from_normalized_record", classmethod(counting))
+    jobs = [_job("a", "one"), _job("b", "two")]
+    controller = _controller(jobs)
+
+    _project(controller)
+    jobs[0].status = JobStatus.RUNNING
+    jobs.append(_job("c", "three"))
+    _, summaries = _project(controller)
+
+    assert converted == ["a", "b", "c"]
+    assert [s.status for s in summaries] == ["RUNNING", "QUEUED", "QUEUED"]
+
+
+def test_a_replaced_record_under_the_same_job_id_is_converted_again() -> None:
+    jobs = [_job("a", "before")]
+    controller = _controller(jobs)
+    _project(controller)
+
+    jobs[0] = _job("a", "after")
+    items, _ = _project(controller)
+
+    assert items == ["after"]
