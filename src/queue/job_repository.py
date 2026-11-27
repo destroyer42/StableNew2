@@ -632,6 +632,7 @@ class JobRepository(JobHistoryStore):
         error_message: str | None = None,
         result: dict[str, Any] | None = None,
         expected_status: JobStatus | None = None,
+        to_queue_front: bool = False,
     ) -> Job:
         """Apply one lifecycle transition atomically; ``job`` is the caller's candidate and is only read.
 
@@ -642,6 +643,7 @@ class JobRepository(JobHistoryStore):
 
         ``expected_status`` makes the transition conditional: the durable status is read inside the same
         transaction that writes it, and a different status raises ``JobStatusChanged`` before any write.
+        ``to_queue_front`` orders a row going back to QUEUED ahead of every QUEUED row, in the same transaction.
         """
 
         with self.transaction() as connection:
@@ -698,6 +700,16 @@ class JobRepository(JobHistoryStore):
                     current.value,
                 ),
             )
+            if to_queue_front and status == JobStatus.QUEUED:
+                connection.execute(
+                    """
+                    UPDATE jobs SET queue_order = COALESCE(
+                        (SELECT MIN(queue_order) - 1 FROM jobs WHERE status = 'queued' AND job_id != ?),
+                        queue_order
+                    ) WHERE job_id = ?
+                    """,
+                    (job.job_id, job.job_id),
+                )
             committed_row = connection.execute(
                 "SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)
             ).fetchone()
