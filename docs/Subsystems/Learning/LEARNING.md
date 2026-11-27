@@ -675,6 +675,21 @@ Each study keeps its own frozen mechanism (sections 3.1-3.14). `study_catalog.ST
 
 The Design step starts from an objective. The eight study engines, their forms, validation, freezing, bounds, ratings and evidence rules are unchanged; only how the operator reaches them changed. The grouping lives in `study_catalog` (`OBJECTIVES`, and per study `objective_group`, `nav_tier` and `target_check_ref`; data and lazy `"module:attribute"` references only).
 
+**Simple workspace (N6).** The window's Simple workspace (the default) hides some entries from the chooser:
+
+- the four study types with no saved experiments in the owner's workspace on 2026-11-26: Prompt Slot, Embedding, Two-Axis Grid and Prompt x Model Matrix;
+- the "More comparisons" heading, which then has nothing under it;
+- the tab's Discovered Outputs view.
+
+The rules for this hiding:
+
+- A hidden study that is currently selected stays shown.
+- Every study stays in the catalog, and saved experiments of every type still open, run and rate.
+- **Advanced** shows the chooser and the views as before.
+- The automatic discovered-output scan is unchanged.
+
+The list is `SIMPLE_HIDDEN_STUDY_SLUGS` in `src/gui/view_contracts/workspace_mode_contract.py`.
+
 | Objective | Studies | Opens |
 |---|---|---|
 | Does this model work here | Compatibility Probe | the Model Evidence Catalog (its existing Compatibility Probe action; the probe has no Design frame) |
