@@ -271,6 +271,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `artifact_metadata_inspector_dialog.py`: Read-only artifact metadata inspector dialog
 - `base_generation_panel_v2.py`: Base generation panel for GUI V2
 - `batch_builder_dialog.py`: N5 Packs x Models batch builder: pick PromptPacks and models, see the exact totals, queue one named batch
+- `batch_model_picker.py`: DESK-QUICK: the batch builder's model list, with search and a status per model
 - `batch_operations_panel_v2.py`: Tk "Batches" view inside the Queue/History operator workflow (PR-BATCH-OPS-201)
 - `batch_retry_dialog.py`: Modal review of a selected retry (PR-BATCH-OPS-201)
 - `design_system_v2.py`: Tk/ttk style registration and primitive helpers for the StableNew V2 GUI
@@ -924,6 +925,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `diagnostics_service_v2.py`: Coordinate diagnostic bundle creation and track asynchronous work through shutdown
 - `duration_stats_service.py`: Duration statistics service for queue ETA estimation
+- `model_file_health.py`: DESK-QUICK: one list of every model with missing files
 - `operator_readiness_service.py`: Read-only operator readiness projection built from existing authorities
 - `persistence_worker.py`: PR-HB-004: Async Persistence Worker
 - `runtime_transition_service.py`: PR-RUNTIME-100: coordinate release of conflicting StableNew-owned GPU runtimes
