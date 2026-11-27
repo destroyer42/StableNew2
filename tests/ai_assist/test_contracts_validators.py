@@ -95,6 +95,8 @@ def test_suggestion_has_no_executable_field_and_diagnostics_hold_no_text() -> No
         "slot_values",
         "slot_proposals",
         "phrase_slots",
+        # ASSIST-FIX: text for the Video Workflow Motion field, applied only after the operator's press.
+        "motion_phrase",
     }
     # AI-213: a proposal names a new slot, its values and a closed-list index; display text only.
     from src.ai_assist.contracts import SlotProposal
@@ -263,10 +265,10 @@ def test_framing_is_deterministic_and_refuses_reserved_markers() -> None:
 
 
 def test_json_schema_pins_choices_to_the_closed_lists() -> None:
-    target_ok = framing.build_json_schema(TARGET)["oneOf"][0]
+    target_ok = framing.build_json_schema(TARGET)
     assert target_ok["properties"]["target"] == {"enum": ["sdxl", "klein"]}
     assert target_ok["additionalProperties"] is False
-    assert framing.build_json_schema(WORKFLOW)["oneOf"][0]["properties"]["workflow"]["enum"] == [
+    assert framing.build_json_schema(WORKFLOW)["properties"]["workflow"]["enum"] == [
         "wan22_ti2v_5b",
         "svd_xt",
     ]

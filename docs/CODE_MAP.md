@@ -24,6 +24,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `events.py`: Content-free event record (owner decision D7: no training-data capture)
 - `framing.py`: The fixed instruction frame and the JSON Schema for one request
 - `host.py`: Read-only host seams: memory and generation activity
+- `image.py`: The one way a picture is prepared for a request: reduced, re-encoded and stripped of every metadata field
 - `manifests.py`: Pinned runtime manifest, provenance-gated model registry, local import and integrity verification
 - `observe.py`: Consume only the read capability minted by run_bounded for this request (F2)
 - `paths.py`: Where the offline AI runtime, weights and records live
@@ -503,6 +504,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
 - `video_workflow_layout_v2.py`: Layout scaffolding for the Video Workflow tab (VID-UX-384)
 - `video_workflow_media_pane_v2.py`: Right-pane media and status column of the Video Workflow tab (VID-UX-384)
+- `video_workflow_motion_ai_host.py`: Suggest a motion phrase for the Video Workflow tab through AI Assist, and undo it (ASSIST-FIX)
 - `video_workflow_motion_intent_v2.py`: Motion preset, motion phrase and duration rows of the Video Workflow tab (V1-1)
 - `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)

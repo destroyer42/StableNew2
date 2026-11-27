@@ -64,6 +64,8 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "priority_verified",
         "child_observed",
         "exit_code",
+        "attempts",
+        "first_reason",
     }
 )
 
