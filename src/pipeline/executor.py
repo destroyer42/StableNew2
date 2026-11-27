@@ -1176,7 +1176,10 @@ class Pipeline:
                     status = "unsafe"
                     reasons.append(f"live GPU pressure near saturation ({vram_pct:.1f}% VRAM)")
             except Exception:
-                pass
+                logger.warning(
+                    "GPU pressure reading was unusable for job %s; assessed without it", self._current_job_id,
+                    exc_info=True,
+                )
 
         return {
             "schema": "stablenew.stage-pressure.v1",
@@ -2635,6 +2638,7 @@ class Pipeline:
             self._emit_status_update(status_data)
 
         cancel_interrupt_time = float("-inf")
+        poll_failure_logged = False
 
         while not stop_event.is_set():
             try:
@@ -2920,7 +2924,12 @@ class Pipeline:
                         escalate_if_due(time.monotonic())
 
             except Exception:
-                pass  # Ignore polling errors
+                if not poll_failure_logged:
+                    poll_failure_logged = True
+                    logger.warning(
+                        "Progress polling failed for job %s; cancel and stall handling may not act while this lasts", self._current_job_id,
+                        exc_info=True,
+                    )
 
             # Wait for next poll or stop signal
             stop_event.wait(poll_interval)
@@ -3035,7 +3044,10 @@ class Pipeline:
                 try:
                     poll_future.result(timeout=1.0)
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Progress poll thread for job %s did not finish cleanly", self._current_job_id,
+                        exc_info=True,
+                    )
             if poll_executor is not None:
                 poll_executor.shutdown(wait=True, cancel_futures=True)
             if self._active_managed_stall_escalation is managed_stall_escalation_event:
@@ -4401,7 +4413,10 @@ class Pipeline:
                 if hr_sampler_name:
                     payload["hr_sampler_name"] = hr_sampler_name
             except Exception:
-                pass
+                logger.warning(
+                    "hr_sampler_name was left out of the payload for job %s", self._current_job_id,
+                    exc_info=True,
+                )
 
             payload.update(sampler_config)
 
@@ -4432,7 +4447,10 @@ class Pipeline:
                     else payload["negative_prompt"],
                 )
             except Exception:
-                pass
+                logger.warning(
+                    "Could not log the prompt for job %s", self._current_job_id,
+                    exc_info=True,
+                )
 
             # Add styles if specified
             if txt2img_config.get("styles"):
@@ -4956,7 +4974,10 @@ class Pipeline:
                         else enhanced_negative,
                     )
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Could not log the global negative terms for job %s", self._current_job_id,
+                        exc_info=True,
+                    )
 
             sampler_config = self._parse_sampler_config(config)
 
@@ -5029,7 +5050,10 @@ class Pipeline:
                     else payload["negative_prompt"],
                 )
             except Exception:
-                pass
+                logger.warning(
+                    "Could not log the prompt for job %s", self._current_job_id,
+                    exc_info=True,
+                )
 
             # Log key parameters at INFO to correlate with WebUI progress
             try:
@@ -5041,7 +5065,10 @@ class Pipeline:
                     payload.get("scheduler"),
                 )
             except Exception:
-                pass
+                logger.warning(
+                    "Could not log the request parameters for job %s", self._current_job_id,
+                    exc_info=True,
+                )
 
             # Execute img2img through the shared progress/cancellation authority.
             response = self._generate_images_with_progress(
@@ -5556,7 +5583,10 @@ class Pipeline:
                         target_height,
                     )
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Could not log the request parameters for job %s", self._current_job_id,
+                        exc_info=True,
+                    )
 
                 # Apply global negative if any (upscale-as-img2img path may include a negative prompt)
                 global_applied = False
@@ -5584,7 +5614,10 @@ class Pipeline:
                         else:
                             logger.info("Global negative skipped for upscale(img2img) stage")
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Global negative terms were NOT applied to the upscale prompt for job %s; upscaling without them", self._current_job_id,
+                        exc_info=True,
+                    )
 
                 # Track timing for this stage
                 stage_start = time.monotonic()
@@ -5864,7 +5897,10 @@ class Pipeline:
                             mem.percent,
                         )
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Memory check after upscale failed for job %s", self._current_job_id,
+                        exc_info=True,
+                    )
 
                 self._record_stage_event("upscale", "exit", 1, 1, False)
                 return metadata

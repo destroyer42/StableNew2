@@ -877,7 +877,7 @@ class PipelineRunner:
         run_started_monotonic = time.monotonic()
         trace = getattr(self._pipeline, "_image_performance", None)
         trace = trace if isinstance(trace, ImagePerformanceTrace) else None
-        self._cleanup_at_job_start(trace, image_backend_id)
+        self._cleanup_at_job_start(trace, image_backend_id, njr.job_id)
         if any(job.stage_name == StageTypeEnum.TRAIN_LORA.value for job in plan.jobs):
             if len(plan.jobs) != 1 or plan.jobs[0].stage_name != StageTypeEnum.TRAIN_LORA.value:
                 raise ValueError("train_lora must be the only enabled stage in an NJR run plan.")
@@ -992,7 +992,9 @@ class PipelineRunner:
         self._last_run_result = result
         return result
 
-    def _cleanup_at_job_start(self, trace: ImagePerformanceTrace | None, image_backend_id: str = "") -> None:
+    def _cleanup_at_job_start(
+        self, trace: ImagePerformanceTrace | None, image_backend_id: str = "", job_id: str = ""
+    ) -> None:
         # Best-effort local cleanup. Refresh is reserved for explicitly requested maintenance. A backend that does not
         # use the WebUI client (PR-IMG-120 Diffusers) owns its runtime entirely; no WebUI request is made for it.
         if image_backend_id and not self._backend_uses_webui_client(image_backend_id):
@@ -1005,7 +1007,10 @@ class PipelineRunner:
                     client, trace, reason="job_start", unload_model=False, refresh_checkpoints=False,
                 )
         except Exception:
-            pass
+            logger.warning(
+                "Pre-job memory cleanup failed for job %s; the job continues", job_id,
+                exc_info=True,
+            )
 
     def _backend_uses_webui_client(self, backend_id: str) -> bool:
         try:
@@ -1899,12 +1904,18 @@ class PipelineRunner:
                 else:
                     self._learning_record_writer.write(record)
             except Exception:
-                pass
+                logger.warning(
+                    "Learning record was NOT written for job %s", getattr(run_result, "run_id", None),
+                    exc_info=True,
+                )
         if self._learning_record_callback:
             try:
                 self._learning_record_callback(record)
             except Exception:
-                pass
+                logger.warning(
+                    "Learning record callback failed for job %s", getattr(run_result, "run_id", None),
+                    exc_info=True,
+                )
         return record
 
 

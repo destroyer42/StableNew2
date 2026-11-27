@@ -31,7 +31,9 @@ def _project(controller: SimpleNamespace):
 
 def test_projection_lists_each_job_with_its_prompt_preview_and_status() -> None:
     bare = Job(job_id="no-njr")
-    controller = _controller([_job("a", "first prompt", JobStatus.RUNNING), _job("b", "second prompt"), bare])
+    controller = _controller(
+        [_job("a", "first prompt", JobStatus.RUNNING), _job("b", "second prompt"), bare]
+    )
 
     items, summaries = _project(controller)
 

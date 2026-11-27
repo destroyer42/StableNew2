@@ -51,8 +51,12 @@ class QueueSummaryProjector:
                 if record:
                     try:
                         entry = self._entry(job, record, previous.get(job.job_id))
-                    except Exception as exc:
-                        logger.warning("Failed to convert job %s to UnifiedJobSummary: %s", job.job_id, exc)
+                    except Exception:
+                        logger.warning(
+                            "Failed to convert job %s to UnifiedJobSummary",
+                            job.job_id,
+                            exc_info=True,
+                        )
                         items.append(job.job_id)
                         fallback_count += 1
                         continue
@@ -72,7 +76,11 @@ class QueueSummaryProjector:
                     )
                     summaries.append(UnifiedJobSummary.from_job(job, status))
                 except Exception:
-                    logger.warning("Job %s is left out of the queue list: no summary", job.job_id, exc_info=True)
+                    logger.warning(
+                        "Job %s is left out of the queue list: no summary",
+                        job.job_id,
+                        exc_info=True,
+                    )
             self._cache = current
         return QueueProjectionResult(items, summaries, fallback_count)
 

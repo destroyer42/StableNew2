@@ -72,12 +72,16 @@ def test_a_cancel_during_preparation_dispatches_nothing(monkeypatch) -> None:
     token.cancel()
 
     with pytest.raises(CancellationError):
-        pipeline._generate_images_with_progress("txt2img", {}, poll_interval=0.01, cancel_token=token)
+        pipeline._generate_images_with_progress(
+            "txt2img", {}, poll_interval=0.01, cancel_token=token
+        )
 
     assert dispatched == []
 
 
-def test_the_interrupt_is_repeated_while_the_cancelled_request_is_still_running(monkeypatch) -> None:
+def test_the_interrupt_is_repeated_while_the_cancelled_request_is_still_running(
+    monkeypatch,
+) -> None:
     """The first interrupt can land before WebUI has the request, which then clears it and generates in full."""
 
     token = CancelToken()
@@ -93,6 +97,8 @@ def test_the_interrupt_is_repeated_while_the_cancelled_request_is_still_running(
     pipeline, client_box["client"] = _pipeline(monkeypatch, generate)
 
     with pytest.raises(CancellationError):
-        pipeline._generate_images_with_progress("txt2img", {}, poll_interval=0.01, cancel_token=token)
+        pipeline._generate_images_with_progress(
+            "txt2img", {}, poll_interval=0.01, cancel_token=token
+        )
 
     assert client_box["client"].interrupt.call_count >= 2

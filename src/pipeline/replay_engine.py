@@ -277,6 +277,10 @@ class ReplayEngine:
                 if isinstance(hydrated, NormalizedJobRecord):
                     return hydrated
             except Exception:
-                pass
+                logger.warning(
+                    "Stored NJR for job %s could not be rebuilt directly; trying the wrapped form",
+                    snapshot.get("job_id"),
+                    exc_info=True,
+                )
         normalized = snapshot if "normalized_job" in snapshot else {"normalized_job": snapshot}
         return normalized_job_from_snapshot(normalized)
