@@ -424,7 +424,7 @@ def build_report(
                 listed.setdefault(option, _Tally()).add(decision)
 
     by_model: dict[str, dict[str, tuple[OptionRow, ...]]] = {}
-    for (key, factor), options in sorted(factor_options.items()):
+    for (key, factor), tallies in sorted(factor_options.items()):
         # A LoRA or embedding is compared with the model's images without it, so the population is every image of
         # the model; other factors compare among the images that have the factor at all.
         population = (
@@ -432,7 +432,7 @@ def build_report(
             if factor in (FACTOR_LORA, FACTOR_EMBEDDING)
             else factor_population[(key, factor)]
         )
-        by_model.setdefault(names[key], {})[factor] = _rows(population, options)
+        by_model.setdefault(names[key], {})[factor] = _rows(population, tallies)
 
     batch_labels: dict[str, str] = {}
     for batch_id in batches:

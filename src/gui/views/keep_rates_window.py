@@ -218,7 +218,7 @@ def open_keep_rates(owner: Any) -> KeepRatesWindow:
     from src.review.review_lineage import repository_of
     from src.state.workspace_paths import workspace_paths
 
-    existing = getattr(owner, "_keep_rates_window", None)
+    existing: KeepRatesWindow | None = getattr(owner, "_keep_rates_window", None)
     if existing is not None and existing.winfo_exists():
         existing.lift()
         existing.reload()
