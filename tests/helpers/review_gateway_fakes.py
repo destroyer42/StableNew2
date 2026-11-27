@@ -151,6 +151,8 @@ class FakeGateway:
 
     def __init__(self, secret: str = SECRET) -> None:
         self.secret = secret
+        #: What health lists; ``None`` is a gateway from before the list existed.
+        self.features: list[str] | None = None
         self.media: dict[str, bytes] = {}
         self.manifests: dict[str, dict[str, Any]] = {}
         self.outbox: list[Any] = []
@@ -167,6 +169,8 @@ class FakeGateway:
         self.declared: set[str] = set()
         self.listed: set[Any] = set()
         self.refuse_offers = False
+        self.statuses: list[dict[str, Any]] = []  # LAUNCH-UPDATE-2 pc_status payloads, in order
+        self.offers_pc_status = True  # False: an older gateway without the route (404)
 
     def request(
         self,
@@ -189,7 +193,12 @@ class FakeGateway:
         split = urlsplit(path)
         route, query = split.path, parse_qs(split.query)
         if route == "/sync/v1/health" and method == "GET":
-            body_ok = {"status": "ok", "schema_version": "stablenew.review-gateway-sync.v1"}
+            body_ok: dict[str, Any] = {
+                "status": "ok",
+                "schema_version": "stablenew.review-gateway-sync.v1",
+            }
+            if self.features is not None:
+                body_ok["features"] = self.features
             return Response(200, json.dumps(body_ok).encode())
         if route.startswith("/sync/v1/media/"):
             digest = route.rsplit("/", 1)[1]
@@ -258,6 +267,14 @@ class FakeGateway:
             self.revocations.append(revocation)
             self.enrolled = [d for d in self.enrolled if d["device_id"] != revocation["device_id"]]
             return Response(200, b'{"status":"revoked"}')
+        if route == "/sync/v1/pc-status" and method == "PUT":
+            if not self.offers_pc_status:
+                return Response(404, b"")
+            status = json.loads(data or b"")
+            validate_def(status, "pc_status")
+            validate(status)
+            self.statuses.append(status)
+            return Response(200, b'{"status":"stored"}')
         if route == "/sync/v1/immich-receipts" and method == "GET":
             page = self.immich_pages.get(query.get("cursor", [""])[0], self.immich_page)
             if page is None:
@@ -299,6 +316,29 @@ class FakeGateway:
             "target": {"library_id": library_id, "sha256": sha256},
             "kind": "action_request",
             "action_request": {"action": action, "params": {"step": "prepare", **params}},
+        }
+        validate_def(record, "outbox_record")
+        self.outbox.append(record)
+        return record
+
+    def update_request(
+        self,
+        expected_sha: str,
+        *,
+        device_id: str = "phone-device-01",
+        record_id: str | None = None,
+        key: str | None = None,
+        created_at: str = "2026-11-25T21:31:00.000Z",
+    ) -> dict[str, Any]:
+        """A LAUNCH-UPDATE-2 ``admin_request`` as the gateway records it: no item target."""
+
+        record = {
+            "record_id": record_id or str(uuid.uuid4()),
+            "idempotency_key": key or uuid.uuid4().hex,
+            "device_id": device_id,
+            "created_at": created_at,
+            "kind": "admin_request",
+            "admin_request": {"action": "update_and_restart", "expected_sha": expected_sha},
         }
         validate_def(record, "outbox_record")
         self.outbox.append(record)

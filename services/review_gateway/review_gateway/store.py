@@ -1,4 +1,4 @@
-"""Gateway state in SQLite: items, the decision outbox, pairing offers, devices and owed Immich uploads.
+"""Gateway state in SQLite: items, the outbox, pairing offers, devices, owed Immich uploads and the PC's status.
 
 Everything here is a projection or a request (RG-100 invariants 2 and 4). It is WAL with ``synchronous=FULL`` (S9),
 and retention only ever removes cached media for items whose latest decision the PC has answered, and never a kept
@@ -34,18 +34,37 @@ DISCARD_UNDO = timedelta(hours=48)
 KEEP_AFTER_ANSWER = timedelta(days=14)
 STALE_FILE_S = 24 * 3600
 _SEEN_RESOLUTION = timedelta(hours=1)
+#: The phone inbox's group key for a named batch (N5); every other group is an output run folder name.
+BATCH_GROUP = "batch:"
+#: RG-140 slices 1 and 2. The schema reserves the others (N8's clip actions); the PC refuses anything it does not
+#: implement, so an older PC answers a slice-2 request with ``invalid_record``.
+PHONE_ACTIONS = frozenset(
+    {
+        "fix_face",
+        "fix_hands",
+        "fix_both",
+        "more_like_this",
+        "another_model",
+        "aspect_ratio",
+        "prompt_tweak",
+        "make_video",
+    }
+)
 #: RG-140: not a quota (the owner set none, 2026-11-26). A technical bound on one phone's *unanswered* action requests,
 #: far above a person's use (a whole 300-item batch fixed while the PC sleeps fits). It protects the outbox and the PC's
 #: next sync from a phone stuck resending in a loop with fresh keys; answered requests never count.
 MAX_PENDING_ACTIONS = 1000
 #: RG-140 slice 1. The schema reserves the others for later slices; the PC refuses anything it does not implement.
 SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
+#: LAUNCH-UPDATE-2: how many of its own update requests an admin phone is shown.
+ADMIN_HISTORY = 5
 
 _TABLES = """
 CREATE TABLE IF NOT EXISTS item (
     library_id TEXT NOT NULL, sha256 TEXT NOT NULL,
     run_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL, duration_s REAL,
     display TEXT NOT NULL, ready_at TEXT, purged_at TEXT, latest_record_id TEXT,
+    batch_id TEXT, batch TEXT,
     PRIMARY KEY (library_id, sha256)
 );
 CREATE INDEX IF NOT EXISTS item_run ON item (run_id, created_at, library_id);
@@ -75,6 +94,9 @@ CREATE TABLE IF NOT EXISTS offer (
 CREATE TABLE IF NOT EXISTS device (
     device_id TEXT PRIMARY KEY, token_sha256 TEXT NOT NULL UNIQUE, offer_id TEXT NOT NULL,
     label TEXT, scopes TEXT NOT NULL, enrolled_at TEXT NOT NULL, seen_at TEXT, revoked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS pc_status (
+    id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL, received_at TEXT NOT NULL
 );
 """
 
@@ -174,6 +196,7 @@ class Store:
         display = dict(manifest.get("display", {}))
         if "seed" in display:
             display["seed"] = str(int(display["seed"]))  # beyond JavaScript's exact integers
+        batch = manifest.get("batch")
         with self.write() as db:
             row = db.execute(
                 "SELECT purged_at FROM item WHERE library_id = ? AND sha256 = ?", key
@@ -181,10 +204,12 @@ class Store:
             if row is not None and row["purged_at"] is not None:
                 return "purged", []
             db.execute(
-                "INSERT INTO item (library_id, sha256, run_id, kind, created_at, duration_s, display)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (library_id, sha256) DO UPDATE SET"
+                "INSERT INTO item (library_id, sha256, run_id, kind, created_at, duration_s, display,"
+                " batch_id, batch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT (library_id, sha256) DO UPDATE SET"
                 " run_id = excluded.run_id, kind = excluded.kind, created_at = excluded.created_at,"
-                " duration_s = excluded.duration_s, display = excluded.display",
+                " duration_s = excluded.duration_s, display = excluded.display,"
+                " batch_id = excluded.batch_id, batch = excluded.batch",
                 (
                     *key,
                     manifest["run_id"],
@@ -192,6 +217,8 @@ class Store:
                     stamp(_instant(manifest["created_at"])),
                     manifest.get("duration_s"),
                     json.dumps(display),
+                    batch["batch_id"].lower() if batch else None,
+                    json.dumps(batch) if batch else None,
                 ),
             )
             db.execute("DELETE FROM item_media WHERE library_id = ? AND sha256 = ?", key)
@@ -253,21 +280,33 @@ class Store:
     # --- the phone's view ---------------------------------------------------------------------------------------
 
     def runs(self) -> list[dict[str, Any]]:
+        """The inbox: one group per named batch (N5), and per output run folder for everything else.
+
+        A group's ``run_id`` is what the phone opens: the run folder, or ``batch:<batch_id>``. Groups come newest
+        activity first (their latest item), then by that key.
+        """
+
         with self.connection() as db:
             rows = db.execute(
                 _ITEMS_WITH_STATE + " ORDER BY item.run_id DESC, item.created_at, item.library_id"
             ).fetchall()
         runs: dict[str, dict[str, Any]] = {}
+        latest: dict[str, str] = {}
         for row in rows:
+            batch = json.loads(row["batch"]) if row["batch_id"] else None
+            group = f"{BATCH_GROUP}{row['batch_id']}" if batch else row["run_id"]
             run = runs.setdefault(
-                row["run_id"],
+                group,
                 {
-                    "run_id": row["run_id"],
+                    "run_id": group,
+                    "kind": "batch" if batch else "run",
+                    "name": batch["name"] if batch else None,
                     **dict.fromkeys(("total", "undecided", "keep", "delete", "favorite"), 0),
                     **dict.fromkeys(("pending", "applied", "refused"), 0),
                     "covers": [],
                 },
             )
+            latest[group] = max(latest.get(group, ""), row["created_at"])
             state, decision, _reason = _outcome(row)
             run["total"] += 1
             run[state] += 1
@@ -276,19 +315,39 @@ class Store:
                 run["favorite"] += decision["favorite"]
             if len(run["covers"]) < 4:
                 run["covers"].append({"library_id": row["library_id"], "sha256": row["sha256"]})
-        return list(runs.values())
+        return sorted(
+            runs.values(), key=lambda run: (latest[run["run_id"]], run["run_id"]), reverse=True
+        )
+
+    def group_name(self, run_id: str) -> str | None:
+        """The batch name of a ``batch:<id>`` group (``None`` for a run folder or an unknown batch)."""
+
+        batch_id = run_id.removeprefix(BATCH_GROUP)
+        if batch_id == run_id:
+            return None
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT batch FROM item WHERE batch_id = ? AND ready_at IS NOT NULL"
+                " AND purged_at IS NULL ORDER BY created_at DESC LIMIT 1",
+                (batch_id.lower(),),
+            ).fetchone()
+        return json.loads(row["batch"])["name"] if row is not None else None
 
     def run_items(self, run_id: str) -> list[dict[str, Any]]:
+        batch_id = run_id.removeprefix(BATCH_GROUP)
+        if batch_id != run_id:
+            where, value = "item.batch_id = ?", batch_id.lower()
+        else:
+            where, value = "item.run_id = ? AND item.batch_id IS NULL", run_id
         with self.connection() as db:
             rows = db.execute(
-                _ITEMS_WITH_STATE
-                + " AND item.run_id = ? ORDER BY item.created_at, item.library_id",
-                (run_id,),
+                _ITEMS_WITH_STATE + f" AND {where} ORDER BY item.created_at, item.library_id",
+                (value,),
             ).fetchall()
             variants = db.execute(
                 "SELECT item_media.library_id, item_media.sha256, variant, digest FROM item_media"
-                " JOIN item USING (library_id, sha256) WHERE item.run_id = ?",
-                (run_id,),
+                f" JOIN item USING (library_id, sha256) WHERE {where}",
+                (value,),
             ).fetchall()
         names = {"thumb_320": "thumb", "preview_1080": "preview", "mobile_video": "video"}
         available: dict[tuple[str, str], list[str]] = {}
@@ -307,6 +366,7 @@ class Store:
                     "created_at": row["created_at"],
                     "duration_s": row["duration_s"],
                     "display": json.loads(row["display"]),
+                    "batch": json.loads(row["batch"]) if row["batch_id"] else None,
                     "variants": sorted(available.get((row["library_id"], row["sha256"]), [])),
                     "state": state,
                     "decision": decision,
@@ -447,7 +507,7 @@ class Store:
             self.contract.validate("outbox_record", record)
         except ContractError as error:
             raise GatewayError(422, "invalid_record") from error
-        if action_request["action"] not in SLICE_ONE_ACTIONS:
+        if action_request["action"] not in PHONE_ACTIONS:
             raise GatewayError(422, "invalid_record")
         key = (target["library_id"], target["sha256"])
         with self.write() as db:
@@ -523,6 +583,118 @@ class Store:
             ).fetchall()
         return [_action_view(row) for row in rows]
 
+    # --- remote update (LAUNCH-UPDATE-2) -----------------------------------------------------------------------
+
+    def set_pc_status(self, status: dict[str, Any]) -> None:
+        """Keep the latest validated ``pc_status``; it is only ever shown to admin phones."""
+
+        with self.write() as db:
+            db.execute(
+                "INSERT INTO pc_status VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET"
+                " payload = excluded.payload, received_at = excluded.received_at",
+                (json.dumps(status), stamp(self.clock())),
+            )
+
+    def admin_view(self, device_id: str) -> dict[str, Any]:
+        """What an admin phone shows: the PC's last status and this phone's recent update requests."""
+
+        with self.connection() as db:
+            status = db.execute(
+                "SELECT payload, received_at FROM pc_status WHERE id = 1"
+            ).fetchone()
+            rows = db.execute(
+                "SELECT record, status, acknowledgement FROM outbox WHERE device_id = ?"
+                " AND kind = 'admin_request' ORDER BY seq DESC LIMIT ?",
+                (device_id, ADMIN_HISTORY),
+            ).fetchall()
+        return {
+            "pc_status": json.loads(status["payload"]) if status else None,
+            "received_at": status["received_at"] if status else None,
+            "now": stamp(self.clock()),
+            "requests": [_admin_view(row) for row in rows],
+        }
+
+    def admin_record(self, device_id: str, record_id: str) -> dict[str, Any] | None:
+        """One of this device's update requests with the PC's answer; ``None`` for anyone else's."""
+
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT record, status, acknowledgement FROM outbox WHERE record_id = ?"
+                " AND device_id = ? AND kind = 'admin_request'",
+                (record_id, device_id),
+            ).fetchone()
+        return _admin_view(row) if row is not None else None
+
+    def request_update(
+        self, device_id: str, admin_request: dict[str, Any], idempotency_key: str
+    ) -> tuple[str, str]:
+        """Record an admin phone's update request. Returns ``(record_id, state)``.
+
+        Only a request (invariant 4): the PC checks the grant against its own ledger, its own switch and its own
+        fetch of origin, and answers. The gateway refuses early what the PC would refuse anyway: a phone without the
+        ``admin`` grant, and a commit other than the ``origin/main`` the PC last reported (``status_changed``).
+        """
+
+        record = {
+            "record_id": str(uuid.uuid4()),
+            "idempotency_key": idempotency_key,
+            "device_id": device_id,
+            "created_at": stamp(self.clock()),
+            "kind": "admin_request",
+            "admin_request": admin_request,
+        }
+        try:
+            self.contract.validate("outbox_record", record)
+        except ContractError as error:
+            raise GatewayError(422, "invalid_record") from error
+        with self.write() as db:
+            # Checked inside the write: the body may have arrived after a revocation (S11).
+            device = db.execute(
+                "SELECT scopes FROM device WHERE device_id = ? AND revoked_at IS NULL", (device_id,)
+            ).fetchone()
+            if device is None:
+                raise GatewayError(401, "not_enrolled")
+            if "admin" not in json.loads(device["scopes"]):
+                raise GatewayError(403, "not_granted")
+            previous = db.execute(
+                "SELECT record_id, record, status FROM outbox"
+                " WHERE device_id = ? AND idempotency_key = ?",
+                (device_id, idempotency_key),
+            ).fetchone()
+            if previous is not None:
+                if json.loads(previous["record"]).get("admin_request") != admin_request:
+                    raise GatewayError(409, "idempotency_conflict")
+                return previous["record_id"], _state(previous["status"])
+            status = db.execute("SELECT payload FROM pc_status WHERE id = 1").fetchone()
+            shown = json.loads(status["payload"])["checkout"] if status else {}
+            if shown.get("origin_main_sha") != admin_request["expected_sha"]:
+                raise GatewayError(409, "status_changed")
+            waiting = db.execute(
+                "SELECT record_id, delivered_at FROM outbox WHERE device_id = ?"
+                " AND kind = 'admin_request' AND status = 'pending'",
+                (device_id,),
+            ).fetchall()
+            if any(row["delivered_at"] is not None for row in waiting):
+                raise GatewayError(409, "update_pending")  # the PC has it; its answer comes first
+            # A request the PC has never seen is simply replaced by the newer one.
+            db.executemany(
+                "UPDATE outbox SET status = 'superseded' WHERE record_id = ?",
+                [(row["record_id"],) for row in waiting],
+            )
+            db.execute(
+                "INSERT INTO outbox (record_id, idempotency_key, device_id, library_id, sha256,"
+                " record, status, kind, created_at)"
+                " VALUES (?, ?, ?, '', '', ?, 'pending', 'admin_request', ?)",
+                (
+                    record["record_id"],
+                    idempotency_key,
+                    device_id,
+                    json.dumps(record),
+                    record["created_at"],
+                ),
+            )
+        return record["record_id"], "pending"
+
     def outbox_page(self, after: int, limit: int) -> dict[str, Any]:
         with self.write() as db:
             rows = db.execute(
@@ -554,7 +726,8 @@ class Store:
         record_id = acknowledgement["record_id"].lower()
         with self.write() as db:
             row = db.execute(
-                "SELECT library_id, sha256, status FROM outbox WHERE record_id = ?", (record_id,)
+                "SELECT library_id, sha256, status, kind FROM outbox WHERE record_id = ?",
+                (record_id,),
             ).fetchone()
             if row is None:
                 raise GatewayError(404, "unknown_record")
@@ -570,7 +743,8 @@ class Store:
                     record_id,
                 ),
             )
-            self._reconcile_upload(db, (row["library_id"], row["sha256"]))
+            if row["kind"] != "admin_request":  # an admin request names no item
+                self._reconcile_upload(db, (row["library_id"], row["sha256"]))
         return "recorded"
 
     # --- Immich (D3) --------------------------------------------------------------------------------------------
@@ -793,6 +967,12 @@ def _migrate(db: sqlite3.Connection) -> None:
     if "created_at" not in columns:
         db.execute("ALTER TABLE outbox ADD COLUMN created_at TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS outbox_device_kind ON outbox (device_id, kind, seq)")
+    # The batch an item was queued in (N5), for grouping the inbox; items published before it have none.
+    item_columns = {row[1] for row in db.execute("PRAGMA table_info(item)")}
+    for column in ("batch_id", "batch"):
+        if column not in item_columns:
+            db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")
+    db.execute("CREATE INDEX IF NOT EXISTS item_batch ON item (batch_id, created_at, library_id)")
 
 
 def _action_view(row: sqlite3.Row) -> dict[str, Any]:
@@ -809,6 +989,19 @@ def _action_view(row: sqlite3.Row) -> dict[str, Any]:
         "state": _state(row["status"]),
         "reason_code": answer.get("reason_code") if row["status"] == "refused" else None,
         "receipt": answer.get("receipt"),
+    }
+
+
+def _admin_view(row: sqlite3.Row) -> dict[str, Any]:
+    record = json.loads(row["record"])
+    answer = json.loads(row["acknowledgement"]) if row["acknowledgement"] else {}
+    return {
+        "record_id": record["record_id"],
+        "expected_sha": record["admin_request"]["expected_sha"],
+        "created_at": record["created_at"],
+        "state": _state(row["status"]),
+        "reason_code": answer.get("reason_code") if row["status"] == "refused" else None,
+        "update": (answer.get("receipt") or {}).get("update"),
     }
 
 

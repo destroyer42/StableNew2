@@ -60,6 +60,7 @@ _VARIANTS = {
 }
 _DECISION_FIELDS = {"library_id", "sha256", "verdict", "favorite", "tags", "idempotency_key"}
 _ACTION_FIELDS = {"library_id", "sha256", "action", "params", "idempotency_key"}
+_UPDATE_FIELDS = {"action", "expected_sha", "idempotency_key"}
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
@@ -152,7 +153,11 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
         await session(request)
         run_id = request.path_params["run_id"]
         return JSONResponse(
-            {"run_id": run_id, "items": await run_in_threadpool(store.run_items, run_id)}
+            {
+                "run_id": run_id,
+                "name": await run_in_threadpool(store.group_name, run_id),
+                "items": await run_in_threadpool(store.run_items, run_id),
+            }
         )
 
     async def decisions(request: Request) -> Response:
@@ -215,6 +220,40 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
             raise GatewayError(404, "not_found")
         return JSONResponse(found)
 
+    # LAUNCH-UPDATE-2: remote update, only for a phone paired from the desktop's dedicated offer (D2).
+    async def admin_session(request: Request) -> Device:
+        device = await session(request, review=False)
+        if "admin" not in device.scopes:
+            raise GatewayError(403, "not_granted")
+        return device
+
+    async def admin(request: Request) -> Response:
+        device = await admin_session(request)
+        return JSONResponse(await run_in_threadpool(store.admin_view, device.device_id))
+
+    async def update_requests(request: Request) -> Response:
+        device = await admin_session(request)
+        body = await read_json(request)
+        if body.keys() != _UPDATE_FIELDS:
+            raise GatewayError(422, "invalid_record")
+        record_id, state = await run_in_threadpool(
+            store.request_update,
+            device.device_id,
+            {"action": body["action"], "expected_sha": body["expected_sha"]},
+            body["idempotency_key"],
+        )
+        return JSONResponse({"record_id": record_id, "state": state})
+
+    async def update_request(request: Request) -> Response:
+        device = await admin_session(request)
+        record_id = request.path_params["record_id"]
+        if not _UUID.fullmatch(record_id):
+            raise GatewayError(404, "not_found")
+        found = await run_in_threadpool(store.admin_record, device.device_id, record_id)
+        if found is None:
+            raise GatewayError(404, "not_found")
+        return JSONResponse(found)
+
     async def media(request: Request) -> Response:
         await session(request)
         params = request.path_params
@@ -239,6 +278,9 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
             Route("/api/actions", actions, methods=["POST"]),
             Route("/api/actions", item_actions, methods=["GET"]),
             Route("/api/actions/{record_id}", action, methods=["GET"]),
+            Route("/api/admin", admin, methods=["GET"]),
+            Route("/api/admin/updates", update_requests, methods=["POST"]),
+            Route("/api/admin/updates/{record_id}", update_request, methods=["GET"]),
             Route("/media/{library_id}/{sha256}/{variant}", media, methods=["GET"]),
         ],
         middleware=[Middleware(_Guard)],

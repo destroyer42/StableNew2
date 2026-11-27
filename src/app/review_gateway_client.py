@@ -42,6 +42,7 @@ ROUTES = {
     "immich_receipts": "/sync/v1/immich-receipts",
     "deploy_requests": "/sync/v1/deploy-requests",
     "deploy_status": "/sync/v1/deploy-status",
+    "pc_status": "/sync/v1/pc-status",
 }
 #: The gateway's refusal codes for a deploy request (DEPLOY-2) that the operator tool explains.
 DEPLOY_REFUSALS = frozenset({"remote_deploy_disabled", "deploy_pending"})
@@ -157,6 +158,8 @@ class GatewayClient:
     def __init__(self, transport: Transport, secret: str) -> None:
         self._transport = transport
         self._secret = secret
+        #: Optional contract parts the gateway accepts, read by ``health`` (empty until then).
+        self.features: frozenset[str] = frozenset()
 
     def _call(
         self,
@@ -196,12 +199,21 @@ class GatewayClient:
         except ProtocolError as error:
             raise GatewayError("invalid_gateway_response") from error
 
-    def health(self) -> None:
-        """Preflight each cycle: checks the secret and the contract version before any large upload."""
+    def health(self) -> frozenset[str]:
+        """Preflight each cycle: checks the secret and the contract version before any large upload.
+
+        Returns (and keeps in ``features``) the optional contract parts the gateway lists, such as ``item_batch``;
+        a gateway from before the list has none, so nothing optional is sent to it.
+        """
 
         reply = self._json(self._require(self._call("GET", ROUTES["health"]), 200))
         if not isinstance(reply, dict) or reply.get("schema_version") != SCHEMA_VERSION:
             raise GatewayError("schema_mismatch")
+        listed = reply.get("features", [])
+        self.features = frozenset(
+            name for name in (listed if isinstance(listed, list) else []) if isinstance(name, str)
+        )
+        return self.features
 
     # -- publish ---------------------------------------------------------------------------------------------------
 
@@ -319,3 +331,15 @@ class GatewayClient:
         if not isinstance(reply, dict) or reply.get("type") != "deploy_status":
             raise GatewayError("invalid_gateway_response")
         return reply
+
+    def send_pc_status(self, payload: Mapping[str, Any]) -> bool:
+        """LAUNCH-UPDATE-2 route; ``False`` while the gateway does not offer it (an older release) or refuses this
+        status (422, a contract mismatch): the status is optional and must never stop decisions from syncing."""
+
+        response = self._call(
+            "PUT", ROUTES["pc_status"], body=encode_json(payload), content_type="application/json"
+        )
+        if response.status in (404, 422):
+            return False
+        self._require(response, 200, 201)
+        return True

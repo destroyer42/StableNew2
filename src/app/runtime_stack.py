@@ -217,13 +217,15 @@ def build_review_gateway_sync(
     """
 
     from src.app.review_gateway_apply import RecordApplier
-    from src.app.review_gateway_publish import GatewayPublisher
+    from src.app.review_gateway_publish import GatewayPublisher, job_batch_reader
     from src.app.review_gateway_store import GatewaySettingsStore, SyncLedger
     from src.app.review_gateway_sync import ReviewGatewaySync as Sync
     from src.app.site_media_files import SiteOutputError
     from src.app.site_output_library import OutputLibrary
+    from src.controller.app_controller_services.pack_model_batch_service import batch_identity
     from src.learning.learning_paths import get_learning_records_path
     from src.review.archive import active_input_paths, configured_output_root, job_queue_of
+    from src.review.review_lineage import repository_of
 
     root = configured_output_root(getattr(app, "_config_manager", None))
     try:
@@ -267,7 +269,10 @@ def build_review_gateway_sync(
         library = OutputLibrary(
             root, "review-gateway", require_active, preview_idle=lambda: not busy()
         )
-        return GatewayPublisher(library, ledger)
+        repository = repository_of(app)
+        # N5: the inbox groups an image by the named batch its job was queued in (read-only snapshot lookup).
+        batch_of = job_batch_reader(repository, batch_identity) if repository is not None else None
+        return GatewayPublisher(library, ledger, batch_of=batch_of)
 
     extra = {"transport_factory": transport_factory} if transport_factory is not None else {}
     sync = Sync(
@@ -291,8 +296,9 @@ def build_live_update_service(
 ) -> Any:
     """Compose the live update service (LAUNCH-UPDATE-1) around the running application; nothing starts here.
 
-    The checkout is the one this process runs from. The preflight compares ``origin`` with the expected repository and
-    runs the launcher's read-only environment check with this interpreter. The only queue effect is the in-memory
+    The checkout is the one this process runs from. The preflight compares ``origin`` with the expected repository,
+    asks GitHub whether it signed the target commit (SAFE-UPDATE; desktop and phone requests alike) and runs the
+    launcher's read-only environment check with this interpreter. The only queue effect is the in-memory
     update hold; the busy probe counts the runner's current job and any RUNNING job in the queue. Without a queue that
     supports the hold the service refuses every update (``queue_unavailable``).
     """
@@ -311,9 +317,15 @@ def build_live_update_service(
         read_file=lambda sha, path: lu.read_target_file(git, sha, path),
     )
 
+    signature_check = lu.github_signature_check()
+
     def preflight(expected_sha: str | None) -> lu.Preflight:
         return lu.preflight(
-            git, expected_sha=expected_sha, expected_origin=lu.EXPECTED_ORIGIN, env_check=env_check
+            git,
+            expected_sha=expected_sha,
+            expected_origin=lu.EXPECTED_ORIGIN,
+            env_check=env_check,
+            signature_check=signature_check,
         )
 
     queue = job_queue_of(app)
@@ -337,3 +349,38 @@ def build_live_update_service(
         repo_root=root,
         pid=os.getpid(),
     )
+
+
+def build_remote_update(app: Any, service: Any, *, spawn: Callable[..., None] | None = None) -> Any:
+    """Compose the phone side of a live update (LAUNCH-UPDATE-2) around a ``LiveUpdateService``; nothing starts here.
+
+    The status probe reads the same checkout as the service, under the service's Git lock. The queue view is counts
+    only: idle, running or paused, and how many jobs wait.
+    """
+
+    from src.app import live_update as lu
+    from src.app.live_update_remote import CheckoutProbe, RemoteUpdate
+    from src.review.archive import job_queue_of
+
+    queue = job_queue_of(app)
+
+    def queue_state() -> tuple[str, int]:
+        if queue is None:
+            return "unknown", 0
+        queued = len(queue.list_jobs(status_filter=JobStatus.QUEUED))
+        runner = getattr(getattr(app, "job_service", None), "runner", None)
+        running = bool(getattr(runner, "current_job_id", None)) or bool(
+            queue.list_jobs(status_filter=JobStatus.RUNNING)
+        )
+        if running:
+            return "running", queued
+        paused = getattr(queue, "is_paused", None)
+        return ("paused" if callable(paused) and paused() else "idle"), queued
+
+    if spawn is None:
+        probe = CheckoutProbe(lu.subprocess_git(service.repo_root), git_lock=service.git_lock)
+        return RemoteUpdate(service, checkout=probe, queue_state=queue_state)
+    probe = CheckoutProbe(
+        lu.subprocess_git(service.repo_root), git_lock=service.git_lock, spawn=spawn
+    )
+    return RemoteUpdate(service, checkout=probe, queue_state=queue_state, spawn=spawn)

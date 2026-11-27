@@ -36,6 +36,7 @@ from src.pipeline.adetailer_localized import (
     LocalizedRefinementError,
     execution_mode,
 )
+from src.pipeline.image_performance import timed_step
 from src.services.runtime_transition_service import (
     RuntimeTransitionCoordinator,
     RuntimeTransitionError,
@@ -272,21 +273,25 @@ class WebUIFamilyImageBackend:
 
     def execute(self, pipeline: Any, request: ImageExecutionRequest) -> ImageExecutionResult | None:
         self._validate_request(request)
+        trace = getattr(pipeline, "_image_performance", None)
         # Release conflicting StableNew-owned runtime residency (owned Comfy, the other WebUI
         # identity, cached SVD state) before this backend is used; never touches an external
         # runtime.  See PR-RUNTIME-100 / PR-IMG-FORGE-100.
-        transition = self._transition.prepare_for(self.transition_target)
+        with timed_step(trace, "runtime_transition"):
+            transition = self._transition.prepare_for(self.transition_target)
         if not transition.ready:
             raise RuntimeTransitionError(transition)
         # Read-only identity guard: reject a backend/endpoint mismatch before any generation POST.
         self.last_identity_decision = None
-        verify_backend_runtime_identity(
-            self.backend_id,
-            getattr(pipeline, "client", None),
-            self._identity_attestor,
-            record=lambda decision: setattr(self, "last_identity_decision", decision),
-        )
-        self._before_dispatch(pipeline, request)
+        with timed_step(trace, "runtime_identity"):
+            verify_backend_runtime_identity(
+                self.backend_id,
+                getattr(pipeline, "client", None),
+                self._identity_attestor,
+                record=lambda decision: setattr(self, "last_identity_decision", decision),
+            )
+        with timed_step(trace, "before_dispatch"):
+            self._before_dispatch(pipeline, request)
 
         if request.stage_name == "txt2img":
             config = self._finalize_config(request, self._txt2img_executor_config(request))

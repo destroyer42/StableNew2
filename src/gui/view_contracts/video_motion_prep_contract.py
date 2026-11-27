@@ -216,6 +216,16 @@ class MotionPreparationSession:
         self._inflight, self._state, self._message = work, STATE_RUNNING, ""
         return work
 
+    def adopt(self, inputs: PrepInputs, outcome: Any) -> None:
+        """Take an earlier, verified preparation as this form's own (V1-2: Re-run with tweaks reuses the frozen
+        clip).  It goes stale like any other result, and the job builder re-verifies it at freeze."""
+
+        self.clear()
+        self._inputs = inputs
+        self._attempt_key = inputs.key()
+        self._outcome = outcome
+        self._state, self._message = STATE_READY, str(getattr(outcome, "message", "") or "")
+
     def cancel(self) -> None:
         if self._inflight is not None:
             self._inflight.cancel.set()

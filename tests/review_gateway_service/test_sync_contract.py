@@ -84,6 +84,26 @@ def sample(kind: str) -> dict:
                 "finished_at": NOW,
             },
         },
+        "pc_status": {
+            "published_at": NOW,
+            "checkout": {
+                "head_sha": "1" * 40,
+                "origin_main_sha": "2" * 40,
+                "commits_behind": 3,
+                "fetched_at": NOW,
+            },
+            "queue": {"state": "running", "queued": 4},
+            "remote_update_enabled": True,
+            "update": {"state": "idle"},
+            "last_result": {
+                "status": "applied",
+                "source": "remote",
+                "old_sha": "0" * 40,
+                "new_sha": "1" * 40,
+                "health": "unconfirmed",
+                "finished_at": NOW,
+            },
+        },
     }
     return {"schema_version": SCHEMA_VERSION, "type": kind, **payloads[kind]}
 
@@ -97,6 +117,7 @@ KINDS = (
     "pairing_offer",
     "deploy_request",
     "deploy_status",
+    "pc_status",
 )
 
 

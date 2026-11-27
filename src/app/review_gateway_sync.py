@@ -2,7 +2,8 @@
 
 Each cycle it sends what this PC owes the gateway (pairing offers, device revocations, acknowledgements not yet
 delivered), pulls pending outbox records page by page, applies each through ``RecordApplier`` and acknowledges it,
-stores Immich receipts once the gateway offers them (RG-130), and publishes a few new Output Library items. While a
+stores Immich receipts once the gateway offers them (RG-130), publishes the PC's checkout and queue status for admin
+phones (LAUNCH-UPDATE-2, once a ``RemoteUpdate`` is attached), and publishes a few new Output Library items. While a
 job is running it publishes at most one item every ``BUSY_PUBLISH_SECONDS`` and never transcodes, so it does not
 compete with generation.
 
@@ -21,7 +22,7 @@ from datetime import UTC, datetime
 from threading import Event, Lock, Thread
 from typing import Any
 
-from src.app.review_gateway_apply import ApplyDeferred, RecordApplier
+from src.app.review_gateway_apply import IN_PROGRESS, ApplyDeferred, RecordApplier
 from src.app.review_gateway_client import (
     GatewayClient,
     GatewayError,
@@ -57,6 +58,10 @@ log = logging.getLogger(__name__)
 SYNC_INTERVAL = 5.0
 MAX_BACKOFF = 60.0
 BUSY_PUBLISH_SECONDS = 30.0
+#: ``pc_status`` is sent when it changes, and at least this often so an admin phone can tell the PC is there.
+STATUS_HEARTBEAT_SECONDS = 60.0
+#: After a gateway that does not offer the ``pc_status`` route yet, ask again this much later.
+STATUS_UNSUPPORTED_SECONDS = 600.0
 IDLE_PUBLISH_BATCH = 8
 MAX_PAGES_PER_CYCLE = 10
 PAGE_SIZE = 100
@@ -134,6 +139,10 @@ class ReviewGatewaySync:
         self._backoff = 0.0
         self._follow_until = -1.0
         self._last_full_cycle = -interval
+        self._status_source: Callable[[], dict[str, Any] | None] | None = None
+        self._last_status: dict[str, Any] | None = None
+        self._last_status_at = 0.0
+        self._status_retry_at = 0.0
 
     # -- Tk-thread API (records intent only) -----------------------------------------------------------------------
 
@@ -183,16 +192,31 @@ class ReviewGatewaySync:
             self._settings, self._settings_loaded = None, True
             self._status = replace(self._status, state="not_configured", address="")
 
-    def create_pairing(self, label: str = "", *, allow_queue: bool = True) -> str:
+    def attach_remote_update(self, remote: Any) -> None:
+        """LAUNCH-UPDATE-2: answer ``admin_request`` records through ``remote`` and publish its ``pc_status``.
+
+        Called once on the Tk thread before the worker starts; without it admin requests are refused
+        (``update_unavailable``) and no status is published.
+        """
+
+        self._applier.admin = remote
+        self._status_source = remote.status_payload
+
+    def create_pairing(
+        self, label: str = "", *, allow_queue: bool = True, allow_update: bool = False
+    ) -> str:
         """Issue a single-use code; returns it for display. Only its salted hash leaves the PC.
 
         The phone may review and, unless ``allow_queue`` is off, queue the RG-140 phone actions. Queueing is a
         per-phone flag that is on by default (owner decision 2026-11-26, amending D6) and can be withdrawn later
-        with ``set_queue``.
+        with ``set_queue``. ``allow_update`` makes this the dedicated remote-update offer (LAUNCH-UPDATE-2, D2): the
+        phone also gets the ``admin`` grant, which only such an offer carries. The PC-local "Allow remote update"
+        switch must still be on before any request is run.
         """
 
+        scopes = ("review", "queue") if allow_queue else ("review",)
         offer = new_pairing_offer(
-            label=label, scopes=("review", "queue") if allow_queue else ("review",)
+            label=label, scopes=(*scopes, "admin") if allow_update else scopes
         )
         payload = offer.payload()
         self._ledger.add_offer(
@@ -284,6 +308,7 @@ class ReviewGatewaySync:
             self._flush_owed(client)
             self._pull(client)
             self._pull_immich(client)
+            self._send_status(client)
             self._publish(client)
             self._last_full_cycle = now
         except GatewayPinMismatch:
@@ -358,6 +383,8 @@ class ReviewGatewaySync:
                 if result is None:
                     unacknowledgeable += 1
                     continue
+                if result.outcome == IN_PROGRESS:
+                    continue  # a remote update under way: asked again next cycle, answered once it has a receipt
                 if (
                     isinstance(raw, dict)
                     and raw.get("kind") == "action_request"
@@ -381,6 +408,30 @@ class ReviewGatewaySync:
             cursor = page.next_cursor
             if not cursor:
                 return
+
+    def _send_status(self, client: GatewayClient) -> None:
+        """Send ``pc_status`` when it changed or the heartbeat is due; an older gateway is asked again later."""
+
+        source = self._status_source
+        now = self._monotonic()
+        if source is None or now < self._status_retry_at:
+            return
+        payload = source()
+        if payload is None:
+            return
+        comparable = {key: value for key, value in payload.items() if key != "published_at"}
+        if (
+            comparable == self._last_status
+            and now - self._last_status_at < STATUS_HEARTBEAT_SECONDS
+        ):
+            return
+        if not client.send_pc_status(payload):
+            self._status_retry_at = now + STATUS_UNSUPPORTED_SECONDS
+            log.info(
+                "Review gateway does not accept the PC status yet; remote update stays unavailable"
+            )
+            return
+        self._last_status, self._last_status_at = comparable, now
 
     def _pull_immich(self, client: GatewayClient) -> None:
         """Read the receipts added since last time; the cursor is kept once a page is stored."""

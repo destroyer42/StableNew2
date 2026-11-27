@@ -27,6 +27,9 @@
     },
     {
       "$ref": "#/$defs/deploy_status"
+    },
+    {
+      "$ref": "#/$defs/pc_status"
     }
   ],
   "$defs": {
@@ -109,6 +112,40 @@
         }
       }
     },
+    "item_batch": {
+      "description": "The named batch (N5 packs x models) the job that made this item was queued in, from its provenance.metadata.batch. Display and grouping only: the phone inbox groups by batch when there is one, and by run_id otherwise. A PC sends it only to a gateway whose health lists the 'item_batch' feature.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batch_id",
+        "name"
+      ],
+      "properties": {
+        "batch_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "cell": {
+          "description": "This item's cell of the batch: the PromptPack name and the checkpoint file name (never a path).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pack": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "model": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        }
+      }
+    },
     "item_manifest": {
       "description": "PC to gateway: one publishable item. Media bodies are uploaded separately and addressed by their sha256. Idempotent by (library_id, sha256).",
       "type": "object",
@@ -170,6 +207,9 @@
               "$ref": "#/$defs/media_variant"
             }
           }
+        },
+        "batch": {
+          "$ref": "#/$defs/item_batch"
         },
         "display": {
           "description": "Display-only text, rendered as text on the phone (S7). Never used for decisions.",
@@ -249,7 +289,7 @@
       ]
     },
     "action_request": {
-      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this.",
+      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this, slice 2 another_model, aspect_ratio, prompt_tweak and make_video. rerun_clip and continue_clip stay reserved.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -284,6 +324,17 @@
             },
             "summary_revision": {
               "$ref": "#/$defs/sha256"
+            },
+            "choice": {
+              "description": "another_model and aspect_ratio only, on prepare: one id from the action_choices the PC listed. Without it the PC answers with the list.",
+              "$ref": "#/$defs/choice_id"
+            },
+            "text": {
+              "description": "prompt_tweak (required: words added to the prompt) and make_video (optional: the motion prompt) only, on prepare. One line of plain text; the PC scrubs anything it shows back.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
             }
           },
           "allOf": [
@@ -301,8 +352,22 @@
                   "summary_revision"
                 ],
                 "not": {
-                  "required": [
-                    "count"
+                  "anyOf": [
+                    {
+                      "required": [
+                        "count"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "choice"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "text"
+                      ]
+                    }
                   ]
                 }
               },
@@ -345,6 +410,81 @@
                     "count"
                   ]
                 }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "not": {
+                  "enum": [
+                    "another_model",
+                    "aspect_ratio"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "not": {
+                  "required": [
+                    "choice"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "not": {
+                  "enum": [
+                    "prompt_tweak",
+                    "make_video"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "not": {
+                  "required": [
+                    "text"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "prompt_tweak"
+              },
+              "params": {
+                "properties": {
+                  "step": {
+                    "const": "prepare"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "required": [
+                  "text"
+                ]
               }
             }
           }
@@ -440,6 +580,54 @@
         }
       }
     },
+    "choice_id": {
+      "description": "An option id the PC made (RG-140 slice 2): a checkpoint's id or an aspect ratio such as 2x3. Never a path.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+    },
+    "action_choices": {
+      "description": "PC to gateway, inside an acknowledgement receipt (RG-140 slice 2): what the phone may pick for another_model (the PC's checkpoints) or aspect_ratio. Labels are PC-written and scrubbed of paths; 'current' marks the image's own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "items"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/action_name"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/choice_id"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "current": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "selected": {
+          "$ref": "#/$defs/choice_id"
+        }
+      }
+    },
     "outbox_record": {
       "type": "object",
       "additionalProperties": false,
@@ -448,7 +636,6 @@
         "idempotency_key",
         "device_id",
         "created_at",
-        "target",
         "kind"
       ],
       "properties": {
@@ -472,7 +659,8 @@
         "kind": {
           "enum": [
             "decision",
-            "action_request"
+            "action_request",
+            "admin_request"
           ]
         },
         "decision": {
@@ -480,6 +668,9 @@
         },
         "action_request": {
           "$ref": "#/$defs/action_request"
+        },
+        "admin_request": {
+          "$ref": "#/$defs/admin_request"
         }
       },
       "allOf": [
@@ -493,11 +684,21 @@
           },
           "then": {
             "required": [
-              "decision"
+              "decision",
+              "target"
             ],
             "not": {
-              "required": [
-                "action_request"
+              "anyOf": [
+                {
+                  "required": [
+                    "action_request"
+                  ]
+                },
+                {
+                  "required": [
+                    "admin_request"
+                  ]
+                }
               ]
             }
           }
@@ -512,16 +713,60 @@
           },
           "then": {
             "required": [
-              "action_request"
+              "action_request",
+              "target"
             ],
             "not": {
-              "required": [
-                "decision"
+              "anyOf": [
+                {
+                  "required": [
+                    "decision"
+                  ]
+                },
+                {
+                  "required": [
+                    "admin_request"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "admin_request"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "admin_request"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "target"
+                  ]
+                },
+                {
+                  "required": [
+                    "decision"
+                  ]
+                },
+                {
+                  "required": [
+                    "action_request"
+                  ]
+                }
               ]
             }
           }
         }
-      ]
+      ],
+      "description": "Gateway to PC: one phone request. Decisions and action requests name an item target; an admin_request (LAUNCH-UPDATE-2) has none."
     },
     "outbox_page": {
       "description": "Gateway to PC, in reply to the PC's list request: pending records in creation order.",
@@ -625,7 +870,34 @@
             "admission_refused",
             "summary_changed",
             "action_unavailable",
-            "prepare_required"
+            "prepare_required",
+            "invalid_request",
+            "remote_update_disabled",
+            "update_unavailable",
+            "update_in_progress",
+            "rate_limited",
+            "request_expired",
+            "wrong_branch",
+            "wrong_upstream",
+            "origin_mismatch",
+            "dirty_checkout",
+            "fetch_failed",
+            "git_failed",
+            "target_moved",
+            "already_current",
+            "not_fast_forward",
+            "not_github_signed",
+            "github_unavailable",
+            "environment_drift",
+            "queue_unavailable",
+            "busy_timeout",
+            "updater_failed",
+            "updater_lost",
+            "old_app_did_not_exit",
+            "checkout_changed",
+            "merge_failed",
+            "rolled_back",
+            "rollback_failed"
           ]
         },
         "receipt": {
@@ -647,6 +919,9 @@
                 "maxLength": 64
               }
             },
+            "choices": {
+              "$ref": "#/$defs/action_choices"
+            },
             "action_summary": {
               "$ref": "#/$defs/action_summary"
             },
@@ -662,10 +937,18 @@
                 "adetailer_unavailable",
                 "detector_unavailable",
                 "operation_unsupported",
+                "choice_unavailable",
+                "no_change",
+                "prompt_required",
+                "size_unsupported",
+                "video_unavailable",
                 "app_busy",
                 "app_shutting_down",
                 "compile_failed"
               ]
+            },
+            "update": {
+              "$ref": "#/$defs/update_receipt"
             }
           }
         },
@@ -769,7 +1052,7 @@
       }
     },
     "pairing_offer": {
-      "description": "PC to gateway: a single-use phone enrollment offer (D5, S1). The desktop shows the code; only its salted hash is sent. The gateway enforces expiry and an attempt cap, then reports the enrolled device id in the next outbox page's device list or by refusal.",
+      "description": "PC to gateway: a single-use phone enrollment offer (D5, S1). The desktop shows the code; only its salted hash is sent. The gateway enforces expiry and an attempt cap, then reports the enrolled device id in the next outbox page's device list or by refusal. The 'admin' scope (LAUNCH-UPDATE-2, D2) is only ever in an offer the desktop creates for remote update.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -806,7 +1089,8 @@
           "items": {
             "enum": [
               "review",
-              "queue"
+              "queue",
+              "admin"
             ]
           }
         },
@@ -1015,6 +1299,201 @@
               }
             }
           ]
+        }
+      }
+    },
+    "admin_request": {
+      "description": "LAUNCH-UPDATE-2: a remote update request from a phone holding the 'admin' grant. It names only the origin/main commit the phone was shown (D3); the PC fetches origin itself, refuses 'target_moved' when origin/main is any other commit and runs its own preflight. No ref, path, remote or option comes from it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "expected_sha"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "update_and_restart"
+          ]
+        },
+        "expected_sha": {
+          "$ref": "#/$defs/commit_sha"
+        }
+      }
+    },
+    "update_reason": {
+      "description": "Why a live update did not happen or what it ended as (LAUNCH-UPDATE reason codes).",
+      "enum": [
+        "invalid_request",
+        "remote_update_disabled",
+        "update_unavailable",
+        "update_in_progress",
+        "rate_limited",
+        "request_expired",
+        "wrong_branch",
+        "wrong_upstream",
+        "origin_mismatch",
+        "dirty_checkout",
+        "fetch_failed",
+        "git_failed",
+        "target_moved",
+        "already_current",
+        "not_fast_forward",
+        "not_github_signed",
+        "github_unavailable",
+        "environment_drift",
+        "queue_unavailable",
+        "busy_timeout",
+        "updater_failed",
+        "updater_lost",
+        "old_app_did_not_exit",
+        "checkout_changed",
+        "merge_failed",
+        "rolled_back",
+        "rollback_failed"
+      ]
+    },
+    "update_receipt": {
+      "description": "PC to gateway: the outcome of one live update, in an acknowledgement receipt and as the last result in pc_status. Commit ids and closed codes only, never Git or launcher text. 'health' is the updater's start check of the new app: 'unconfirmed' means it was started but did not report in within the wait.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "applied",
+            "refused",
+            "already_current"
+          ]
+        },
+        "reason_code": {
+          "$ref": "#/$defs/update_reason"
+        },
+        "source": {
+          "enum": [
+            "desktop",
+            "remote"
+          ]
+        },
+        "old_sha": {
+          "$ref": "#/$defs/commit_sha"
+        },
+        "new_sha": {
+          "$ref": "#/$defs/commit_sha"
+        },
+        "target_sha": {
+          "$ref": "#/$defs/commit_sha"
+        },
+        "health": {
+          "enum": [
+            "confirmed",
+            "unconfirmed",
+            "exited"
+          ]
+        },
+        "finished_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "pc_status": {
+      "description": "PC to gateway (LAUNCH-UPDATE-2, D3): the PC's checkout and queue state, so an admin phone can offer 'Update to <sha>'. Commit ids and counts only: no paths, no commit text, no job names. The gateway keeps the latest one and shows it only to devices holding the 'admin' grant.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "published_at",
+        "checkout",
+        "queue",
+        "remote_update_enabled",
+        "update"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "pc_status"
+        },
+        "published_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "checkout": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "head_sha": {
+              "$ref": "#/$defs/commit_sha"
+            },
+            "origin_main_sha": {
+              "$ref": "#/$defs/commit_sha"
+            },
+            "commits_behind": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "fetched_at": {
+              "$ref": "#/$defs/timestamp"
+            }
+          }
+        },
+        "queue": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "queued"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "idle",
+                "running",
+                "paused",
+                "unknown"
+              ]
+            },
+            "queued": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          }
+        },
+        "remote_update_enabled": {
+          "type": "boolean"
+        },
+        "update": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "idle",
+                "in_progress"
+              ]
+            },
+            "phase": {
+              "enum": [
+                "checking",
+                "waiting_for_job",
+                "restarting"
+              ]
+            },
+            "record_id": {
+              "$ref": "#/$defs/uuid"
+            }
+          }
+        },
+        "last_result": {
+          "$ref": "#/$defs/update_receipt"
         }
       }
     }

@@ -162,6 +162,7 @@ def test_fixture_matcher_agrees_with_the_real_history_query(disposable_repositor
 def test_navigation_ids_hold_state_and_unknown_ids():
     entries = model.nav_entries()
     assert [tab for tab, _label in entries] == [
+        "generate",  # N6: the Simple workspace's Generate tab, listed first under Create
         "prompt",
         "pipeline",
         "review",

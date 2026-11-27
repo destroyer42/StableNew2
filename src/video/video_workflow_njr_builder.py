@@ -22,7 +22,9 @@ from pathlib import Path
 from typing import Any
 
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
+from src.pipeline.history_variation_marker import VARIATION_KEY
 from src.pipeline.job_models_v2 import LearningJobContext, NormalizedJobRecord
+from src.pipeline.njr_core_v26 import SourceDescriptor, SourceKind
 from src.pipeline.policy_warnings import SURFACE_DESKTOP, merge_accepted_warnings
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import (
@@ -37,6 +39,8 @@ from src.video.motion_alignment_preparation import (
     verify_aligned_source_binding,
 )
 from src.video.motion_alignment_support import alignment_support
+from src.video.motion_intent import MOTION_INTENT_FIELD, normalize_motion_intent_record
+from src.video.motion_rerun import RERUN_LINEAGE_FIELD, normalize_rerun_lineage, variation_marker
 from src.video.motion_source_plan import motion_source_contract
 from src.video.motion_source_preparation import validate_prepared_record
 from src.video.rife_runtime import default_rife_multiplier, find_rife_executable
@@ -823,6 +827,15 @@ class VideoWorkflowNjrBuilder:
                 fps=length_policy["fps"],
                 approximate_seconds=approximate_seconds(frozen_frame_count, length_policy["fps"]),
             )
+        # V1 (D5): the applied motion preset and the basis of each automatic choice, as provenance only. Admission and
+        # replay never read it; the frozen length above is the one it records.
+        intent_record = normalize_motion_intent_record(
+            form_data.get(MOTION_INTENT_FIELD),
+            frame_count=frozen_frame_count,
+            fps=None if length_policy is None else length_policy["fps"],
+        )
+        if intent_record is not None:
+            extra_metadata["video_workflow"][MOTION_INTENT_FIELD] = intent_record
         if sequence_plan is not None:
             extra_metadata["video_workflow"]["sequence"] = {
                 "sequence_id": sequence_plan.get("sequence_id"),
@@ -860,6 +873,21 @@ class VideoWorkflowNjrBuilder:
                 identity["source_artifact_id"] = parent_artifact
                 extra_metadata["parent_artifact_id"] = parent_artifact
             extra_metadata["video_workflow"]["source_identity"] = identity
+        # V1-2: a re-run with tweaks is a new NJR built here like any other, whose source is HISTORY_REPLAY lineage to
+        # the finished job it came from, with a content-free variation marker (the edited field names only).
+        rerun = normalize_rerun_lineage(form_data.get(RERUN_LINEAGE_FIELD))
+        rerun_source: SourceDescriptor | None = None
+        if rerun is not None:
+            extra_metadata["parent_job_id"] = rerun["parent_job_id"]
+            rerun_source = SourceDescriptor(
+                kind=SourceKind.HISTORY_REPLAY,
+                display_name="Video Workflow",
+                parent_job_id=rerun["parent_job_id"],
+                metadata={
+                    "original_source_kind": rerun["original_source_kind"],
+                    VARIATION_KEY: variation_marker(rerun),
+                },
+            )
 
         njr = ReprocessJobBuilder().build_reprocess_job(
             input_image_paths=[frozen.prepared_source_path],
@@ -872,6 +900,7 @@ class VideoWorkflowNjrBuilder:
             source="video_workflow",
             extra_metadata=extra_metadata,
             learning_context=learning_context,
+            source_descriptor=rerun_source,
         )
         return VideoWorkflowBuild(
             njr=njr,

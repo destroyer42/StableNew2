@@ -224,3 +224,48 @@ def test_the_real_manager_exposes_the_launch_session_only_while_it_owns_the_proc
         assert manager.launch_session_command is None
     finally:
         clear_global_webui_process_manager()
+
+
+def _listing_client(module_reads, model_reads):
+    """A Forge client whose catalog answers advance per read, then keep the last answer."""
+
+    state = {"models": -1, "modules": -1}
+
+    def reader(kind, reads):
+        def read():
+            state[kind] = min(state[kind] + 1, len(reads) - 1)
+            return reads[state[kind]]
+
+        return read
+
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        get_models=reader("models", model_reads), get_vae_models=reader("modules", module_reads)
+    ), state
+
+
+@pytest.fixture
+def fake_clock(monkeypatch):
+    waited: list[float] = []
+    monkeypatch.setattr(assets_module, "_monotonic", lambda: sum(waited))
+    monkeypatch.setattr(assets_module, "_sleep", waited.append)
+    return waited
+
+
+def test_klein_modules_listed_late_after_a_forge_start_are_waited_for(fake_clock):
+    from types import SimpleNamespace
+
+    from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
+
+    profile = KLEIN_PROFILE_V1
+    modules = [{"model_name": a.filename, "filename": f"/data/{a.filename}"} for a in profile.modules]
+    models = [{"model_name": profile.transformer.filename, "title": profile.transformer.filename}]
+    client, state = _listing_client([[], modules[:1], modules], [models])
+    ForgeWebUIImageBackend._assert_assets_listed(SimpleNamespace(client=client), profile)
+    assert state["modules"] == 2 and fake_clock == [assets_module.CATALOG_POLL_INTERVAL_S] * 2
+
+    client, _ = _listing_client([modules[:1]], [models])  # never listed: the same refusal, after the bound
+    with pytest.raises(KleinProfileError, match="does not list the required module"):
+        ForgeWebUIImageBackend._assert_assets_listed(SimpleNamespace(client=client), profile)
+    assert sum(fake_clock) == pytest.approx(2 * assets_module.CATALOG_POLL_INTERVAL_S + assets_module.CATALOG_SETTLE_TIMEOUT_S)

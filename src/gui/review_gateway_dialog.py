@@ -27,6 +27,12 @@ _REASONS = {
     "summary_changed": "summary changed; shown again",
     "action_unavailable": "action not possible",
     "prepare_required": "summary expired",
+    "remote_update_disabled": "remote update is switched off",
+    "update_unavailable": "remote update unavailable",
+    "request_expired": "update request too old",
+    "target_moved": "origin/main moved",
+    "rate_limited": "updated less than 10 minutes ago",
+    "update_in_progress": "update already running",
 }
 
 
@@ -92,6 +98,9 @@ class ReviewGatewayDialog:
         top = ttk.Frame(pairing)
         top.pack(fill="x")
         ttk.Button(top, text="Pair a phone", command=self.pair).pack(side="left")
+        ttk.Button(top, text="Pair for remote update", command=self.pair_for_update).pack(
+            side="left", padx=(6, 0)
+        )
         ttk.Label(top, textvariable=self._vars["code"], font=("TkFixedFont", 14)).pack(
             side="left", padx=(12, 0)
         )
@@ -107,7 +116,7 @@ class ReviewGatewayDialog:
         for column, heading, width in (
             ("label", "Phone", 160),
             ("enrolled", "Paired", 160),
-            ("access", "Access", 110),
+            ("access", "Access", 150),
             ("state", "State", 80),
         ):
             devices.heading(column, text=heading)
@@ -173,10 +182,28 @@ class ReviewGatewayDialog:
         self.refresh()
 
     def pair(self) -> None:
+        self._pair(allow_update=False)
+
+    def pair_for_update(self) -> None:
+        """The dedicated remote-update offer (LAUNCH-UPDATE-2, D2): the only one that carries the ``admin`` grant."""
+
+        if self._dialog is None or not self.confirm(
+            self._dialog,
+            "Pair for remote update",
+            "The phone that enters this code can ask this PC to update to the merged origin/main and restart "
+            "StableNew, as well as review. It still needs 'Allow remote update' switched on in the Update dialog. "
+            "If the phone is already paired, it replaces that pairing on the phone; revoke the old entry here.",
+        ):
+            return
+        self._pair(allow_update=True)
+
+    def _pair(self, *, allow_update: bool) -> None:
         allow_queue = bool(self._allow_queue.get()) if self._allow_queue is not None else False
         self._pairing_scope = "review and queueing" if allow_queue else "review only"
+        if allow_update:
+            self._pairing_scope += " and remote update"
         try:
-            code = self._sync.create_pairing(allow_queue=allow_queue)
+            code = self._sync.create_pairing(allow_queue=allow_queue, allow_update=allow_update)
         except (OSError, ValueError):
             messagebox.showerror(
                 "Phone review gateway",
@@ -262,7 +289,11 @@ class ReviewGatewayDialog:
             values = (
                 device.label or device.device_id[:12],
                 device.enrolled_at,
-                "review, queue" if "queue" in device.scopes else "review",
+                ", ".join(
+                    {"admin": "update"}.get(scope, scope)
+                    for scope in ("review", "queue", "admin")
+                    if scope in device.scopes
+                ),
                 "revoked" if device.revoked else "active",
             )
             if devices.exists(device.device_id):

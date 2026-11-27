@@ -14,7 +14,9 @@ from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
 from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_text_widget
+from src.gui.tooltip import attach_tooltip
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
+from src.gui.views.video_workflow_motion_intent_v2 import MotionIntentPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
@@ -42,31 +44,59 @@ _DEPTH_INPUT_MODES = ("none", "auto", "upload")
 
 
 def build_settings_section(tab: Any, body: ttk.Frame) -> None:
-    """Row 1: the always-visible settings (engine, motion, length, seed, smoothing); row 3: More settings."""
+    """Row 1: the task's own settings (motion phrase, preset, duration); row 3: Advanced (engine, raw length, seed,
+    smoothing, negative prompt, declared controls).  V1-1 (section 5.2): the summary line names the engine."""
 
-    # VID-UX-384: the controls most people change are never behind a disclosure.
-    adv = ttk.Frame(body, style="Panel.TFrame")
-    adv.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 6))
-    tab.settings_block = adv
-    tab._settings_frame = adv
-    configure_grid_columns(adv, tab._form_columns)
+    visible = ttk.Frame(body, style="Panel.TFrame")
+    visible.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+    tab.settings_block = visible
+    tab._settings_frame = visible
+    configure_grid_columns(visible, tab._form_columns)
     tab.suggestion_reasons_var = tk.StringVar(value="")
     tab.why_button = ttk.Button(
-        adv, text="Why these settings?", style="Dark.TButton", command=tab._toggle_reasons
+        visible, text="Why these settings?", style="Dark.TButton", command=tab._toggle_reasons
     )
     tab.why_button.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
     reasons_label = ttk.Label(
-        adv, textvariable=tab.suggestion_reasons_var, style="Muted.TLabel", justify="left"
+        visible, textvariable=tab.suggestion_reasons_var, style="Muted.TLabel", justify="left"
     )
     reasons_label.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 6))
     bind_wraplength(reasons_label)
     reasons_label.grid_remove()
     tab.reasons_label = reasons_label
+    tab.motion_intent_panel = MotionIntentPanel(
+        visible,
+        on_preset=tab._on_preset_chosen,
+        on_reset_preset=tab._on_reset_preset,
+        on_duration=tab._on_duration_entered,
+    )
+    tab.motion_intent_panel.grid(row=2, column=0, columnspan=4, sticky="ew")
+    # Advanced (today's More settings): the section keeps its ``advanced_section`` name; it opens by itself for a
+    # required control or an experimental engine (see _apply_workflow_visibility).
+    tab.advanced_section = DisclosureSection(body, title="Advanced")
+    tab.advanced_section.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+    tab.advanced_section.toggle_button.configure(command=tab._toggle_settings)
+    adv = tab.advanced_section.body
+    tab._advanced_frame = adv
+    configure_grid_columns(adv, tab._form_columns)
+    # N13 (beside the engine picker, under Advanced since V1-1): unrated speed arms and superseded arms are listed only when this is on.
+    tab.show_experimental_check = ttk.Checkbutton(
+        adv,
+        text="Show experimental",
+        variable=tab.show_experimental_var,
+        style="Dark.TCheckbutton",
+    )
+    tab.show_experimental_check.grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
+    attach_tooltip(
+        tab.show_experimental_check,
+        "Also list unrated speed arms and superseded engine arms (A14B CK attention and SVI, "
+        "HunyuanVideo 1.5). They stay experimental: Queue warns and records your opt-in.",
+    )
     tab.workflow_combo = cast(
         ttk.Combobox,
         tab._add_labeled_entry(
             adv,
-            2,
+            0,
             "Engine",
             combo=True,
             variable=tab.workflow_label_var,
@@ -82,20 +112,20 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
         style="Muted.TLabel",
         wraplength=640,
         justify="left",
-    ).grid(row=2, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
+    ).grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
     tab.motion_combo = tab._add_labeled_entry(
         adv,
-        3,
-        "Motion",
+        1,
+        "Motion profile",
         combo=True,
         variable=tab.motion_profile_var,
         values=_MOTION_PROFILES,
         help_key="motion",
     )
-    tab.motion_label = tab.motion_combo.master.grid_slaves(row=3, column=0)[0]
-    # Generation length, shown only for workflows that declare a frame-count policy.
+    tab.motion_label = tab.motion_combo.master.grid_slaves(row=1, column=0)[0]
+    # The raw generation length (the Duration above resolves to one of these), only for a declared frame-count policy.
     tab.frame_count_frame = ttk.Frame(adv, style="Panel.TFrame")
-    tab.frame_count_frame.grid(row=3, column=2, columnspan=2, sticky="w", padx=(6, 0))
+    tab.frame_count_frame.grid(row=1, column=2, columnspan=2, sticky="w", padx=(6, 0))
     frame_count_label = ttk.Label(tab.frame_count_frame, text="Length", style="Dark.TLabel")
     frame_count_label.pack(side="left", padx=(0, 6))
     tab.frame_count_combo = ttk.Combobox(
@@ -122,9 +152,9 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
         tab.frame_count_combo,
     )
     tab.seed_label = ttk.Label(adv, text="Seed", style="Dark.TLabel")
-    tab.seed_label.grid(row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+    tab.seed_label.grid(row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
     tab.seed_entry = ttk.Entry(adv, textvariable=tab.seed_var, style="Dark.TEntry", width=40)
-    tab.seed_entry.grid(row=4, column=1, sticky="ew", pady=(0, 6))
+    tab.seed_entry.grid(row=2, column=1, sticky="ew", pady=(0, 6))
     tab._attach_setting_help(
         "seed", VIDEO_WORKFLOW_SETTING_HELP["seed"], tab.seed_label, tab.seed_entry
     )
@@ -134,27 +164,19 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
         variable=tab.smooth_var,
         style="Dark.TCheckbutton",
     )
-    tab.smooth_check.grid(row=4, column=2, columnspan=2, sticky="w", padx=(6, 0), pady=(0, 6))
+    tab.smooth_check.grid(row=2, column=2, columnspan=2, sticky="w", padx=(6, 0), pady=(0, 6))
     tab._attach_setting_help(
         "rife_smooth", VIDEO_WORKFLOW_SETTING_HELP["rife_smooth"], tab.smooth_check
     )
-    # More settings: rarely changed controls.  The section keeps its ``advanced_section`` name; it opens by
-    # ittab for a required control or an experimental engine (see _apply_workflow_visibility).
-    tab.advanced_section = DisclosureSection(body, title="More settings")
-    tab.advanced_section.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(0, 6))
-    tab.advanced_section.toggle_button.configure(command=tab._toggle_settings)
-    adv = tab.advanced_section.body
-    tab._advanced_frame = adv
-    configure_grid_columns(adv, tab._form_columns)
     negative_label = ttk.Label(adv, text="Negative", style="Dark.TLabel")
-    negative_label.grid(row=0, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
+    negative_label.grid(row=3, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
     tab.negative_prompt_text = tk.Text(
         adv,
         height=4,
         wrap="word",
     )
     style_text_widget(tab.negative_prompt_text, elevated=True)
-    tab.negative_prompt_text.grid(row=0, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
+    tab.negative_prompt_text.grid(row=3, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
     tab._attach_setting_help(
         "negative",
         VIDEO_WORKFLOW_SETTING_HELP["negative"],
@@ -165,10 +187,10 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
     tab.workflow_controls_panel = WorkflowControlsPanel(
         adv, on_change=tab._refresh_workspace_summary
     )
-    tab.workflow_controls_panel.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+    tab.workflow_controls_panel.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 6))
     tab.workflow_controls_panel.grid_remove()
     svd_row = ttk.Frame(adv, style="Panel.TFrame")
-    svd_row.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+    svd_row.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(0, 6))
     tab.use_svd_button = ttk.Button(
         svd_row, text="Use native SVD instead", style="Dark.TButton", command=tab._on_use_svd
     )

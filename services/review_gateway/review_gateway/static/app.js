@@ -28,7 +28,21 @@ const ACTIONS = [
   ["fix_hands", "Fix hands"],
   ["fix_both", "Fix both"],
   ["more_like_this", "More like this"],
+  ["another_model", "Another model"],
+  ["aspect_ratio", "Aspect ratio"],
+  ["prompt_tweak", "Tweak prompt"],
+  ["make_video", "Make video"],
 ];
+// Slice 2. A picker action first asks the PC for its options; a words action asks the owner first.
+const PICKERS = {
+  another_model: "Choose a checkpoint on the PC. The image is run through it with img2img.",
+  aspect_ratio: "Choose a shape. Outpainting adds space around the image; every original pixel is kept.",
+};
+const WORDS = {
+  prompt_tweak: { required: true, hint: "Words added to this image's prompt, then img2img of the image.", placeholder: "smiling, golden hour" },
+  make_video: { required: false, hint: "What should move? Leave it empty to use the image's own prompt.", placeholder: "she turns towards the window" },
+};
+const SLICE_TWO = new Set(["another_model", "aspect_ratio", "prompt_tweak", "make_video"]);
 const DETAILS = {
   not_an_image: "only images can be fixed",
   source_changed: "the image changed on the PC",
@@ -40,6 +54,11 @@ const DETAILS = {
   adetailer_unavailable: "ADetailer is not available; connect Forge on the PC",
   detector_unavailable: "Forge lists no detector for this pass",
   operation_unsupported: "the backend cannot run this",
+  choice_unavailable: "that option is not on the PC any more; choose again",
+  no_change: "that is what the image already has",
+  prompt_required: "there are no words to use for the prompt",
+  size_unsupported: "the new canvas would be too large",
+  video_unavailable: "the PC has no approved Make Video workflow",
   app_busy: "StableNew was busy; try again",
   app_shutting_down: "StableNew is shutting down",
   compile_failed: "the PC could not prepare it",
@@ -84,7 +103,11 @@ const key = (item) => `${item.library_id}/${item.sha256}`;
 const mediaUrl = (item, variant) =>
   `/media/${encodeURIComponent(item.library_id)}/${encodeURIComponent(item.sha256)}/${variant}`;
 
+// A group is a named batch ("batch:<id>", N5) or an output run folder; batch names come from the server.
+const groupNames = new Map();
+
 function runName(runId) {
+  if (runId.startsWith("batch:")) return groupNames.get(runId) || "Batch";
   const match = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}_(.*)$/.exec(runId);
   if (!match) return runId;
   const [, year, month, day, hour, minute, name] = match;
@@ -303,6 +326,7 @@ function showRejected() {
 
 async function loadRun(runId) {
   const data = await api(`/api/runs/${encodeURIComponent(runId)}`);
+  if (data.name) groupNames.set(runId, data.name);
   const items = overlayUnsent(data.items);
   runItems.set(runId, items);
   return items;
@@ -385,8 +409,10 @@ function runCard(run) {
         },
       })
     : null;
+  if (run.kind === "batch" && run.name) groupNames.set(run.run_id, run.name);
   return el("section", { class: "run", tabindex: "0", onclick: open }, [
     el("h2", { text: runName(run.run_id) }),
+    run.kind === "batch" ? el("p", { class: "muted", text: "Batch" }) : null,
     el("div", { class: "counts" }, [
       countChip(waiting, "to review", "todo"),
       countChip(run.keep, "kept"),
@@ -405,11 +431,15 @@ const needsReview = (item) => ["undecided", "refused", "rejected"].includes(item
 
 async function showInbox(serial) {
   const { runs } = await api("/api/runs");
+  await loadScopes();
   if (serial !== renderSerial) return;
   const content = runs.length
     ? runs.map(runCard)
     : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
-  show("Review", false, ...content);
+  const update = canUpdate()
+    ? el("button", { type: "button", class: "pc-link", text: "Update the PC…", onclick: () => (location.hash = "#/update") })
+    : null;
+  show("Review", false, ...[update, ...content].filter(Boolean));
 }
 
 const STATE_BADGES = { unsent: "…", pending: "⏳", applied: "✓", refused: "!", rejected: "!" };
@@ -530,7 +560,11 @@ function mediaElement(item) {
 function infoPanel(item) {
   const display = item.display;
   const line = (name, value) => (value ? el("p", { text: `${name}: ${value}` }) : null);
+  const batch = item.batch;
+  const cell = batch && batch.cell ? [batch.cell.pack, batch.cell.model].filter(Boolean).join(" · ") : "";
   return el("div", { class: "info", hidden: "" }, [
+    line("Batch", batch ? batch.name : ""),
+    line("Cell", cell),
     line("Model", display.model),
     line("Workflow", display.workflow),
     line("Seed", display.seed),
@@ -723,10 +757,58 @@ function actionRow(item) {
         text,
         onclick: () => {
           if (FIX_TAGS[action]) addTags(item, FIX_TAGS[action]);
-          openAction(item, action);
+          if (WORDS[action]) askWords(item, action);
+          else openAction(item, action);
         },
       }),
     ),
+  );
+}
+
+const actionLabel = (action) => Object.fromEntries(ACTIONS)[action];
+
+function askWords(item, action) {
+  const { required, hint, placeholder } = WORDS[action];
+  const label = actionLabel(action);
+  const input = el("input", { maxlength: "200", placeholder, "aria-label": label, autocomplete: "off" });
+  const error = el("p", { class: "error", role: "alert" });
+  const go = () => {
+    // One line of plain text: the PC refuses control characters, so they never leave the phone.
+    const text = input.value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 200);
+    if (required && !text) {
+      error.textContent = "Type a few words first.";
+      return;
+    }
+    openAction(item, action, text ? { text } : {});
+  };
+  input.addEventListener("keydown", (event) => event.key === "Enter" && go());
+  sheet(
+    el("h2", { text: label }),
+    el("p", { class: "muted", text: hint }),
+    input,
+    error,
+    el("div", { class: "sheet-actions" }, [
+      el("button", { type: "button", text: "Cancel", onclick: closeSheet }),
+      el("button", { type: "button", class: "primary", text: "Ask the PC", onclick: go }),
+    ]),
+  );
+  input.focus();
+}
+
+function showChoices(item, action, choices) {
+  const buttons = choices.items.map((choice) =>
+    el("button", {
+      type: "button",
+      text: choice.current ? `${choice.label} (this image)` : choice.label,
+      "aria-pressed": String(choice.id === choices.selected),
+      onclick: () => openAction(item, action, { choice: choice.id }),
+    }),
+  );
+  return sheet(
+    el("h2", { text: actionLabel(action) }),
+    el("p", { class: "muted", text: PICKERS[action] }),
+    el("div", { class: "choices", role: "group", "aria-label": "Options" }, buttons),
+    el("div", { class: "sheet-actions" }, [el("button", { type: "button", text: "Cancel", onclick: closeSheet })]),
   );
 }
 
@@ -766,6 +848,10 @@ function waitFor(recordId, alive) {
 }
 
 function refusalText(answer) {
+  // A PC from before RG-140 slice 2 knows only the first four actions: it refuses the others as invalid.
+  if (answer.reason_code === "invalid_record" && SLICE_TWO.has(answer.action)) {
+    return "StableNew on the PC does not offer this action yet. Update it and try again.";
+  }
   const reason = REASONS[answer.reason_code] || "no reason given";
   const detail = answer.receipt && DETAILS[answer.receipt.detail];
   return detail ? `${reason}: ${detail}.` : `${reason}.`;
@@ -802,20 +888,23 @@ async function sendAction(body) {
   }
 }
 
-async function openAction(item, action) {
-  const label = Object.fromEntries(ACTIONS)[action];
-  const node = sheet(el("h2", { text: label }), el("p", { class: "muted", text: "Asking the PC for a summary…" }));
+async function openAction(item, action, extra = {}) {
+  const label = actionLabel(action);
+  const asking = PICKERS[action] && !extra.choice ? "Asking the PC for its options…" : "Asking the PC for a summary…";
+  const node = sheet(el("h2", { text: label }), el("p", { class: "muted", text: asking }));
   const alive = () => document.getElementById("sheet") === node;
   const cancel = () =>
     el("div", { class: "sheet-actions" }, [
       el("button", { type: "button", class: "primary", text: "Close", onclick: closeSheet }),
     ]);
   const fail = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel());
+  const params = { step: "prepare", ...extra };
+  if (action === "more_like_this") params.count = 4;
   const body = {
     library_id: item.library_id,
     sha256: item.sha256,
     action,
-    params: action === "more_like_this" ? { step: "prepare", count: 4 } : { step: "prepare" },
+    params,
     idempotency_key: idempotencyKey(),
   };
   try {
@@ -828,9 +917,11 @@ async function openAction(item, action) {
 }
 
 function showAnswer(item, action, recordId, answer, cancel, fail) {
-  const label = Object.fromEntries(ACTIONS)[action];
+  const label = actionLabel(action);
   if (answer.state === "pending") return fail("The PC has not answered yet. It may be off; ask again later.");
   const summary = answer.receipt && answer.receipt.action_summary;
+  const choices = answer.receipt && answer.receipt.choices;
+  if (answer.state === "applied" && choices && !summary) return showChoices(item, action, choices);
   if (answer.state === "refused" && !(answer.reason_code === "summary_changed" && summary)) {
     return fail(`Not possible: ${refusalText(answer)}`);
   }
@@ -849,6 +940,7 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
     ...summaryView(summary),
     el("div", { class: "sheet-actions" }, [
       el("button", { type: "button", text: "Cancel", onclick: closeSheet }),
+      choices ? el("button", { type: "button", text: "Change", onclick: () => showChoices(item, action, choices) }) : null,
       el("button", {
         type: "button",
         class: "primary",
@@ -856,6 +948,8 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
         onclick: async (event) => {
           event.currentTarget.disabled = true;
           const alive = () => document.getElementById("sheet") === node;
+          // This sheet replaced the one the request started on, so a refusal is shown while this one is open.
+          const failHere = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel());
           try {
             const sent = await sendAction({
               library_id: item.library_id,
@@ -866,15 +960,207 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
             });
             node.querySelector(".sheet-actions").replaceChildren(el("p", { class: "muted", text: "Waiting for the PC…" }));
             const result = await waitFor(sent.record_id, alive);
-            if (result) showAnswer(item, action, sent.record_id, result, cancel, fail);
+            if (result) showAnswer(item, action, sent.record_id, result, cancel, failHere);
           } catch (error) {
-            fail(`Not sent: ${error.code || "no connection"}.`);
+            failHere(`Not sent: ${error.code || "no connection"}.`);
           }
         },
       }),
     ]),
   );
   return node;
+}
+
+// --- remote update (LAUNCH-UPDATE-2) ------------------------------------------------------------------------------
+// Only on a phone paired from the desktop's "Pair for remote update" offer. The phone sends the origin/main commit
+// it shows; the PC checks it against its own fetch, waits for the running job, updates, restarts and answers.
+
+const UPDATE_REASONS = {
+  remote_update_disabled: "remote update is switched off on the PC (Update dialog, Allow remote update)",
+  update_unavailable: "remote update is not available on the PC",
+  update_in_progress: "an update is already in progress",
+  rate_limited: "the PC updated less than 10 minutes ago",
+  request_expired: "the PC saw the request more than an hour after the tap",
+  invalid_request: "the request did not name a valid commit",
+  wrong_branch: "the PC's checkout is not on main",
+  wrong_upstream: "the PC's main does not track origin/main",
+  origin_mismatch: "the PC's origin is not the expected repository",
+  dirty_checkout: "the PC's checkout has uncommitted changes",
+  fetch_failed: "the PC could not fetch origin",
+  git_failed: "Git failed on the PC",
+  target_moved: "origin/main moved since this screen; check again",
+  already_current: "the PC is already up to date",
+  not_fast_forward: "origin/main is not a fast-forward of the PC's main",
+  not_github_signed:
+    "the newest commit on main is not a merge GitHub signed, so the PC did not install it; " +
+    "merge the change through a pull request on GitHub, then check again",
+  github_unavailable:
+    "the PC could not ask GitHub whether it signed the new commit; nothing was changed, try again in a few minutes",
+  environment_drift: "the update needs packages the PC does not have; nothing was installed",
+  queue_unavailable: "the PC's queue could not be reached",
+  busy_timeout: "the running job did not finish within an hour; the queue continues",
+  updater_failed: "the updater could not be started",
+  updater_lost: "the updater stopped without a result; check the PC at the desk",
+  old_app_did_not_exit: "StableNew did not exit, so nothing was changed",
+  checkout_changed: "the checkout changed after the check; it was left as it was",
+  merge_failed: "the fast-forward failed; the checkout was left as it was",
+  rolled_back: "the new version did not start; the PC went back to the previous version",
+  rollback_failed: "the new version did not start and going back failed; fix it at the desk",
+};
+const NOT_SENT = {
+  status_changed: "the PC reported a different origin/main; check again",
+  update_pending: "the PC is already handling an update request",
+  not_granted: "this phone is not allowed to update the PC",
+};
+const UPDATE_POLL_MS = 5000;
+const STATUS_STALE_MS = 3 * 60 * 1000;
+
+const canUpdate = () => Array.isArray(scopes) && scopes.includes("admin");
+const shortSha = (sha) => (sha ? sha.slice(0, 10) : "unknown");
+
+function ago(then, now) {
+  const minutes = Math.max(0, Math.round((Date.parse(now) - Date.parse(then)) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 120) return `${minutes} min ago`;
+  return `${Math.round(minutes / 60)} h ago`;
+}
+
+function queueText(queue) {
+  const waiting = queue.queued ? `, ${queue.queued} queued` : "";
+  const state = { idle: "idle", running: "running a job", paused: "paused", unknown: "unknown" }[queue.state];
+  return `Queue: ${state || queue.state}${waiting}`;
+}
+
+function receiptText(update, reasonCode) {
+  if (update && update.status === "applied") {
+    const health =
+      update.health === "confirmed"
+        ? "StableNew started."
+        : "StableNew was started but did not confirm it is running (health unconfirmed); check it when you can.";
+    return `Updated ${shortSha(update.old_sha)} → ${shortSha(update.new_sha)}. ${health}`;
+  }
+  const reason = (update && update.reason_code) || reasonCode;
+  const text = UPDATE_REASONS[reason] || REASONS[reason] || reason || "no reason given";
+  return reason === "already_current" ? "Already up to date." : `Not updated: ${text}.`;
+}
+
+function requestRow(request) {
+  const when = new Date(request.created_at).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const text =
+    request.state === "pending"
+      ? "Waiting for the PC. It waits for the running job, then updates and restarts."
+      : request.state === "superseded"
+        ? "Replaced by a newer request."
+        : receiptText(request.update, request.reason_code);
+  const kind = request.state === "refused" ? "error" : request.state === "pending" ? "muted" : "";
+  return el("li", {}, [
+    el("p", { text: `${when} · update to ${shortSha(request.expected_sha)}` }),
+    el("p", { class: kind, text }),
+  ]);
+}
+
+async function sendUpdate(sha) {
+  const body = { action: "update_and_restart", expected_sha: sha, idempotency_key: idempotencyKey() };
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await api("/api/admin/updates", body);
+    } catch (error) {
+      if (error.status || attempt >= 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+}
+
+let updateTimer = 0;
+
+async function showUpdate(serial) {
+  await loadScopes();
+  if (!canUpdate()) throw new ApiError(403, "not_granted");
+  const data = await api("/api/admin");
+  if (serial !== renderSerial) return;
+  const status = data.pc_status;
+  const nodes = [];
+  const pending = data.requests.some((request) => request.state === "pending");
+  if (!status) {
+    nodes.push(el("p", { class: "muted", text: "The PC has not reported yet. It reports while StableNew runs." }));
+  } else {
+    const checkout = status.checkout || {};
+    const stale = Date.parse(data.now) - Date.parse(data.received_at) > STATUS_STALE_MS;
+    const behind = checkout.commits_behind || 0;
+    nodes.push(
+      el("section", { class: "run pc" }, [
+        el("p", { class: stale ? "error" : "muted", text: `PC last reported ${ago(data.received_at, data.now)}.` }),
+        el("p", { text: `Running main at ${shortSha(checkout.head_sha)}` }),
+        el("p", {
+          text: checkout.origin_main_sha
+            ? `origin/main is ${shortSha(checkout.origin_main_sha)} (${behind} new commit${behind === 1 ? "" : "s"})`
+            : "origin/main is not known yet",
+        }),
+        checkout.fetched_at
+          ? el("p", { class: "muted", text: `Checked ${ago(checkout.fetched_at, data.now)}.` })
+          : null,
+        el("p", { text: queueText(status.queue) }),
+        status.update.state === "in_progress"
+          ? el("p", { text: "An update is in progress on the PC." })
+          : null,
+        status.remote_update_enabled
+          ? null
+          : el("p", { class: "error", text: "Remote update is switched off on the PC (Update dialog)." }),
+        status.last_result
+          ? el("p", { class: "muted", text: `Last update: ${receiptText(status.last_result)}` })
+          : null,
+      ]),
+    );
+    const ready =
+      status.remote_update_enabled &&
+      status.update.state === "idle" &&
+      !pending &&
+      checkout.origin_main_sha &&
+      checkout.origin_main_sha !== checkout.head_sha &&
+      behind > 0;
+    if (ready) {
+      const sha = checkout.origin_main_sha;
+      const where = status.queue.state === "running" ? "after the running job" : "now";
+      nodes.push(
+        el("button", {
+          type: "button",
+          class: "primary",
+          text: `Update to ${shortSha(sha)} (${behind} commit${behind === 1 ? "" : "s"})`,
+          onclick: async (event) => {
+            const question =
+              `Update the PC to ${shortSha(sha)} and restart StableNew ${where}? ` +
+              "Queued jobs resume after the restart. Nothing is installed.";
+            if (!window.confirm(question)) return;
+            event.currentTarget.disabled = true;
+            try {
+              await sendUpdate(sha);
+              toast("Sent to the PC");
+            } catch (error) {
+              toast(`Not sent: ${NOT_SENT[error.code] || error.code || "no connection"}`);
+            }
+            route();
+          },
+        }),
+      );
+    } else if (!pending && checkout.origin_main_sha && behind === 0) {
+      nodes.push(el("p", { class: "muted", text: "The PC is up to date with origin/main." }));
+    }
+  }
+  if (data.requests.length) {
+    nodes.push(el("h2", { class: "section-title", text: "Requests from this phone" }), el("ul", { class: "updates" }, data.requests.map(requestRow)));
+  }
+  show("Update the PC", true, ...nodes);
+  clearTimeout(updateTimer);
+  if (pending || (status && status.update.state === "in_progress")) {
+    updateTimer = setTimeout(() => {
+      if (serial === renderSerial && !document.hidden) refresh();
+    }, UPDATE_POLL_MS);
+  }
 }
 
 function step(direction) {
@@ -916,6 +1202,7 @@ async function route() {
     if (page === "triage" && run) await showTriage(decodeURIComponent(run), libraryId, serial);
     else if (page === "run" && run) await showRun(decodeURIComponent(run), serial);
     else if (page === "rejected") showRejected();
+    else if (page === "update") await showUpdate(serial);
     else await showInbox(serial);
   } catch (error) {
     if (serial !== renderSerial) return;
@@ -950,6 +1237,9 @@ async function refresh() {
       updateTriageStatus();
     } else if (page === "run" && run) {
       await showRun(decodeURIComponent(run), serial);
+      window.scrollTo(0, scroll);
+    } else if (page === "update") {
+      await showUpdate(serial);
       window.scrollTo(0, scroll);
     } else if (!page) {
       await showInbox(serial);

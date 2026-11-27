@@ -176,6 +176,120 @@ def test_typed_action_params_parse():
     )
 
 
+@pytest.mark.parametrize(
+    "action_request",
+    [
+        {"action": "fix_face", "params": {"step": "prepare", "choice": "2x3"}},
+        {"action": "more_like_this", "params": {"step": "prepare", "text": "smiling"}},
+        {"action": "another_model", "params": {"step": "prepare", "text": "smiling"}},
+        {"action": "aspect_ratio", "params": {"step": "prepare", "choice": "C:\\x"}},
+        {"action": "aspect_ratio", "params": {"step": "prepare", "choice": ""}},
+        {"action": "aspect_ratio", "params": {"step": "prepare", "choice": "x" * 65}},
+        {"action": "prompt_tweak", "params": {"step": "prepare"}},  # the words are required
+        {"action": "prompt_tweak", "params": {"step": "prepare", "text": ""}},
+        {"action": "prompt_tweak", "params": {"step": "prepare", "text": "a\nb"}},
+        {"action": "prompt_tweak", "params": {"step": "prepare", "text": "a\u0000b"}},
+        {"action": "prompt_tweak", "params": {"step": "prepare", "text": "x" * 201}},
+        {"action": "make_video", "params": {"step": "prepare", "text": 7}},
+        {"action": "make_video", "params": {"step": "prepare", "choice": "a14b"}},
+        {
+            "action": "another_model",
+            "params": {
+                "step": "confirm",
+                "choice": "abc",
+                "prepared_record": PREPARED,
+                "summary_revision": DIGEST,
+            },
+        },
+        {
+            "action": "prompt_tweak",
+            "params": {
+                "step": "confirm",
+                "text": "smiling",
+                "prepared_record": PREPARED,
+                "summary_revision": DIGEST,
+            },
+        },
+    ],
+)
+def test_slice_two_params_belong_to_their_action_and_step(action_request):
+    test_action_params_are_typed_per_step(action_request)
+
+
+def test_slice_two_params_parse():
+    base = _forged(kind="action_request", decision=KeyError)
+    cases = [
+        ({"action": "another_model", "params": {"step": "prepare"}}, ("", "")),
+        (
+            {"action": "another_model", "params": {"step": "prepare", "choice": "a1b2"}},
+            ("a1b2", ""),
+        ),
+        ({"action": "aspect_ratio", "params": {"step": "prepare", "choice": "16x9"}}, ("16x9", "")),
+        (
+            {
+                "action": "prompt_tweak",
+                "params": {"step": "prepare", "text": "smiling, golden hour"},
+            },
+            ("", "smiling, golden hour"),
+        ),
+        ({"action": "make_video", "params": {"step": "prepare"}}, ("", "")),
+        (
+            {"action": "make_video", "params": {"step": "prepare", "text": "she turns her head"}},
+            ("", "she turns her head"),
+        ),
+    ]
+    for action_request, (choice, text) in cases:
+        record = {**base, "action_request": action_request}
+        validate_def(record, "outbox_record")
+        parsed = parse_record(record).action_request
+        assert (parsed.choice, parsed.text) == (choice, text)
+    assert protocol.SLICE_TWO_ACTIONS == {
+        "another_model",
+        "aspect_ratio",
+        "prompt_tweak",
+        "make_video",
+    }
+    assert (
+        not {"rerun_clip", "continue_clip"} & protocol.PHONE_ACTIONS
+    )  # N8: they use V1's functions later
+
+
+def test_action_choices_are_bounded_scrubbed_and_match_the_schema():
+    choices = protocol.ActionChoices(
+        "another_model",
+        (
+            ("a1b2c3", "C:\\Users\\rob\\Forge\\models\\juggernautXL.safetensors", True),
+            ("d4e5f6", "ponyXL.safetensors", False),
+            *((f"m{index}", f"model {index}", False) for index in range(150)),
+        ),
+        selected="d4e5f6",
+    )
+    body = choices.payload()
+    validate_def(body, "action_choices")
+    assert len(body["items"]) == protocol.MAX_CHOICES
+    assert body["items"][0] == {
+        "id": "a1b2c3",
+        "label": "juggernautXL.safetensors",
+        "current": True,
+    }
+    assert body["items"][1] == {"id": "d4e5f6", "label": "ponyXL.safetensors"}
+    assert body["selected"] == "d4e5f6"
+    ack = acknowledgement(RECORD["record_id"], "applied", receipt={"choices": body})
+    validate_def(ack, "acknowledgement")
+    for detail in ("choice_unavailable", "no_change", "prompt_required", "size_unsupported"):
+        refused = acknowledgement(
+            RECORD["record_id"],
+            "refused",
+            reason_code="action_unavailable",
+            receipt={"detail": detail},
+        )
+        validate_def(refused, "acknowledgement")
+    with pytest.raises(ProtocolError):
+        protocol.ActionChoices("another_model", (("bad id!", "x", False),)).payload()
+    with pytest.raises(ProtocolError):
+        protocol.ActionChoices("another_model", ()).payload()
+
+
 def test_an_action_summary_carries_no_path_and_matches_the_schema():
     warning = protocol.SummaryWarning(
         "image_model_unqualified",
@@ -291,6 +405,59 @@ def test_outgoing_payloads_validate_against_the_checked_in_schema():
         acknowledgement(RECORD["record_id"], "applied", receipt={"path": "C:/x"})
 
 
+def _manifest(batch):
+    return item_manifest(
+        item=ItemRef("b" * 32, DIGEST),
+        kind="image",
+        run_id="20261125_213000_portraits",
+        created_at=datetime(2026, 11, 25, 21, 30, tzinfo=UTC),
+        media={
+            "thumb_320": MediaVariant("c" * 64, 1200, "image/webp", 320, 240),
+            "original": MediaVariant(DIGEST, 99_000, "image/png", 1024, 768),
+        },
+        batch=batch,
+    )
+
+
+def test_a_manifest_names_its_batch_bounded_and_without_paths():
+    manifest = _manifest(
+        {
+            "batch_id": "5B0C4F8E-2A1D-4E3B-9C7A-1F2E3D4C5B6A",
+            "name": "  2026-11-26\tportraits " + "x" * 200,
+            "cell": {
+                "pack": "portraits",
+                "model": "C:\\Users\\rob\\Forge\\models\\juggernautXL.safetensors",
+            },
+        }
+    )
+    validate_def(manifest, "item_manifest")
+    validate(manifest)
+    batch = manifest["batch"]
+    assert batch["batch_id"] == "5b0c4f8e-2a1d-4e3b-9c7a-1f2e3d4c5b6a"
+    assert batch["name"].startswith("2026-11-26 portraits x") and len(batch["name"]) == 120
+    assert batch["cell"] == {"pack": "portraits", "model": "juggernautXL.safetensors"}
+    assert "rob" not in json.dumps(manifest)
+
+
+@pytest.mark.parametrize(
+    "batch",
+    [
+        None,
+        {},
+        {"batch_id": "not-a-uuid", "name": "x"},
+        {"batch_id": "5b0c4f8e-2a1d-4e3b-9c7a-1f2e3d4c5b6a", "name": "  "},
+        {"batch_id": "5b0c4f8e-2a1d-4e3b-9c7a-1f2e3d4c5b6a"},
+        {"batch_id": 7, "name": "x"},
+    ],
+)
+def test_a_batch_without_an_identity_and_a_name_is_left_out(batch):
+    """An unnamed or unreadable batch is no reason to hold an item back: it is grouped by run folder instead."""
+
+    manifest = _manifest(batch)
+    assert "batch" not in manifest
+    validate_def(manifest, "item_manifest")
+
+
 def test_the_validator_itself_rejects_contract_violations():
     with pytest.raises(SchemaViolation):
         validate_def({**RECORD, "path": "x"}, "outbox_record")
@@ -315,6 +482,10 @@ def test_closed_lists_match_the_schema():
     params = defs["action_request"]["properties"]["params"]["properties"]
     assert set(params["step"]["enum"]) == protocol.STEPS
     assert params["count"]["maximum"] == protocol.MAX_SEEDS
+    assert params["text"]["maxLength"] == protocol.MAX_TEXT
+    assert defs["choice_id"]["pattern"] == f"^{protocol.CHOICE_ID.pattern}$"
+    assert defs["action_choices"]["properties"]["items"]["maxItems"] == protocol.MAX_CHOICES
+    assert protocol.PHONE_ACTIONS <= protocol.ACTIONS
     assert set(defs["outbox_record"]["properties"]["kind"]["enum"]) == protocol.RECORD_KINDS
     assert (
         set(defs["media_variant"]["properties"]["content_type"]["enum"]) == protocol.CONTENT_TYPES

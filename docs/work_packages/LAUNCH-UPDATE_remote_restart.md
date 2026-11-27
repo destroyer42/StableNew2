@@ -1,8 +1,11 @@
 # LAUNCH-UPDATE — Remote update and restart: design, threat model and owner decisions
 
-Status: **design accepted, not built.** The owner accepted decisions D1–D10 as recommended on 2026-11-26
-("Accept all ten"), including D7's automatic local rollback. Implementation is split into LAUNCH-UPDATE-1 (PC side)
-and LAUNCH-UPDATE-2 (gateway and phone, after RG-140's schema change merges). The desktop shortcut and sign-in
+Status: **built, not yet run on the owner's checkout.** The owner accepted decisions D1–D10 as recommended on
+2026-11-26 ("Accept all ten"), including D7's automatic local rollback. LAUNCH-UPDATE-1 (PC side, PR #445) and
+LAUNCH-UPDATE-2 (gateway and phone) are implemented; the phone side is described in
+`docs/Subsystems/ReviewGateway/REVIEW_GATEWAY.md` section 8. LAUNCH-UPDATE-2 keeps `schema_version` at v1 with
+additive changes, as RG-140 did, instead of D8's version bump: a bump would stop every older PC and gateway from
+syncing until both were updated, while every addition is refused or ignored by an older peer. The desktop shortcut and sign-in
 autostart (LAUNCH-AUTOSTART-440) shipped separately and are not part of this package.
 
 ## Objective
@@ -98,7 +101,7 @@ untracked or ignored file are not touched: a fast-forward changes only files tha
 
 `not_granted`, `revoked_device`, `remote_update_disabled`, `update_in_progress`, `rate_limited`, `not_live_checkout`,
 `wrong_branch`, `wrong_upstream`, `origin_mismatch`, `dirty_checkout`, `target_moved` (origin/main is not
-`expected_sha`), `not_fast_forward`, `already_current`, `fetch_failed`, `environment_drift`, `busy_timeout`,
+`expected_sha`), `not_github_signed`, `github_unavailable`, `not_fast_forward`, `already_current`, `fetch_failed`, `environment_drift`, `busy_timeout`,
 `old_app_did_not_exit`, `checkout_changed`, `merge_failed`, `rolled_back`, `rollback_failed`.
 
 ## Threat model
@@ -121,8 +124,12 @@ that is not the owner's phone; anyone able to land a commit on `origin/main`.
 
 ## Owner decisions
 
-All ten accepted as recommended, 2026-11-26 ("Accept all ten"). Under D4 the optional GitHub-signature check was not
-separately chosen; it is not part of LAUNCH-UPDATE-1 and can be proposed later.
+All ten accepted as recommended, 2026-11-26 ("Accept all ten"). D4's optional GitHub-signature check was chosen
+later (SAFE-UPDATE, owner approval 2026-11-27). The PC preflight, for the desktop button and the phone alike, asks
+GitHub's public commit API about the target, the same rule as the gateway deployer's `verify_target`:
+`verification.verified` true and committer `web-flow` (on `main` and forward only are the existing Git checks). It
+replaces the `git verify-commit` idea in decision 4: no key is kept on the PC. Refusals are `not_github_signed` and,
+when GitHub gives no usable answer, `github_unavailable`. Only the target commit is checked, not each commit behind it.
 
 | # | Decision | Accepted answer |
 |---|---|---|

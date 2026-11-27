@@ -741,6 +741,12 @@ class WindowsDesktopDriver(TkDriver):
                 f"registry ids {sorted(registry)}",
             )
         if tab_id not in bar.visible_destination_ids():
+            from src.gui.view_contracts.task_navigation_contract import visible_tab_ids
+
+            if tab_id not in visible_tab_ids(bar.mode):
+                # N6: the Simple workspace hides this page; an operator turns on Advanced first.
+                self.click(bar.advanced_check, label=f"Advanced switch for {title}")
+                self.pump(0.2)
             self.click(bar.group_button(destination.group_id), label=f"nav group for {title}")
             self.pump(0.2)
         self.click(bar.destination_button(tab_id), label=f"nav {destination.display_label}")

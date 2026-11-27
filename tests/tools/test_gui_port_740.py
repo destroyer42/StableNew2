@@ -45,7 +45,7 @@ from src.gui.view_contracts.task_navigation_contract import all_tab_ids, get_des
 s=AppStateV2(); s.set_invoker(ImmediateUiDispatcher()); calls=[]
 def listener(): calls.append('ok')
 s.subscribe('proof',listener); s._notify('proof'); s.unsubscribe('proof',listener); s._notify('proof')
-assert calls==['ok'] and len(all_tab_ids())==10 and get_destination('invalid') is None
+assert calls==['ok'] and len(all_tab_ids())==11 and get_destination('invalid') is None
 print(json.dumps({'status':'PASS'}))
 """
     result = subprocess.run(

@@ -5,8 +5,9 @@ do not need the running application:
 
 * :func:`preflight` decides, read-only apart from ``git fetch``, whether the checkout may be fast-forwarded: branch
   ``main`` tracking ``origin/main``, the expected ``origin`` URL, no staged or modified tracked files, ``origin/main``
-  equal to the commit the requester was shown and a descendant of ``HEAD``, and the target's pinned constraints still
-  satisfied by the current ``.venv`` (nothing is ever installed).
+  equal to the commit the requester was shown and a descendant of ``HEAD``, the target commit signed by GitHub
+  (SAFE-UPDATE, :func:`github_signature_check`), and the target's pinned constraints still satisfied by the current
+  ``.venv`` (nothing is ever installed).
 * :class:`LiveUpdateStore` keeps the intent, the updater's result, the started marker, the last receipt and the
   owner's switch as small JSON files under ``%LOCALAPPDATA%\\StableNew\\live-update``, outside the checkout, so an
   update can never change them.
@@ -19,13 +20,17 @@ it reaches Git, and no ref name, path, remote or option ever comes from a reques
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +51,8 @@ FETCH_FAILED = "fetch_failed"
 TARGET_MOVED = "target_moved"
 ALREADY_CURRENT = "already_current"
 NOT_FAST_FORWARD = "not_fast_forward"
+NOT_GITHUB_SIGNED = "not_github_signed"
+GITHUB_UNAVAILABLE = "github_unavailable"
 ENVIRONMENT_DRIFT = "environment_drift"
 BUSY_TIMEOUT = "busy_timeout"
 UPDATER_FAILED = "updater_failed"
@@ -66,6 +73,15 @@ REASON_TEXT = {
     TARGET_MOVED: "origin/main moved after the update was requested.",
     ALREADY_CURRENT: "Already up to date.",
     NOT_FAST_FORWARD: "origin/main is not a fast-forward of local main.",
+    NOT_GITHUB_SIGNED: (
+        "The newest commit on origin/main is not a merge GitHub signed, so it was not installed. "
+        "Merge the change through a pull request on GitHub and check again, "
+        "or review the commit and update by hand at the desk."
+    ),
+    GITHUB_UNAVAILABLE: (
+        "GitHub could not be asked whether it signed the new commit, so nothing was changed. "
+        "Check this PC's internet connection and try again in a few minutes."
+    ),
     ENVIRONMENT_DRIFT: "The update needs packages this environment does not have; nothing was installed.",
     BUSY_TIMEOUT: "The running job did not finish within the wait limit; the queue continues.",
     UPDATER_FAILED: "The updater could not be started.",
@@ -80,6 +96,10 @@ REASON_TEXT = {
 }
 
 EXPECTED_ORIGIN = "https://github.com/destroyer42/StableNew2.git"
+#: GitHub's record of one commit of the expected repository (public; read without credentials).
+GITHUB_COMMITS_API = "https://api.github.com/repos/destroyer42/StableNew2/commits"
+#: The account GitHub commits as when it merges a pull request; it signs those commits with its own key.
+GITHUB_SIGNER = "web-flow"
 CONSTRAINTS_PATH = "constraints/windows-py314-cu130.txt"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UPDATER_SCRIPT = REPO_ROOT / "scripts" / "update_and_restart.ps1"
@@ -89,6 +109,8 @@ _SHA = re.compile(r"[0-9a-f]{40}")
 _GIT_TIMEOUT = 120.0
 _ENV_CHECK_TIMEOUT = 300.0
 _JSON_LIMIT = 64 * 1024
+_GITHUB_TIMEOUT = 20.0
+_GITHUB_LIMIT = 4 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -211,14 +233,92 @@ def environment_check(
     return check
 
 
+def _github_json(url: str) -> tuple[int, Any]:
+    """One anonymous GET of a fixed ``https://api.github.com`` URL: the status and the decoded body.
+
+    A refused status is returned with no body. A network failure, a cut-off response or an undecodable body raises
+    ``OSError``, ``HTTPException`` or ``ValueError``; the caller reports each as ``github_unavailable``.
+    """
+
+    request = urllib.request.Request(  # noqa: S310 - the URL is a module constant plus a validated SHA
+        url,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "StableNew-live-update"},
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310
+            request, timeout=_GITHUB_TIMEOUT, context=ssl.create_default_context()
+        ) as response:
+            if not str(response.geturl()).startswith("https://api.github.com/"):
+                raise OSError("GitHub redirected the request to another host")
+            return int(response.status), json.loads(response.read(_GITHUB_LIMIT))
+    except urllib.error.HTTPError as error:
+        return int(error.code), None
+
+
+def _mapping(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def github_signature_check(
+    *,
+    fetch_json: Callable[[str], tuple[int, Any]] | None = None,
+    api: str = GITHUB_COMMITS_API,
+) -> Callable[[str], tuple[str, str]]:
+    """A check that GitHub signed a commit: ``("", "")`` when it did, else a reason code and a short detail.
+
+    The same rule as the gateway deployer (``services/deploy/stablenew_deploy.py`` ``verify_target``): GitHub reports
+    ``verification.verified`` true and the committer is ``web-flow``, which is what a pull request merged on GitHub
+    produces. The deployer's other two conditions, on ``main`` and forward only, are already established here by Git
+    (the target is the fetched ``origin/main`` and a descendant of ``HEAD``).
+
+    ``not_github_signed``: GitHub answered and the commit is unknown to it, unsigned, or committed by someone else.
+    ``github_unavailable``: no usable answer (no network, a timeout, a rate limit, a server error). Both refuse.
+    """
+
+    def check(sha: str) -> tuple[str, str]:
+        if not valid_sha(sha):
+            return NOT_GITHUB_SIGNED, "not a commit id"
+        fetch = fetch_json or _github_json
+        try:
+            status, body = fetch(f"{api}/{sha}")
+        except (OSError, ValueError, http.client.HTTPException) as error:
+            return GITHUB_UNAVAILABLE, f"GitHub did not answer: {error}"[:300]
+        if status in (404, 422):
+            return NOT_GITHUB_SIGNED, f"GitHub does not know commit {sha[:12]} (HTTP {status})."
+        if status != 200 or not isinstance(body, dict):
+            return GITHUB_UNAVAILABLE, f"GitHub answered HTTP {status}."
+        if body.get("sha") != sha:
+            return NOT_GITHUB_SIGNED, f"GitHub answered for a different commit than {sha[:12]}."
+        commit = _mapping(body.get("commit"))
+        verification = _mapping(commit.get("verification"))
+        committer = _mapping(body.get("committer"))
+        verified = verification.get("verified") is True
+        login = re.sub(r"[^A-Za-z0-9-]", "", str(committer.get("login") or ""))[:40]
+        if not verified or login != GITHUB_SIGNER:
+            signed = "signature verified" if verified else "no verified signature"
+            return (
+                NOT_GITHUB_SIGNED,
+                f"Commit {sha[:12]}: {signed}, committed by {login or 'an unknown account'}.",
+            )
+        return "", ""
+
+    return check
+
+
 def preflight(
     git: GitRunner,
     *,
     expected_sha: str | None,
     expected_origin: str,
     env_check: Callable[[str], tuple[bool, str]],
+    signature_check: Callable[[str], tuple[str, str]],
 ) -> Preflight:
-    """Whether the checkout may be fast-forwarded to ``expected_sha`` (or to the fetched ``origin/main``)."""
+    """Whether the checkout may be fast-forwarded to ``expected_sha`` (or to the fetched ``origin/main``).
+
+    ``signature_check`` (:func:`github_signature_check` in production) is asked only about a target that already
+    passed every Git check, and before the slower environment check. It has no default: a caller cannot leave the
+    signature unchecked by omission. A check that raises is a refusal (``github_unavailable``).
+    """
 
     if expected_sha is not None and not valid_sha(expected_sha):
         return Preflight(False, INVALID_REQUEST, "", "")
@@ -261,6 +361,12 @@ def preflight(
         return refuse(NOT_FAST_FORWARD, old, target)
     count = git(["rev-list", "--count", f"{old}..{target}"])
     ahead = int(count.out) if count.code == 0 and count.out.isdigit() else 0
+    try:
+        unsigned, why = signature_check(target)
+    except Exception as error:  # noqa: BLE001 - an unanswered signature question never lets an update through
+        unsigned, why = GITHUB_UNAVAILABLE, f"The signature check failed: {error}"[:300]
+    if unsigned:
+        return Preflight(False, unsigned, old, target, why, ahead)
     ok, detail = env_check(target)
     if not ok:
         return Preflight(False, ENVIRONMENT_DRIFT, old, target, detail, ahead)
