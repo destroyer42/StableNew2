@@ -500,6 +500,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
 - `video_workflow_layout_v2.py`: Layout scaffolding for the Video Workflow tab (VID-UX-384)
 - `video_workflow_media_pane_v2.py`: Right-pane media and status column of the Video Workflow tab (VID-UX-384)
+- `video_workflow_motion_intent_v2.py`: Motion preset, motion phrase and duration rows of the Video Workflow tab (V1-1)
 - `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
@@ -1029,6 +1030,8 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `motion_alignment_compatibility.py`: Source / driving-motion compatibility advisories (PR-VID-MOTION-420)
 - `motion_alignment_preparation.py`: Prepare the driving frames a workflow will consume with one explicit spatial alignment (PR-VID-MOTION-420)
 - `motion_alignment_support.py`: Which registered workflows can honestly be offered spatial alignment (PR-VID-MOTION-420)
+- `motion_intent.py`: The task-first motion intent layer (V1, ``docs/work_packages/V1_motion_controls.md`` sections 5.3, 5.4, 5.9 a…
+- `motion_presets.py`: Versioned motion presets for the task-first Video Workflow (V1, ``docs/work_packages/V1_motion_controls.md``…
 - `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
 - `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories

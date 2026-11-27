@@ -37,12 +37,12 @@ class VideoTask:
 TASKS: tuple[VideoTask, ...] = (
     VideoTask(
         TASK_ANIMATE,
-        "Animate from a prompt",
-        "Turn one image into a clip; the prompt describes the motion.",
+        "Prompt-only motion",
+        "Turn one image into a clip; the prompt, a motion preset and a duration describe the movement.",
     ),
     VideoTask(
         TASK_FOLLOW_CLIP,
-        "Follow a driving clip",
+        "Follow a driving video",
         "Transfer the motion of a short video onto the character in the image.",
     ),
     VideoTask(

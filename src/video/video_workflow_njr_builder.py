@@ -37,6 +37,7 @@ from src.video.motion_alignment_preparation import (
     verify_aligned_source_binding,
 )
 from src.video.motion_alignment_support import alignment_support
+from src.video.motion_intent import MOTION_INTENT_FIELD, normalize_motion_intent_record
 from src.video.motion_source_plan import motion_source_contract
 from src.video.motion_source_preparation import validate_prepared_record
 from src.video.rife_runtime import default_rife_multiplier, find_rife_executable
@@ -835,6 +836,15 @@ class VideoWorkflowNjrBuilder:
                 fps=length_policy["fps"],
                 approximate_seconds=approximate_seconds(frozen_frame_count, length_policy["fps"]),
             )
+        # V1 (D5): the applied motion preset and the basis of each automatic choice, as provenance only. Admission and
+        # replay never read it; the frozen length above is the one it records.
+        intent_record = normalize_motion_intent_record(
+            form_data.get(MOTION_INTENT_FIELD),
+            frame_count=frozen_frame_count,
+            fps=None if length_policy is None else length_policy["fps"],
+        )
+        if intent_record is not None:
+            extra_metadata["video_workflow"][MOTION_INTENT_FIELD] = intent_record
         if sequence_plan is not None:
             extra_metadata["video_workflow"]["sequence"] = {
                 "sequence_id": sequence_plan.get("sequence_id"),

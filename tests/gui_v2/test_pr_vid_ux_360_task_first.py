@@ -140,9 +140,11 @@ def test_default_task_hides_everything_it_does_not_need(env):
     assert tab.motion_library_panel.master is tab.follow_clip_tools
     for section in (tab.advanced_section, tab.keyframes_section, tab.details_section):
         assert not section.is_expanded()
-    # The settings themselves are not behind a disclosure (VID-UX-384).
-    assert tab.workflow_combo.winfo_manager()
-    assert tab.seed_entry.winfo_manager()
+    # V1-1: the task's own settings are in the open; the engine and raw settings sit under Advanced, and the
+    # summary line names the engine.
+    assert tab.motion_intent_panel.duration_combo.winfo_manager()
+    assert tab.workflow_combo.master is tab.advanced_section.body
+    assert tab.seed_entry.master is tab.advanced_section.body
 
 
 def test_summary_line_names_the_engine_and_what_was_set(env):
@@ -151,11 +153,11 @@ def test_summary_line_names_the_engine_and_what_was_set(env):
     assert env.tab.workflow_label_var.get() in summary
 
 
-def test_more_settings_button_opens_the_rarely_changed_controls(env):
-    assert str(env.tab.suggested_line.change_button.cget("text")) == "More settings"
+def test_change_opens_the_advanced_settings(env):
+    assert str(env.tab.suggested_line.change_button.cget("text")) == "Change"
     env.tab.suggested_line.change_button.invoke()
     assert env.tab.advanced_section.is_expanded()
-    assert str(env.tab.suggested_line.change_button.cget("text")) == "Hide more settings"
+    assert str(env.tab.suggested_line.change_button.cget("text")) == "Hide advanced"
     assert env.tab.workflow_combo.winfo_manager()
 
 
