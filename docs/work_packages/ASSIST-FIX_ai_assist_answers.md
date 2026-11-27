@@ -1,7 +1,7 @@
 # ASSIST-FIX: AI Assist answers reliably
 
-Status: implemented on a feature branch (2026-11-27); the live targets (G1) are **not measured**. Package 9 of the
-2026-11-27 Value Assessment.
+Status: implemented on a feature branch (2026-11-27). Live replay run: refusals meet G1, **malformed does not**
+(1.9% against under 1%). Package 9 of the 2026-11-27 Value Assessment.
 
 Execution class: Standard. Model recommendation: Claude Code, Sonnet 5.5, medium to high effort
 (`docs/AI_MODEL_SELECTION.md`). Canonical execution path unchanged: AI Assist stays advisory and before Intent.
@@ -61,7 +61,7 @@ tracks (`config/ai_visual_candidates.json` stays unreadable from `src/`); anythi
 | A5 | The motion button writes only the Motion field, only if source, prompt and field are unchanged since the press; Undo restores it | tests |
 | A6 | The image sent is downscaled, re-encoded without metadata, and sent only to an approved vision-capable remote model | tests |
 | A7 | PR gate, `tests/ai_assist`, `tests/system`, `tests/tools` pass | run output |
-| G1 | Live: refused under 5%, malformed under 1% | **owner-approved live replay, not yet run** |
+| G1 | Live: refused under 5%, malformed under 1% | live replay: refused 0.0% (met), malformed 1.9% (**not met**) |
 
 ## Offline limits
 
@@ -99,7 +99,28 @@ the PR gate, `tests/system` and `tests/tools` once on the final tree.
 The two "after" rows are the ends of a range, not a prediction: no model ran. `offline` shows only that the new
 service classifies and retries each logged failure class as intended.
 
-## Live replay plan (needs the owner's OK; not run)
+## Live replay result (2026-11-27, owner-approved)
+
+Source `f5f31446` (request path unchanged since), `qwen3.5:4b-q4_K_M` on Ollama 0.40.16, seed 1, 104 rebuilt cases,
+every case answered. No motion pictures were sent.
+
+| arm | suggestion | refused | malformed | worker seconds |
+|---|---|---|---|---|
+| old contract, no retry | 84 | 5 (4.8%) | 15 (14.4%) | 307 |
+| new contract, one retry | 102 | 0 (0.0%) | 2 (1.9%) | 373 |
+
+- Old-contract malformed: 11 plan `target_not_in_closed_list` (11 of 18 plans), 4 `slot_repeated`. The plan schema
+  change removed all 11.
+- New contract: 3 first attempts were malformed, the retry recovered 1. Left: 1 `slot_repeated` (slot variety; the
+  array schema cannot forbid naming a slot twice) and 1 `protected_tokens_changed` (rewrite).
+- Every suggestion in both arms passed the slot-variety judge where it applies; quality was not judged.
+- **Limits:** the old contract refused only 4.8% here against 24% in the log. Goals were neutral placeholders, not the
+  owner's, so refusals under the owner's own goals are **not demonstrated**. The truncated answers in the log did not
+  recur. One seed, one run.
+- **Next candidate (not done):** say "one entry per slot" in the slot-variety instruction, give the retry the failure
+  reason, and re-measure with another seed.
+
+## Live replay plan (as run, without `--motion-image`)
 
 - **What it does:** 104 cases in the logged kind mix (70 slot variety, 18 plan, 6 target fit, 6 rewrite, 4 slot
   proposal), rebuilt in memory from the owner's PromptPacks, each sent with the old contract (no retry) and the new
@@ -126,7 +147,7 @@ python -m tools.ai_assist_replay live --packs "$env:LOCALAPPDATA\StableNew\Promp
   under 1 (at 104 cases that is at most 5 refusals and 1 malformed). Check `usable_suggestions` too: if refusals
   turned into unusable answers, the count will not rise with the refusal fall. The goals are neutral, so the
   measured refusal rate may be lower than with the owner's own goals.
-- **Image support is unverified:** the motion cases are the first picture ever sent to this worker. An HTTP error or
+- **Image support is still unverified:** the motion cases are the first picture ever sent to this worker. An HTTP error or
   descriptions unrelated to the picture mean the installed model build does not take images.
 - **If G1 fails on refusals:** the next lever is an uncensored build (below), measured with this same command.
 
