@@ -442,6 +442,11 @@ def managed(tmp_path, monkeypatch):
         _config=SimpleNamespace(working_dir="src"),
     )
     monkeypatch.setattr(forge_klein_assets, "_active_manager", lambda: manager)
+    now = [0.0]
+    monkeypatch.setattr(forge_klein_assets, "_monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        forge_klein_assets, "_sleep", lambda seconds: now.__setitem__(0, now[0] + seconds)
+    )
     forge_klein_assets.clear_verified_cache()
     yield root, profile, modules
     forge_klein_assets.clear_verified_cache()
@@ -522,3 +527,30 @@ def test_a_wrong_module_or_an_ambiguous_listing_is_refused(managed):
             models + [{"model_name": FLUX1, "filename": str(root / "elsewhere" / FLUX1)}],
             modules,
         )
+
+
+def test_a_catalog_forge_is_still_rebuilding_is_re_read_before_the_served_identity_check(managed):
+    root, profile, modules = managed
+    transformer = write_gguf(root / "models" / "Stable-diffusion" / FLUX1, flux1_table())
+    served = [{"model_name": FLUX1, "filename": str(transformer)}]
+    # Each read pair (checkpoints, modules) is what Forge answers while list_models()/refresh_models() run.
+    reads = [([], modules[:1]), ([], modules), (served, modules)]
+    index = [-1]
+
+    def get_models():
+        index[0] = min(index[0] + 1, len(reads) - 1)
+        return reads[index[0]][0]
+
+    client = SimpleNamespace(
+        base_url="http://127.0.0.1:7861",
+        get_models=get_models,
+        get_module_catalog=lambda: reads[index[0]][1],
+    )
+    result = forge_klein_assets.verify_flux1_assets(
+        profile, client=client, model_name=FLUX1, verify_launch=lambda *a: {"revision": a[2]}
+    )
+    assert result["transformer"]["variant"] == "flux1_dev"
+    assert {result[role]["verified"] for role in ("text_encoder", "text_encoder_2", "vae")} == {
+        "sha256"
+    }
+    assert index[0] == 2  # read three times, then admitted
