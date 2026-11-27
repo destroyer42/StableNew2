@@ -46,7 +46,7 @@ def configure_task_navigation_styles(style: ttk.Style) -> None:
     """Define the bar's styles from the shared theme constants (no new tokens)."""
 
     base: dict[str, Any] = {
-        "padding": (14, 5),
+        "padding": (10, 5),  # N6: room for the Advanced switch at 200% scaling
         "borderwidth": 1,
         "relief": "flat",
         "focusthickness": 2,
@@ -177,11 +177,11 @@ class TaskNavigationBar(ttk.Frame):
             command=self._on_advanced_toggled,
             style="Dark.TCheckbutton",
         )
-        self.advanced_check.pack(side=tk.LEFT, padx=(10, 0), pady=4)
+        self.advanced_check.pack(side=tk.LEFT, padx=(6, 0), pady=4)
         attach_tooltip(self.advanced_check, SWITCH_TOOLTIP)
 
         self._divider = ttk.Separator(self, orient=tk.VERTICAL)
-        self._divider.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=6)
+        self._divider.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=6)
 
         self._destinations_frame = ttk.Frame(self)
         self._destinations_frame.pack(side=tk.LEFT, pady=4)
