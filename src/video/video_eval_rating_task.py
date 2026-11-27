@@ -5,8 +5,9 @@ calling ``register_rating_task``. The file names the clips on this PC, what to a
 review gateway publisher (``src/app/review_gateway_ratings.py``) sends only the ids, text and media; the paths, the
 case ids and the key that maps clips to arms stay here, and the key is read only when a submitted answer is applied.
 
-``apply_answers`` writes the eval's own contract and nothing else, all or nothing: a filled cell that disagrees refuses
-the whole submission. Writing the same answers again changes nothing. This module has no Tk, network or GPU use.
+``apply_answers`` writes the eval's own contract and nothing else, all or nothing: a filled cell that disagrees, or a
+key file that cannot say which arm every clip was, refuses the whole submission before anything is written. The key
+is also checked at registration. Writing the same answers again changes nothing. This module has no Tk, network or GPU use.
 """
 
 from __future__ import annotations
@@ -280,6 +281,10 @@ def _check_files(spec: RatingSpec) -> None:
         value = spec.data["result"].get(name)
         if value and not (spec.adapter == "ranking_csv" and name == "sheet"):
             _need(spec.path(value).is_file(), f"missing file: {value}")
+    try:
+        check_key(spec)
+    except RatingConflict as error:
+        raise RatingSpecError(str(error)) from None
 
 
 def register_rating_task(data: Mapping[str, Any], folder: str | Path) -> Path:
@@ -384,11 +389,39 @@ def _read_sheet(path: Path) -> tuple[bytes, list[str], list[dict[str, str]]]:
     return raw, header, rows
 
 
-def _read_key(spec: RatingSpec) -> dict[str, Any]:
+def _bad_key(spec: RatingSpec, problem: str) -> RatingConflict:
+    """What is wrong with the key file, naming the file only (the text may be logged)."""
+
+    return RatingConflict("write_failed", f"{spec.result_path('key').name}: {problem}")
+
+
+def _read_key(spec: RatingSpec, section: str) -> dict[str, Any]:
+    """The key file's ``section`` object."""
+
     value = json.loads(_read(spec.result_path("key")))
     if not isinstance(value, dict):
-        raise RatingConflict("write_failed", "the key file is not a JSON object")
-    return value
+        raise _bad_key(spec, "not a JSON object")
+    entries = value.get(section)
+    if not isinstance(entries, dict):
+        raise _bad_key(spec, f'no "{section}" object')
+    return entries
+
+
+def check_key(spec: RatingSpec) -> None:
+    """The key must give an arm for every clip of every item, or the sitting could not be revealed.
+
+    Raises ``RatingConflict`` saying what is wrong. A set without a key (a question) has nothing to check.
+    """
+
+    if spec.adapter == "answer_file" or not spec.data["result"].get("key"):
+        return
+    try:
+        _arm_map(spec)
+    except RatingConflict:
+        raise
+    except (OSError, ValueError, KeyError, RecursionError, csv.Error) as error:
+        # Type only: a message may carry a path.
+        raise _bad_key(spec, f"cannot be read ({type(error).__name__})") from error
 
 
 def check_clip_identity(spec: RatingSpec) -> None:
@@ -397,7 +430,7 @@ def check_clip_identity(spec: RatingSpec) -> None:
     if spec.adapter != "ratings_csv":
         return
     try:
-        entries = _read_key(spec)["clips"]
+        entries = _read_key(spec, "clips")
         for item in spec.items:
             for clip in item["clips"]:
                 if file_digest(spec.path(clip["path"])) != entries[clip["key"]]["artifact_sha256"]:
@@ -413,13 +446,19 @@ def check_clip_identity(spec: RatingSpec) -> None:
 def _score_rows(spec: RatingSpec) -> dict[tuple[str, str], tuple[tuple[str, str, str], str]]:
     """``(item, clip) -> (ratings.csv row key, artifact sha)`` from the key file."""
 
-    entries = _read_key(spec)["clips"]
+    entries = _read_key(spec, "clips")
+    fields = ("case_id", "arm_id", "job_id", "artifact_sha256")
     mapping = {}
     for item in spec.items:
         for clip in item["clips"]:
-            entry = entries[clip["key"]]
-            row = (str(entry["case_id"]), str(entry["arm_id"]), str(entry["job_id"]))
-            mapping[(item["item_id"], clip["clip_id"])] = (row, str(entry["artifact_sha256"]))
+            entry = entries.get(clip["key"])
+            if not isinstance(entry, dict):
+                raise _bad_key(spec, f"no entry {clip['key']}")
+            for name in fields:
+                if not isinstance(entry.get(name), str) or not entry[name]:
+                    raise _bad_key(spec, f"entry {clip['key']} has no {name}")
+            row = (entry["case_id"], entry["arm_id"], entry["job_id"])
+            mapping[(item["item_id"], clip["clip_id"])] = (row, entry["artifact_sha256"])
     return mapping
 
 
@@ -613,13 +652,15 @@ def apply_answers(spec: RatingSpec, answers: Any) -> list[dict[str, Any]]:
 
     checked = _checked(spec, answers)
     try:
+        # Built first: it reads the whole key, so a key that cannot be used stops here with nothing written.
+        reveal = _reveal(spec, checked)
         if spec.adapter == "ratings_csv":
             _apply_ratings(spec, checked)
         elif spec.adapter == "answer_file":
             _apply_file(spec, checked)
         else:
             _apply_sheet(spec, checked)
-        return _reveal(spec, checked)
+        return reveal
     except RatingConflict:
         raise
     except RatingsFileError as error:
@@ -640,23 +681,52 @@ def _table(title: str, columns: Sequence[str], rows: Sequence[Sequence[str]]) ->
 
 
 def _arm_map(spec: RatingSpec) -> dict[str, dict[str, str]]:
-    """``item_id -> {clip_id: arm}`` from the eval's key file."""
+    """``item_id -> {clip_id: arm}`` from the eval's key file, for every item and clip.
+
+    Raises ``RatingConflict`` naming what the key (or the pair sheet's case column) does not give.
+    """
 
     if spec.adapter == "ratings_csv":
         rows = _score_rows(spec)
-        return {
+        found = {
             item["item_id"]: {
                 clip["clip_id"]: rows[(item["item_id"], clip["clip_id"])][0][1]
                 for clip in item["clips"]
             }
             for item in spec.items
         }
-    key = _read_key(spec)["key"]
-    if spec.adapter == "pairwise_csv":
-        _raw, _header, sheet = _read_sheet(spec.result_path("sheet"))
-        cases = {row["pair"]: row["case_id"] for row in sheet}
-        return {item["item_id"]: dict(key[cases[item["item_id"]]]) for item in spec.items}
-    return {item["item_id"]: dict(key[item["item_id"]]) for item in spec.items}
+    else:
+        key = _read_key(spec, "key")
+        cases = {item["item_id"]: item["item_id"] for item in spec.items}
+        if spec.adapter == "pairwise_csv":
+            _raw, _header, sheet = _read_sheet(spec.result_path("sheet"))
+            by_pair = {row.get("pair", ""): row.get("case_id", "") for row in sheet}
+            for item_id in cases:
+                if not by_pair.get(item_id):
+                    raise RatingConflict(
+                        "write_failed", f"the pair sheet gives no case_id for {item_id}"
+                    )
+                cases[item_id] = by_pair[item_id]
+        found = {}
+        for item in spec.items:
+            item_id = item["item_id"]
+            entry = key.get(cases[item_id])
+            if not isinstance(entry, dict):
+                raise _bad_key(spec, f"no entry for item {item_id} ({cases[item_id]})")
+            found[item_id] = {}
+            for clip in item["clips"]:
+                arm = entry.get(clip["clip_id"])
+                if not isinstance(arm, str) or not arm:
+                    raise _bad_key(
+                        spec, f"item {item_id} has no arm name for clip {clip['clip_id']}"
+                    )
+                found[item_id][clip["clip_id"]] = arm
+    # Arm names reach the phone in the reveal.
+    for arms in found.values():
+        for arm in arms.values():
+            if len(arm) > 120 or _PC_PATH.search(arm):
+                raise _bad_key(spec, "an arm name is over 120 characters or holds a PC path")
+    return found
 
 
 def _places(order: str, clips: Sequence[str]) -> dict[str, float]:
@@ -738,6 +808,7 @@ __all__ = [
     "RatingSpecError",
     "apply_answers",
     "check_clip_identity",
+    "check_key",
     "file_digest",
     "follow_up_spec",
     "is_rated",

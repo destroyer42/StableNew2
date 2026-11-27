@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -443,3 +444,114 @@ def test_a_damaged_sheet_refuses_the_submission_instead_of_raising(pairs: dict) 
         apply_answers(spec, _pair_answers())
     assert error.value.reason == "write_failed"
     assert sheet.read_text(encoding="utf-8") == damaged
+
+
+# --- the key file: checked at registration, and again before anything is written -----------------------------------
+
+_ARMS = {"A": "new", "B": "base"}
+
+
+@pytest.mark.parametrize(
+    ("key", "said"),
+    [
+        ({"case1": _ARMS, "case2": _ARMS}, 'no "key" object'),  # VID-FRAME's old shape
+        ([1, 2], "not a JSON object"),
+        ({"key": {"case1": _ARMS}}, "p02"),
+        ({"key": {"case1": _ARMS, "case2": {"A": "new"}}}, "clip B"),
+        ({"key": {"case1": _ARMS, "case2": "base"}}, "p02"),
+        ({"key": {"case1": _ARMS, "case2": {"A": "new", "B": ""}}}, "clip B"),
+        ({"key": {"case1": _ARMS, "case2": {"A": "new", "B": r"C:\models\x"}}}, "PC path"),
+    ],
+)
+def test_a_pair_key_that_cannot_reveal_every_pair_is_refused_before_anything_is_written(
+    pairs: dict, tmp_path: Path, key: object, said: str
+) -> None:
+    root = Path(pairs["root"])
+    (root / "pairwise_key.json").write_text(json.dumps(key), encoding="utf-8")
+    sheet = (root / "pairwise.csv").read_bytes()
+
+    with pytest.raises(RatingSpecError, match=re.escape(said)):
+        register_rating_task(pairs, tmp_path / "rating_tasks")
+    with pytest.raises(RatingConflict) as error:  # a key that changed after registration
+        apply_answers(validate_spec(pairs), _pair_answers())
+
+    assert not (tmp_path / "rating_tasks").exists()
+    assert error.value.reason == "write_failed"
+    assert (root / "pairwise.csv").read_bytes() == sheet
+
+
+def test_a_pair_sheet_without_a_case_for_every_pair_is_refused(pairs: dict, tmp_path: Path) -> None:
+    root = Path(pairs["root"])
+    sheet = root / "pairwise.csv"
+    sheet.write_text(sheet.read_text(encoding="utf-8").replace("p02,case2,", "p02,,"), "utf-8")
+    before = sheet.read_bytes()
+
+    with pytest.raises(RatingSpecError, match="p02"):
+        register_rating_task(pairs, tmp_path / "rating_tasks")
+    with pytest.raises(RatingConflict):
+        apply_answers(validate_spec(pairs), _pair_answers())
+
+    assert sheet.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        lambda key: key.pop("clips"),
+        lambda key: key["clips"].pop("c01_B"),
+        lambda key: key["clips"]["c01_B"].pop("arm_id"),
+        lambda key: key["clips"]["c01_B"].update(job_id=""),
+    ],
+)
+def test_a_score_key_that_does_not_cover_every_clip_is_refused(
+    scores: dict, tmp_path: Path, damage
+) -> None:
+    path = Path(scores["root"]) / "rating_key.json"
+    key = json.loads(path.read_text(encoding="utf-8"))
+    damage(key)
+    path.write_text(json.dumps(key), encoding="utf-8")
+    ratings = Path(scores["result"]["ratings"])
+    before = ratings.read_bytes()
+
+    with pytest.raises(RatingSpecError, match="rating_key.json"):
+        register_rating_task(scores, tmp_path / "rating_tasks")
+    with pytest.raises(RatingConflict):
+        apply_answers(validate_spec(scores), _score_answers())
+
+    assert ratings.read_bytes() == before
+
+
+def test_a_ranking_key_missing_a_clip_writes_no_sheet(tmp_path: Path) -> None:
+    root = tmp_path / "blind"
+    root.mkdir()
+    (root / "key.json").write_text(json.dumps({"key": {"c01": {"A": "x"}}}), encoding="utf-8")
+    data = {
+        "schema": "stablenew.rating-set.v1",
+        "task_id": "two-way",
+        "title": "Two way",
+        "kind": "ranking",
+        "created_at": NOW,
+        "root": str(root),
+        "criteria": [
+            {"criterion_id": "motion", "label": "Motion", "type": "rank", "required": True}
+        ],
+        "items": [
+            {
+                "item_id": "c01",
+                "clips": [
+                    {"clip_id": c, "label": c, "path": _clip(root, f"{c}.mp4")} for c in "AB"
+                ],
+            }
+        ],
+        "result": {"adapter": "ranking_csv", "sheet": "ranking.csv", "key": "key.json"},
+    }
+
+    with pytest.raises(RatingSpecError, match="clip B"):
+        register_rating_task(data, tmp_path / "rating_tasks")
+    with pytest.raises(RatingConflict):
+        apply_answers(
+            validate_spec(data),
+            [{"item_id": "c01", "clip_id": "", "values": {"motion": "B>A"}, "notes": ""}],
+        )
+
+    assert not (root / "ranking.csv").exists()

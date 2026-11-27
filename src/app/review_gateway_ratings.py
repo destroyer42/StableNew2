@@ -44,6 +44,7 @@ from src.video.video_eval_rating_task import (
     RatingSpec,
     apply_answers,
     check_clip_identity,
+    check_key,
     file_digest,
     follow_up_spec,
     is_rated,
@@ -205,7 +206,8 @@ class RatingTaskSync:
             except _Waiting:
                 continue
             except RatingConflict as error:
-                log.warning("Rating set %s is not published (%s)", spec.task_id, error.reason)
+                # The detail names files, items and clips only, never a path or an arm.
+                log.warning("Rating set %s is not published: %s", spec.task_id, error)
             except (GatewayConflict, GatewayRejected):
                 log.warning("The review gateway refused rating set %s", spec.task_id)
             except (OSError, ValueError) as error:
@@ -344,6 +346,7 @@ class RatingTaskSync:
             self._save_state(spec.task_id, status="done")
             self._discard_renditions()
             return
+        check_key(spec)
         check_clip_identity(spec)
         manifest, files = self._manifest(spec, busy, cancel)
         status, missing = client.post_rating_task(manifest)

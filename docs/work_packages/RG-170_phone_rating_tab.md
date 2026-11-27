@@ -83,8 +83,9 @@ criteria, items with media paths under `root`, `result`, optional `follow_up`) a
 | `ranking_csv` | `ranking.csv` (`<criterion>_order`, for example `B>A>C`) | mean place per arm |
 | `answer_file` | the chosen value (`.txt`) or all answers (`.json`) | none |
 
-Writes are all or nothing: any filled cell that disagrees refuses the whole submission (`already_rated`) and writes
-nothing; the phone shows the reason and the task opens again. A `ratings.csv` row bound to another clip digest, or a
+The key must give an arm for every clip of every item; that is checked at registration, before publishing and before
+any write. Writes are all or nothing: any filled cell that disagrees refuses the whole submission (`already_rated`)
+and writes nothing; the phone shows the reason and the task opens again. A `ratings.csv` row bound to another clip digest, or a
 clip file that no longer matches the key's digest, is refused (`clip_changed`). A task whose sheet was completed at
 the desk is published as done.
 

@@ -500,7 +500,9 @@ Rules:
    at most 1280 px) and pictures re-saved with **all metadata dropped**; StableNew clips otherwise carry their workflow,
    backend and a PC path, which would also unblind the rating.
 2. A submission is a request. The PC refuses it from an unpaired or revoked phone, checks every answer again, and writes
-   all or nothing: a different value already in the eval's file refuses it (`already_rated`) and the task reopens.
+   all or nothing: a different value already in the eval's file refuses it (`already_rated`) and the task reopens. The
+   key file must give an arm for every clip of every item: registration refuses it otherwise, such a set is not
+   published, and a key that breaks later refuses the submission with nothing written.
 3. Gateway retention: a finished task and its media go 14 days after the PC answered, a withdrawn one after 48 hours;
    an unanswered submission is never purged.
 4. A gateway lists `rating_tasks` in health; a PC sends nothing about ratings to one that does not. Deploy the gateway

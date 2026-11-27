@@ -354,6 +354,31 @@ def test_a_broken_registration_or_missing_clip_does_not_stop_the_others(env: Env
     assert [task["task_id"] for task in env.tasks()] == ["demo-pairs"]
 
 
+def test_a_set_whose_key_cannot_reveal_it_never_reaches_the_phone(env: Env) -> None:
+    # A registration file dropped straight into the folder skips register_rating_task's check.
+    env.register_pairs()
+    (env.root / "key.json").write_text(json.dumps({"caseone": {}}), encoding="utf-8")
+
+    env.step()
+    env.phone()
+
+    assert env.tasks() == []
+
+
+def test_a_key_broken_after_publishing_refuses_the_submission_and_writes_nothing(env: Env) -> None:
+    env.register_pairs()
+    env.step()
+    env.phone()
+    env.answer_and_submit("demo-pairs", PAIR_ANSWERS)
+    (env.root / "key.json").write_text(json.dumps({"key": {}}), encoding="utf-8")
+
+    env.step()
+
+    shown = env.task("demo-pairs")
+    assert (shown["state"], shown["reason_code"]) == ("refused", "write_failed")
+    assert [row["motion_better"] for row in env.rows()] == ["", ""]
+
+
 # --- renditions -----------------------------------------------------------------------------------------------------
 
 

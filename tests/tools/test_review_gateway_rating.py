@@ -30,7 +30,10 @@ def pairwise_folder(tmp_path: Path) -> Path:
             f"{pair},case_{pair},pairwise_blind/{pair}_A.mp4,pairwise_blind/{pair}_B.mp4,,,,"
         )
     (root / "pairwise.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
-    (root / "pairwise_key.json").write_text("not read at registration", encoding="utf-8")
+    arms = {"A": "secret_arm_x", "B": "secret_arm_y"}
+    (root / "pairwise_key.json").write_text(
+        json.dumps({"key": {"case_p01": arms, "case_p02": arms}}), encoding="utf-8"
+    )
     source = tmp_path / "source.png"
     source.write_bytes(b"png")
     (root / "HOW_TO_RATE.txt").write_text(
@@ -76,6 +79,8 @@ def test_a_pairwise_folder_registers_with_its_prompts_and_sources(
         "pairwise_blind/p01_B.mp4",
     ]
     assert "placeholder request" not in capsys.readouterr().out  # prompts are never printed
+    # The key is checked at registration, never copied into it.
+    assert "secret_arm" not in (folder / "ck-ab.json").read_text(encoding="utf-8")
 
 
 def test_a_score_folder_registers_against_its_runs_ratings_and_pick(tmp_path: Path, capsys) -> None:
