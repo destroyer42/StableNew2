@@ -297,6 +297,11 @@ def build_review_gateway_sync(
         **extra,
     )
     owner.append(sync)
+    # PHONE-FAST: a finished job's outputs reach the phone without waiting for the busy-queue rate.
+    jobs = getattr(app, "job_service", None)
+    register = getattr(jobs, "register_completion_handler", None)
+    if callable(register):
+        register(lambda _job, _result: sync.notify_job_completed())
     return sync
 
 

@@ -53,6 +53,13 @@ def _codec_store(path: Path) -> GatewaySettingsStore:
     return GatewaySettingsStore(path, protect=xor, unprotect=xor)
 
 
+def copy_strip(source, target: Path, _cancelled) -> bool:
+    """Stands in for FFmpeg: these tests' videos are not real clips (stripping has its own tests)."""
+
+    target.write_bytes(source.read())
+    return True
+
+
 class Env:
     def __init__(self, tmp_path: Path, *, busy=lambda: False, monotonic=time.monotonic) -> None:
         self.root = (tmp_path / "output").resolve()
@@ -67,7 +74,9 @@ class Env:
         self.ledger = SyncLedger(self.ledger_path)
         self.gateway = FakeGateway()
         self.library = OutputLibrary(self.root, "review-gateway", lambda: None)
-        self.publisher = GatewayPublisher(self.library, self.ledger, transcode=None)
+        self.publisher = GatewayPublisher(
+            self.library, self.ledger, transcode=None, strip=copy_strip
+        )
         self.applier = RecordApplier(self.ledger, self.root, self.records, active_inputs=set)
         self.sync = ReviewGatewaySync(
             settings_store=_codec_store(tmp_path / "state" / "settings.bin"),
@@ -140,7 +149,7 @@ def test_publish_sends_manifests_and_media_without_any_path(env, tmp_path):
     large = env.gateway.manifests[large_id]
     assert set(large["media"]) == {"thumb_320", "preview_1080", "original"}
     assert large["media"]["preview_1080"]["width"] == 1080
-    assert set(env.gateway.manifests[small_id]["media"]) == {"thumb_320", "original"}
+    assert env.gateway.manifests[small_id]["media"]["preview_1080"]["width"] == 64
     assert env.gateway.media[large_sha] == env.large.read_bytes()
     assert large["run_id"] == RUN and large["kind"] == "image"
     text = json.dumps(env.gateway.manifests)

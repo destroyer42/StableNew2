@@ -59,6 +59,7 @@ is refused at startup, so there is no plain-HTTP LAN mode. Every request carries
 | `POST /sync/v1/acknowledgements` | `acknowledgement` | `{"status":"recorded"\|"already_acknowledged"}`; 404 `unknown_record` |
 | `POST /sync/v1/pairing-offers` | `pairing_offer` | `{"status":"accepted"}`; 409 `offer_conflict`; 422 `offer_expired` |
 | `POST /sync/v1/device-revocations` | `device_revocation` | `{"status":"revoked"\|"unknown_device"}` |
+| `POST /sync/v1/withdrawals` | `item_withdrawal` | `{"withdrawn": n}` (section 3.0) |
 | `GET /sync/v1/immich-receipts?cursor=` | - | `immich_receipt_page` (section 5); 400 `invalid_cursor` |
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
 
@@ -91,7 +92,8 @@ Rules:
     `action_summary`, `job_ids` and `detail` (section 7).
 13. `features` in the health reply lists the optional parts of v1 this gateway accepts. The PC sends an optional part
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
-    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1).
+    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1);
+    `item_withdraw`, the withdrawals route (section 3.0).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -105,7 +107,8 @@ Rules:
   device row, so revocation applies to the next request. Every data and media route needs an enrolled device with the
   `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
 - JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata
-  is put on screen with `textContent` only. Originals are `private, no-store`; derivatives `private, max-age=3600`.
+  is put on screen with `textContent` only. Originals are `private, no-store`; thumbnails and image renditions `private, max-age=604800, immutable`; other
+  derivatives `private, max-age=3600`.
 - Inbox grouped by named batch, else by run folder, with counts (section 3.1); a group's grid; triage with Keep,
   Favorite, Delete buttons and swipes (right, up, left) and the six reason tags. A refused item counts as "to review"
   again.
@@ -115,6 +118,33 @@ Rules:
   with Try again and Dismiss; it is never dropped silently. The unsent list is shared safely between tabs.
 - The decision buttons and swipes stay off until the item has loaded. If it cannot load, the owner may retry or choose
   to decide without seeing it.
+
+- The phone prefetches the next 4 image renditions while triaging.
+
+### 3.0 What the PC publishes (PHONE-FAST)
+
+- **Only authoritative outputs** (`src/app/review_gateway_sources.py`). An image under `movie_clips`, an image a video
+  manifest lists as a frame, and a retained un-smoothed clip are never published. While a job runs, an image that may
+  be one of its frames waits.
+- **Nothing blocks the rest.** A row whose file is gone is recorded as `missing` and looked at again after a day; a row
+  that fails for another reason is set aside for a while, longer each time (up to 10 minutes). A published item's
+  ledger row is never overwritten.
+- **Window.** The last 3 days, or back to when the publisher last caught up if that is older; never before the first
+  window.
+- **Rate.** Up to 8 items per cycle while idle; one item per 30 s while a job runs, with nothing transcoded. When a job
+  completes, its new outputs publish at once even if the next job is already running.
+- **Phone rendition.** Every image is sent with a WebP (JPEG where WebP is unavailable) of at most 1080 px on its long
+  side, never enlarged. Images published before this get one a few at a time while the PC is idle.
+- **No PC paths in videos** (invariant 3). A video's original is sent as a bit-exact copy of its picture and sound
+  without any container, stream or chapter metadata (no re-encode; the PC's file is not touched), and the mobile copy
+  is made the same way. The item is known to the gateway and Immich by the SHA-256 of the bytes sent; the PC maps a
+  decision back to its file (`public_digest`). A video that cannot be stripped (no FFmpeg, or FFmpeg fails) is not
+  sent. Videos sent before this keep their metadata. **Open:** image originals are still sent with their embedded
+  StableNew metadata, which can name PC paths.
+- **One-time withdrawal.** Frames and un-smoothed clips published before the rule above are withdrawn once: the PC
+  classifies its publish ledger and posts `item_withdrawal` to a gateway listing `item_withdraw`. The gateway purges
+  those items without recording a decision or touching Immich, and leaves any item with a decision or a request the
+  PC has not refused. No PC file changes.
 
 ### 3.1 Inbox grouped by batch
 

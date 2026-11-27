@@ -363,7 +363,9 @@ def test_media_is_served_with_its_declared_type_and_cache_rules(rig) -> None:
 
     assert thumb.content == b"thumb-one"
     assert thumb.headers["content-type"] == "image/jpeg"
-    assert thumb.headers["cache-control"].startswith("private, max-age=")
+    assert thumb.headers["cache-control"] == "private, max-age=604800, immutable"
+    rendition = rig.phone.get(f"/media/{item['library_id']}/{item['sha256']}/preview")
+    assert rendition.headers["cache-control"] == "private, max-age=604800, immutable"
     assert original.headers["content-type"] == "image/png"
     assert original.headers["cache-control"] == "private, no-store"
     assert original.headers["content-security-policy"]
