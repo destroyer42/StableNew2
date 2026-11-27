@@ -447,7 +447,7 @@ def is_rated(spec: RatingSpec) -> bool:
             )
             for item in spec.items
         )
-    except (OSError, KeyError, TypeError, ValueError):
+    except (OSError, KeyError, TypeError, ValueError, csv.Error):
         return False
 
 
@@ -624,7 +624,7 @@ def apply_answers(spec: RatingSpec, answers: Any) -> list[dict[str, Any]]:
         raise
     except RatingsFileError as error:
         raise RatingConflict("write_failed", "ratings.csv could not be written") from error
-    except (KeyError, TypeError, UnicodeError, json.JSONDecodeError) as error:
+    except (KeyError, TypeError, UnicodeError, json.JSONDecodeError, csv.Error) as error:
         raise RatingConflict("write_failed", "an eval file is not in the expected shape") from error
 
 

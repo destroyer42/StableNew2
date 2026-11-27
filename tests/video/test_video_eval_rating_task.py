@@ -430,3 +430,16 @@ def test_missing_clip_files_are_refused_at_registration(pairs: dict, tmp_path: P
     (Path(pairs["root"]) / "clips" / "p01_A.mp4").unlink()
     with pytest.raises(RatingSpecError):
         register_rating_task(pairs, tmp_path / "rating_tasks")
+
+
+def test_a_damaged_sheet_refuses_the_submission_instead_of_raising(pairs: dict) -> None:
+    sheet = Path(pairs["root"]) / "pairwise.csv"
+    damaged = sheet.read_text(encoding="utf-8").replace("case1", '"case1"x')
+    sheet.write_text(damaged, encoding="utf-8")
+    spec = validate_spec(pairs)
+
+    assert not is_rated(spec)
+    with pytest.raises(RatingConflict) as error:
+        apply_answers(spec, _pair_answers())
+    assert error.value.reason == "write_failed"
+    assert sheet.read_text(encoding="utf-8") == damaged
