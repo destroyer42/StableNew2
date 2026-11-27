@@ -57,8 +57,11 @@ def dialog(tk_root):  # type: ignore[no-untyped-def]
         selected_model=MODELS[0][1],
         adetailer=True,
     )
-    window.calls = calls  # type: ignore[attr-defined]
-    yield window
+    panel = (
+        window.panel
+    )  # N6: the builder is a panel the dialog hosts (and the Generate tab embeds)
+    panel.calls = calls  # type: ignore[attr-defined]
+    yield panel
     window.destroy()
 
 
@@ -166,10 +169,11 @@ def test_the_pipeline_tab_button_opens_the_dialog_seeded_from_the_sidebar(monkey
     panel.batch_builder_button.invoke()
     (window,) = opened
     try:
-        assert window.selected_packs() == ["pack-beta"]
-        assert window.selected_models() == [MODELS[1][1]]
-        assert window.upscale_var.get() is True
-        window._plan()
+        builder = window.panel
+        assert builder.selected_packs() == ["pack-beta"]
+        assert builder.selected_models() == [MODELS[1][1]]
+        assert builder.upscale_var.get() is True
+        builder._plan()
         assert seen and seen[0][0] is controller and seen[0][1].pack_ids == ("pack-beta",)
     finally:
         window.destroy()
@@ -196,3 +200,69 @@ def test_saved_recipes_are_on_by_default_and_the_owner_can_turn_them_off(dialog)
     assert dialog.queue_button.instate(["disabled"])
     dialog._plan()
     assert dialog.calls.planned[-1].use_recipes is False
+
+
+# ------------------------------------------------------------------ N6: the same builder embedded as a panel
+
+
+def test_refreshed_sources_keep_the_operators_selection_and_stale_the_plan(dialog):  # type: ignore[no-untyped-def]
+    from src.gui.batch_builder_dialog import BatchSources
+
+    dialog._plan()
+    dialog.calls.plan_reply[0](_plan(dialog.calls.planned[0]))
+    assert dialog.queue_button.instate(["!disabled"])
+    dialog.set_sources(
+        BatchSources(
+            packs=("forests", "castles", "deserts"),
+            models=(*MODELS, ("Flux dev", "flux1-dev.safetensors")),
+            selected_packs=("deserts",),
+            selected_model="flux1-dev.safetensors",
+        )
+    )
+    assert dialog.selected_packs() == [
+        "castles"
+    ]  # the operator's pick survives, the card's is not forced
+    assert dialog.selected_models() == [MODELS[0][1]]
+    assert dialog.plan is None and dialog.queue_button.instate(["disabled"])
+    assert dialog.model_list.size() == 3
+
+
+def test_an_empty_builder_takes_the_pipeline_selection_on_refresh(tk_root):  # type: ignore[no-untyped-def]
+    from src.gui.batch_builder_dialog import BatchBuilderPanel, BatchSources
+
+    calls = Calls()
+    panel = BatchBuilderPanel(
+        tk_root, packs=[], models=[], plan_batch=calls.plan, queue_batch=calls.queue
+    )
+    try:
+        assert panel.cancel_button is None  # embedded: no Close button
+        panel.set_sources(
+            BatchSources(
+                packs=("castles", "portraits"),
+                models=tuple(MODELS),
+                selected_packs=("portraits",),
+                selected_model=MODELS[1][1],
+                upscale=True,
+            )
+        )
+        assert panel.selected_packs() == ["portraits"]
+        assert panel.selected_models() == [MODELS[1][1]]
+        assert panel.upscale_var.get() is True
+    finally:
+        panel.destroy()
+
+
+def test_batch_callbacks_report_an_unconnected_controller_instead_of_raising() -> None:
+    from src.gui.batch_builder_dialog import batch_callbacks
+
+    plan_batch, queue_batch = batch_callbacks(lambda: None)
+    errors: list[Exception] = []
+    plan_batch(
+        BatchRequest(name="n", pack_ids=("a",), models=("m",)), lambda _plan: None, errors.append
+    )
+    queue_batch(
+        _plan(BatchRequest(name="n", pack_ids=("a",), models=("m",))),
+        lambda _n: None,
+        errors.append,
+    )
+    assert len(errors) == 2 and all("not connected" in str(error) for error in errors)

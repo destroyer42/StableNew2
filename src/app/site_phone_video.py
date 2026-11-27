@@ -9,6 +9,8 @@ from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from PIL import Image
+
 from src.app.site_media_files import SiteOutputError, inside
 from src.app.site_output_catalog import SiteOutputCatalog
 from src.app.site_phone_admission import PhonePreviewInput
@@ -81,6 +83,96 @@ def _unlinked_destination(root: Path, path: Path) -> None:
         return
 
 
+def _phone_specs(registry: DefaultWorkflowRegistryPort) -> dict[tuple[str, str], WorkflowSpec]:
+    """The Comfy workflows a phone can fill: only the bounded phone inputs, with source preparation and frames."""
+
+    return {
+        spec.registry_key: spec
+        for spec in registry.list_specs_for_backend("comfy")
+        if set(spec.required_input_names) <= _PHONE_INPUTS
+        and _PHONE_INPUTS | {"negative_prompt"} <= set(spec.declared_input_names)
+        and spec.backend_defaults.get("source_preparation")
+        and frame_count_policy(spec) is not None
+    }
+
+
+def make_video_spec(specs: dict[tuple[str, str], WorkflowSpec]) -> WorkflowSpec | None:
+    """The recommended Make Video workflow (the approved ``make_video_default``, today Wan2.2 I2V-A14B 4-step)."""
+
+    return next(
+        (
+            spec
+            for spec in latest_spec_per_workflow(list(specs.values()))
+            if not spec.is_experimental and spec.backend_defaults.get("make_video_default")
+        ),
+        None,
+    )
+
+
+def gateway_make_video(
+    root: Path,
+    path: Path,
+    digest: str,
+    prompt: str,
+    seed: int,
+    *,
+    registry: DefaultWorkflowRegistryPort | None = None,
+) -> tuple[WorkflowSpec, PhonePreviewInput]:
+    """RG-140 slice 2: the desktop's Make Video hand-off, compiled without the Video Workflow tab.
+
+    The image at ``path`` (already re-hashed as ``digest``) is the source of the recommended approved workflow, at its
+    default frame count and default negative prompt, with ``prompt`` and ``seed``. The prepared source is frozen under
+    ``root`` exactly as the desktop does; nothing is queued here. Refusals are closed ``SiteOutputError`` codes.
+    """
+
+    registry = registry or DefaultWorkflowRegistryPort()
+    specs = _phone_specs(registry)
+    spec = make_video_spec(specs)
+    if spec is None:
+        raise SiteOutputError("video_unavailable")
+    frames = frame_count_policy(spec)
+    assert frames is not None
+    form = {
+        "workflow_id": spec.workflow_id,
+        "workflow_version": spec.workflow_version,
+        "experimental_opt_in": False,
+        "frame_count": frames["default"],
+        # N1: a phone Queue records its accepted warnings as accepted on the phone.
+        WARNING_SURFACE_FIELD: SURFACE_PHONE,
+        "prompt": prompt,
+        "negative_prompt": "",
+        "seed": seed,
+    }
+    builder = VideoWorkflowNjrBuilder(
+        workflow_registry=registry, output_dir_provider=lambda: str(root)
+    )
+    try:
+        with Image.open(path) as image:
+            width, height = image.size
+        # The native preparer applies EXIF before choosing a target: guard both axis orders against links.
+        for dimensions in ((width, height), (height, width)):
+            _orientation, target, _rule = resolve_declared_target(
+                spec.backend_defaults["source_preparation"], *dimensions
+            )
+            _unlinked_destination(root, prepared_source_destination(root, digest, target))
+        frozen = builder.freeze_inputs(path, form)
+        if frozen.source_sha256 != digest:
+            raise SiteOutputError("source_changed")
+        inside(root, Path(frozen.prepared_source_path))
+        built = builder.build_job(form, frozen, lineage={"source_artifact_id": f"sha256:{digest}"})
+    except SiteOutputError:
+        raise
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise SiteOutputError("video_preview_failed") from exc
+
+    def require_current() -> None:
+        inside(root, Path(frozen.source_image_path))
+        inside(root, Path(frozen.prepared_source_path))
+        builder.verify_unchanged(frozen)
+
+    return spec, PhonePreviewInput(spec.display_name, (built.njr,), require_current)
+
+
 class PhoneVideo:
     def __init__(
         self, jobs: JobService, *, registry: DefaultWorkflowRegistryPort | None = None
@@ -89,25 +181,11 @@ class PhoneVideo:
         self._registry = registry or DefaultWorkflowRegistryPort()
 
     def _supported(self) -> dict[tuple[str, str], WorkflowSpec]:
-        return {
-            spec.registry_key: spec
-            for spec in self._registry.list_specs_for_backend("comfy")
-            if set(spec.required_input_names) <= _PHONE_INPUTS
-            and _PHONE_INPUTS | {"negative_prompt"} <= set(spec.declared_input_names)
-            and spec.backend_defaults.get("source_preparation")
-            and frame_count_policy(spec) is not None
-        }
+        return _phone_specs(self._registry)
 
     def options(self) -> dict[str, Any]:
         specs = list(self._supported().values())
-        preferred = next(
-            (
-                spec
-                for spec in latest_spec_per_workflow(specs)
-                if not spec.is_experimental and spec.backend_defaults.get("make_video_default")
-            ),
-            None,
-        )
+        preferred = make_video_spec(self._supported())
         return {
             "workflows": [_public_workflow(spec) for spec in specs],
             "default": list(preferred.registry_key) if preferred else None,

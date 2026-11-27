@@ -14,6 +14,7 @@ from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
 from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_text_widget
+from src.gui.tooltip import attach_tooltip
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_motion_intent_v2 import MotionIntentPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
@@ -78,6 +79,19 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
     adv = tab.advanced_section.body
     tab._advanced_frame = adv
     configure_grid_columns(adv, tab._form_columns)
+    # N13 (beside the engine picker, under Advanced since V1-1): unrated speed arms and superseded arms are listed only when this is on.
+    tab.show_experimental_check = ttk.Checkbutton(
+        adv,
+        text="Show experimental",
+        variable=tab.show_experimental_var,
+        style="Dark.TCheckbutton",
+    )
+    tab.show_experimental_check.grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
+    attach_tooltip(
+        tab.show_experimental_check,
+        "Also list unrated speed arms and superseded engine arms (A14B CK attention and SVI, "
+        "HunyuanVideo 1.5). They stay experimental: Queue warns and records your opt-in.",
+    )
     tab.workflow_combo = cast(
         ttk.Combobox,
         tab._add_labeled_entry(
