@@ -330,4 +330,5 @@ while a request is pending or an update is in progress.
 **Rollout.** The changes are additive and `schema_version` is unchanged. An older PC refuses an `admin_request`
 (`invalid_record`). An older gateway answers 404 to `pc_status`, so the PC sends nothing and asks again after 10 minutes,
 and it refuses an offer with `admin` (the desktop's code then does not work). Install the gateway release first, then
-update the PC app.
+update the PC app. SAFE-UPDATE adds the `not_github_signed` and `github_unavailable` codes the same way: an older
+gateway rejects a status or receipt carrying them, so deploy the gateway before updating the PC.

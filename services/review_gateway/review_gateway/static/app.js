@@ -864,6 +864,11 @@ const UPDATE_REASONS = {
   target_moved: "origin/main moved since this screen; check again",
   already_current: "the PC is already up to date",
   not_fast_forward: "origin/main is not a fast-forward of the PC's main",
+  not_github_signed:
+    "the newest commit on main is not a merge GitHub signed, so the PC did not install it; " +
+    "merge the change through a pull request on GitHub, then check again",
+  github_unavailable:
+    "the PC could not ask GitHub whether it signed the new commit; nothing was changed, try again in a few minutes",
   environment_drift: "the update needs packages the PC does not have; nothing was installed",
   queue_unavailable: "the PC's queue could not be reached",
   busy_timeout: "the running job did not finish within an hour; the queue continues",

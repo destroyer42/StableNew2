@@ -83,6 +83,8 @@ UPDATE_REASONS = frozenset(
         "target_moved",
         "already_current",
         "not_fast_forward",
+        "not_github_signed",
+        "github_unavailable",
         "environment_drift",
         "queue_unavailable",
         "busy_timeout",
