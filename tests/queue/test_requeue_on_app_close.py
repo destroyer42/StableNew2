@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from src.controller.job_service import JobService
+from src.pipeline.replay_engine import ReplayEngine
 from src.queue.job_model import JobStatus, StageCheckpoint
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
@@ -224,3 +225,21 @@ def test_the_next_start_runs_the_interrupted_job_first(stack: Stack) -> None:
         runner.stop()
         service.stop()
         repository.close()
+
+
+def test_a_stage_that_returns_after_the_close_leaves_no_checkpoint(stack: Stack) -> None:
+    _run_first(stack)
+    live = stack.queue.get_job("A")
+    late: list = []
+
+    class LateRunner:
+        def run_njr(self, record, cancel_token=None, run_plan=None, checkpoint_callback=None):
+            late.append(checkpoint_callback)
+
+    ReplayEngine(LateRunner()).replay_njr(live._normalized_record, job=live)  # noqa: SLF001
+    _close_app(stack.service)
+    _settle(stack)
+
+    late[0]("txt2img", ["late.png"])
+
+    assert stack.repository.get_job_model("A").execution_metadata.stage_checkpoints == []

@@ -216,7 +216,7 @@ class ReplayEngine:
 
         checkpoint_callback = None
         if job is not None:
-            from src.queue.job_model import StageCheckpoint
+            from src.queue.job_model import JobStatus, StageCheckpoint
 
             def checkpoint_callback(
                 stage_name: str, output_paths: list[str], metadata: dict[str, Any] | None = None
@@ -224,6 +224,8 @@ class ReplayEngine:
                 execution_metadata = getattr(job, "execution_metadata", None)
                 if execution_metadata is None:
                     return
+                if getattr(job, "status", None) == JobStatus.QUEUED:
+                    return  # re-queued by an app close while this stage was still returning: it runs whole again
                 sanitized_paths = [str(path) for path in output_paths if path]
                 checkpoint = StageCheckpoint(
                     stage_name=str(stage_name),

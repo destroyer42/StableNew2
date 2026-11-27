@@ -2,7 +2,8 @@
 
 Every case submits through the normal GUI, lets the production queue and runner meet a deterministic failure injected
 at the loopback HTTP seam, and then verifies what the operator can see and what the repository recorded.  No case
-replays, restarts or adopts an external runtime, and none touches a completed artifact.
+restarts or adopts an external runtime or touches a completed artifact; only the job interrupted by closing the
+application runs again, once, on the next start.
 """
 
 from __future__ import annotations
@@ -384,7 +385,13 @@ def run_ops01(
     ]
     run.boot_app()
     d = run.driver
-    d.pump(12.0)
+    d.wait_until(  # the close re-queued the job; the next start runs it again (owner decision 2026-11-27)
+        lambda: all(r["status"] in TERMINAL for r in run.job_rows()),
+        timeout=run.config.run_timeout,
+        description="the re-queued job runs again after the restart",
+        evidence=lambda: [(r["job_id"], r["status"]) for r in run.job_rows()],
+    )
+    d.pump(1.5)  # a duplicate dispatch would show up here as an extra request
     reopened = {r["job_id"]: (r["status"], r["error_message"]) for r in run.job_rows()}
     ctx.outcomes["close_with_pending_work"]["after_reopen"] = [
         reopened.get(r["job_id"]) for r in inflight
@@ -406,15 +413,15 @@ def run_ops01(
     )
     run.check(
         "close",
-        "closed_job_recorded_cancelled",
-        pending["status_after_close"] == ["cancelled"],
+        "closed_job_requeued",
+        pending["status_after_close"] == ["queued"],
         f"{pending['status_after_close']}",
     )
     run.check(
         "reopen",
-        "not_replayed_after_reopen",
-        pending["posts_after_reopen"] == 1
-        and [s[0] for s in pending["after_reopen"]] == ["cancelled"],
+        "requeued_job_ran_once_after_reopen",
+        pending["posts_after_reopen"] == 2
+        and [s[0] for s in pending["after_reopen"]] == ["completed"],
         f"{pending}",
     )
 
