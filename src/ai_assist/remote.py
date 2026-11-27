@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import threading
@@ -20,6 +21,7 @@ from src.ai_assist.contracts import (
 )
 from src.ai_assist.framing import FramingError, build_json_schema, render_prompt
 from src.ai_assist.remote_preview import (
+    VISION_MODELS,
     DuplicateRemoteKeyError,
     RemoteApproval,
     RemoteSettings,
@@ -292,12 +294,20 @@ class RemoteAssist:
         retry: bool = False,
     ) -> RuntimeResult:
         started = time.monotonic()
+        if request.image_jpeg and identity.model not in VISION_MODELS:
+            return RuntimeResult(OutcomeCode.UNAVAILABLE, "image_model_unsupported")
+        pictures = (
+            {"images": [base64.b64encode(request.image_jpeg).decode("ascii")]}
+            if request.image_jpeg
+            else {}
+        )
         try:
             schema = build_json_schema(request)
             body = json.dumps(
                 {
                     "model": identity.model_reference,
                     "prompt": render_prompt(request, retry=retry),
+                    **pictures,
                     "format": schema,
                     "stream": False,
                     "think": False,

@@ -95,10 +95,22 @@ PHRASE = AssistRequest(
     phrase_text="at dusk",
     existing_slot_names=("location",),
 )
-REQUESTS = {r.kind: r for r in (REWRITE, TARGET, WORKFLOW, PLAN, VARIETY, PROPOSAL, PHRASE)}
+MOTION = AssistRequest(
+    request_id="s8",
+    kind=SuggestionKind.MOTION_PHRASE,
+    positive_text="a barn in a field",
+    image_jpeg=bytes.fromhex("ffd8") + b"test",
+)
+REQUESTS = {r.kind: r for r in (REWRITE, TARGET, WORKFLOW, PLAN, VARIETY, PROPOSAL, PHRASE, MOTION)}
 
 #: One document the validator accepts for each kind (``changes`` omitted: it is the only optional field).
 ACCEPTED: dict[SuggestionKind, dict[str, Any]] = {
+    SuggestionKind.MOTION_PHRASE: {
+        "schema": SUGGESTION_SCHEMA_ID,
+        "status": "ok",
+        "kind": "motion_phrase",
+        "phrase": "the camera pushes in slowly",
+    },
     SuggestionKind.PROMPT_REWRITE: {
         "schema": SUGGESTION_SCHEMA_ID,
         "status": "ok",
@@ -187,6 +199,7 @@ SCHEMA_STRICTER_THAN_VALIDATOR = {
     SuggestionKind.SLOT_VARIETY: set(),
     SuggestionKind.SLOT_PROPOSAL: set(),
     SuggestionKind.PHRASE_SLOT: set(),
+    SuggestionKind.MOTION_PHRASE: set(),
 }
 
 

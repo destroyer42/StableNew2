@@ -10,6 +10,7 @@ from typing import Any
 
 from src.ai_assist.contracts import (
     CHANGE_CODES,
+    MAX_MOTION_PHRASE_CHARS,
     MAX_PHRASE_SLOTS,
     MAX_PHRASE_VALUES,
     MAX_PLAN_STEPS,
@@ -67,6 +68,7 @@ class FramingError(ValueError):
 #: What the answer object holds, per kind. The frame offers no refusal shape (ASSIST-FIX): a model that will not help is
 #: still recognised by the validator (D5), but it is never invited to.
 _SUCCESS_PAYLOAD = {
+    SuggestionKind.MOTION_PHRASE: "Put the movement in phrase.",
     SuggestionKind.PROMPT_REWRITE: (
         "Write the revised prompts in positive and negative. If NEGATIVE_PROMPT is empty, return an empty negative. "
         "Only reproduce protected tokens that occur in the authored prompts."
@@ -93,6 +95,12 @@ _SUCCESS_PAYLOAD = {
 
 
 _INSTRUCTIONS = {
+    SuggestionKind.MOTION_PHRASE: (
+        "A short video will start from the attached picture. Suggest one phrase describing what moves: the subject's "
+        "movement and, if it helps, the camera's. Present tense, concrete and visible, fitting the picture and the "
+        "prompt. Do not describe appearance, clothing or style. One line of at most "
+        f"{MAX_MOTION_PHRASE_CHARS} characters, with no square or angle brackets."
+    ),
     SuggestionKind.PROMPT_REWRITE: (
         "Rewrite the positive and negative image prompts so they read more clearly for the stated target, keeping the "
         "author's meaning. Keep every <angle-bracket> token and every [[double-bracket]] marker exactly as written. "
@@ -491,6 +499,9 @@ def _answer_schema(request: AssistRequest) -> dict[str, Any]:
             },
         }
         required.append("phrase_slots")
+    elif request.kind is SuggestionKind.MOTION_PHRASE:
+        properties["phrase"] = {"type": "string", "maxLength": MAX_MOTION_PHRASE_CHARS}
+        required.append("phrase")
     else:
         properties["workflow"] = {"enum": list(request.allowed_workflows)}
         required.append("workflow")

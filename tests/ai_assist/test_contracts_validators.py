@@ -95,6 +95,8 @@ def test_suggestion_has_no_executable_field_and_diagnostics_hold_no_text() -> No
         "slot_values",
         "slot_proposals",
         "phrase_slots",
+        # ASSIST-FIX: text for the Video Workflow Motion field, applied only after the operator's press.
+        "motion_phrase",
     }
     # AI-213: a proposal names a new slot, its values and a closed-list index; display text only.
     from src.ai_assist.contracts import SlotProposal

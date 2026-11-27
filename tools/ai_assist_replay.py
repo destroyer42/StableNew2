@@ -40,6 +40,7 @@ from src.ai_assist.contracts import (
     OutcomeCode,
     SuggestionKind,
 )
+from src.ai_assist.image import prepare_image
 from src.ai_assist.manifests import load_model_registry, load_runtime_manifest
 from src.ai_assist.paths import events_path, resolve_ai_root
 from src.ai_assist.remote import RemoteAssist
@@ -386,6 +387,23 @@ def build_cases(
     return cases
 
 
+def motion_cases(images: Sequence[Path], repeats: int = 5) -> list[tuple[AssistRequest, Any]]:
+    """The new motion-phrase kind, which has no previous contract: ``repeats`` requests for each picture."""
+
+    cases: list[tuple[AssistRequest, Any]] = []
+    for path in images:
+        picture = prepare_image(path)
+        for number in range(repeats):
+            request = AssistRequest(
+                f"motion-{len(cases)}",
+                SuggestionKind.MOTION_PHRASE,
+                positive_text=_GOALS[number % len(_GOALS)],
+                image_jpeg=picture,
+            )
+            cases.append((request, None))
+    return cases
+
+
 def previous_prompt(prompt: str) -> str:
     """The frame as sent before ASSIST-FIX (``ai_assist.frame/1``): same text plus the offered refusal."""
 
@@ -470,6 +488,10 @@ def run_live(
         infrastructure_in_a_row = 0
         for number, (request, slots) in enumerate(cases, 1):
             kind = request.kind.value
+            if request.kind is SuggestionKind.MOTION_PHRASE:  # new kind: nothing to compare with
+                answer = service.run(request)
+                arms.setdefault("motion", []).append((kind, answer.code.value, answer.reason))
+                continue
             old = RemoteAssist(root, transport=previous_transport(request, transport))
             started = time.monotonic()
             sent = old.run(identity, request, AiCancelToken(), RunLimits(), Sampling())
@@ -519,6 +541,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     live.add_argument(
         "--packs", type=Path, required=True, help="folder of native PromptPacks (read only)"
     )
+    live.add_argument(
+        "--motion-image",
+        type=Path,
+        action="append",
+        default=[],
+        help="also ask for motion phrases from this picture (repeatable; the picture is sent to the worker)",
+    )
     live.add_argument("--seed", type=int, default=1)
     live.add_argument("--limit", type=int, help="at most this many cases of each kind")
     live.add_argument("--out", type=Path, help="also write the counts to this JSON file")
@@ -535,7 +564,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     mix = {kind: min(count, args.limit or count) for kind, count in LOGGED_MIX.items()}
-    cases = build_cases(args.packs, mix, seed=args.seed)
+    cases = build_cases(args.packs, mix, seed=args.seed) + motion_cases(args.motion_image)
     planned = dict(Counter(request.kind.value for request, _slots in cases))
     print(json.dumps({"cases": len(cases), "by_kind": planned, "arms": ["before", "after"]}))
     if not args.owner_approved:

@@ -106,3 +106,27 @@ def test_the_previous_prompt_matches_the_frame_before_this_change() -> None:
         "short refusal_reason.\n"
     ) in old
     assert old.endswith(framing.render_prompt(request).split(framing.BEGIN_MARKER)[1])
+
+
+def test_motion_cases_run_on_the_current_contract_only(tmp_path) -> None:
+    from PIL import Image
+
+    Image.new("RGB", (64, 64), (1, 2, 3)).save(tmp_path / "still.png")
+    cases = replay.motion_cases([tmp_path / "still.png"], repeats=2)
+    worker = replay._ScriptedWorker(IDENTITY)
+    worker.script = [
+        (
+            json.dumps(
+                {
+                    "schema": "ai_assist.suggestion/1",
+                    "status": "ok",
+                    "kind": "motion_phrase",
+                    "phrase": "slow pan",
+                }
+            ),
+            "stop",
+        )
+    ]
+    report = replay.run_live(cases, IDENTITY, transport=worker)
+    assert report["motion"]["outcomes"] == {"suggestion": 2}
+    assert report["before"]["requests"] == report["after"]["requests"] == 0

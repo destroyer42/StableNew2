@@ -388,6 +388,9 @@ class AiAssistService:
         def refuse(code: OutcomeCode, reason: str) -> AssistOutcome:
             return AssistOutcome(code=code, request_id=request.request_id, reason=reason)
 
+        if request.image_jpeg:
+            # The local runtime has no vision path (invariant 10); a picture only ever goes to the remote worker.
+            return refuse(OutcomeCode.UNAVAILABLE, "image_needs_remote")
         if not self._swept:
             # Once per service, before the first request: remove scratch directories (which hold prompt text) that a
             # hard kill or a locked file left behind. Age-gated, so another live request is never touched.
@@ -515,8 +518,7 @@ class AiAssistService:
             # malformed answer now keeps its bounded raw output in memory only (never recorded; see RuntimeDetail).
             detail = (
                 remote_output_detail(result.stdout, reason)
-                if result.stdout
-                and code in (OutcomeCode.REFUSED_BY_MODEL, OutcomeCode.MALFORMED)
+                if result.stdout and code in (OutcomeCode.REFUSED_BY_MODEL, OutcomeCode.MALFORMED)
                 else None
             )
             outcome = AssistOutcome(
