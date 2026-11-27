@@ -30,6 +30,9 @@
     },
     {
       "$ref": "#/$defs/pc_status"
+    },
+    {
+      "$ref": "#/$defs/item_withdrawal"
     }
   ],
   "$defs": {
@@ -71,6 +74,32 @@
         },
         "sha256": {
           "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "item_withdrawal": {
+      "description": "PC to gateway (PHONE-FAST): stop showing items published earlier that are not a job's output, such as video frames. Not a decision: an item with a decision or a waiting request is left alone, and nothing is sent to Immich. Sent only to a gateway that lists the item_withdraw feature.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "library_ids"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "item_withdrawal"
+        },
+        "library_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/library_id"
+          }
         }
       }
     },

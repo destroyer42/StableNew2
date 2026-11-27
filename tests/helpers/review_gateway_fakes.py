@@ -171,6 +171,8 @@ class FakeGateway:
         self.refuse_offers = False
         self.statuses: list[dict[str, Any]] = []  # LAUNCH-UPDATE-2 pc_status payloads, in order
         self.offers_pc_status = True  # False: an older gateway without the route (404)
+        self.withdrawn: list[str] = []  # PHONE-FAST library ids the PC asked to withdraw
+        self.refuse_withdrawals = False
 
     def request(
         self,
@@ -275,6 +277,13 @@ class FakeGateway:
             validate(status)
             self.statuses.append(status)
             return Response(200, b'{"status":"stored"}')
+        if route == "/sync/v1/withdrawals" and method == "POST":
+            withdrawal = json.loads(data or b"")
+            validate_def(withdrawal, "item_withdrawal")
+            if self.refuse_withdrawals:
+                return Response(422, b'{"error":"invalid_payload"}')
+            self.withdrawn.extend(withdrawal["library_ids"])
+            return Response(200, json.dumps({"withdrawn": len(withdrawal["library_ids"])}).encode())
         if route == "/sync/v1/immich-receipts" and method == "GET":
             page = self.immich_pages.get(query.get("cursor", [""])[0], self.immich_page)
             if page is None:
