@@ -214,6 +214,14 @@ PC's publish ledger (`item_sources`); until then they count as Other.
 - `GET /api/runs?source=<id>` lists one section's groups; `GET /api/runs/all:<id>` is its review stream.
 - Evaluation sittings are not a section. They belong to the phone's rating tab (RG-170).
 
+### 3.5 Viewing (PHONE-FAST, phone page only)
+
+- **Compare.** A rework and its original as side by side, flip, or a before/after slider (original left of the divider).
+  The choice is remembered on the phone.
+- **Scroll.** The home, section and run lists return to where they were left.
+- **Full resolution.** Double-tapping a picture loads the `original` variant with pinch zoom and pan; double-tapping
+  returns to fit, and from fit closes it. A single tap keeps its meaning after a short wait. Videos are unchanged.
+
 ## 4. Retention (D4)
 
 Hourly, and by `review-gateway-admin purge`. An item is purged only when it has no unanswered record and its latest

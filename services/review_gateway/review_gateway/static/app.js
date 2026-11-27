@@ -671,8 +671,8 @@ async function showHome(serial) {
 }
 
 async function showSection(name, serial) {
+  const clock = await api("/api/status").catch(() => null); // asked first: nothing arriving meanwhile counts as seen
   const { runs } = await api(`/api/runs?source=${encodeURIComponent(name)}`);
-  const clock = await api("/api/status").catch(() => null);
   if (serial !== renderSerial) return;
   section = name;
   if (clock) writeSetting(SEEN_KEY, { ...readSetting(SEEN_KEY, {}), [name]: clock.now });
@@ -760,6 +760,119 @@ async function showRun(runId, serial) {
   if (serial === renderSerial) renderGrid(runId);
 }
 
+// --- full resolution (PHONE-FAST) ---------------------------------------------------------------------------------
+// A double tap on a picture shows the original with pinch zoom and pan. A double tap returns to fit, and from fit
+// closes it. The rendition stays the default.
+
+const DOUBLE_TAP_MS = 300;
+const TAP_REACH = 40; // px between the two taps
+
+// Tell one tap from two on the same spot; the single tap waits to see whether a second one comes.
+function doubleTaps() {
+  let last = null;
+  return (x, y, single, double) => {
+    if (last && Math.hypot(x - last.x, y - last.y) < TAP_REACH) {
+      clearTimeout(last.timer);
+      last = null;
+      double();
+      return;
+    }
+    const timer = setTimeout(() => {
+      last = null;
+      single();
+    }, DOUBLE_TAP_MS);
+    last = { x, y, timer };
+  };
+}
+
+function closeViewer() {
+  document.querySelector(".viewer")?.remove();
+}
+
+function openViewer(item) {
+  closeViewer();
+  const image = el("img", { src: mediaUrl(item, "original"), alt: "Full resolution", draggable: "false" });
+  const status = el("p", { class: "viewer-status", role: "status", text: "Loading full resolution…" });
+  const close = el("button", { type: "button", class: "viewer-close", text: "Close", onclick: closeViewer });
+  const node = el("div", { class: "viewer", role: "dialog", "aria-modal": "true" }, [image, status, close]);
+  image.addEventListener("load", () => (status.hidden = true), { once: true });
+  image.addEventListener("error", () => (status.textContent = "Could not load the full-resolution image."), {
+    once: true,
+  });
+  attachZoom(node, image);
+  document.body.append(node);
+}
+
+function attachZoom(node, image) {
+  const view = { scale: 1, x: 0, y: 0 }; // the picture's zoom and its offset from the middle
+  const fingers = new Map();
+  const taps = doubleTaps();
+  let from = null; // the view and fingers a gesture started from
+  let moved = false;
+  const clamp = (value, limit) => Math.min(limit, Math.max(-limit, value));
+  const apply = () => {
+    const box = node.getBoundingClientRect();
+    const most = Math.max(4, (2 * (image.naturalWidth || 0)) / (image.offsetWidth || 1));
+    view.scale = Math.min(most, Math.max(1, view.scale));
+    view.x = clamp(view.x, Math.max(0, (image.offsetWidth * view.scale - box.width) / 2));
+    view.y = clamp(view.y, Math.max(0, (image.offsetHeight * view.scale - box.height) / 2));
+    image.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+  };
+  const gesture = () => {
+    const box = node.getBoundingClientRect();
+    const points = [...fingers.values()];
+    const [a, b = a] = points;
+    return {
+      x: (a.x + b.x) / 2 - box.left - box.width / 2,
+      y: (a.y + b.y) / 2 - box.top - box.height / 2,
+      spread: Math.hypot(a.x - b.x, a.y - b.y),
+    };
+  };
+  const begin = () => (from = fingers.size ? { scale: view.scale, left: view.x, top: view.y, at: gesture() } : null);
+  node.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".viewer-close")) return;
+    if (!fingers.size) moved = false;
+    fingers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
+    if (fingers.size > 1) moved = true;
+    node.setPointerCapture?.(event.pointerId);
+    begin();
+  });
+  node.addEventListener("pointermove", (event) => {
+    const finger = fingers.get(event.pointerId);
+    if (!finger || !from) return;
+    finger.x = event.clientX;
+    finger.y = event.clientY;
+    if (Math.hypot(finger.x - finger.startX, finger.y - finger.startY) >= 8) moved = true;
+    const now = gesture();
+    const factor = fingers.size > 1 && from.at.spread ? now.spread / from.at.spread : 1;
+    view.scale = from.scale * factor;
+    // The spot under the fingers stays under them.
+    view.x = now.x - ((from.at.x - from.left) / from.scale) * view.scale;
+    view.y = now.y - ((from.at.y - from.top) / from.scale) * view.scale;
+    apply();
+  });
+  const lift = (event) => {
+    if (!fingers.delete(event.pointerId)) return;
+    begin();
+    if (fingers.size || moved || event.type === "pointercancel") return;
+    taps(
+      event.clientX,
+      event.clientY,
+      () => {},
+      () => {
+        if (view.scale > 1.01) {
+          Object.assign(view, { scale: 1, x: 0, y: 0 });
+          apply();
+        } else {
+          closeViewer();
+        }
+      },
+    );
+  };
+  node.addEventListener("pointerup", lift);
+  node.addEventListener("pointercancel", lift);
+}
+
 // --- triage -------------------------------------------------------------------------------------------------------
 
 async function showTriage(runId, libraryId, serial) {
@@ -823,11 +936,13 @@ function infoPanel(item) {
     line("Seed", display.seed),
     line("Duration", item.duration_s ? `${item.duration_s} s` : ""),
     line("Prompt", display.prompt_excerpt),
+    item.kind === "image" ? el("p", { class: "muted", text: "Double-tap the picture for full resolution." }) : null,
     el("a", { href: mediaUrl(item, "original"), target: "_blank", rel: "noopener", text: "Open full size" }),
   ]);
 }
 
-function attachSwipe(stage, media, info) {
+function attachSwipe(stage, media, info, item) {
+  const taps = doubleTaps();
   const hint = el("div", { class: "hint", hidden: "" });
   stage.append(hint);
   let start = null;
@@ -870,7 +985,9 @@ function attachSwipe(stage, media, info) {
     const choice = choose(dx, dy);
     reset();
     if (choice) decide(choice === "delete" ? "delete" : "keep", choice === "favorite");
-    else if (Math.abs(dx) < 8 && Math.abs(dy) < 8 && media.tagName === "IMG") info.hidden = !info.hidden;
+    else if (Math.abs(dx) < 8 && Math.abs(dy) < 8 && media.tagName === "IMG") {
+      taps(event.clientX, event.clientY, () => (info.hidden = !info.hidden), () => openViewer(item));
+    }
   });
   stage.addEventListener("pointercancel", () => {
     pointers = Math.max(0, pointers - 1);
@@ -888,7 +1005,7 @@ function renderItem() {
   const media = mediaElement(item);
   const info = infoPanel(item);
   const stage = el("div", { class: "stage" }, [media, info]);
-  attachSwipe(stage, media, info);
+  attachSwipe(stage, media, info, item);
 
   const tags = el(
     "div",
@@ -1029,6 +1146,7 @@ function renderCompare(item) {
     const box = stage.getBoundingClientRect();
     return ((event.clientX - box.left) / (box.width || 1)) * 100;
   };
+  const taps = doubleTaps();
   let start = null;
   stage.addEventListener("pointerdown", (event) => {
     start = event.isPrimary ? { x: event.clientX, y: event.clientY, target: event.target } : null;
@@ -1047,14 +1165,21 @@ function renderCompare(item) {
     if (zoomed) return;
     const tap = Math.abs(dx) < 8 && Math.abs(dy) < 8;
     const swipe = Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy);
-    if (mode === "slider") {
-      if (tap) slide(across(event));
-    } else if (mode === "flip") {
-      if (tap || swipe) showSide(1 - shown);
-    } else if (tap && touched >= 0) {
-      shown = touched;
-      setMode("flip"); // one alone for a closer look; the saved view stays side by side
-    }
+    if (mode === "flip" && swipe) return showSide(1 - shown);
+    if (!tap) return;
+    const at = across(event);
+    // The picture under the finger.
+    const side = mode === "slider" ? Number(at >= split) : mode === "flip" ? shown : touched;
+    if (side < 0) return;
+    const single = () => {
+      if (mode === "slider") slide(at);
+      else if (mode === "flip") showSide(1 - shown);
+      else {
+        shown = side;
+        setMode("flip"); // one alone for a closer look; the saved view stays side by side
+      }
+    };
+    taps(event.clientX, event.clientY, single, () => openViewer(sides[side][1]));
   });
 
   const button = (className, text, onclick) =>
@@ -1702,6 +1827,7 @@ async function route() {
   savePlace();
   listed = null;
   triage = null;
+  closeViewer();
   closeSheet();
   try {
     if (page === "triage" && run) await showTriage(decodeURIComponent(run), libraryId, serial);
