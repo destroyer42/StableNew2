@@ -34,6 +34,7 @@ from src.ai_assist.remote import RemoteAssist, RemoteState
 from src.ai_assist.remote_preview import (
     REMOTE_DISCLOSURE,
     REMOTE_PREVIEW_LABEL,
+    UNCENSORED_MODEL,
     RemoteApproval,
     RemoteSettings,
 )
@@ -418,16 +419,36 @@ class AiAssistIntegration:
         with self._lock:
             self._dispatch = dispatch
 
+    def refusal_retry_model(self, outcome: AssistOutcome) -> RemoteApproval | None:
+        """The approved uncensored model to offer after another remote model refused; ``None`` otherwise."""
+
+        if (
+            outcome.code is not OutcomeCode.REFUSED_BY_MODEL
+            or outcome.details.get("provider") != "remote"
+            or outcome.details.get("model_name") == UNCENSORED_MODEL
+        ):
+            return None
+        settings = self._remote.settings()
+        if not settings.preferred:
+            return None
+        return next((a for a in settings.approvals if a.model == UNCENSORED_MODEL), None)
+
     def submit(
-        self, request: AssistRequest, on_done: Callable[[AssistOutcome], None]
+        self,
+        request: AssistRequest,
+        on_done: Callable[[AssistOutcome], None],
+        *,
+        one_off: RemoteApproval | None = None,
     ) -> Submission:
-        return self._submit(request, lambda outcome: on_done(outcome), None)
+        return self._submit(request, lambda outcome: on_done(outcome), None, one_off)
 
     def submit_plan(
         self,
         request: AssistRequest,
         judge: Callable[[AssistOutcome], _J],
         on_done: Callable[[AssistOutcome, _J | None], None],
+        *,
+        one_off: RemoteApproval | None = None,
     ) -> Submission:
         """Advisory planning (AI-210): the same single-flight request, plus a deterministic ``judge``.
 
@@ -436,13 +457,14 @@ class AiAssistIntegration:
         is advice: this method adds no path to Intent, the compiler, the queue or any job.
         """
 
-        return self._submit(request, on_done, judge)
+        return self._submit(request, on_done, judge, one_off)
 
     def _submit(
         self,
         request: AssistRequest,
         on_done: Callable[..., None],
         judge: Callable[[AssistOutcome], Any] | None,
+        one_off: RemoteApproval | None = None,
     ) -> Submission:
         with self._lock:
             if self._closed or self.service is None:
@@ -484,7 +506,11 @@ class AiAssistIntegration:
                 self._dispatch(deliver)
 
             try:
-                result = self.service.submit(request, completed)
+                result = (
+                    self.service.submit(request, completed)
+                    if one_off is None
+                    else self.service.submit(request, completed, one_off=one_off)
+                )
             except Exception:  # noqa: BLE001 - only fixed messages may cross into the GUI
                 result = Submission(
                     False,

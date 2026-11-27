@@ -130,6 +130,8 @@ def result_provider_label(outcome: AssistOutcome) -> str:
 
 
 def provider_outcome_text(outcome: AssistOutcome) -> str:
+    if outcome.reason == "retry_source_changed":
+        return "The prompt, matrix or goal changed since the refusal, so nothing was sent. Request it again."
     if outcome.reason == "remote_approval_required":
         return "Select an approved Ollama model in AI Preview."
     if outcome.reason == "remote_identity_mismatch":

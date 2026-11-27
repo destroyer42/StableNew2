@@ -10,6 +10,7 @@
   },
   "models": [
     {"name": "qwen3.5:4b-q4_K_M", "digest": "d8b0f5e9760cd1682034f292d7ef72ec46f432149be0df7574bf2d6e92e38c04"},
-    {"name": "lfm3:1.7b", "digest": "b36a103fe2f8fbe9df2ceec88b9cfdf842dc04aaabe2b4677d1acf8e16570b5d"}
+    {"name": "lfm3:1.7b", "digest": "b36a103fe2f8fbe9df2ceec88b9cfdf842dc04aaabe2b4677d1acf8e16570b5d"},
+    {"name": "huihui_ai/qwen3.5-abliterated:4B", "digest": "9acbd90c2645120ea1e4a5fe7ec9c4fe000e547ccebc8a24f950315d582003e6"}
   ]
 }

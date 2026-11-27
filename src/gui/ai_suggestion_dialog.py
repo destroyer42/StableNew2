@@ -87,6 +87,9 @@ APPLY_SELECTED_TEXT = "Apply selected"
 APPLY_ALL_TEXT = "Apply all offered"
 
 
+RETRY_UNCENSORED_TEXT = "Try with the uncensored model"
+
+
 class AiSuggestionDialog(tk.Toplevel):
     def __init__(
         self,
@@ -95,6 +98,7 @@ class AiSuggestionDialog(tk.Toplevel):
         on_request: Callable[[SuggestionKind], None],
         on_accept: Callable[[], None],
         on_cancel: Callable[[], None],
+        on_retry: Callable[[], None] | None = None,
         on_close: Callable[[], None],
         explanations: dict[SuggestionKind, str],
         trust_label: str = "",
@@ -167,6 +171,8 @@ class AiSuggestionDialog(tk.Toplevel):
             actions, text="Cancel Request", command=on_cancel, state="disabled"
         )
         self.cancel_button.pack(side="left")
+        # Shown only after a refusal, while an approved uncensored model can take that request.
+        self.retry_button = ttk.Button(actions, text=RETRY_UNCENSORED_TEXT, command=on_retry or "")
         ttk.Button(actions, text="Reject / Close", command=self.close).pack(side="right", padx=4)
         self.undo_button = ttk.Button(actions, text=UNDO_TEXT, command=self._undo, state="disabled")
         self.undo_button.pack(side="right", padx=4)
@@ -814,6 +820,7 @@ class AiSuggestionDialog(tk.Toplevel):
         self._clear_copy_buttons()
         self._clear_cards()
         self.clear_runtime_detail()
+        self.offer_retry(False)
         self.status(status)
         self._text(text)
         self._set_requests(True)
@@ -833,6 +840,12 @@ class AiSuggestionDialog(tk.Toplevel):
         for button in self._copy_buttons:
             button.destroy()
         self._copy_buttons.clear()
+
+    def offer_retry(self, offered: bool) -> None:
+        if offered:
+            self.retry_button.pack(side="left", padx=8)
+        else:
+            self.retry_button.pack_forget()
 
     def set_runtime_detail(self, text: str) -> None:
         """Hold raw runtime output for the operator. Nothing is shown until "Show runtime detail" is pressed."""
@@ -965,6 +978,7 @@ class AiSuggestionDialog(tk.Toplevel):
         self._clear_cards()
         self.check_cards.clear()
         self.clear_runtime_detail()
+        self.offer_retry(False)
         self.goal_var.set("")
         self.variety_goal_var.set("")
         self.variety_coverage_var.set("")

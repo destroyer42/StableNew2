@@ -130,3 +130,23 @@ def test_motion_cases_run_on_the_current_contract_only(tmp_path) -> None:
     report = replay.run_live(cases, IDENTITY, transport=worker)
     assert report["motion"]["outcomes"] == {"suggestion": 2}
     assert report["before"]["requests"] == report["after"]["requests"] == 0
+
+
+def test_a_candidate_model_is_measured_without_approving_it() -> None:
+    request = replay.synthetic_request(SuggestionKind.SLOT_VARIETY, "a")
+    candidate = "sha256-" + "1" * 64 + ":local"
+    sent: list[str] = []
+
+    def worker(path, body, token, timeout, limit):
+        if path == "/api/tags":
+            model = {"name": "other:4B", "digest": "1" * 64}
+            return 200, json.dumps({"models": [model]}).encode()
+        sent.append(json.loads(body)["model"])
+        answer, done = replay.fixture_answer(request, "suggestion", "")
+        return 200, json.dumps({"model": sent[-1], "response": answer, "done": done}).encode()
+
+    assert replay.candidate_reference("other:4b", worker) == candidate
+    send = replay.candidate_transport(IDENTITY.model_reference, candidate, worker)
+    body = json.dumps({"model": IDENTITY.model_reference}).encode()
+    status, raw = send("/api/generate", body, None, 1.0, 1000)
+    assert sent == [candidate] and json.loads(raw)["model"] == IDENTITY.model_reference
