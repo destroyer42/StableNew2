@@ -79,15 +79,13 @@ const Rating = (() => {
 
   // --- the tab on the inbox -------------------------------------------------------------------------------------
 
-  function tab() {
+  // The navigation hook: a "To rate" button with the open count as its badge, for any top-level bar to place beside
+  // its own entries. On a gateway without rating tasks it hides itself and calls ``unavailable``.
+  function entry(unavailable = () => {}) {
     const count = el("span", { class: "rt-count", hidden: "" });
     const open = el("button", { type: "button", onclick: () => (location.hash = "#/rate") }, [
       document.createTextNode("To rate"),
       count,
-    ]);
-    const nav = el("nav", { class: "rt-tabs" }, [
-      el("button", { type: "button", text: "Review", "aria-current": "page" }),
-      open,
     ]);
     api("/api/rating/tasks").then(
       ({ waiting }) => {
@@ -95,8 +93,20 @@ const Rating = (() => {
         count.hidden = waiting === 0;
       },
       (error) => {
-        if (error.status === 404) nav.hidden = true; // an older gateway
+        if (error.status !== 404) return;
+        open.hidden = true;
+        unavailable();
       },
+    );
+    return open;
+  }
+
+  // The inbox's bar while it has no sections of its own.
+  function tab() {
+    const nav = el("nav", { class: "rt-tabs" });
+    nav.append(
+      el("button", { type: "button", text: "Review", "aria-current": "page" }),
+      entry(() => (nav.hidden = true)),
     );
     return nav;
   }
@@ -528,5 +538,5 @@ const Rating = (() => {
 
   window.addEventListener("online", () => flush());
 
-  return { route, tab };
+  return { route, tab, entry };
 })();

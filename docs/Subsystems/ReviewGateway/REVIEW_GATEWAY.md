@@ -432,6 +432,11 @@ its state: to rate, partly done, waiting for the PC, done, or not accepted with 
 yes/no scores per clip, an N-way ordering, and a pick-one question. Answers are saved per item as they are given.
 **Submit** is explicit and final; the PC then writes the eval's own file and sends back the reveal.
 
+**Navigation hook** (`static/rating.js`). `Rating.entry(unavailable)` returns the "To rate" button with its open-count
+badge, for the top-level bar to place beside its own entries; on a gateway without rating tasks it hides itself and
+calls `unavailable`. `Rating.tab()` is the two-entry bar used while the inbox has no sections. The hash routes under
+`#/rate` belong to ratings. Evaluation runs appear only here, never as a Review section.
+
 **Register a sitting** on the PC (nothing else is needed on the gateway):
 
 ```powershell

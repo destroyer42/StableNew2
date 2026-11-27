@@ -1,5 +1,5 @@
 /* RG-170 "To rate": the inbox tabs and the rating view. Colours and the .run, .chip and .tools classes are app.css's. */
-.rt-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; margin-bottom: 0.75rem; }
+.rt-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: 0.4rem; margin-bottom: 0.75rem; }
 .rt-tabs button[aria-current="page"] { border-color: var(--accent); font-weight: 600; }
 .rt-count {
   display: inline-block;
