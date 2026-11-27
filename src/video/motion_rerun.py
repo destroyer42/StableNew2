@@ -140,6 +140,8 @@ class IntentSnapshot:
     driver: DriverBinding | None = None
     experimental_opt_in: bool = False
     has_provenance: bool = False
+    #: V1 end frame: the operator's own end image (the job runs a prepared copy of it).
+    end_image_path: str = ""
 
     @property
     def duration_seconds(self) -> float | None:
@@ -218,6 +220,11 @@ def intent_snapshot(njr: Any) -> IntentSnapshot:
         driver=driver,
         experimental_opt_in=execution.get("experimental_opt_in") is True,
         has_provenance=bool(record),
+        end_image_path=str(
+            _mapping(video_meta.get("end_frame")).get("original_path")
+            or stage.get("end_anchor_path")
+            or ""
+        ),
     )
 
 
@@ -510,6 +517,8 @@ def rerun_form_state(snapshot: IntentSnapshot) -> dict[str, Any]:
         form["operator_controls"] = dict(snapshot.operator_controls)
     if snapshot.driver is not None:
         form["pose_video_path"] = snapshot.driver.path
+    if snapshot.end_image_path:
+        form["end_anchor_path"] = snapshot.end_image_path
     return form
 
 

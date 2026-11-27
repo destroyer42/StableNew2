@@ -20,6 +20,10 @@ they are a guard, not a qualification.  StableNew binds the same inputs it binds
 prompt, negative prompt, seed, frozen geometry, frozen frame count) and nothing else: there is no LoRA
 control and no first/last-frame input.
 
+V1 end frame (2026-11-27, owner "Accept re-scope"): ``wan22_i2v_a14b_flf_v1`` 1.0.0 is the 1.0.0 graph with
+``WanImageToVideo`` replaced by the stock ``WanFirstLastFrameToVideo`` and a second ``LoadImage`` for the end image;
+experimental until rated.  Whether the installed 4-step I2V experts follow the end frame well is not measured.
+
 VID-A14B-SPEED-374 registers three EXPERIMENTAL speed arms of the same workflow id beside the approved 1.0.0, for an
 owner-rated eval (``docs/runbooks/examples/video_eval_a14b_speed_arms.suite.json``).  Each changes exactly one thing:
 
@@ -41,6 +45,7 @@ from dataclasses import replace
 from typing import Any
 
 from src.video.workflow_contracts import (
+    WORKFLOW_CAP_END_FRAME_VIDEO,
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
     WORKFLOW_GOVERNANCE_APPROVED,
     WORKFLOW_GOVERNANCE_EXPERIMENTAL,
@@ -86,6 +91,12 @@ WAN_A14B_ASPECT_TARGETS = (
     (768, 512),
     (832, 480),
 )
+# V1 end frame: the start-and-end-image workflow (its own id, as the picker offers one entry per id).
+WAN_A14B_FLF_ID = "wan22_i2v_a14b_flf_v1"
+WAN_A14B_FLF_VERSION = "1.0.0"
+WAN_A14B_FLF_NODE = "WanFirstLastFrameToVideo"
+#: Declared on the spec: the end image is prepared to the start image's own target size before admission.
+WAN_A14B_END_FRAME_PREPARATION = "match_source"
 # A crop above this share of the source is warned about, never done silently.  Declared beside the specs, not inside
 # them: published versions stay byte-identical.
 WAN_A14B_MAX_CROP_FRACTION = 0.05
@@ -95,6 +106,7 @@ WAN_A14B_CROP_WARNED_IDS = frozenset(
         "wan22_i2v_a14b_4step_ck_v1",
         "wan22_i2v_a14b_svi",
         WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_FLF_ID,
     }
 )
 # ComfyUI 0.38.0 comfy_extras/nodes_model_advanced.py: ModelAttentionBackend(model, attention).  The combo lists
@@ -741,11 +753,73 @@ def build_wan_a14b_full_picture_spec() -> WorkflowSpec:
     )
 
 
+def _flf_template() -> dict[str, Any]:
+    graph = _prompt_template()
+    graph["10"]["class_type"] = WAN_A14B_FLF_NODE
+    graph["10"]["inputs"]["end_image"] = ["19", 0]
+    graph["19"] = {"class_type": "LoadImage", "inputs": {"image": "{{input.end_anchor}}"}}
+    graph["16"]["inputs"]["filename_prefix"] = "stablenew/wan_a14b_flf_{{request.job_id}}"
+    return graph
+
+
+def build_wan_a14b_flf_spec() -> WorkflowSpec:
+    """Start image and end image on the approved A14B experts, through the stock first-and-last-frame node."""
+
+    base = build_wan_a14b_spec()
+    defaults = deepcopy(base.backend_defaults)
+    defaults["make_video_default"] = False
+    defaults["prompt_template"] = _flf_template()
+    defaults["end_frame_preparation"] = WAN_A14B_END_FRAME_PREPARATION
+    defaults["provenance"]["qualification"] = (
+        "NOT QUALIFIED: V1 end frame on the approved 1.0.0 files with the stock first-and-last-frame node; "
+        "offline tests only, no physical run"
+    )
+    fixed = defaults["operator_projection"]["fixed_settings"]
+    fixed["end_frame"] = (
+        f"stock {WAN_A14B_FLF_NODE}; the end image is prepared to the start image's size"
+    )
+    fixed["workflow_identity"] = (
+        "stock ComfyUI Wan2.2 I2V-A14B two-expert with first-and-last-frame conditioning"
+    )
+    fixed["hardware"] = (
+        "NOT QUALIFIED for this graph; readiness floors are 1.0.0's (321F) and unmeasured here"
+    )
+    stock_nodes = tuple(
+        WAN_A14B_FLF_NODE if node == "WanImageToVideo" else node for node in WAN_A14B_STOCK_NODES
+    )
+    end_binding = WorkflowInputBinding(
+        binding_name="end_anchor",
+        source_field="end_anchor_path",
+        backend_key="end_anchor",
+        description="End image the clip arrives at (required); prepared to the start image's size.",
+    )
+    return replace(
+        base,
+        workflow_id=WAN_A14B_FLF_ID,
+        workflow_version=WAN_A14B_FLF_VERSION,
+        display_name="Wan2.2 I2V-A14B start and end image (Experimental)",
+        description=(
+            "Experimental: the Wan2.2 I2V-A14B 4-step experts with the stock first-and-last-frame node. A start image, "
+            "an end image and a prompt give the clip between them. Native 16 fps."
+        ),
+        capability_tags=(*base.capability_tags, WORKFLOW_CAP_END_FRAME_VIDEO),
+        input_bindings=(*base.input_bindings, end_binding),
+        dependency_specs=_dependency_specs(WAN_A14B_MODEL_FILES, stock_nodes),
+        governance_state=WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+        pinned_revision=f"catalog:{WAN_A14B_FLF_ID}@{WAN_A14B_FLF_VERSION}",
+        governance_notes=(
+            "EXPERIMENTAL until rated, per-job opt-in only (V1 end frame). How closely the installed 4-step I2V "
+            "experts arrive at the end image, and the memory and time it takes, are unmeasured. NOT QUALIFIED."
+        ),
+        backend_defaults=defaults,
+    )
+
+
 def a14b_launch_attention(spec: WorkflowSpec) -> str | None:
     """Resolve launch mode from the immutable workflow identity, including old baseline jobs."""
 
     if getattr(spec, "workflow_version", None) == WAN_A14B_VERSION:
-        if spec.workflow_id in (WAN_A14B_ID, WAN_A14B_FULL_PICTURE_ID):
+        if spec.workflow_id in (WAN_A14B_ID, WAN_A14B_FULL_PICTURE_ID, WAN_A14B_FLF_ID):
             return "baseline"
         if spec.workflow_id == WAN_A14B_CK_LAUNCH_ID:
             return "ck"
@@ -761,6 +835,7 @@ def build_wan_a14b_specs() -> tuple[WorkflowSpec, ...]:
         build_wan_a14b_merged_spec(),
         build_wan_a14b_gpu_text_encoder_spec(),
         build_wan_a14b_full_picture_spec(),
+        build_wan_a14b_flf_spec(),
         build_wan_a14b_ck_launch_spec(),
     )
 
@@ -772,6 +847,10 @@ __all__ = [
     "WAN_A14B_CK_LAUNCH_ID",
     "WAN_A14B_ASPECT_TARGETS",
     "WAN_A14B_CROP_WARNED_IDS",
+    "WAN_A14B_END_FRAME_PREPARATION",
+    "WAN_A14B_FLF_ID",
+    "WAN_A14B_FLF_NODE",
+    "WAN_A14B_FLF_VERSION",
     "WAN_A14B_FRAME_COUNT_POLICY",
     "WAN_A14B_FULL_PICTURE_ID",
     "WAN_A14B_MAX_CROP_FRACTION",

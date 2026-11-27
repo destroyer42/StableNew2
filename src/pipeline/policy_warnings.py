@@ -34,6 +34,8 @@ CODE_VIDEO_EXPERIMENTAL = "video_experimental_workflow"
 CODE_VIDEO_LICENCE_RESTRICTION = "video_licence_restriction"
 #: VID-FRAME: the video workflow's closest size cuts away more of the source picture than the workflow allows.
 CODE_VIDEO_SOURCE_CROPPED = "video_source_cropped"
+#: V1 end frame: the end image is cut to the start image's size and loses more than the workflow allows.
+CODE_VIDEO_END_FRAME_CROPPED = "video_end_frame_cropped"
 #: A checkpoint StableNew has no qualified profile for (for example a FLUX layout without a profile).
 CODE_IMAGE_MODEL_UNQUALIFIED = "image_model_unqualified"
 #: N1b: an SDXL-only feature on a checkpoint the registry could not classify (``src/image_backends/sdxl_target.py``).
