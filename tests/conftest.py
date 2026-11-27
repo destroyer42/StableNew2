@@ -217,6 +217,21 @@ def _isolate_process_global_runtime_state():
 
 
 @pytest.fixture(autouse=True)
+def _retire_the_shared_persistence_worker():
+    """The persistence worker is one per process and remembers every failed write.
+
+    Left in place, one test's fake data makes a later application shutdown report "not drained" and leave the job
+    repository open. Drain and drop it while this test's temporary directory still exists.
+    """
+
+    yield
+    module = sys.modules.get("src.services.persistence_worker")
+    if module is not None and module._global_worker is not None:
+        module.shutdown_persistence_worker(timeout=5.0)
+        module._global_worker = None  # also when it did not stop in time
+
+
+@pytest.fixture(autouse=True)
 def _pin_host_runtime_autostart_off(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic pytest never launches, adopts, or probes the owner's A1111/Comfy.
 

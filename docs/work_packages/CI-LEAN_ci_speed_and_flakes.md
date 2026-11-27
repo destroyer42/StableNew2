@@ -61,5 +61,10 @@ sharded census before and after for the host-independence claim; hosted CI (run 
 | 3 | `run_pr_gate.py --parity` and `tools/ci/affected_tests.py` | 69 of 87 PR-edited existing tests selected over 30 merges, about 170 s mean |
 | 4 | Five census shards, refreshed shard weights | predicted full run about 13 min against a 19.7 min median; hosted observation pending |
 
+Regrouping the shards exposed order and timing dependencies, repaired the same day: the suite now resets the
+registered WebUI process manager and retires the shared persistence worker after each test, and one queue-projection
+test waits for its background refresh. A new test file reshuffles the shards, so treat a failure that appears only
+after a regrouping as leftover state first.
+
 Contract for maintenance: `docs/Subsystems/Testing/TESTING_AND_CI.md` sections 4, 5, 10 and 11. Close this work
 package after the first hosted run confirms the timing.

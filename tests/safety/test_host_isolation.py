@@ -1,4 +1,4 @@
-"""The host-isolation guard: a live runtime or installed tool on this machine cannot change a test's verdict."""
+"""Test isolation: neither this machine's runtimes and tools nor an earlier test can change a test's verdict."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from src.api.webui_process_manager import (
     get_global_webui_process_manager,
 )
 from src.pipeline.video import resolve_ffmpeg_executable
+from src.services import persistence_worker
 from src.video.comfy_healthcheck import probe_comfy_endpoint
 from src.video.rife_runtime import find_rife_executable
 from tests.helpers import host_isolation
@@ -87,6 +88,22 @@ def test_a_webui_manager_a_test_leaves_registered() -> None:
 def test_does_not_reach_the_next_test() -> None:
     # PR #474: a leftover ``standard``-only manager changed the admission tests' verdict once shards regrouped.
     assert get_global_webui_process_manager() is None
+
+
+def test_a_failed_write_a_test_leaves_on_the_shared_persistence_worker() -> None:
+    """First half of another in-file pair."""
+
+    worker = persistence_worker.get_persistence_worker()
+    no_path = persistence_worker.PersistenceTask("manifest", {})  # so the write fails
+    assert worker.enqueue(no_path)
+    worker._queue.join()
+
+    assert worker.get_stats()["failed"] == 1
+
+
+def test_does_not_fail_a_later_shutdown() -> None:
+    # PR #474: an earlier test's failed write made a later application shutdown leave the repository open.
+    assert persistence_worker.shutdown_persistence_worker(timeout=5.0) is True
 
 
 def test_parity_mode_hides_the_tools_the_hosted_runner_does_not_have(
