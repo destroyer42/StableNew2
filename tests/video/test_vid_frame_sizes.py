@@ -1,4 +1,4 @@
-"""VID-FRAME: A14B 1.4.0 keeps the whole picture, and a crop is never silent."""
+"""VID-FRAME: A14B full-picture sizes keep the whole picture, and a crop is never silent."""
 
 from __future__ import annotations
 
@@ -16,12 +16,13 @@ from src.video.video_workflow_batch import BatchSource, VideoWorkflowBatchServic
 from src.video.video_workflow_intent import EXPERIMENTAL_OPT_IN_FIELD
 from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
 from src.video.workflow_catalog_wan_a14b import (
-    WAN_A14B_FULL_PICTURE_VERSION,
+    WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_ID,
     WAN_A14B_VERSION,
     a14b_launch_attention,
 )
-from src.video.workflow_registry import build_default_workflow_registry, latest_spec_per_workflow
+from src.video.workflow_picker import is_offered
+from src.video.workflow_registry import build_default_workflow_registry
 from src.video.workflow_source_preparation import (
     passthrough_declared_workflow_source,
     resolve_declared_target,
@@ -31,8 +32,17 @@ from src.video.workflow_warnings import source_crop_warning, source_crop_warning
 REGISTRY = build_default_workflow_registry()
 
 
-def _spec(version: str) -> Any:
-    return REGISTRY.get(WAN_A14B_ID, version, allow_experimental=True)
+FULL = (
+    WAN_A14B_FULL_PICTURE_ID  # its own workflow id; the other argument is the approved A14B version
+)
+
+
+def _ids(choice: str) -> tuple[str, str]:
+    return (FULL, WAN_A14B_VERSION) if choice == FULL else (WAN_A14B_ID, choice)
+
+
+def _spec(choice: str) -> Any:
+    return REGISTRY.get(*_ids(choice), allow_experimental=True)
 
 
 def _policy(version: str) -> dict[str, Any]:
@@ -51,13 +61,14 @@ def _builder(tmp_path: Path) -> VideoWorkflowNjrBuilder:
     )
 
 
-def _form(version: str) -> dict[str, Any]:
+def _form(choice: str) -> dict[str, Any]:
+    workflow_id, version = _ids(choice)
     return {
-        "workflow_id": WAN_A14B_ID,
+        "workflow_id": workflow_id,
         "workflow_version": version,
         "prompt": "the person waves",
         "seed": "7",
-        EXPERIMENTAL_OPT_IN_FIELD: version != WAN_A14B_VERSION,
+        EXPERIMENTAL_OPT_IN_FIELD: choice == FULL,
     }
 
 
@@ -74,14 +85,16 @@ def _target(version: str, width: int, height: int) -> tuple[int, int]:
         ((1024, 1024), (624, 624)),
         ((720, 1280), (480, 832)),
         ((1920, 1080), (832, 480)),
+        ((832, 1216), (512, 768)),
+        ((1216, 832), (768, 512)),
     ],
 )
 def test_full_picture_version_chooses_the_size_that_crops_least(source, expected) -> None:
-    assert _target(WAN_A14B_FULL_PICTURE_VERSION, *source) == expected
+    assert _target(WAN_A14B_FULL_PICTURE_ID, *source) == expected
 
 
 def test_every_declared_size_is_legal_and_no_larger_than_the_baseline() -> None:
-    for size in _policy(WAN_A14B_FULL_PICTURE_VERSION)["aspect_targets"]:
+    for size in _policy(WAN_A14B_FULL_PICTURE_ID)["aspect_targets"]:
         assert size["width"] % 16 == 0 and size["height"] % 16 == 0
         assert size["width"] * size["height"] <= 480 * 832
 
@@ -92,21 +105,22 @@ def test_the_approved_version_keeps_its_two_sizes() -> None:
 
 
 def test_full_picture_version_is_experimental_with_the_baseline_graph_and_launch() -> None:
-    base, full = _spec(WAN_A14B_VERSION), _spec(WAN_A14B_FULL_PICTURE_VERSION)
+    base, full = _spec(WAN_A14B_VERSION), _spec(WAN_A14B_FULL_PICTURE_ID)
 
     assert full.is_experimental and not full.backend_defaults["make_video_default"]
     assert full.backend_defaults["prompt_template"] == base.backend_defaults["prompt_template"]
     assert full.dependency_specs == base.dependency_specs
     assert a14b_launch_attention(full) == "baseline"
-    offered = [s for s in REGISTRY.list_offerable_specs("comfy") if s.workflow_id == WAN_A14B_ID]
-    assert latest_spec_per_workflow(offered)[0].workflow_version == WAN_A14B_VERSION
+    record = {"workflow_id": FULL, "governance_state": full.governance_state, "experimental": True}
+    assert not is_offered(record, show_experimental=False)
+    assert is_offered(record, show_experimental=True)
 
 
 def test_a_handoff_frame_of_any_declared_size_passes_through(tmp_path: Path) -> None:
     frame = _png(tmp_path / "frame.png", (544, 720))
 
     record = passthrough_declared_workflow_source(
-        source_path=frame, policy=_policy(WAN_A14B_FULL_PICTURE_VERSION)
+        source_path=frame, policy=_policy(WAN_A14B_FULL_PICTURE_ID)
     )
 
     assert record.target_dimensions == {"width": 544, "height": 720}
@@ -118,9 +132,10 @@ def test_a_large_crop_warns_with_why_and_fix_and_a_small_one_does_not() -> None:
     assert cropped is not None and cropped.code == CODE_VIDEO_SOURCE_CROPPED
     assert "23%" in cropped.title and "480x832" in cropped.why and cropped.fix
     assert source_crop_warning(_spec(WAN_A14B_VERSION), 720, 1280) is None
-    assert source_crop_warning(_spec(WAN_A14B_FULL_PICTURE_VERSION), 768, 1024) is None
-    # 2:3 fits no size within 5 %.
-    assert source_crop_warning(_spec(WAN_A14B_FULL_PICTURE_VERSION), 832, 1216) is not None
+    assert source_crop_warning(_spec(WAN_A14B_FULL_PICTURE_ID), 768, 1024) is None
+    assert source_crop_warning(_spec(WAN_A14B_FULL_PICTURE_ID), 832, 1216) is None
+    # A very tall source fits no size within 5 %.
+    assert source_crop_warning(_spec(WAN_A14B_FULL_PICTURE_ID), 500, 1500) is not None
 
 
 def test_warning_from_a_path_honours_exif_rotation_and_survives_a_bad_file(tmp_path: Path) -> None:
@@ -132,7 +147,7 @@ def test_warning_from_a_path_honours_exif_rotation_and_survives_a_bad_file(tmp_p
     broken = tmp_path / "broken.png"
     broken.write_bytes(b"not an image")
 
-    subject = f"{WAN_A14B_ID}@{WAN_A14B_VERSION}"
+    subject = f"{WAN_A14B_ID}@{WAN_A14B_VERSION}"  # the approved two sizes
     tall = _png(tmp_path / "tall.png", (768, 1024))
 
     assert source_crop_warning_for_path(policy, subject, str(tall)) is not None
@@ -160,7 +175,7 @@ def test_job_records_size_crop_fraction_and_the_accepted_warning(tmp_path: Path)
 def test_full_picture_job_of_a_3_4_source_records_no_crop_warning(tmp_path: Path) -> None:
     builder = _builder(tmp_path)
     source = _png(tmp_path / "portrait.png", (768, 1024))
-    form = _form(WAN_A14B_FULL_PICTURE_VERSION)
+    form = _form(WAN_A14B_FULL_PICTURE_ID)
 
     built = builder.build_job(form, builder.freeze_inputs(source, form))
 

@@ -130,13 +130,15 @@ Every MP4 written from frames goes through `VideoCreator.create_video_from_image
 | `wan_animate2_drive_i2v_v1` | 1.0.0, 1.1.0, 1.2.0 | experimental | Adds a driving video (the qualified mode). 1.1.0 binds the real `WanAnimate2ToVideo` controls (motion prompt, pose strength, pose window, reference strength). Requires `--disable-pinned-memory`. |
 | `hunyuan_video15_i2v_480p_8step_v1`, `hunyuan_video15_i2v_480p_12step_v1` | 1.0.0 each | experimental (VID-CAND-382), per-job opt-in, never the picker default | HunyuanVideo 1.5 480p I2V step-distilled FP8 on stock nodes (`src/video/workflow_catalog_hunyuan15.py`), two ids that differ only in the sampler step count (8 or 12): Qwen2.5-VL 7B and ByT5 glyph encoders through `DualCLIPLoader` (`hunyuan_video_15`), the HunyuanVideo 1.5 VAE, SigCLIP vision encoding of the source image, `HunyuanVideo15ImageToVideo`, one Euler/simple `KSampler` at CFG 1 with the model's own shift of 7.0, five pinned files with SHA-256 and `Comfy-Org/Hunyuan-Video-1.5@1405a2b7`, frames out at 24 fps, 17-121 frames (default 121), source-aware 480x848 / 848x480. The probe also requires the `hunyuan_video_15` recipe and the `clip_vision_output` input. All values are unmeasured and NOT QUALIFIED; the earlier HunyuanVideo NO-GO (PR-VID-160A) was for a different artifact. |
 
-**Frame sizes and crops (VID-FRAME).** `wan22_i2v_a14b_4step_v1` **1.4.0** (experimental, never run on the GPU) is the
-1.0.0 graph with `aspect_targets` 480x832, 544x720, 624x624, 720x544, 832x480: the size that crops the source least is
-chosen. An A14B crop above 5% (declared beside the specs) is an N1 warning (`video_source_cropped`) beside
-Queue, in the batch preview and in the job's accepted warnings, and `video_workflow.source_crop_fraction` records it.
+**Frame sizes and crops (VID-FRAME).** `wan22_i2v_a14b_4step_full_picture_v1` 1.0.0 (experimental, listed with Show
+experimental, never run on the GPU) is the A14B 1.0.0 graph with `aspect_targets` 480x832, 512x768, 544x720, 624x624,
+720x544, 768x512, 832x480: the size that crops the source least is chosen. An A14B crop above 5% (declared beside the
+specs) is an N1 warning (`video_source_cropped`) beside Queue, in the batch preview and in the job's accepted warnings,
+and `video_workflow.source_crop_fraction` records it.
 
 **Frame retention (VID-FRAME).** `src/video/frame_retention.py` removes a frames-out clip's PNGs a day after the clip
-exists (setting `video_frame_cleanup_enabled`, default on, Engine Settings; runs only while the queue is empty, five minutes after start and every six hours). It keeps
+exists (setting `video_frame_cleanup_enabled`, default on, Engine Settings; the first sweep waits for a one-time
+confirmation showing a dry run's count and size; passes run only while the queue is empty). It keeps
 the clip, every recorded output, the first and last frame, frames a cut manifest or Storyboard file names, and skips
 sequence runs, evaluations and the archive; `frames_removed.json` marks a swept run. Continue in Storyboard then decodes
 that clip, and the Movie Clips handoff uses the clip. Deletion cannot be undone.

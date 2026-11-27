@@ -55,6 +55,15 @@ def test_old_frames_go_and_the_clip_first_and_last_frame_stay(tmp_path: Path) ->
     assert _sweep(tmp_path).frames == 0  # a second sweep finds nothing
 
 
+def test_a_dry_run_counts_the_same_frames_and_touches_nothing(tmp_path: Path) -> None:
+    run = _run(tmp_path)
+
+    counted = _sweep(tmp_path, dry_run=True)
+
+    assert (counted.frames, counted.bytes, counted.runs) == (3, 9, 1)
+    assert len(_names(run)) == 5 and not frames_were_removed(run)
+
+
 def test_a_young_a_missing_or_an_empty_clip_keeps_every_frame(tmp_path: Path) -> None:
     young = _run(tmp_path, "young", age=NOW - 3600)
     gone = _run(tmp_path, "gone")

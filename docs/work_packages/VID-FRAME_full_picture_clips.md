@@ -12,28 +12,25 @@ controller grows. Validation: focused tests per commit, then `tests/video`, `tes
 Not in scope: new engine or model, 2:3 sizes, picker redesign (PRs #461 and #462 change the form and picker, so form
 edits here stay minimal).
 
-## a. Sizes: A14B 1.4.0 (experimental)
+## a. Sizes: A14B full picture (experimental)
 
-- New version `1.4.0` of `wan22_i2v_a14b_4step_v1`: the 1.0.0 graph and files, only `source_preparation` differs.
-  `make_video_default` False. `a14b_launch_attention` must return `baseline` for it, as for 1.0.0.
-- Policy gains optional `aspect_targets`: 480x832, 544x720, 624x624, 720x544, 832x480 (multiples of 16, at or just
-  under 399,360 pixels). The size that crops the source least is chosen. 768x1024 -> 544x720 (0.7 % crop; the exact
-  3:4 alternative 528x704 has 7 % fewer pixels). 1024x1024 -> 624x624 (no crop).
-- A14B workflows have a 5 % crop limit, declared beside the specs so published versions stay byte-identical. Above it, an N1 warning (`video_source_cropped`, why and fix) is
-  shown beside Queue, in the multi-image batch preview, and frozen in accepted warnings. It never refuses.
-- Provenance: `video_workflow.source_crop_fraction` (absent when nothing is cut); the chosen size is already `source_preparation.target_dimensions`.
-- Touch points: `workflow_source_preparation.resolve_declared_target`, `workflow_warnings`, `policy_warnings`,
-  `video_workflow_njr_builder`, `video_workflow_batch.assess` (its `warnings` list), `list_workflow_specs`,
-  `video_workflow_tab_frame_v2._experimental_warning_text` plus a source-change trace to `_refresh_queue_gate`.
-- Tests that list versions must change: `test_vid_a14b_374_speed_arms.py`, `test_pr_vid_gov_316_ti2v_governance.py`.
-- Add eval suite `docs/runbooks/examples/video_eval_a14b_full_picture.suite.json` (1.0.0 vs 1.4.0).
-- Reachability: the picker offers only the approved version of a workflow id, and phone video lists runnable
-  (approved) specs only, so until promotion 1.4.0 runs through the Video Eval panel.
+- `wan22_i2v_a14b_4step_full_picture_v1` 1.0.0: the A14B 1.0.0 graph and files, only `source_preparation` differs. It
+  is its own workflow id (planned as version 1.4.0) because the picker offers one entry per id; it is listed with **Show
+  experimental**. `make_video_default` False; launch profile `baseline`.
+- `aspect_targets`: 480x832, 512x768, 544x720, 624x624, 720x544, 768x512, 832x480 (multiples of 16, no more than
+  399,360 pixels). The size that crops the source least is chosen. 768x1024 -> 544x720 (0.7 % crop; the exact 3:4
+  alternative 528x704 has 7 % fewer pixels). 1024x1024 -> 624x624 (no crop). 832x1216 -> 512x768 (2.6 %).
+- A14B workflows have a 5 % crop limit, declared beside the specs so published versions stay byte-identical. Above it,
+  an N1 warning (`video_source_cropped`, why and fix) is shown beside Queue, in the multi-image batch preview, and
+  frozen in accepted warnings. It never refuses.
+- Provenance: `video_workflow.source_crop_fraction` (absent when nothing is cut); the chosen size is already
+  `source_preparation.target_dimensions`.
+- Eval suite: `docs/runbooks/examples/video_eval_a14b_full_picture.suite.json`.
 
-**GPU test needed before 1.4.0 becomes the default** (none run): for 544x720, 624x624 and 720x544 at 81 frames on the
-12 GB card, cold and warm: peak VRAM, host RAM, wall time, no out-of-memory; 121 frames (the declared maximum) for
-544x720; then an owner-rated motion and identity comparison against 1.0.0 on the same 768x1024 and 1024x1024 sources,
-prompts and seeds. Readiness floors stay 1.0.0's and are unmeasured at these sizes.
+**GPU test needed before it becomes the default** (none run): for 512x768, 544x720, 624x624, 720x544 and 768x512 at 81
+frames on the 12 GB card, cold and warm: peak VRAM, host RAM, wall time, no out-of-memory; 121 frames (the declared
+maximum) for 544x720; then an owner-rated motion and identity comparison against A14B 1.0.0 on the same 768x1024 and
+1024x1024 sources, prompts and seeds. Readiness floors stay 1.0.0's and are unmeasured at these sizes.
 
 ## b. Blind CK rating sitting (prepared, not rated)
 
@@ -65,11 +62,13 @@ whichever merges second must add one to the two counts in `test_pr_vid_gov_316_t
 
 ## d2. Frame retention
 
-Setting `video_frame_cleanup_enabled` (default on, per the owner decision), a checkbox in Engine Settings. The sweep
-runs only while no job is queued or running, off the GUI thread, five minutes after start and every six hours.
-A read-only dry run on 2026-11-27 found 100,268 removable frames (64.6 GB, 1,232 clip folders; 14 sequence runs
-skipped, 1,691 protected names) in about 3.5 minutes. Deletion cannot be undone; turning the setting off
-only stops further deletion.
+Setting `video_frame_cleanup_enabled` (default on, per the owner decision), a checkbox in Engine Settings. Deletion
+cannot be undone, so **the first sweep needs the operator**: a dry run counts the frames and size and a non-modal window
+shows them, with what is kept, and offers **Delete now**, **Not now** (asked again at the next start) and **Turn off**.
+Delete now records `video_frame_cleanup_confirmed`; later sweeps then run on schedule without asking. Passes run only
+while no job is queued or running, off the GUI thread, five minutes after start and every six hours. A read-only dry run
+on 2026-11-27 found 100,268 removable frames (64.6 GB, 1,232 clip folders; 14 sequence runs skipped, 1,691 protected
+names) in about 3.5 minutes.
 
 Delete only PNGs listed in a backend manifest's `frames_out` block, inside that run folder, under the output root, and
 only when that clip exists, is non-empty and is more than 24 hours old. Never delete:
@@ -90,8 +89,8 @@ Observation, not verified and not part of this package: the Output Library index
 `output_role`, so it treats them as primary and the phone publisher may be able to publish them. Retention here treats
 "authoritative" as what the job's artifact record names.
 
-## Owner questions
+## Owner questions (defaults built, 2026-11-27)
 
-1. 3:4 size: 544x720 (0.7 % crop, same pixel count) or 528x704 (no crop, 7 % fewer pixels)?
-2. Should 1.4.0 be selectable on the desktop before it is promoted?
-3. 2:3 sources (for example 832x1216) still crop about 9.5 % and will warn. Add a 2:3 size?
+1. 3:4 size: 544x720 (built; 0.7 % crop) or 528x704 (no crop, 7 % fewer pixels)?
+2. Selectable on the desktop before promotion? Built: yes, with Show experimental.
+3. A 2:3 size? Built: 512x768 and 768x512.

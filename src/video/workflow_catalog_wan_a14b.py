@@ -74,14 +74,28 @@ WAN_A14B_SPEED_ARM_VERSIONS = (
     WAN_A14B_GPU_TEXT_ENCODER_VERSION,
 )
 # VID-FRAME: 1.0.0's graph with frame sizes chosen from the source's shape ("whole source picture at same pixel
-# count").  Every size is a multiple of 16 and no larger than 480x832 (399,360 pixels).
-WAN_A14B_FULL_PICTURE_VERSION = "1.4.0"
-WAN_A14B_ASPECT_TARGETS = ((480, 832), (544, 720), (624, 624), (720, 544), (832, 480))
+# count").  Every size is a multiple of 16 and no larger than 480x832 (399,360 pixels).  Its own workflow id, like the
+# CK launch profile, because the picker offers one entry per id.
+WAN_A14B_FULL_PICTURE_ID = "wan22_i2v_a14b_4step_full_picture_v1"
+WAN_A14B_ASPECT_TARGETS = (
+    (480, 832),
+    (512, 768),
+    (544, 720),
+    (624, 624),
+    (720, 544),
+    (768, 512),
+    (832, 480),
+)
 # A crop above this share of the source is warned about, never done silently.  Declared beside the specs, not inside
 # them: published versions stay byte-identical.
 WAN_A14B_MAX_CROP_FRACTION = 0.05
 WAN_A14B_CROP_WARNED_IDS = frozenset(
-    {"wan22_i2v_a14b_4step_v1", "wan22_i2v_a14b_4step_ck_v1", "wan22_i2v_a14b_svi"}
+    {
+        "wan22_i2v_a14b_4step_v1",
+        "wan22_i2v_a14b_4step_ck_v1",
+        "wan22_i2v_a14b_svi",
+        WAN_A14B_FULL_PICTURE_ID,
+    }
 )
 # ComfyUI 0.38.0 comfy_extras/nodes_model_advanced.py: ModelAttentionBackend(model, attention).  The combo lists
 # "comfy kitchen attention" only when the build's Comfy Kitchen package has INT8 attention; validate_inputs accepts
@@ -694,7 +708,7 @@ def build_wan_a14b_ck_launch_spec() -> WorkflowSpec:
 
 
 def build_wan_a14b_full_picture_spec() -> WorkflowSpec:
-    """1.4.0: the 1.0.0 graph and files; only the frame sizes differ, chosen from the source's shape."""
+    """The 1.0.0 graph and files; only the frame sizes differ, chosen from the source's shape."""
 
     base = build_wan_a14b_spec()
     defaults = deepcopy(base.backend_defaults)
@@ -711,17 +725,17 @@ def build_wan_a14b_full_picture_spec() -> WorkflowSpec:
     fixed["hardware"] = "NOT QUALIFIED at these sizes; readiness floors are 1.0.0's (321F)"
     return replace(
         base,
-        workflow_version=WAN_A14B_FULL_PICTURE_VERSION,
+        workflow_id=WAN_A14B_FULL_PICTURE_ID,
         display_name="Wan2.2 I2V-A14B 4-step full picture (Experimental)",
         description=(
-            "The approved Wan2.2 I2V-A14B 4-step graph with portrait, 3:4, square, 4:3 and landscape sizes "
+            "The approved Wan2.2 I2V-A14B 4-step graph with portrait, 2:3, 3:4, square, 4:3, 3:2 and landscape sizes "
             "at about the same pixel count, so common source shapes are not cropped."
         ),
         governance_state=WORKFLOW_GOVERNANCE_EXPERIMENTAL,
-        pinned_revision=f"catalog:{WAN_A14B_ID}@{WAN_A14B_FULL_PICTURE_VERSION}",
+        pinned_revision=f"catalog:{WAN_A14B_FULL_PICTURE_ID}@{WAN_A14B_VERSION}",
         governance_notes=(
-            "EXPERIMENTAL, per-job opt-in only (VID-FRAME). Memory and motion quality at 544x720, 624x624 and "
-            "720x544 are unmeasured. NOT QUALIFIED."
+            "EXPERIMENTAL, per-job opt-in only (VID-FRAME). Memory and motion quality at 512x768, 544x720, 624x624, "
+            "720x544 and 768x512 are unmeasured. NOT QUALIFIED."
         ),
         backend_defaults=defaults,
     )
@@ -730,11 +744,10 @@ def build_wan_a14b_full_picture_spec() -> WorkflowSpec:
 def a14b_launch_attention(spec: WorkflowSpec) -> str | None:
     """Resolve launch mode from the immutable workflow identity, including old baseline jobs."""
 
-    version = getattr(spec, "workflow_version", None)
-    if version in (WAN_A14B_VERSION, WAN_A14B_FULL_PICTURE_VERSION):
-        if spec.workflow_id == WAN_A14B_ID:
+    if getattr(spec, "workflow_version", None) == WAN_A14B_VERSION:
+        if spec.workflow_id in (WAN_A14B_ID, WAN_A14B_FULL_PICTURE_ID):
             return "baseline"
-        if spec.workflow_id == WAN_A14B_CK_LAUNCH_ID and version == WAN_A14B_VERSION:
+        if spec.workflow_id == WAN_A14B_CK_LAUNCH_ID:
             return "ck"
     return None
 
@@ -760,7 +773,7 @@ __all__ = [
     "WAN_A14B_ASPECT_TARGETS",
     "WAN_A14B_CROP_WARNED_IDS",
     "WAN_A14B_FRAME_COUNT_POLICY",
-    "WAN_A14B_FULL_PICTURE_VERSION",
+    "WAN_A14B_FULL_PICTURE_ID",
     "WAN_A14B_MAX_CROP_FRACTION",
     "WAN_A14B_GPU_TEXT_ENCODER_VERSION",
     "WAN_A14B_ID",

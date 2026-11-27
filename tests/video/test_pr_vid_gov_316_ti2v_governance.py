@@ -77,7 +77,7 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
             ("wan22_i2v_a14b_4step_v1", "1.1.0"),
             ("wan22_i2v_a14b_4step_v1", "1.2.0"),
             ("wan22_i2v_a14b_4step_v1", "1.3.0"),
-            ("wan22_i2v_a14b_4step_v1", "1.4.0"),  # VID-FRAME full-picture sizes
+            ("wan22_i2v_a14b_4step_full_picture_v1", "1.0.0"),  # VID-FRAME full-picture sizes
             # VID-CAND-382 HunyuanVideo 1.5 eval candidates.
             ("hunyuan_video15_i2v_480p_8step_v1", "1.0.0"),
             ("hunyuan_video15_i2v_480p_12step_v1", "1.0.0"),

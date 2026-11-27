@@ -165,8 +165,11 @@ def sweep_retained_frames(
     now: float | None = None,
     min_age_seconds: float = MIN_AGE_SECONDS,
     should_stop: Callable[[], bool] = lambda: False,
+    dry_run: bool = False,
 ) -> FrameSweep:
-    """One pass over ``output_root``; ``should_stop`` is asked before each run folder."""
+    """One pass over ``output_root``; ``should_stop`` is asked before each run folder.
+
+    ``dry_run`` counts what a pass would remove and writes and removes nothing."""
 
     root = Path(output_root).expanduser().resolve()
     if not root.is_dir():
@@ -204,6 +207,11 @@ def sweep_retained_frames(
                     doomed[frame.name] = frame.stat().st_size
         if not doomed:
             continue
+        if dry_run:
+            runs += 1
+            removed += len(doomed)
+            size += sum(doomed.values())
+            continue
         try:
             # Written first: a reader that finds a frame gone must be able to tell why.
             atomic_write_json(
@@ -223,7 +231,7 @@ def sweep_retained_frames(
                 continue
             removed += 1
             size += bytes_
-    if removed:
+    if removed and not dry_run:
         logger.info(
             "Removed %d video frame PNGs (%.1f GB) from %d clip folders; clips were kept.",
             removed,

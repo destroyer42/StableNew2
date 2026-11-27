@@ -732,8 +732,13 @@ def main() -> None:
 
     # VID-FRAME: day-old video PNG frames are removed in the background while the queue is empty.
     from src.app.frame_retention_service import schedule_frame_retention
+    from src.gui.frame_cleanup_dialog import show_frame_cleanup_dialog
 
-    stop_frame_retention = schedule_frame_retention(root, app_controller)
+    stop_frame_retention = schedule_frame_retention(
+        root,
+        app_controller,
+        ask=lambda preview, choose: show_frame_cleanup_dialog(root, preview, choose),
+    )
 
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(

@@ -278,6 +278,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `dropdown_loader_v2.py`: Normalize WebUI resources and populate Pipeline dropdowns across the stage cards and sidebar
 - `engine_settings_dialog.py`: Modern engine settings dialog for GUI V2
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
+- `frame_cleanup_dialog.py`: The one-time confirmation before the first video frame cleanup (VID-FRAME)
 - `generation_profile_strip.py`: Compact generation-profile selector for the Base Generation panel (PR-IMG-PROFILE-630)
 - `gui_invoker.py`: Marshal worker-thread calls through a queue serviced by the Tk main loop
 - `guided_reprocess_dialog.py`: Editable guided draft using Review's established batch Preview and admission dialog
