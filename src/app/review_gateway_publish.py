@@ -112,6 +112,30 @@ def run_id_for(rel_path: str, created_at: datetime) -> str:
     return f"{created_at.astimezone(UTC):%Y%m%d}_000000_{top or 'output'}"
 
 
+#: Top output folder (casefolded) -> the phone's review section. A folder not listed is "other".
+_SECTION_OF_FOLDER = {
+    "pipeline": "pipeline",
+    "learning": "learning",
+    "reprocess": "reprocess",
+    "testing": "testing",
+    "movie_clips": "video",
+    "svd": "video",
+    "animatediff": "video",
+}
+
+
+def source_of(rel_path: str, kind: str) -> str:
+    """The phone's review section for an output: learning runs stay together, every other video is a movie clip,
+    and an image goes by its output route. Only this category id leaves the PC."""
+
+    parts = Path(rel_path).parts
+    folder = parts[0].casefold() if len(parts) > 1 else ""
+    section = _SECTION_OF_FOLDER.get(folder, "other")
+    if kind == "video" and section != "learning":
+        return "video"
+    return section
+
+
 def _display(item: LibraryItem) -> dict[str, Any]:
     prompt = " ".join(item.prompt.split())
     display: dict[str, Any] = {
@@ -499,6 +523,32 @@ class GatewayPublisher:
             cursor = int(rows[-1]["rowid"])
             self._ledger.set_meta({"sources_withdraw_cursor": str(cursor)})
 
+    def label_published(self, client: GatewayClient, cancel: Event) -> None:
+        """Once per ledger: tell the gateway the sections of items published before it kept them. Resumes like
+        ``withdraw_unpublishable``."""
+
+        if "item_source" not in client.features:
+            return
+        if self._ledger.get_meta("sections_labelled") == "done":
+            return
+        cursor = int(self._ledger.get_meta("sections_label_cursor") or 0)
+        for _ in range(WITHDRAW_PAGES):
+            if cancel.is_set():
+                return
+            rows = self._ledger.published_after(cursor, WITHDRAW_PAGE)
+            if not rows:
+                self._ledger.set_meta({"sections_labelled": "done"})
+                return
+            named = [
+                (str(row["library_id"]), source_of(str(row["rel_path"]), str(row["kind"])))
+                for row in rows
+            ]
+            if not client.label_items(named):
+                log.info("Review gateway did not accept the sections of earlier items")
+                return
+            cursor = int(rows[-1]["rowid"])
+            self._ledger.set_meta({"sections_label_cursor": str(cursor)})
+
     def publish(
         self,
         client: GatewayClient,
@@ -677,6 +727,7 @@ class GatewayPublisher:
                 batch=self._batch(client, path),
                 # Only for a gateway that takes it: an older one's schema refuses the field.
                 parent=ItemRef(*parent) if parent and "item_parent" in client.features else None,
+                source=source_of(item.path, item.kind) if "item_source" in client.features else "",
             )
             # The file must still be the bytes the manifest names when the gateway records it.
             self._library.path_for(item)
