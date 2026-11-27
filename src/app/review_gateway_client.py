@@ -396,7 +396,8 @@ class GatewayClient:
             or not isinstance(reply.get("submissions"), list)
         ):
             raise GatewayError("invalid_gateway_response")
-        return reply["submissions"]
+        submissions: list[Any] = reply["submissions"]
+        return submissions
 
     def acknowledge_rating(self, payload: Mapping[str, Any]) -> None:
         """Settled on 200; a 404 means the gateway no longer holds the submission."""
