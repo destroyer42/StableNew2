@@ -96,6 +96,7 @@ class Rig:
         extra: dict[str, bytes] | None = None,
         batch: dict | None = None,
         source: str | None = None,
+        made_from: dict | None = None,
     ) -> tuple[dict, dict[str, bytes]]:
         """Return ``(item_manifest, {digest: bytes})`` for a small synthetic item."""
 
@@ -131,6 +132,8 @@ class Rig:
             manifest["batch"] = batch
         if source is not None:
             manifest["source"] = source
+        if made_from is not None:
+            manifest["input"] = made_from
         return manifest, {sha(data): data for data in blobs.values()}
 
     def publish(self, name: str = "one", **options) -> dict[str, str]:

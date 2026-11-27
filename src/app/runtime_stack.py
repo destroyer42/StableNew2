@@ -229,6 +229,7 @@ def build_review_gateway_sync(
     """
 
     from src.app.review_gateway_apply import RecordApplier
+    from src.app.review_gateway_origin import job_input_reader
     from src.app.review_gateway_publish import (
         GatewayPublisher,
         job_batch_reader,
@@ -290,9 +291,13 @@ def build_review_gateway_sync(
         repository = repository_of(app)
         # N5: the inbox groups an image by the named batch its job was queued in (read-only snapshot lookup).
         batch_of = job_batch_reader(repository, batch_identity) if repository is not None else None
+        # PHONE-FAST: and shows an output beside the input image its job started from.
+        input_of = job_input_reader(repository) if repository is not None else None
         # NAME-INFO: and says how each output was made ("More info").
         info_of = job_info_reader(repository, batch_identity)
-        return GatewayPublisher(library, ledger, batch_of=batch_of, info_of=info_of)
+        return GatewayPublisher(
+            library, ledger, batch_of=batch_of, input_of=input_of, info_of=info_of
+        )
 
     extra = {"transport_factory": transport_factory} if transport_factory is not None else {}
     sync = Sync(

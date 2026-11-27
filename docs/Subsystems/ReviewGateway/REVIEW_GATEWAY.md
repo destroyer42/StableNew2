@@ -98,8 +98,9 @@ Rules:
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
     the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch`
     (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`, the withdrawals route (section 3.0).
-    `item_source`, the manifest's `source` and the item-sources route (section 3.4); `item_info`, the manifest's
-    `info` (section 3.6).
+    `item_source`, the manifest's `source` and the item-sources route (section 3.4);
+    `item_input`, the manifest's `input` and `input_missing` (section 3.6); `item_info`, the manifest's `info`
+    (section 3.7).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -227,7 +228,19 @@ PC's publish ledger (`item_sources`); until then they count as Other.
 - **Full resolution.** Double-tapping a picture loads the `original` variant with pinch zoom and pan; double-tapping
   returns to fit, and from fit closes it. A single tap keeps its meaning after a short wait. Videos are unchanged.
 
-### 3.6 More info (NAME-INFO)
+### 3.6 A desk reprocess beside its input (PHONE-FAST)
+
+For an image whose job recorded an input image (reprocess started at the desk), the PC reads that path from the job's
+immutable NJR snapshot, hashes the file and names the Output Library item with those bytes (`input`: ids only). A job
+with several inputs is matched through the run's stage manifests. If no library item can be named, the manifest says
+`input_missing`. Images published earlier are looked at once, a few at a time when the PC is idle.
+
+The phone shows the same compare views, with "Keep both" beside the two picks. Unlike a phone rework, the result is
+not regrouped: it stays in its own folder. A result whose input the gateway does not hold (never sent, deleted or
+already purged) is shown alone and says "original not found". Retention keeps an original while a result made from it
+is still to be judged.
+
+### 3.7 More info (NAME-INFO)
 
 Every item, and each side of a compare, has **More info**: the stage path (`txt2img → ADetailer`, `img2img`,
 `clip (A14B) from <source model>`, `storyboard take (...)`), the short and full model or workflow name, prompt pack,

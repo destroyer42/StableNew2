@@ -225,6 +225,7 @@ def test_health_names_the_contract_version_and_its_features(rig) -> None:
             "item_parent",
             "item_withdraw",
             "item_source",
+            "item_input",
             "rating_tasks",
             "item_info",
             "item_file_name",
