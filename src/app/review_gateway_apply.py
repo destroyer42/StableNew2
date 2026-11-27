@@ -22,6 +22,9 @@ services only:
   (``src/app/live_update_remote.py``) runs them through the LAUNCH-UPDATE-1 service, which also requires the
   PC-local "Allow remote update" switch. While an update is under way the record is left unanswered
   (``in_progress``) and asked again on later cycles, across the restart, until the update has a receipt.
+* A **deferred action** (RG-160, step ``queue``), made while this PC was away, is compiled and admitted when it
+  arrives. While the image backend's lists are not loaded, or the app is busy or closing, it is left unanswered
+  the same way: only a certain failure refuses it.
 
 Each outcome is written to the ledger before it is acknowledged, so a re-sent record gets the same answer and is never
 applied twice.
@@ -39,6 +42,7 @@ from src.app.review_gateway_protocol import (
     ARCHIVE_FAILED,
     DIGEST_MISMATCH,
     FAVORITE_WITH_DELETE,
+    IN_PROGRESS,
     INVALID_RECORD,
     NOT_GRANTED,
     REVOKED_DEVICE,
@@ -72,8 +76,6 @@ log = logging.getLogger(__name__)
 
 _HASH_LIMIT = max(VIDEO_LIMIT, 64 * 1024 * 1024)
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
-#: An answer that is not final yet: the record is neither recorded nor acknowledged and is asked again later.
-IN_PROGRESS = "in_progress"
 UPDATE_UNAVAILABLE = "update_unavailable"
 
 
@@ -230,9 +232,21 @@ class RecordApplier:
         return Applied(record.record_id, result.outcome, result.reason, dict(result.receipt))
 
     def _action(self, record: OutboxRecord) -> Applied:
+        request = record.action_request
+        assert request is not None
+        deferred = request.step == "queue"
+        if deferred and self._actions is not None:
+            # RG-160: a request admitted before this PC could answer is answered with its jobs, whatever has
+            # happened to the phone or the file since; nothing is admitted here.
+            done = self._actions.admitted_before(record)
+            if done is not None:
+                return Applied(record.record_id, done.outcome, done.reason, dict(done.receipt))
         self._authorize(record, "queue")
         if self._actions is None:
             raise _Refused(NOT_GRANTED)
+        # Before the file is hashed, so a waiting request costs almost nothing each cycle.
+        if deferred and not self._actions.ready(request.action):
+            return Applied(record.record_id, IN_PROGRESS)
         record, path, _rel_path = self._resolve(record)
         current = self._current_digest(path)
         if current is None:

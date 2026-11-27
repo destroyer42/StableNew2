@@ -240,6 +240,14 @@ class PhonePreviewHost:
 
         return self._capture(read)
 
+    def gateway_detectors(self) -> tuple[str, ...]:
+        """The ADetailer detectors the connected image backend lists (read on the Tk thread)."""
+
+        app = self._app
+        return self._capture(
+            lambda: tuple(getattr(app.app_state, "adetailer_detectors", None) or ())
+        )
+
     def image_baseline(self, path: Path) -> dict[str, Any]:
         """The recipe recorded in the image itself (model, prompt, settings), as Review reads it."""
 

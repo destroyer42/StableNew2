@@ -45,6 +45,7 @@ ROUTES = {
     "deploy_status": "/sync/v1/deploy-status",
     "pc_status": "/sync/v1/pc-status",
     "withdrawals": "/sync/v1/withdrawals",
+    "choice_catalog": "/sync/v1/choice-catalog",
 }
 #: The gateway's refusal codes for a deploy request (DEPLOY-2) that the operator tool explains.
 DEPLOY_REFUSALS = frozenset({"remote_deploy_disabled", "deploy_pending"})
@@ -267,6 +268,20 @@ class GatewayClient:
 
         response = self._post("withdrawals", item_withdrawal(library_ids))
         if response.status in (404, 422):
+            return False
+        self._require(response, 200, 201)
+        return True
+
+    def send_choice_catalog(self, payload: Mapping[str, Any]) -> bool:
+        """RG-160: what the phone may choose; ``False`` when the gateway did not accept it."""
+
+        response = self._call(
+            "PUT",
+            ROUTES["choice_catalog"],
+            body=encode_json(payload),
+            content_type="application/json",
+        )
+        if response.status in (404, 413, 422):
             return False
         self._require(response, 200, 201)
         return True

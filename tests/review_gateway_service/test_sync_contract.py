@@ -105,6 +105,15 @@ def sample(kind: str) -> dict:
             },
         },
         "item_withdrawal": {"library_ids": ["lib-00000001"]},
+        "choice_catalog": {
+            "published_at": "2026-11-25T12:00:00Z",
+            "models": [{"id": "0123456789abcdef", "label": "a.safetensors", "warnings": []}],
+            "warnings": [],
+            "ratios": [{"id": "1x1", "label": "Square 1:1"}],
+            "video": {"available": False},
+            "image_backend_ready": False,
+            "truncated": False,
+        },
     }
     return {"schema_version": SCHEMA_VERSION, "type": kind, **payloads[kind]}
 
@@ -120,6 +129,7 @@ KINDS = (
     "deploy_status",
     "pc_status",
     "item_withdrawal",
+    "choice_catalog",
 )
 
 
