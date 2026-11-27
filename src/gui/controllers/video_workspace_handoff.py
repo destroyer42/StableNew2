@@ -247,6 +247,19 @@ def route_job_to_storyboard(
     starter(str(job_id), status_message=status_message)
 
 
+def route_job_to_video_rerun(*, main_window: Any, job_id: str) -> None:
+    """Open a finished clip's job in the Video Workflow tab for Re-run with tweaks (intent only; nothing is queued)."""
+
+    workflow_tab = getattr(main_window, "video_workflow_tab", None)
+    if workflow_tab is None:
+        raise RuntimeError("Video Workflow tab is not available")
+    opener = getattr(workflow_tab, "open_rerun", None)
+    if not callable(opener):
+        raise RuntimeError("Video Workflow tab does not support Re-run with tweaks")
+    _select_tab(main_window, workflow_tab)
+    opener(str(job_id))
+
+
 __all__ = [
     "route_bundle_to_movie_clips",
     "route_bundle_to_video_workflow",
@@ -257,6 +270,7 @@ __all__ = [
     "route_images_to_review",
     "route_images_to_video_workflow",
     "route_job_to_storyboard",
+    "route_job_to_video_rerun",
     "route_video_to_motion_harvest",
     "show_queue_view",
 ]
