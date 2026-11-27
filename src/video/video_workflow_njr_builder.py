@@ -748,7 +748,9 @@ class VideoWorkflowNjrBuilder:
         # Optional RIFE smoothing of the finished clip (PR-VID-SMOOTH-302). Validated here, so a missing
         # runtime or an unsupported factor is refused at admission, and frozen as resolved values so the queued
         # job and any replay smooth the same way.
-        smoothing = normalize_interpolation_request(form_data.get("interpolation"))
+        # VID-FRAME: a sequence smooths its assembled cut (``cut_interpolation``), never a segment's clip.
+        interpolation_key = "interpolation" if sequence_plan is None else "cut_interpolation"
+        smoothing = normalize_interpolation_request(form_data.get(interpolation_key))
         frozen_interpolation: dict[str, Any] | None = None
         if smoothing is not None:
             resolved_executable = find_rife_executable(smoothing.executable_path)
@@ -762,7 +764,7 @@ class VideoWorkflowNjrBuilder:
                 else str(resolved_executable),
                 "model_dir": smoothing.model_dir,
             }
-            workflow_config["interpolation"] = frozen_interpolation
+            workflow_config[interpolation_key] = frozen_interpolation
         if sequence_plan is not None:
             # One NJR, N sequential segments (PR-VID-SEQ-330-CORE): the plan was frozen at admission and the
             # runner executes it inside this single job.
