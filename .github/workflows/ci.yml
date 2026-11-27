@@ -7,7 +7,7 @@ name: StableNew CI
 # classifies the base-to-head change set; this workflow only consumes its plan:
 #   docs-only         -> cheap checks, no Python environment, no tests
 #   executable change -> `required` (repository quality + cross-boundary contract gate), then ONE blocking full census
-#                        (three independent file-level shards plus the aggregate `full-suite` verdict)
+#                        (five independent file-level shards plus the aggregate `full-suite` verdict)
 # There is no per-lane routing: every active test file runs for every executable change.
 # Docs-only pushes to main use cheap checks; scheduled and manual runs always run the census.
 on:
@@ -177,7 +177,7 @@ jobs:
         path: ${{ runner.temp }}/plan.json
 
   # Blocking gate: the full configured suite (headless-safe GUI v2, fake-backend integration, tools, video).
-  # PR-DEVEX-CENSUS-140: the census runs as THREE independent file-level shards (separate runner, Python
+  # PR-DEVEX-CENSUS-140: the census runs as FIVE independent file-level shards (separate runner, Python
   # process, Xvfb and JUnit each) so its wall time is the slowest shard, not the whole suite. The partition is a
   # deterministic longest-processing-time-first assignment of whole files by recorded duration
   # (tools/ci/census_timings.json, tools/ci/census_weights.py) over the same active test files pytest collects
@@ -193,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]  # keep in step with --shards 3 below (a truth test enforces it)
+        shard: [0, 1, 2, 3, 4]  # keep in step with --shards 5 below (a truth test enforces it)
 
     steps:
     - name: Checkout repository
@@ -206,8 +206,12 @@ jobs:
 
     - name: Install system deps for Tk (required for GUI tests)
       run: |
-        sudo apt-get update
-        sudo apt-get install -y python3-tk xvfb
+        # A mirror outage left `python3-tk` with "no installation candidate"; refresh and retry, then fail.
+        for attempt in 1 2 3; do
+          if sudo apt-get update && sudo apt-get install -y python3-tk xvfb; then break; fi
+          if [ "$attempt" = 3 ]; then exit 1; fi
+          sleep 20
+        done
 
     - name: Install pip tools
       run: |
@@ -215,11 +219,11 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install -r requirements-dev.txt
 
-    - name: Run census shard ${{ matrix.shard }} of 3 (Xvfb)
+    - name: Run census shard ${{ matrix.shard }} of 5 (Xvfb)
       uses: GabrielBB/xvfb-action@86d97bde4a65fe9b290c0b3fb92c2c4ed0e5302d  # v1
       with:
         run: |
-          python tools/ci/census_shards.py run-shard --shards 3 --index ${{ matrix.shard }} --out-dir census-shard-results
+          python tools/ci/census_shards.py run-shard --shards 5 --index ${{ matrix.shard }} --out-dir census-shard-results
 
     - name: Upload shard results
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
@@ -253,7 +257,7 @@ jobs:
     - name: Verify census completeness and summarize
       run: |
         set -o pipefail
-        python tools/ci/census_shards.py verify --shards 3 --results-dir census-results --json census-summary.json | tee -a "$GITHUB_STEP_SUMMARY"
+        python tools/ci/census_shards.py verify --shards 5 --results-dir census-results --json census-summary.json | tee -a "$GITHUB_STEP_SUMMARY"
 
     - name: Upload full test results
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from src.pipeline.cli_njr_builder import build_cli_njr
+from src.queue import single_node_runner
 from src.queue.dispatch_evidence import NEVER_INVOKED
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
@@ -204,8 +205,10 @@ def test_an_idle_runner_does_not_poll(stack) -> None:
         runner.stop()
 
 
-def test_an_idle_runner_picks_up_a_new_job_immediately(stack) -> None:
+def test_an_idle_runner_picks_up_a_new_job_immediately(stack, monkeypatch) -> None:
     _repository, queue = stack
+    # A heartbeat far longer than any wait below: only the submit's own wake can start the job in time.
+    monkeypatch.setattr(single_node_runner, "IDLE_HEARTBEAT_SECONDS", 120.0)
     ran = threading.Event()
 
     def _run(job: Job) -> dict:
@@ -216,22 +219,20 @@ def test_an_idle_runner_picks_up_a_new_job_immediately(stack) -> None:
     runner.start()
     try:
         time.sleep(0.2)  # let it go idle
-        started = time.monotonic()
         queue.submit(_job("woken"))
-        assert ran.wait(3.0)
-        assert time.monotonic() - started < 0.5  # far below the 1 s heartbeat: the submit woke it
+        assert ran.wait(10.0)
     finally:
         runner.stop()
 
 
-def test_stop_wakes_an_idle_runner_without_waiting_out_the_heartbeat(stack) -> None:
+def test_stop_wakes_an_idle_runner_without_waiting_out_the_heartbeat(stack, monkeypatch) -> None:
     _repository, queue = stack
+    monkeypatch.setattr(single_node_runner, "IDLE_HEARTBEAT_SECONDS", 120.0)
     runner = SingleNodeJobRunner(queue, run_callable=lambda job: {}, poll_interval=0.01)
     runner.start()
     time.sleep(0.2)
-    started = time.monotonic()
-    assert runner.stop(timeout=5.0) is True
-    assert time.monotonic() - started < 0.5
+    # ``stop`` reports False when the worker is still asleep at the timeout.
+    assert runner.stop(timeout=10.0) is True
 
 
 def test_setting_the_stop_flag_directly_also_wakes_the_idle_wait(stack) -> None:
