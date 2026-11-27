@@ -16,12 +16,12 @@ from typing import Any
 from src.controller.app_controller_services.pack_model_batch_service import batch_identity
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui import theme_v2 as theme_mod
-from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
+from src.gui.view_contracts.edit_work_runner import EditWorkRunner, build_edit_work_runner
 from src.review.output_info import OutputDescriber, info_rows
 
 _VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".webm", ".mkv", ".gif"})
 
-Side = tuple[str, Path]
+Side = tuple[str, str | Path]
 
 
 def describe_sides(
@@ -31,7 +31,8 @@ def describe_sides(
 
     describer = OutputDescriber(repository, batch_identity=batch_identity)
     described = []
-    for heading, path in sides:
+    for heading, given in sides:
+        path = Path(given)
         try:
             made = datetime.fromtimestamp(path.stat().st_mtime, UTC)
         except OSError:
@@ -58,7 +59,7 @@ class OutputInfoDialog(tk.Toplevel):
         theme_mod.apply_toplevel_theme(self)
         self._app_state = app_state
         self._sides = tuple((heading or "This file", Path(path)) for heading, path in sides)
-        self._work = build_edit_work_runner(self)
+        self._work: EditWorkRunner | None = build_edit_work_runner(self)
         self.status_var = tk.StringVar(master=self, value="Reading…")
         body = ttk.Frame(self, style=theme_mod.SURFACE_FRAME_STYLE, padding=theme_mod.PADDING_MD)
         body.pack(fill=tk.BOTH, expand=True)
