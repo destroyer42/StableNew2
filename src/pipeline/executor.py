@@ -173,6 +173,8 @@ _MAX_STAGE_STEPS = 150
 # model loading to complete (~12-20s on observed hardware) before declaring failure.
 POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC = 30.0
 POST_RECOVERY_GRACE_WINDOW_SEC = 120.0
+#: How often a requested cancel repeats the WebUI interrupt while the cancelled request is still running.
+CANCEL_INTERRUPT_REPEAT_SEC = 1.0
 
 # Per-stage sampling/no-progress hard-stall overrides. ADetailer extension work
 # after nominal sampling completion is bounded by the client's transport timeout.
@@ -2632,6 +2634,8 @@ class Pipeline:
             )
             self._emit_status_update(status_data)
 
+        cancel_interrupt_time = float("-inf")
+
         while not stop_event.is_set():
             try:
                 cancel_requested = bool(
@@ -2640,7 +2644,10 @@ class Pipeline:
                     and cancel_token.is_cancelled()
                 )
                 if cancel_requested:
-                    if not interrupt_sent:
+                    # WebUI clears an interrupt that arrives before it has taken the request, so repeat it while
+                    # this stage's request is still open (the poll stops as soon as the request returns).
+                    if time.monotonic() - cancel_interrupt_time >= CANCEL_INTERRUPT_REPEAT_SEC:
+                        cancel_interrupt_time = time.monotonic()
                         self.client.interrupt()
                         interrupt_sent = True
                     stop_event.wait(poll_interval)
@@ -2937,6 +2944,8 @@ class Pipeline:
 
         if stage_label is None:
             stage_label = stage
+        # A cancel that arrived while the stage was preparing (model load, module switch) dispatches nothing.
+        self._ensure_not_cancelled(cancel_token, f"{stage_label} dispatch")
 
         stop_event = threading.Event()
         stall_detected_event = threading.Event()
