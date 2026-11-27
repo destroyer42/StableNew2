@@ -94,6 +94,7 @@ class Rig:
         run_id: str = "20261125_101500_pack",
         kind: str = "image",
         extra: dict[str, bytes] | None = None,
+        batch: dict | None = None,
     ) -> tuple[dict, dict[str, bytes]]:
         """Return ``(item_manifest, {digest: bytes})`` for a small synthetic item."""
 
@@ -125,6 +126,8 @@ class Rig:
         }
         if kind == "video":
             manifest["duration_s"] = 5.0
+        if batch is not None:
+            manifest["batch"] = batch
         return manifest, {sha(data): data for data in blobs.values()}
 
     def publish(self, name: str = "one", **options) -> dict[str, str]:

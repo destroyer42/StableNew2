@@ -23,6 +23,9 @@ from .web import EXCEPTION_HANDLERS, read_json, refusal
 
 PAGE_DEFAULT = 200
 PAGE_LIMIT = 500
+#: Optional parts of the v1 contract this gateway accepts, listed by health so a PC sends them only here (an older
+#: gateway's schema would refuse the whole payload). ``item_batch``: the manifest's ``batch`` (N5 inbox grouping).
+FEATURES = ("item_batch",)
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
 
@@ -67,7 +70,9 @@ def build_sync_app(
         return body
 
     async def health(_request: Request) -> Response:
-        return JSONResponse({"status": "ok", "schema_version": SCHEMA_VERSION})
+        return JSONResponse(
+            {"status": "ok", "schema_version": SCHEMA_VERSION, "features": list(FEATURES)}
+        )
 
     async def items(request: Request) -> Response:
         manifest = await payload(request, "item_manifest")
