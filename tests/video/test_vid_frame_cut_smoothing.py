@@ -9,6 +9,7 @@ import pytest
 from PIL import Image
 
 from src.video import video_interpolation
+from src.video.svd_errors import SVDPostprocessError
 from src.video.video_interpolation import (
     VideoInterpolationRequest,
     VideoInterpolationResult,
@@ -117,6 +118,18 @@ def test_a_sequence_smooths_only_its_assembled_cut(tmp_path, monkeypatch) -> Non
         Path(movie["output_path"]).name: "primary",
         Path(movie["native"]["output_path"]).name: "retained_source",
     }
+
+
+def test_a_failed_smoothing_keeps_the_finished_movie_and_says_why(tmp_path) -> None:
+    def broken(**_kwargs):
+        raise SVDPostprocessError("no model folder")
+
+    outcome = _executor(
+        tmp_path, _plan(2), Segments(tmp_path), smoothing={"enabled": True}, interpolate=broken
+    ).execute(source_image_path=_source(tmp_path))
+
+    assert Path(outcome.assembled_path).is_file()
+    assert "no model folder" in outcome.ledger.assembly["interpolation_error"]
 
 
 def test_a_sequence_without_smoothing_is_unchanged(tmp_path) -> None:

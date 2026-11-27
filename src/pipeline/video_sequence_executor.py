@@ -91,6 +91,7 @@ from src.video.storyboard_cut import (
     take_manifest,
     write_cut_manifest,
 )
+from src.video.svd_errors import SVDExportError, SVDPostprocessError
 from src.video.video_interpolation import VideoInterpolationRequest, interpolate_cut_frames
 
 logger = logging.getLogger(__name__)
@@ -680,17 +681,26 @@ class VideoSequenceExecutor:
 
         assert self._ledger.assembly is not None and self._smoothing is not None
         native = Path(str(self._ledger.assembly["output_path"]))
-        result = self._interpolate(
-            frame_paths=frames,
-            output_path=native.with_name(f"{native.stem}_smooth.mp4"),
-            source_fps=self._plan.fps,
-            request=VideoInterpolationRequest(
-                multiplier=self._smoothing.get("multiplier"),
-                executable_path=self._smoothing.get("executable_path"),
-                model_dir=self._smoothing.get("model_dir"),
-            ),
-            cancel_token=self._cancel_token,
-        )
+        try:
+            result = self._interpolate(
+                frame_paths=frames,
+                output_path=native.with_name(f"{native.stem}_smooth.mp4"),
+                source_fps=self._plan.fps,
+                request=VideoInterpolationRequest(
+                    multiplier=self._smoothing.get("multiplier"),
+                    executable_path=self._smoothing.get("executable_path"),
+                    model_dir=self._smoothing.get("model_dir"),
+                ),
+                cancel_token=self._cancel_token,
+            )
+        except (SVDPostprocessError, SVDExportError, OSError) as exc:
+            # Every segment is already generated: keep the native-rate movie and say why it is not smoothed.
+            logger.warning("The assembled movie was not smoothed: %s", exc)
+            self._ledger.assembly = {
+                **self._ledger.assembly,
+                "interpolation_error": f"{type(exc).__name__}: {exc}"[:500],
+            }
+            return
         smoothed = Path(result.video_path)
         for path, role in ((native, OUTPUT_ROLE_RETAINED_SOURCE), (smoothed, OUTPUT_ROLE_PRIMARY)):
             write_video_container_metadata(
