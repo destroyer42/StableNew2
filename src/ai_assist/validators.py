@@ -98,6 +98,24 @@ def looks_like_refusal(text: str) -> bool:
     return bool(_REFUSAL_OPENERS.match((text or "").strip()[:240]))
 
 
+def _refusal_in_content(suggestion: AssistSuggestion, request: AssistRequest) -> bool:
+    """Whether the model wrote a refusal into the payload itself, which the answer shape cannot rule out (D5).
+
+    Same conservative openers as :func:`looks_like_refusal`. A rewrite of a prompt that itself opens that way is not
+    called a refusal."""
+
+    texts: list[str] = []
+    if suggestion.positive_text and not looks_like_refusal(request.positive_text):
+        texts.append(suggestion.positive_text)
+    for entry in suggestion.slot_values:
+        texts.extend(entry.values)
+    for proposal in suggestion.slot_proposals:
+        texts.extend(proposal.values)
+    for phrase in suggestion.phrase_slots:
+        texts.extend(phrase.values)
+    return any(looks_like_refusal(text) for text in texts)
+
+
 def protected_tokens(text: str) -> Counter[str]:
     """The multiset of protected tokens in ``text`` (same rule as the deterministic adaptation engine)."""
 
@@ -430,6 +448,8 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
         slot_proposals=slot_proposals,
         phrase_slots=phrase_slots,
     )
+    if _refusal_in_content(suggestion, request):
+        return ValidationResult(OutcomeCode.REFUSED_BY_MODEL, "refusal_in_content")
     return ValidationResult(OutcomeCode.SUGGESTION, "", suggestion)
 
 

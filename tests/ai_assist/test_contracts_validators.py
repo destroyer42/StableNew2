@@ -263,10 +263,10 @@ def test_framing_is_deterministic_and_refuses_reserved_markers() -> None:
 
 
 def test_json_schema_pins_choices_to_the_closed_lists() -> None:
-    target_ok = framing.build_json_schema(TARGET)["oneOf"][0]
+    target_ok = framing.build_json_schema(TARGET)
     assert target_ok["properties"]["target"] == {"enum": ["sdxl", "klein"]}
     assert target_ok["additionalProperties"] is False
-    assert framing.build_json_schema(WORKFLOW)["oneOf"][0]["properties"]["workflow"]["enum"] == [
+    assert framing.build_json_schema(WORKFLOW)["properties"]["workflow"]["enum"] == [
         "wan22_ti2v_5b",
         "svd_xt",
     ]

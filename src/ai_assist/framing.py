@@ -6,7 +6,6 @@ delimiter is refused rather than rewritten, so an author cannot close the data b
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from src.ai_assist.contracts import (
@@ -18,7 +17,6 @@ from src.ai_assist.contracts import (
     MAX_PROPOSAL_VALUES,
     MAX_PROPOSALS,
     MAX_RATIONALE_CHARS,
-    MAX_REFUSAL_REASON_CHARS,
     MAX_STEP_COUNT,
     MAX_VARIETY_RATIONALE_CHARS,
     MAX_VARIETY_VALUE_CHARS,
@@ -53,11 +51,45 @@ PROPOSAL_RESERVED_MARKERS = (*VARIETY_RESERVED_MARKERS, _EXISTING_SLOT_MARKER, _
 _PHRASE_MARKER = "PHRASE:"
 #: Every marker the phrase-to-slot data block uses (AI-230g). Authored text containing any of them is refused.
 PHRASE_RESERVED_MARKERS = (*PROPOSAL_RESERVED_MARKERS, _PHRASE_MARKER)
-FRAME_VERSION = "ai_assist.frame/1"
+FRAME_VERSION = "ai_assist.frame/2"
+#: Added for the single retry after a malformed answer (ASSIST-FIX). Same request, tighter wording.
+RETRY_INSTRUCTION = (
+    "Your previous answer to this request was not one complete valid object of the required form. Answer again with one "
+    "compact JSON object only: no text before or after it, no code fence, no extra fields, every required field present, "
+    "identifiers copied exactly, and rationales of a few words."
+)
 
 
 class FramingError(ValueError):
     """The request cannot be framed without letting authored text impersonate the instructions."""
+
+
+#: What the answer object holds, per kind. The frame offers no refusal shape (ASSIST-FIX): a model that will not help is
+#: still recognised by the validator (D5), but it is never invited to.
+_SUCCESS_PAYLOAD = {
+    SuggestionKind.PROMPT_REWRITE: (
+        "Write the revised prompts in positive and negative. If NEGATIVE_PROMPT is empty, return an empty negative. "
+        "Only reproduce protected tokens that occur in the authored prompts."
+    ),
+    SuggestionKind.TARGET_FIT_ADVICE: "Set target to one exact identifier from Allowed targets.",
+    SuggestionKind.WORKFLOW_CHOICE: "Set workflow to one exact identifier from Allowed workflows.",
+    SuggestionKind.PLAN_PROPOSAL: (
+        "Put the ordered advice in steps. Copy identifiers exactly, including capitalization and punctuation. "
+        "For an image step, set target and use null for workflow. For a video step, set workflow and use null for target."
+    ),
+    SuggestionKind.SLOT_PROPOSAL: (
+        "Put the proposals in proposals. Each needs a new slot_name, its values, the insertion_point number copied from "
+        "the numbered positions listed in the data, and a rationale."
+    ),
+    SuggestionKind.PHRASE_SLOT: (
+        "Put the proposals in phrase_slots. Each needs a new slot_name, its alternative values for the selected phrase, "
+        "and a rationale."
+    ),
+    SuggestionKind.SLOT_VARIETY: (
+        "Put the proposals in slots. Copy each slot name exactly into slot and put the new phrases in values. "
+        "Follow the requested category for each value."
+    ),
+}
 
 
 _INSTRUCTIONS = {
@@ -292,8 +324,8 @@ def _selected_model_lines(request: AssistRequest) -> list[str]:
     ]
 
 
-def render_prompt(request: AssistRequest, *, response_instructions: str = "") -> str:
-    """The complete model input. Deterministic for a given request."""
+def render_prompt(request: AssistRequest, *, retry: bool = False) -> str:
+    """The complete model input. Deterministic for a given request; ``retry`` adds the tighter instruction."""
 
     _check_text("positive_text", request.positive_text)
     _check_text("negative_text", request.negative_text)
@@ -321,23 +353,52 @@ def render_prompt(request: AssistRequest, *, response_instructions: str = "") ->
         lines.append("Allowed stages: " + " | ".join(request.allowed_stages))
     if request.kind is SuggestionKind.PLAN_PROPOSAL and request.current_target:
         lines += _selected_model_lines(request)
-    lines += [
-        response_instructions
-        or (
-            "If you cannot or will not help, reply "
-            + json.dumps(
-                {"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "..."}
-            )
-            + "."
-        ),
-        "",
-        *_authored_block(request),
-    ]
+    lines.append(
+        'Set status to "ok" and use the schema id and kind given above. '
+        + _SUCCESS_PAYLOAD[request.kind]
+    )
+    if retry:
+        lines.append(RETRY_INSTRUCTION)
+    lines += ["", *_authored_block(request)]
     return "\n".join(lines)
 
 
-def _ok_branch(request: AssistRequest) -> dict[str, Any]:
-    """The branch of a normal answer: ``kind`` and the kind's payload are required, ``changes`` stays optional."""
+def _step_schema(request: AssistRequest) -> dict[str, Any]:
+    """One plan step. An image stage must name a model and the video stage a workflow, so the grammar cannot produce
+    the ``null`` choice the validator rejects. A branch with an empty closed list is left out (llama.cpp refuses one)."""
+
+    def step(stages: list[str], target: list[Any], workflow: list[Any]) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "stage": {"enum": stages},
+                "target": {"enum": target},
+                "workflow": {"enum": workflow},
+                "count": {"type": "integer", "minimum": 1, "maximum": MAX_STEP_COUNT},
+                "rationale": {"type": "string", "maxLength": MAX_RATIONALE_CHARS},
+            },
+            "required": ["stage", "target", "workflow", "count", "rationale"],
+            "additionalProperties": False,
+        }
+
+    images = [stage for stage in request.allowed_stages if stage != VIDEO_STAGE]
+    branches: list[dict[str, Any]] = []
+    if images and request.allowed_targets:
+        branches.append(step(images, list(request.allowed_targets), [None]))
+    if VIDEO_STAGE in request.allowed_stages and request.allowed_workflows:
+        branches.append(step([VIDEO_STAGE], [None], list(request.allowed_workflows)))
+    if not branches:
+        # No usable pair: keep the open shape and let the validator reject the answer.
+        return step(
+            list(request.allowed_stages),
+            [*request.allowed_targets, None],
+            [*request.allowed_workflows, None],
+        )
+    return {"oneOf": branches}
+
+
+def _answer_schema(request: AssistRequest) -> dict[str, Any]:
+    """The one answer shape: ``kind`` and the kind's payload are required, ``changes`` stays optional."""
 
     properties: dict[str, Any] = {
         "schema": {"const": SUGGESTION_SCHEMA_ID},
@@ -357,18 +418,7 @@ def _ok_branch(request: AssistRequest) -> dict[str, Any]:
             "type": "array",
             "minItems": 1,
             "maxItems": MAX_PLAN_STEPS,
-            "items": {
-                "type": "object",
-                "properties": {
-                    "stage": {"enum": list(request.allowed_stages)},
-                    "target": {"enum": [*request.allowed_targets, None]},
-                    "workflow": {"enum": [*request.allowed_workflows, None]},
-                    "count": {"type": "integer", "minimum": 1, "maximum": MAX_STEP_COUNT},
-                    "rationale": {"type": "string", "maxLength": MAX_RATIONALE_CHARS},
-                },
-                "required": ["stage", "target", "workflow", "count", "rationale"],
-                "additionalProperties": False,
-            },
+            "items": _step_schema(request),
         }
         required.append("steps")
     elif request.kind is SuggestionKind.SLOT_VARIETY:
@@ -457,31 +507,16 @@ def _ok_branch(request: AssistRequest) -> dict[str, Any]:
     }
 
 
-def _refused_branch() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "schema": {"const": SUGGESTION_SCHEMA_ID},
-            "status": {"const": "refused"},
-            "refusal_reason": {"type": "string", "maxLength": MAX_REFUSAL_REASON_CHARS},
-        },
-        "required": ["schema", "status", "refusal_reason"],
-        "additionalProperties": False,
-    }
-
-
 def build_json_schema(request: AssistRequest) -> dict[str, Any]:
     """JSON Schema (for the runtime's constrained decoding) of the one object this request may produce.
 
-    Two branches, told apart by ``status``: a complete answer (``kind`` and the kind's payload are required) or a refusal
-    (``refusal_reason`` is required). No third shape exists, so grammar-constrained decoding cannot stop at
-    ``{"schema": ..., "status": "ok"}`` (AI-202c). The root holds only ``oneOf``: both pinned llama.cpp tags convert a
-    ``oneOf``/``anyOf`` node to a plain alternation and ignore any sibling keyword, and they emit properties in the
-    order given, so ``schema``, ``status`` and ``kind`` come first. Only constructs proven supported in b11840 and b11960
-    are used (``docs/work_packages/AI-202_invocation_and_selector.md`` section 10).
+    One closed object. There is no refusal shape (ASSIST-FIX); ``kind`` and the kind's payload are required, so
+    grammar-constrained decoding cannot stop at ``{"schema": ..., "status": "ok"}`` (AI-202c). Properties are emitted in
+    the order given, so ``schema``, ``status`` and ``kind`` come first. Only constructs proven supported in b11840 and
+    b11960 are used (``docs/work_packages/AI-202_invocation_and_selector.md`` section 10).
     """
 
-    return {"oneOf": [_ok_branch(request), _refused_branch()]}
+    return _answer_schema(request)
 
 
 __all__ = [
@@ -489,6 +524,7 @@ __all__ = [
     "END_MARKER",
     "FRAME_VERSION",
     "PLAN_SELECTED_MODEL_RULE",
+    "RETRY_INSTRUCTION",
     "PHRASE_EXAMPLE",
     "PHRASE_RESERVED_MARKERS",
     "PROPOSAL_EXAMPLE",

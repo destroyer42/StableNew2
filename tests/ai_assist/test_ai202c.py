@@ -265,7 +265,8 @@ def test_each_validator_accepted_document_satisfies_the_schema(kind: SuggestionK
     assert conforms(ACCEPTED[kind], schema)
     with_changes = {**ACCEPTED[kind], "changes": sorted(CHANGE_CODES)[:2]}
     assert verdict(with_changes, kind) is OutcomeCode.SUGGESTION and conforms(with_changes, schema)
-    assert verdict(REFUSED, kind) is OutcomeCode.REFUSED_BY_MODEL and conforms(REFUSED, schema)
+    assert verdict(REFUSED, kind) is OutcomeCode.REFUSED_BY_MODEL
+    assert not conforms(REFUSED, schema)
 
 
 @pytest.mark.parametrize("kind", list(SuggestionKind))
@@ -273,7 +274,7 @@ def test_the_schema_requires_what_the_validator_requires(kind: SuggestionKind) -
     """Drift guard: the required fields are measured from the validator, not restated from the schema."""
 
     request = REQUESTS[kind]
-    ok_branch = framing.build_json_schema(request)["oneOf"][0]
+    ok_branch = framing.build_json_schema(request)
     schema_required = set(ok_branch["required"])
     validator_required = {
         key
@@ -308,13 +309,10 @@ def test_the_schema_requires_what_the_validator_requires(kind: SuggestionKind) -
 @pytest.mark.parametrize("kind", list(SuggestionKind))
 def test_the_schema_has_the_decided_shape(kind: SuggestionKind) -> None:
     schema = framing.build_json_schema(REQUESTS[kind])
-    assert set(schema) == {"oneOf"} and len(schema["oneOf"]) == 2
-    ok_branch, refused_branch = schema["oneOf"]
+    ok_branch = schema
+    assert ok_branch["type"] == "object"
     assert ok_branch["properties"]["status"] == {"const": "ok"}
-    assert refused_branch["properties"]["status"] == {"const": "refused"}
     assert list(ok_branch["properties"])[:3] == ["schema", "status", "kind"]
-    assert list(refused_branch["properties"]) == ["schema", "status", "refusal_reason"]
-    assert refused_branch["required"] == ["schema", "status", "refusal_reason"]
     assert ok_branch["required"][:3] == ["schema", "status", "kind"]
     assert "changes" in ok_branch["properties"] and "changes" not in ok_branch["required"]
     for node in schema_nodes(schema):
@@ -325,7 +323,7 @@ def test_the_schema_has_the_decided_shape(kind: SuggestionKind) -> None:
 
 def test_the_payload_requirements_are_per_kind() -> None:
     required = {
-        kind: framing.build_json_schema(REQUESTS[kind])["oneOf"][0]["required"] for kind in REQUESTS
+        kind: framing.build_json_schema(REQUESTS[kind])["required"] for kind in REQUESTS
     }
     assert required[SuggestionKind.PROMPT_REWRITE][3:] == ["positive", "negative"]
     assert required[SuggestionKind.TARGET_FIT_ADVICE][3:] == ["target"]
@@ -334,7 +332,7 @@ def test_the_payload_requirements_are_per_kind() -> None:
     assert required[SuggestionKind.SLOT_VARIETY][3:] == ["slots"]
     assert required[SuggestionKind.SLOT_PROPOSAL][3:] == ["proposals"]
     assert required[SuggestionKind.PHRASE_SLOT][3:] == ["phrase_slots"]
-    proposals = framing.build_json_schema(PROPOSAL)["oneOf"][0]["properties"]["proposals"]
+    proposals = framing.build_json_schema(PROPOSAL)["properties"]["proposals"]
     assert (
         proposals["minItems"] == 1 and proposals["items"]["properties"]["values"]["minItems"] == 3
     )
@@ -345,15 +343,15 @@ def test_the_payload_requirements_are_per_kind() -> None:
         "insertion_point",
         "rationale",
     ]
-    phrase = framing.build_json_schema(PHRASE)["oneOf"][0]["properties"]["phrase_slots"]
+    phrase = framing.build_json_schema(PHRASE)["properties"]["phrase_slots"]
     assert phrase["minItems"] == 1 and phrase["items"]["properties"]["values"]["minItems"] == 2
     assert phrase["items"]["properties"]["values"]["maxItems"] == 5
     assert phrase["items"]["required"] == ["slot_name", "values", "rationale"]
     assert "insertion_point" not in phrase["items"]["properties"]
-    slots = framing.build_json_schema(VARIETY)["oneOf"][0]["properties"]["slots"]
+    slots = framing.build_json_schema(VARIETY)["properties"]["slots"]
     assert slots["minItems"] == 1 and slots["items"]["properties"]["values"]["minItems"] == 1
     assert slots["items"]["required"] == ["slot", "values", "rationale"]
-    steps = framing.build_json_schema(PLAN)["oneOf"][0]["properties"]["steps"]
+    steps = framing.build_json_schema(PLAN)["properties"]["steps"]
     assert steps["minItems"] == 1 and steps["maxItems"] == MAX_PLAN_STEPS
 
 
@@ -399,7 +397,7 @@ def test_the_runtime_writes_the_schema_in_declared_order(installation: Install, 
     text = seen.get("schema_text")
     assert text is not None, "the fake child must record the schema file it was given"
     document = json.loads(text)
-    assert list(document["oneOf"][0]["properties"])[:3] == ["schema", "status", "kind"]
+    assert list(document["properties"])[:3] == ["schema", "status", "kind"]
 
 
 # -- the review dialog's runtime detail -----------------------------------------------------------------------------------

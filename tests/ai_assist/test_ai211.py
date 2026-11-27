@@ -150,7 +150,7 @@ def test_a_plan_prompt_carries_no_prompt_pack_or_matrix_text() -> None:
 _GOLDEN = {
     "rewrite": (
         AssistRequest("r1", SuggestionKind.PROMPT_REWRITE, "a barn", "blur", "sdxl_policy"),
-        "ab097cb3d8a17dc30b3d5d583f0b3972501a27ed9a610f937a99fbb58618cafa",
+        "a21d7b4477e507c687389d213d7b12563c8ff520801304f3d9dd414f0dee82ad",
         "79f54529802e",
     ),
     "target": (
@@ -162,14 +162,14 @@ _GOLDEN = {
             "sdxl_policy",
             allowed_targets=("m-a", "m-b"),
         ),
-        "6724e42ee195e374c1e8fa0bac7ea2e35de32bd24f89dbaf2e8b87a450e5ad4c",
+        "df9b7b25c6886da5f43525f1de05a450869ebe0b24275b93885732c61310ae13",
         "aa7ba66520d7",
     ),
     "workflow": (
         AssistRequest(
             "r3", SuggestionKind.WORKFLOW_CHOICE, "a barn", allowed_workflows=("wf-a", "wf-b")
         ),
-        "215110d3553696bd964e7b6cc2dcada85c6c4ebf38f3d63a2ed95f0d1e784a41",
+        "c0c84286f95d9f9540bff6a558fb57c316a7a5120f23b0cc996e121c3bbb558d",
         "5a7be92187a3",
     ),
     "plan_without_selection": (
@@ -181,7 +181,7 @@ _GOLDEN = {
             allowed_stages=("txt2img", "video"),
             goal_text="more variety",
         ),
-        "95b86b1a94ae294c2b73e9b81b6beec112292662cbb4fb4cfcbcedb2c23fad4a",
+        "4379967920330d43bbf92ab4c6c4b5edb8bae55c4cda5f1f01e3d7219d158ad5",
         "11c49e80d05d",
     ),
 }
