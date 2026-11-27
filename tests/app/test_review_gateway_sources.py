@@ -112,9 +112,7 @@ def test_an_unsmoothed_clip_is_never_published(env, monkeypatch, recorded):
     smooth = make_item(env, f"{FRAMES_RUN}/wan_rife.mp4", mime="video/mp4")
     source_path = absolute(env, FRAMES_RUN, "wan.mp4")
     smooth_path = absolute(env, FRAMES_RUN, "wan_rife.mp4")
-    payload = json.loads(
-        json.dumps(recorded).replace("{source}", json.dumps(source_path)[1:-1])
-    )
+    payload = json.loads(json.dumps(recorded).replace("{source}", json.dumps(source_path)[1:-1]))
     write_manifest(
         env, FRAMES_RUN, video_path=smooth_path, video_paths=[smooth_path, source_path], **payload
     )
