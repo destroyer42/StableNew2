@@ -55,6 +55,8 @@ def test_list_workflow_specs_offers_the_approved_a14b_and_ti2v_and_the_experimen
     assert [spec["workflow_id"] for spec in specs] == [
         "hunyuan_video15_i2v_480p_12step_v1",  # VID-CAND-382 experimental eval candidates
         "hunyuan_video15_i2v_480p_8step_v1",
+        "ltx25_distilled_i2v_audio_v1",  # VID-CAND-LTX25 experimental eval candidates
+        "ltx25_distilled_i2v_v1",
         "wan22_fun_control_5b_canny_i2v_v1",
         "wan22_i2v_a14b_4step_ck_v1",
         "wan22_i2v_a14b_4step_full_picture_v1",
@@ -68,6 +70,8 @@ def test_list_workflow_specs_offers_the_approved_a14b_and_ti2v_and_the_experimen
     assert {spec["workflow_id"]: spec["experimental"] for spec in specs} == {
         "hunyuan_video15_i2v_480p_12step_v1": True,
         "hunyuan_video15_i2v_480p_8step_v1": True,
+        "ltx25_distilled_i2v_audio_v1": True,
+        "ltx25_distilled_i2v_v1": True,
         "wan22_fun_control_5b_canny_i2v_v1": True,
         "wan22_i2v_a14b_4step_ck_v1": True,
         "wan22_i2v_a14b_4step_full_picture_v1": True,
