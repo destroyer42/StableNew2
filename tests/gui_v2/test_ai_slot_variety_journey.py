@@ -149,7 +149,9 @@ def test_the_request_sends_goal_and_slots_only_from_the_workspace_matrix(variety
         (),
         (),
     )
-    assert request.positive_text == "" and SENTENCE not in json.dumps(dataclasses.asdict(request), default=repr)
+    assert request.positive_text == "" and SENTENCE not in json.dumps(
+        dataclasses.asdict(request), default=repr
+    )
     assert request.content_class == "standard"
     assert "Suggest variety: request running" in dialog.status_var.get()
     assert dialog.variety_button.instate(["disabled"]) and dialog.cancel_button.instate(
