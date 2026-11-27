@@ -739,6 +739,20 @@ per-checkpoint cache and schedules one background read on the repository's read-
 20,000 rows and 200 matching jobs, refreshed after five minutes). Until that read finishes it answers 0, so the first Preview
 of a model can show a warning that a later Preview no longer shows.
 
+### 3.20 What you keep: decision rates (LEARN-JOIN)
+
+**What You Keep** on the Learning header (Simple and Advanced) opens a read-only window of keep and favourite rates with
+reason-tag counts: by model; per model by prompt slot value, LoRA and strength, embedding and strength, sampler, steps,
+CFG and PromptPack; and by named batch. `src/learning/decision_rates.py` takes each image's current Keep or Delete
+(last disposition row for its bytes, desktop or phone; Re-work and Undo do not count), joins it by `source_job_id` to the
+job's NJR (`JobRepository.read_snapshots_for_jobs`, `mode=ro`, primary-key chunks) and aggregates. Videos are not
+included. The window also says how many decisions did not join and how many published images are undecided.
+
+A difference is shown only when a Newcombe 95% interval against the rest of the group, Bonferroni-corrected for the
+options compared, excludes zero with at least 30 images on each side; otherwise it reads "not enough yet". The report is
+observational (invariant 5): it feeds no recommendation, proposal, publication, Apply or setting, writes nothing and is
+not stored. A new Keep or Delete row for a named batch's job also carries `review_batch` (`batch_id`, `name`).
+
 ## 4. Data and persistence
 
 | Data | Location | Writer | Atomic |

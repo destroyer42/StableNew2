@@ -473,6 +473,34 @@ class JobRepository(JobHistoryStore):
         finally:
             connection.close()
 
+    @staticmethod
+    def read_snapshots_for_jobs(path: str | Path, job_ids: Sequence[str]) -> dict[str, dict[str, Any]]:
+        """The stored NJR snapshots of ``job_ids`` from an existing repository, read-only (LEARN-JOIN).
+
+        Primary-key lookups in bounded chunks on a short-lived ``mode=ro`` connection: no schema change, no write,
+        no shared lock (a WAL reader never blocks the writer). Unknown ids and unparseable snapshots are absent.
+        """
+
+        ids = list(dict.fromkeys(job_ids))
+        if not ids:
+            return {}
+        uri = f"file:{Path(path).resolve().as_posix()}?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=10.0)
+        found: dict[str, dict[str, Any]] = {}
+        try:
+            for start in range(0, len(ids), _IN_CHUNK):
+                chunk = ids[start : start + _IN_CHUNK]
+                marks = ",".join("?" for _ in chunk)
+                for job_id, text in connection.execute(
+                    f"SELECT job_id, njr_snapshot FROM jobs WHERE job_id IN ({marks})", tuple(chunk)
+                ):
+                    snapshot = _json_loads(text, None, column="njr_snapshot")
+                    if isinstance(snapshot, dict):
+                        found[str(job_id)] = snapshot
+        finally:
+            connection.close()
+        return found
+
     def _prepare_submission(self, job: Job) -> _PreparedSubmission:
         """Canonical snapshot, fingerprint and lineage for one job (no database access)."""
 
