@@ -46,7 +46,8 @@ const SLICE_TWO = new Set(["another_model", "aspect_ratio", "prompt_tweak", "mak
 const DETAILS = {
   not_an_image: "only images can be fixed",
   source_changed: "the image changed on the PC",
-  provenance_unverified: "the PC cannot find the job that made this image",
+  provenance_unverified:
+    "the PC cannot trace this image to one job it can repeat (images from batch or multi-variant runs cannot be varied yet)",
   recipe_not_variable: "this image's recipe has more than one stage, so it cannot be varied yet",
   model_unavailable: "the checkpoint is not available",
   model_family_refused: "the checkpoint cannot run this fix",
@@ -62,7 +63,7 @@ const DETAILS = {
   app_shutting_down: "StableNew is shutting down",
   compile_failed: "the PC could not prepare it",
 };
-const ACTION_POLL_MS = 2000;
+const ACTION_POLL_MS = 1000;
 const ACTION_WAIT_MS = 10 * 60 * 1000;
 let scopes = null; // the session's grants, read once
 const REFRESH_MS = 20000;
@@ -639,7 +640,12 @@ function renderItem() {
     "div",
     { class: "tags", role: "group", "aria-label": "Reason tags" },
     TAGS.map(([value, text]) => {
-      const button = el("button", { type: "button", text, "aria-pressed": String(triage.tags.has(value)) });
+      const button = el("button", {
+        type: "button",
+        text,
+        "data-tag": value,
+        "aria-pressed": String(triage.tags.has(value)),
+      });
       button.addEventListener("click", () => {
         if (!triage.tags.delete(value)) triage.tags.add(value);
         button.setAttribute("aria-pressed", String(triage.tags.has(value)));
@@ -722,6 +728,24 @@ async function loadScopes() {
 
 const canQueue = () => Array.isArray(scopes) && scopes.includes("queue");
 
+// Asking for a fix says what is wrong with the image, so the matching reason tags are switched on (and a decision
+// already made for it is resent with them).
+const FIX_TAGS = { fix_face: ["face"], fix_hands: ["hands"], fix_both: ["face", "hands"] };
+
+function addTags(item, wanted) {
+  if (!triage || triage.list[triage.index] !== item) return;
+  const before = triage.tags.size;
+  for (const tag of wanted) triage.tags.add(tag);
+  for (const button of document.querySelectorAll(".tags button[data-tag]")) {
+    button.setAttribute("aria-pressed", String(triage.tags.has(button.dataset.tag)));
+  }
+  const decision = item.decision;
+  if (triage.tags.size !== before && decision && decision.verdict === "keep") {
+    queueDecision(item, "keep", decision.favorite, [...triage.tags]);
+    updateTriageStatus();
+  }
+}
+
 function actionRow(item) {
   if (item.kind !== "image" || !canQueue()) return null;
   return el(
@@ -731,7 +755,11 @@ function actionRow(item) {
       el("button", {
         type: "button",
         text,
-        onclick: () => (WORDS[action] ? askWords(item, action) : openAction(item, action)),
+        onclick: () => {
+          if (FIX_TAGS[action]) addTags(item, FIX_TAGS[action]);
+          if (WORDS[action]) askWords(item, action);
+          else openAction(item, action);
+        },
       }),
     ),
   );
@@ -794,6 +822,9 @@ function sheet(...nodes) {
   const node = el("div", { id: "sheet", class: "sheet", role: "dialog", "aria-modal": "true" }, [
     el("div", { class: "sheet-body" }, nodes),
   ]);
+  node.addEventListener("click", (event) => {
+    if (event.target === node) closeSheet(); // a tap outside the sheet closes it
+  });
   document.body.append(node);
   return node;
 }
@@ -862,8 +893,11 @@ async function openAction(item, action, extra = {}) {
   const asking = PICKERS[action] && !extra.choice ? "Asking the PC for its options…" : "Asking the PC for a summary…";
   const node = sheet(el("h2", { text: label }), el("p", { class: "muted", text: asking }));
   const alive = () => document.getElementById("sheet") === node;
-  const cancel = el("button", { type: "button", text: "Close", onclick: closeSheet });
-  const fail = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel);
+  const cancel = () =>
+    el("div", { class: "sheet-actions" }, [
+      el("button", { type: "button", class: "primary", text: "Close", onclick: closeSheet }),
+    ]);
+  const fail = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel());
   const params = { step: "prepare", ...extra };
   if (action === "more_like_this") params.count = 4;
   const body = {
@@ -898,7 +932,7 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
       el("h2", { text: `${label}: queued` }),
       el("p", { text: `${ids.length} job${ids.length === 1 ? "" : "s"} admitted on the PC. ${where}` }),
       el("p", { class: "muted", text: "The result appears in the inbox once it is published." }),
-      cancel,
+      cancel(),
     );
   }
   const node = sheet(
@@ -915,7 +949,7 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
           event.currentTarget.disabled = true;
           const alive = () => document.getElementById("sheet") === node;
           // This sheet replaced the one the request started on, so a refusal is shown while this one is open.
-          const failHere = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel);
+          const failHere = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel());
           try {
             const sent = await sendAction({
               library_id: item.library_id,
