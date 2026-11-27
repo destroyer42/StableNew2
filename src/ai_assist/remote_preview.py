@@ -17,9 +17,13 @@ SETTINGS_NAME = "remote_preview.json"
 ENDPOINT = f"http://{HOST}:{PORT}"
 RUNTIME_VERSION = "0.40.16"
 DEFAULT_MODEL = "qwen3.5:4b-q4_K_M"
+#: A third-party build of the default model with its refusal behaviour removed. Never active unless the operator
+#: approves it and picks it; not in VISION_MODELS because it has not been tried with a picture.
+UNCENSORED_MODEL = "huihui_ai/qwen3.5-abliterated:4B"
 MODEL_LABELS = {
     DEFAULT_MODEL: "Qwen3.5-4B (default)",
     "lfm3:1.7b": "LFM3-1.7B",
+    UNCENSORED_MODEL: "Qwen3.5-4B uncensored",
 }
 MODELS = tuple(MODEL_LABELS)
 #: Approved models that accept a picture (ASSIST-FIX motion phrase). Any other model is never sent one.

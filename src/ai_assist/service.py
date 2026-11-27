@@ -269,17 +269,26 @@ class AiAssistService:
         return self._run_admitted(request, token, admitted)
 
     def submit(
-        self, request: AssistRequest, on_done: Callable[[AssistOutcome], None]
+        self,
+        request: AssistRequest,
+        on_done: Callable[[AssistOutcome], None],
+        *,
+        one_off: RemoteApproval | None = None,
     ) -> Submission:
-        """Admit synchronously; run on a tracked non-daemon worker. ``on_done`` is called only for an accepted request."""
+        """Admit synchronously; run on a tracked non-daemon worker. ``on_done`` is called only for an accepted request.
+
+        ``one_off`` sends this request to another approved remote model without changing the selection, and never
+        falls back to the local runtime. Only an explicit operator press sets it."""
 
         token = AiCancelToken()
-        admitted = self._admit(request, token)
+        admitted = (
+            self._admit(request, token) if one_off is None else self._admit(request, token, one_off)
+        )
         if isinstance(admitted, AssistOutcome):
             return Submission(False, self._record(request, admitted, None))
 
         def work() -> None:
-            outcome = self._run_admitted(request, token, admitted)
+            outcome = self._run_admitted(request, token, admitted, one_off is not None)
             try:
                 on_done(outcome)
             except Exception:  # noqa: BLE001 - a failing listener must not leak into the service
@@ -369,7 +378,10 @@ class AiAssistService:
     # -- admission ----------------------------------------------------------------------------------------------------
 
     def _admit(
-        self, request: AssistRequest, token: AiCancelToken
+        self,
+        request: AssistRequest,
+        token: AiCancelToken,
+        one_off: RemoteApproval | None = None,
     ) -> AssistOutcome | Verification | RemoteSettings:
         with self._lock:
             if self._closed:
@@ -377,6 +389,15 @@ class AiAssistService:
             if self._active is not None or (self._worker is not None and self._worker.is_alive()):
                 return AssistOutcome(OutcomeCode.BUSY, request.request_id, "another_request_active")
             settings = self.remote.settings() if self.remote is not None else RemoteSettings()
+            if one_off is not None:
+                if not (settings.preferred and one_off in settings.approvals):
+                    return AssistOutcome(
+                        OutcomeCode.INTEGRITY_FAILED,
+                        request.request_id,
+                        "remote_approval_required",
+                        details={"provider": "remote"},
+                    )
+                settings = replace(settings, selection=one_off.model)
             admitted = settings if settings.preferred else self._admit_local(request)
             if not isinstance(admitted, AssistOutcome):
                 self._active = (request.request_id, token)
@@ -445,12 +466,16 @@ class AiAssistService:
     # -- execution ----------------------------------------------------------------------------------------------------
 
     def _run_admitted(
-        self, request: AssistRequest, token: AiCancelToken, admitted: Verification | RemoteSettings
+        self,
+        request: AssistRequest,
+        token: AiCancelToken,
+        admitted: Verification | RemoteSettings,
+        one_off: bool = False,
     ) -> AssistOutcome:
         try:
             if isinstance(admitted, Verification):
                 return self._execute(request, token, admitted)
-            return self._execute_remote(request, token, admitted)
+            return self._execute_remote(request, token, admitted, one_off)
         finally:
             if isinstance(admitted, RemoteSettings) and self.remote is not None:
                 self.remote.set_active(None)
@@ -458,7 +483,11 @@ class AiAssistService:
                 self._active = None
 
     def _execute_remote(
-        self, request: AssistRequest, token: AiCancelToken, settings: RemoteSettings
+        self,
+        request: AssistRequest,
+        token: AiCancelToken,
+        settings: RemoteSettings,
+        one_off: bool = False,
     ) -> AssistOutcome:
         assert self.remote is not None
         identity = settings.approval
@@ -478,15 +507,23 @@ class AiAssistService:
             "runtime_build_id": f"ollama-{identity.version}",
             "fallback": False,
         }
+        if one_off:
+            details["one_off"] = True
         try:
             attempts, elapsed_ms, first_reason = 0, 0, ""
             while True:
                 attempts += 1
                 result = self.remote.run(
-                    identity, request, token, self._limits, self._sampling, retry=attempts > 1
+                    identity,
+                    request,
+                    token,
+                    self._limits,
+                    self._sampling,
+                    retry_reason=first_reason,
+                    one_off=one_off,
                 )
                 # Local fallback is for a connection that failed before anything was generated (D25).
-                if result.reason == "remote_disconnected" and attempts == 1:
+                if result.reason == "remote_disconnected" and attempts == 1 and not one_off:
                     return self._fallback_local(request, token, settings)
                 elapsed_ms += result.elapsed_ms
                 code, reason = result.code, result.reason
@@ -508,7 +545,7 @@ class AiAssistService:
             with self._lock:
                 if token.cancelled:
                     code, reason, suggestion = OutcomeCode.CANCELLED, "request_cancelled", None
-                elif self.remote.settings().approval != settings.approval:
+                elif not self.remote.permits(identity, one_off):
                     code, reason, suggestion = (
                         OutcomeCode.INTEGRITY_FAILED,
                         "remote_identity_mismatch",

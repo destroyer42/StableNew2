@@ -1,7 +1,8 @@
 # ASSIST-FIX: AI Assist answers reliably
 
-Status: implemented on a feature branch (2026-11-27). Live replay run: refusals meet G1, **malformed does not**
-(1.9% against under 1%). Package 9 of the 2026-11-27 Value Assessment.
+Status: merged as PR #472 (2026-11-27); the follow-up below is on its own branch. With the follow-up the current
+model measured 0.0% refused and 1 malformed in 208 requests over two samples (1.0% and 0.0% per sample). Package 9 of
+the 2026-11-27 Value Assessment.
 
 Execution class: Standard. Model recommendation: Claude Code, Sonnet 5.5, medium to high effort
 (`docs/AI_MODEL_SELECTION.md`). Canonical execution path unchanged: AI Assist stays advisory and before Intent.
@@ -61,7 +62,7 @@ tracks (`config/ai_visual_candidates.json` stays unreadable from `src/`); anythi
 | A5 | The motion button writes only the Motion field, only if source, prompt and field are unchanged since the press; Undo restores it | tests |
 | A6 | The image sent is downscaled, re-encoded without metadata, and sent only to an approved vision-capable remote model | tests |
 | A7 | PR gate, `tests/ai_assist`, `tests/system`, `tests/tools` pass | run output |
-| G1 | Live: refused under 5%, malformed under 1% | live replay: refused 0.0% (met), malformed 1.9% (**not met**) |
+| G1 | Live: refused under 5%, malformed under 1% | PR #472: refused 0.0%, malformed 1.9% (not met). Follow-up: refused 0.0%; malformed 1.0% on seed 1 (at the line, not under it) and 0.0% on seed 2 |
 
 ## Offline limits
 
@@ -119,6 +120,70 @@ every case answered. No motion pictures were sent.
   recur. One seed, one run.
 - **Next candidate (not done):** say "one entry per slot" in the slot-variety instruction, give the retry the failure
   reason, and re-measure with another seed.
+
+## Owner decisions (2026-11-27, relayed by the orchestrating session)
+
+- Invariant 10 amendment: "Accept". Motion Suggest may send the reduced 512 px, metadata-stripped picture to the AI
+  worker.
+- Uncensored trial: "Yes, try it". Pull `huihui_ai/qwen3.5-abliterated:4B` beside the current model and run the replay
+  with both. The current model stays the default; switching needs the owner's OK on the result.
+- Orchestrator adjudication on 1.9% malformed: merge #472 as is, then fix in a follow-up.
+
+## Follow-up: wording, retry reason, and the two-model replay
+
+Changes (frame `ai_assist.frame/3`): the slot-variety instruction says one entry per slot; the retry adds a fixed
+sentence chosen by the first attempt's reason code (nothing from the answer is quoted); `live --model` measures an
+installed model without adding it to the application's approved list.
+
+**Model added to the AI worker** (Ollama `/api/pull` over the existing forward; nothing else changed on the host):
+
+| name | digest | bytes | capabilities | licence (`/api/show`) |
+|---|---|---|---|---|
+| `huihui_ai/qwen3.5-abliterated:4B` | `9acbd90c2645120ea1e4a5fe7ec9c4fe000e547ccebc8a24f950315d582003e6` | 3,315,333,475 | completion, vision, tools, thinking | Apache-2.0 |
+
+It is **not** approved in the application and is not in `config/ai_worker_manifest.json`.
+
+**Replay, new contract with one retry** (104 rebuilt cases per run; seed 1 is the same 104 as before, seed 2 a new
+sample; no pictures). "Usable" is a suggestion that, for slot variety, holds at least one value the application would
+offer.
+
+| model | seed | usable | suggestion | refused | malformed | timeout | first attempt malformed | worker s |
+|---|---|---|---|---|---|---|---|---|
+| current | 1 | 103 | 103 | 0 | 1 | 0 | 2 | 382 |
+| uncensored | 1 | 102 | 104 | 0 | 0 | 0 | 0 | 313 |
+| current | 2 | 104 | 104 | 0 | 0 | 0 | 0 | 364 |
+| uncensored | 2 | 95 | 101 | 0 | 0 | 3 | 0 | 320 |
+
+**Same cases, old contract, no retry:**
+
+| model | seed | suggestion | refused | malformed | timeout |
+|---|---|---|---|---|---|
+| current | 1 | 83 | 4 | 17 | 0 |
+| uncensored | 1 | 91 | 0 | 13 | 0 |
+| current | 2 | 85 | 5 | 14 | 0 |
+| uncensored | 2 | 90 | 0 | 8 | 6 |
+
+- The one remaining malformed answer is a rewrite that changed a protected token, after its retry.
+- **Recommendation: keep the current model.** Under the new contract neither model refused, and the current one gave
+  more usable answers (207 of 208 against 197 of 208). The uncensored build's 3 timeouts have no established cause.
+- **What this does not show:** refusals under the owner's own goals (goals were neutral placeholders; the one measured
+  difference is that the uncensored build did not refuse when a refusal branch was offered), suggestion quality, or
+  picture handling by either model.
+
+## Uncensored model added to the picker (owner, 2026-11-27: "Add the uncensored model")
+
+`huihui_ai/qwen3.5-abliterated:4B` (digest `9acbd90c2645…`) is now an approvable remote model, labelled "Qwen3.5-4B uncensored", and is
+recorded in `config/ai_worker_manifest.json`. The default model is unchanged. It is not sent pictures.
+
+It appears in the picker only after the operator approves it, **after the running app has this code**: an older build
+treats a settings file naming an unknown model as damaged.
+
+```powershell
+python -m tools.ai_assist_admin approve-remote-preview --endpoint http://127.0.0.1:11435 --model huihui_ai/qwen3.5-abliterated:4B --digest 9acbd90c2645120ea1e4a5fe7ec9c4fe000e547ccebc8a24f950315d582003e6 --version 0.40.16 --accept-ssh-transfer
+```
+
+Also chosen by the owner and built: **Try with the uncensored model**, shown after a refusal. One press resends
+exactly that request; the selection, the default and motion Suggest are unchanged. Not yet tried in the live app.
 
 ## Live replay plan (as run, without `--motion-image`)
 

@@ -55,7 +55,10 @@ def test_neither_schema_nor_instructions_offer_a_refusal(kind: SuggestionKind) -
     schema = framing.build_json_schema(request)
     assert "refus" not in json.dumps(schema).lower()
     assert schema["properties"]["status"] == {"const": "ok"}
-    for prompt in (framing.render_prompt(request), framing.render_prompt(request, retry=True)):
+    for prompt in (
+        framing.render_prompt(request),
+        framing.render_prompt(request, retry_reason="slot_repeated"),
+    ):
         instructions = prompt.split(framing.BEGIN_MARKER)[0].lower()
         assert "refus" not in instructions and "cannot or will not" not in instructions
 
@@ -134,6 +137,28 @@ def test_a_malformed_answer_is_retried_once_with_a_tighter_instruction(installat
         "not_json",
         "suggestion",
     )
+
+
+def test_the_retry_says_what_was_wrong_without_quoting_the_answer(installation) -> None:
+    wrong = json.dumps({**REWRITE, "positive": "SECRET <lora:added:1>"})
+    worker = Scripted(wrong, GOOD)
+    service, _spy, _ = service_for(installation, worker)
+    assert service.run(assist_request()).ok
+    retry = worker.prompts()[1]
+    assert framing.RETRY_HINTS["protected_tokens_changed"] in retry
+    assert "SECRET" not in retry and "lora:added" not in retry
+
+
+def test_an_unknown_reason_gets_the_general_instruction_alone() -> None:
+    request = REQUESTS[SuggestionKind.PROMPT_REWRITE]
+    prompt = framing.render_prompt(request, retry_reason="SECRET")
+    assert framing.RETRY_INSTRUCTION in prompt and "SECRET" not in prompt
+    assert not any(hint in prompt for hint in framing.RETRY_HINTS.values())
+
+
+def test_slot_variety_asks_for_one_entry_per_slot() -> None:
+    prompt = framing.render_prompt(REQUESTS[SuggestionKind.SLOT_VARIETY])
+    assert "exactly one entry per slot" in prompt
 
 
 def test_two_malformed_answers_stay_malformed(installation) -> None:
