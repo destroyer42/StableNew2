@@ -187,9 +187,12 @@ def test_other_tasks_neither_show_nor_send_the_phrase(env):
     tab.motion_intent_panel.choose_preset("Walk")
     assert tab.select_task("follow_clip")
     panel = tab.motion_intent_panel
-    assert not panel.phrase_entry.winfo_manager() and not panel.preset_row.winfo_manager()
+    assert not panel.phrase_entry.winfo_manager()
+    assert panel.preset_row.winfo_manager()  # V1-3: following a driver offers the presets too
     form = tab.get_video_workflow_state(for_submission=True)
-    assert form["prompt"] == PROMPT and MOTION_INTENT_FIELD not in form
+    assert form["prompt"] == PROMPT  # the phrase is never added to a driven clip's prompt
+    assert form[MOTION_INTENT_FIELD]["intent"] == "follow_clip"
+    assert form[MOTION_INTENT_FIELD]["motion_phrase"] == ""
     assert tab.select_task("animate")
     assert panel.phrase_entry.winfo_manager()
 

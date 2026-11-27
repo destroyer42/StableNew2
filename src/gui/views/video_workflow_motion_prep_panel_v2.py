@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import base64
 import tkinter as tk
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from tkinter import ttk
 from typing import Any
 
@@ -59,6 +60,11 @@ class WorkflowMotionPreparationPanel(ttk.LabelFrame):
         self._photos: list[tk.PhotoImage] = []
         self._thumb_labels: list[ttk.Label] = []
         self._last_view: MotionPrepView | None = None
+        #: V1-3: the frame a large driver is scaled down to cover, set by the driver panel.
+        self.cover: tuple[int, int] | None = None
+        #: V1-3: told when the operator (not the driver panel) edits the window, prepares or drops it.
+        self.on_operator_edit: Callable[[], None] | None = None
+        self._automatic_writes = 0
         self.bind("<Destroy>", self._on_destroy, add="+")
         self.columnconfigure(0, weight=1)
 
@@ -139,6 +145,7 @@ class WorkflowMotionPreparationPanel(ttk.LabelFrame):
             start_text=self.start_var.get(),
             end_text=self.end_var.get(),
             convert=bool(self.convert_var.get()),
+            cover=self.cover,
         )
 
     def _adopt_form(self) -> bool:
@@ -160,9 +167,46 @@ class WorkflowMotionPreparationPanel(ttk.LabelFrame):
     def _on_edit(self) -> None:
         """An option changed here: what the form carries may have changed (a result may be stale)."""
 
+        self._operator_edited()
         self.refresh()
         if self._on_change is not None and not self._closed:
             self._on_change()
+
+    @contextmanager
+    def _automatic(self) -> Iterator[None]:
+        self._automatic_writes += 1
+        try:
+            yield
+        finally:
+            self._automatic_writes -= 1
+
+    def _operator_edited(self) -> None:
+        if not self._automatic_writes and self.on_operator_edit is not None:
+            self.on_operator_edit()
+
+    def prepare_automatically(self, *, convert: bool = True, start: str | None = None) -> None:
+        """V1-3: prepare from the start time shown, to the planned length, at the workflow's rate (``convert``),
+        replacing any run for older inputs.  The driver panel calls this; it is not an operator edit."""
+
+        if self._closed:
+            return
+        with self._automatic():
+            if start is not None:
+                self.start_var.set(start)
+            self.end_var.set("")
+            self.convert_var.set(convert)
+            self._session.clear()
+            self._start_preparation()
+        if self._on_change is not None:
+            self._on_change()
+
+    def drop(self) -> None:
+        """V1-3: forget any preparation (the driver panel could not read the new clip); not an operator edit."""
+
+        if self._closed:
+            return
+        self._session.clear()
+        self.render()
 
     def submission_fields(self) -> dict[str, Any]:
         """The extra form keys a submission must carry (the record, a blocker, or nothing)."""
@@ -173,10 +217,11 @@ class WorkflowMotionPreparationPanel(ttk.LabelFrame):
     def set_window(self, *, start: float, end: float | None, convert: bool) -> None:
         """Fill in the window a re-run reproduces (V1-2); the operator can still change it."""
 
-        self.start_var.set(f"{start:g}")
-        self.end_var.set("" if end is None else f"{end:g}")
-        self.convert_var.set(bool(convert))
-        self.refresh()
+        with self._automatic():
+            self.start_var.set(f"{start:g}")
+            self.end_var.set("" if end is None else f"{end:g}")
+            self.convert_var.set(bool(convert))
+            self.refresh()
 
     def adopt_record(self, record: Mapping[str, Any], message: str) -> None:
         """Show and use a frozen, verified prepared record as if it had just been prepared (V1-2)."""
@@ -193,16 +238,22 @@ class WorkflowMotionPreparationPanel(ttk.LabelFrame):
     def _on_prepare(self) -> None:
         if self._closed:
             return
+        self._operator_edited()
+        self._start_preparation()
+
+    def _start_preparation(self) -> None:
         work = self._session.begin(self._inputs())  # every Tk read happens before the worker starts
         self.render()
         if work is not None:
             self._start(work)
 
     def _on_cancel(self) -> None:
+        self._operator_edited()
         self._session.cancel()
         self.render()
 
     def _on_clear(self) -> None:
+        self._operator_edited()
         self._session.clear()
         self.render()
         if self._on_change is not None:

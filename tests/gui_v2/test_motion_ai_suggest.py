@@ -18,6 +18,7 @@ from src.ai_assist.remote_preview import DEFAULT_MODEL, ENDPOINT, RUNTIME_VERSIO
 from src.ai_assist.service import Submission
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.video.motion_presets import FIELD_MOTION_PHRASE
+from src.video.workflow_tasks import TASK_ANIMATE, TASK_FOLLOW_CLIP
 from tests.helpers.make_video_313 import make_app, make_image, make_window
 
 pytestmark = pytest.mark.gui
@@ -162,3 +163,14 @@ def test_an_unreachable_worker_is_not_reported_as_a_model_choice_problem(env) ->
         )
     )
     assert env.tab.status_var.get().startswith("Remote unavailable.")
+
+
+def test_suggest_stays_with_the_motion_row_beside_the_driver_task(env) -> None:
+    """The follow-a-driver task (V1-3) hides the whole Motion row, Suggest included; prompt-only brings it back."""
+
+    assert env.panel.suggest_row.winfo_manager()
+    env.tab.select_task(TASK_FOLLOW_CLIP)
+    assert not env.panel.suggest_row.winfo_manager() and not env.panel.phrase_entry.winfo_manager()
+    assert env.panel.preset_row.winfo_manager()  # presets belong to both tasks
+    env.tab.select_task(TASK_ANIMATE)
+    assert env.panel.suggest_row.winfo_manager() and env.panel.phrase_entry.winfo_manager()
