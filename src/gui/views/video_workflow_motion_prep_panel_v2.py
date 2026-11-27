@@ -26,6 +26,7 @@ from src.gui.view_contracts.video_motion_prep_contract import (
 )
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.utils.thread_registry import get_thread_registry
+from src.video.motion_source_preparation import PreparationOutcome
 
 # What reading the tab's form can raise (a destroyed widget, a malformed snapshot).
 _FORM_READ_ERRORS = (tk.TclError, AttributeError, KeyError, TypeError, ValueError)
@@ -168,6 +169,26 @@ class WorkflowMotionPreparationPanel(ttk.LabelFrame):
 
         self._adopt_form()
         return self._session.submission_fields()
+
+    def set_window(self, *, start: float, end: float | None, convert: bool) -> None:
+        """Fill in the window a re-run reproduces (V1-2); the operator can still change it."""
+
+        self.start_var.set(f"{start:g}")
+        self.end_var.set("" if end is None else f"{end:g}")
+        self.convert_var.set(bool(convert))
+        self.refresh()
+
+    def adopt_record(self, record: Mapping[str, Any], message: str) -> None:
+        """Show and use a frozen, verified prepared record as if it had just been prepared (V1-2)."""
+
+        outcome = PreparationOutcome(status="prepared", message=message, record=dict(record))
+        self._session.adopt(self._inputs(), outcome)
+        self.render()
+
+    def prepare(self) -> None:
+        """Start preparing now, exactly as the Prepare button does (a worker; never on the Tk thread)."""
+
+        self._on_prepare()
 
     def _on_prepare(self) -> None:
         if self._closed:

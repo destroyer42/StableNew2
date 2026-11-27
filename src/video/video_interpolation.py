@@ -22,6 +22,7 @@ from PIL import Image
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.pipeline.video import (
     VideoEncodeCancelled,
+    VideoEncodeSettings,
     resolve_ffmpeg_executable,
     run_ffmpeg,
 )
@@ -33,11 +34,13 @@ from src.video.rife_runtime import (
 from src.video.svd_config import SVDConfig
 from src.video.svd_errors import SVDExportError, SVDPostprocessError
 from src.video.svd_postprocess import SVDPostprocessRunner, validate_svd_postprocess_config
-from src.video.video_export import export_video_mp4
+from src.video.video_export import export_image_sequence_video, export_video_mp4
 
 DECODE_TIMEOUT_SECONDS = 600.0
 # Bound the decoded clip held in memory: the smoothed clip is up to 4x this many frames.
 MAX_SOURCE_FRAMES = 400
+# VID-FRAME: a stitched cut can be far longer, so it is interpolated this many frames at a time.
+CUT_CHUNK_FRAMES = 200
 
 
 @dataclass(frozen=True)
@@ -220,20 +223,79 @@ def interpolate_frame_files(
     )
 
 
-def _smooth(
+def interpolate_cut_frames(
     *,
-    load_frames: Callable[[], list[Image.Image]],
-    source_label: str,
-    output_path: Path,
-    work_dir: Path,
+    frame_paths: Sequence[str | Path],
+    output_path: str | Path,
     source_fps: int,
     request: VideoInterpolationRequest,
-    cancel_token: CancelToken | None,
-    status_callback: Callable[[dict[str, Any]], None] | None,
+    cancel_token: CancelToken | None = None,
 ) -> VideoInterpolationResult:
+    """Smooth a stitched cut of any length: RIFE in chunks to PNGs on disk, then one encode.
+
+    Each chunk but the last also reads the next chunk's first frame, so the in-between frames at the join are made,
+    and drops that frame's own output; every source frame appears exactly ``multiplier`` times, as in one pass.
+    """
+
+    paths = [Path(path) for path in frame_paths]
+    if not paths:
+        raise SVDExportError("No frames were provided for interpolation")
     if source_fps < 1:
         raise ValueError("source_fps must be a positive integer")
     multiplier = request.multiplier or default_rife_multiplier(source_fps)
+    config = _postprocess_config(source_fps, multiplier, request)
+    target = Path(output_path)
+    work_dir = target.with_name(f"{target.stem}_work")
+    out_dir = work_dir / "frames"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    metadata: dict[str, Any] | None = None
+    try:
+        for start in range(0, len(paths), CUT_CHUNK_FRAMES):
+            if cancel_token is not None and cancel_token.is_cancelled():
+                raise CancellationError("video interpolation cancelled")
+            chunk = paths[start : start + CUT_CHUNK_FRAMES + 1]
+            frames: list[Image.Image] = []
+            for path in chunk:
+                with Image.open(path) as image:
+                    frames.append(image.convert("RGB"))
+            keep = min(CUT_CHUNK_FRAMES, len(chunk)) * multiplier
+            try:
+                frames, metadata = SVDPostprocessRunner(cancel_token=cancel_token).process_frames(
+                    frames=frames, config=config, work_dir=work_dir / "rife"
+                )
+                for image in frames[:keep]:
+                    written.append(out_dir / f"frame_{len(written):06d}.png")
+                    image.save(written[-1])
+            finally:
+                for image in frames:
+                    image.close()
+        export_image_sequence_video(
+            image_paths=written,
+            output_path=target,
+            fps=source_fps * multiplier,
+            settings=VideoEncodeSettings(),
+            cancel_token=cancel_token,
+            require_all_frames=True,
+        )
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+    interpolation = dict((metadata or {}).get("interpolation") or {})
+    return VideoInterpolationResult(
+        source_video_path=str(paths[0].parent),
+        video_path=str(target),
+        input_frame_count=len(paths),
+        output_frame_count=len(written),
+        input_fps=int(source_fps),
+        output_fps=int(source_fps) * multiplier,
+        multiplier=multiplier,
+        model=interpolation.get("model"),
+    )
+
+
+def _postprocess_config(
+    source_fps: int, multiplier: int, request: VideoInterpolationRequest
+) -> SVDConfig:
     config = SVDConfig.from_dict(
         {
             "inference": {"fps": int(source_fps)},
@@ -250,6 +312,24 @@ def _smooth(
     valid, reason = validate_svd_postprocess_config(config)
     if not valid:
         raise SVDPostprocessError(reason or "RIFE interpolation is not available")
+    return config
+
+
+def _smooth(
+    *,
+    load_frames: Callable[[], list[Image.Image]],
+    source_label: str,
+    output_path: Path,
+    work_dir: Path,
+    source_fps: int,
+    request: VideoInterpolationRequest,
+    cancel_token: CancelToken | None,
+    status_callback: Callable[[dict[str, Any]], None] | None,
+) -> VideoInterpolationResult:
+    if source_fps < 1:
+        raise ValueError("source_fps must be a positive integer")
+    multiplier = request.multiplier or default_rife_multiplier(source_fps)
+    config = _postprocess_config(source_fps, multiplier, request)
 
     frames: list[Image.Image] = []
     input_count = 0
@@ -285,6 +365,7 @@ def _smooth(
 __all__ = [
     "VideoInterpolationRequest",
     "VideoInterpolationResult",
+    "interpolate_cut_frames",
     "interpolate_frame_files",
     "interpolate_video_file",
     "normalize_interpolation_request",

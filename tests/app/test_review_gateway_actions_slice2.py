@@ -315,6 +315,45 @@ def test_the_recipe_source_is_the_completed_job_that_recorded_this_file(tmp_path
         site_phone_followup.verified_recipe_source(repository, tmp_path / "forged.png", forged)
 
 
+def test_the_recipe_source_accepts_the_fingerprint_the_runner_stamped(tmp_path):
+    """The runner stamps the fingerprint of the record it ran: the stored snapshot hydrated and serialized again.
+
+    Stored snapshots can hold ``""`` where the hydrated record holds ``None`` (seen on the owner's PC for every job), so
+    the two fingerprints differ. The image is still this job's; anything that matches neither is refused.
+    """
+
+    from src.queue.job_model import JobStatus
+    from src.utils.njr_identity import snapshot_envelope, snapshot_fingerprint
+    from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+
+    record = _multi_stage("job-8")
+    snapshot = snapshot_envelope(record.job_id, record.to_queue_snapshot())
+    stages = snapshot["normalized_job"]["stages"]
+    for stage in stages:
+        if stage.get("vae") is None:
+            stage["vae"] = ""  # what the stored text holds; hydration reads it back as None
+    hydrated = normalized_job_from_snapshot(snapshot)
+    ran = snapshot_fingerprint(snapshot_envelope(hydrated.job_id, hydrated.to_queue_snapshot()))
+    stored = snapshot_fingerprint(snapshot)
+    assert ran != stored  # the mismatch this test is about
+    image = tmp_path / "final.png"
+    raw = _embedded(image, "job-8", ran)
+    entry = SimpleNamespace(
+        job_id="job-8",
+        status=JobStatus.COMPLETED,
+        snapshot=snapshot,
+        result={"artifact": {"primary_path": str(image), "output_paths": [str(image)]}},
+    )
+    repository = SimpleNamespace(get_job=lambda job_id: entry if job_id == "job-8" else None)
+
+    found, fingerprint = site_phone_followup.verified_recipe_source(repository, image, raw)
+    assert (found.job_id, fingerprint) == ("job-8", stored)
+
+    forged = _embedded(tmp_path / "forged.png", "job-8", "1" * 64)
+    with pytest.raises(SiteOutputError, match="followup_provenance_unverified"):
+        site_phone_followup.verified_recipe_source(repository, tmp_path / "forged.png", forged)
+
+
 # -- the preview host against the real Review compilers ----------------------------------------------------------
 
 

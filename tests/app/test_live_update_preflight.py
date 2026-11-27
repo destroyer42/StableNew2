@@ -28,12 +28,17 @@ def _env_ok(_sha: str) -> tuple[bool, str]:
     return True, ""
 
 
-def check(repos, expected_sha=None, *, env=_env_ok, origin=None):
+def _signed(_sha: str) -> tuple[str, str]:
+    return "", ""
+
+
+def check(repos, expected_sha=None, *, env=_env_ok, origin=None, signature=_signed):
     return lu.preflight(
         lu.subprocess_git(repos.live),
         expected_sha=expected_sha,
         expected_origin=origin if origin is not None else str(repos.origin),
         env_check=env,
+        signature_check=signature,
     )
 
 
@@ -70,7 +75,11 @@ def test_a_malformed_expected_sha_is_refused_before_any_git_call(repos, sha):
         return lu.GitResult(0, "", "")
 
     result = lu.preflight(
-        recording, expected_sha=sha, expected_origin=str(repos.origin), env_check=_env_ok
+        recording,
+        expected_sha=sha,
+        expected_origin=str(repos.origin),
+        env_check=_env_ok,
+        signature_check=_signed,
     )
 
     assert result.reason == lu.INVALID_REQUEST and calls == []
@@ -215,3 +224,57 @@ def test_environment_check_refuses_a_target_without_the_constraints_file(tmp_pat
     ok, detail = env_check("a" * 40)
 
     assert not ok and lu.CONSTRAINTS_PATH in detail
+
+
+# -- SAFE-UPDATE: the target must be a commit GitHub signed -------------------------------------------------------
+
+
+@pytest.mark.parametrize("reason", ["not_github_signed", "github_unavailable"])
+def test_a_target_github_did_not_vouch_for_is_refused_before_anything_changes(repos, reason):
+    old = repos.head
+    new = repos.merge_upstream({"src/main.py": "print('v2')\n"})
+    asked, env_calls = [], []
+
+    def signature(sha):
+        asked.append(sha)
+        return reason, "why"
+
+    result = check(repos, new, env=lambda sha: env_calls.append(sha), signature=signature)
+
+    assert (result.ok, result.reason, result.detail) == (False, reason, "why")
+    assert (result.old_sha, result.target_sha, result.commits_ahead) == (old, new, 1)
+    assert asked == [new] and env_calls == []
+    assert repos.head == old
+    assert (repos.live / "src/main.py").read_text(encoding="utf-8") == "print('v1')\n"
+
+
+def test_a_signature_check_that_raises_is_a_refusal(repos):
+    repos.merge_upstream({"a.txt": "a\n"})
+
+    def broken(_sha):
+        raise RuntimeError("boom")
+
+    result = check(repos, signature=broken)
+
+    assert (result.ok, result.reason) == (False, lu.GITHUB_UNAVAILABLE)
+
+
+def test_github_is_not_asked_about_a_target_git_already_refuses(repos):
+    asked = []
+
+    def signature(sha):
+        asked.append(sha)
+        return "", ""
+
+    assert check(repos, signature=signature).reason == lu.ALREADY_CURRENT
+    shown = repos.merge_upstream({"a.txt": "a\n"})
+    repos.merge_upstream({"b.txt": "b\n"})
+    assert check(repos, shown, signature=signature).reason == lu.TARGET_MOVED
+    (repos.live / "src/main.py").write_text("print('local edit')\n", encoding="utf-8")
+    assert check(repos, signature=signature).reason == lu.DIRTY_CHECKOUT
+    assert asked == []
+
+
+def test_the_signature_refusals_say_what_to_do():
+    assert "pull request" in lu.REASON_TEXT[lu.NOT_GITHUB_SIGNED]
+    assert "try again" in lu.REASON_TEXT[lu.GITHUB_UNAVAILABLE]

@@ -31,6 +31,10 @@ from src.video.workflow_preflight import PreflightProbes
 from tests.gui_v2.test_pr_vid_ux_311_runtime_strip import _Probes, _tab
 
 ANIMATE_ID = "wan_animate2_drive_i2v_v1"
+# PR-VID-ANIMATE-CK-WARM: the driving-video workflow now declares a launch profile (its gate validates the saved command and
+# the profile, and dispatch releases a held process first). The prompt-mode Animate workflow keeps the plain required-flag
+# gate, which is what the live-owned-process test below exercises.
+ANIMATE_PROMPT_ID = "wan_animate2_prompt_i2v_v1"
 PIN = "--disable-pinned-memory"
 AUTO = "--disable-auto-launch"
 BARE = ("python", "main.py")
@@ -136,7 +140,7 @@ def test_a_live_incompatible_owned_process_blocks_queue_with_a_release_hint(
     probes = _LaunchProbes()
     probes.launch = ComfyLaunchFacts(saved_command=GOOD, active_command=BARE, owns_runtime=True)
     tab, runner = _tab(tk_root, tmp_path, monkeypatch, probes)
-    _select(tab, ANIMATE_ID)
+    _select(tab, ANIMATE_PROMPT_ID)
     tab._on_workflow_selected(None)  # an explicit pick; only runtime compatibility can block (N1)
     tab._refresh_queue_gate()
     runner.drain()

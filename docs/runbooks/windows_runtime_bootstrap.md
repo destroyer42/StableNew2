@@ -217,7 +217,9 @@ owner decisions D1–D10: `docs/work_packages/LAUNCH-UPDATE_remote_restart.md`.
 - **Check for update** fetches `origin` and reports whether `main` can be fast-forwarded, and by how many commits.
 - **Update and restart** asks for confirmation, then:
   1. refuses (and changes nothing) unless the checkout is on `main` tracking `origin/main`, `origin` is the
-     StableNew2 repository, no tracked file is modified or staged, `origin/main` is a descendant of `HEAD`, and the
+     StableNew2 repository, no tracked file is modified or staged, `origin/main` is a descendant of `HEAD`, GitHub
+     reports that commit as signed by it (`web-flow`, a pull request merged on GitHub; otherwise
+     `not_github_signed`, or `github_unavailable` when GitHub cannot be asked), and the
      new commit's pinned constraints pass the launcher's read-only check against the current `.venv`. Nothing is ever
      installed: an update that needs packages is refused as `environment_drift`;
   2. holds the queue in memory (not the Pause button) and waits up to 60 minutes for the running job to finish. It

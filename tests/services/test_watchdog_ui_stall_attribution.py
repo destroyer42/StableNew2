@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.services import watchdog_system_v2
 from src.services.watchdog_system_v2 import SystemWatchdogV2
 
 
@@ -195,3 +196,103 @@ def test_a_starved_watchdog_thread_is_reported_with_every_threads_current_site(
     assert sites[parked.thread.name].count("in ") >= 1
     assert "ui_heartbeat_age_s" in payload
     assert isinstance(payload["system"], dict)
+
+
+def _stall_once(watchdog: SystemWatchdogV2, app: SimpleNamespace) -> None:
+    watchdog._check()
+    watchdog._check()
+    app.last_ui_heartbeat_ts = time.monotonic()
+    watchdog._check()
+
+
+def test_a_stall_records_how_much_cpu_the_tk_thread_and_the_process_used(
+    parked, stall_records
+) -> None:
+    """Near-zero Tk CPU means it was waiting (GIL, modal loop, pause); high means it was working in Tcl."""
+
+    app = _app(ui_age_s=3.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+    readings = iter([(1.0, 10.0), (1.1, 14.5)])
+    watchdog._cpu_times = lambda: next(readings)
+
+    _stall_once(watchdog, app)
+
+    (record,) = stall_records()
+    assert record.json_payload["tk_cpu_s"] == pytest.approx(0.1)
+    assert record.json_payload["process_cpu_s"] == pytest.approx(4.5)
+    assert record.json_payload["observed_s"] >= 0.0
+
+
+def test_cpu_times_reads_the_watched_thread_and_the_process() -> None:
+    watchdog = SystemWatchdogV2(_app(ui_age_s=0.0), None, ui_thread_ident=threading.get_ident())
+
+    reading = watchdog._cpu_times()
+
+    assert reading is not None
+    tk_cpu, process_cpu = reading
+    assert 0.0 <= tk_cpu <= process_cpu + 1.0
+
+
+def test_a_mainloop_only_sample_also_records_what_the_other_threads_were_doing(
+    parked, stall_records, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no Python frame on the Tk thread, a GIL holder shows up only on another thread.
+
+    Only the sampling thread and the Tk thread are left out, by identity. Whatever else is alive is listed, including
+    threads other tests (or another watchdog) left running, so this asserts on its own two threads only.
+    """
+
+    app = _app(ui_age_s=3.0)
+    # However many threads this test process has accumulated, none is cut from the list.
+    monkeypatch.setattr(watchdog_system_v2, "_OTHER_THREADS", 10_000)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=-1)
+    watchdog._capture_ui_stack = lambda: ("__init__.py:1625 in mainloop", "src/main.py:757 in main")
+    release = threading.Event()
+    # Unrelated threads, as a shared test process (or the app) has: one even carries the watchdog's own thread name.
+    bystanders = [
+        threading.Thread(target=release.wait, args=(10.0,), name=name)
+        for name in ("SystemWatchdogV2", *(f"bystander-{index}" for index in range(10)))
+    ]
+    for thread in bystanders:
+        thread.start()
+    sampler = threading.Thread(target=_stall_once, args=(watchdog, app), name="own-sampler")
+    try:
+        sampler.start()
+        sampler.join(10.0)
+    finally:
+        release.set()
+        for thread in bystanders:
+            thread.join(5.0)
+
+    (record,) = stall_records()
+    listed = {item["site"].split(":", 1)[0]: item for item in record.json_payload["other_threads"]}
+    assert "own-sampler" not in listed
+    assert "_count_everything_on_disk" in listed["fake-tk-thread"]["site"]
+    assert listed["fake-tk-thread"]["samples"] == 2
+
+
+def test_an_attributed_stall_does_not_list_other_threads(parked, stall_records) -> None:
+    app = _app(ui_age_s=3.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+
+    _stall_once(watchdog, app)
+
+    (record,) = stall_records()
+    assert record.json_payload["other_threads"] == []
+
+
+def test_a_late_thread_is_not_cut_from_the_list_of_a_process_with_many_threads(
+    stall_records,
+) -> None:
+    """Every waiting thread counts as often as a GIL holder, so a short list would drop it by start order."""
+
+    app = _app(ui_age_s=3.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=-1)
+    watchdog._capture_ui_stack = lambda: ("__init__.py:1625 in mainloop", "src/main.py:757 in main")
+    sites = [f"idle-{index}: wait" for index in range(24)] + ["late-worker: busy"]
+    watchdog._other_thread_sites = lambda: list(sites)
+
+    _stall_once(watchdog, app)
+
+    (record,) = stall_records()
+    assert "late-worker: busy" in [item["site"] for item in record.json_payload["other_threads"]]

@@ -94,10 +94,12 @@ from src.controller.app_controller_services.pack_settings_apply_service import (
     apply_settings_to_packs,
     bind_preview_invalidation,
 )
+from src.controller.app_controller_services.queue_projection import QueueSummaryProjector
 from src.controller.app_controller_services.run_submission_service import (
     PreviewWitness,
     QueueRunSubmissionService,
     launch_preview_queue_submission,
+    report_queue_refusal,
 )
 from src.controller.app_controller_services.runtime_projection_coordinator import (
     RuntimeProjectionCoordinator,
@@ -134,7 +136,7 @@ from src.pipeline.config_contract_v26 import (
     validate_svd_native_execution_config,
     validate_train_lora_execution_config,
 )
-from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
+from src.pipeline.job_models_v2 import UnifiedJobSummary
 from src.pipeline.last_run_store_v2_5 import (
     LastRunStoreV2_5,
     update_current_config_from_last_run,
@@ -1072,7 +1074,6 @@ class AppController:
             self._last_runtime_status_flush_ts = 0.0
         if not hasattr(self, "_runtime_status_min_interval_ms"):
             self._runtime_status_min_interval_ms = 250
-
         delay_ms = 0
         should_schedule = False
         with self._runtime_status_lock:
@@ -1086,13 +1087,11 @@ class AppController:
                 delay_ms = max(1, int(self._runtime_status_min_interval_ms - elapsed_ms))
             self._runtime_status_flush_scheduled = True
             should_schedule = True
-
         if should_schedule:
             self._ui_dispatch_later(delay_ms, self._flush_runtime_status_update)
 
     def _flush_runtime_status_update(self) -> None:
         import time
-
         runtime_status = None
         with self._runtime_status_lock:
             runtime_status = self._pending_runtime_status
@@ -1100,7 +1099,6 @@ class AppController:
             self._runtime_status_flush_scheduled = False
             self._last_runtime_status_flush_ts = time.monotonic()
             self._last_runtime_status = runtime_status
-
         if runtime_status is None:
             return
         self._runtime_projection_coordinator.publish_runtime_status(runtime_status)
@@ -1502,9 +1500,8 @@ class AppController:
                 return
             transition = getattr(controller, "_safe_gui_transition", None)
             if error is not None:
-                self._append_log(
-                    f"[controller] Run submission error: {error!r} (source={origin_source})"
-                )
+                report_queue_refusal(self.app_state, error)
+                self._append_log(f"[controller] Run submission error: {error!r} (source={origin_source})")
                 if callable(transition):
                     try:
                         transition(GUIState.ERROR)
@@ -1512,6 +1509,7 @@ class AppController:
                         pass
                 return
             if not ready:
+                report_queue_refusal(self.app_state, "The WebUI is not ready. Wait for it to connect.")
                 self._append_log(
                     f"[controller] Run submission aborted because WebUI is not ready (source={origin_source})"
                 )
@@ -1625,6 +1623,7 @@ class AppController:
         def _finish() -> None:
             self._queue_submit_in_progress = False
             if error is not None:
+                report_queue_refusal(getattr(self, "app_state", None), error)
                 self._log_preview_queue_finish(
                     f"[controller] enqueue_draft_jobs error: {error!r} "
                     f"(thread={origin_thread_name})",
@@ -1679,7 +1678,9 @@ class AppController:
                 self._append_log(f"[controller] Replayed job {job_id} ({count} queued).")
                 return True
             self._append_log(f"[controller] Replay job {job_id} was not queued; snapshot unavailable or admission refused.")
+            report_queue_refusal(self.app_state, "The replay's stored job could not be read.")
         except Exception as exc:  # noqa: BLE001
+            report_queue_refusal(getattr(self, "app_state", None), exc)
             self._append_log(f"[controller] Replay job {job_id} failed: {exc!r}")
         return False
 
@@ -2558,44 +2559,17 @@ class AppController:
     def _build_queue_projection(self) -> tuple[list[str], list[UnifiedJobSummary]]:
         started_at = time.monotonic()
         jobs = self._list_service_jobs()
-        # Convert Job objects to UnifiedJobSummary via their NJRs
-        queue_jobs: list[UnifiedJobSummary] = []
-        summaries: list[str] = []
-        fallback_count = 0
-        for job in jobs:
-            njr = getattr(job, "_normalized_record", None)
-            if njr:
-                try:
-                    summary = UnifiedJobSummary.from_normalized_record(njr)
-                    status_value = getattr(job, "status", None)
-                    status_text = (
-                        status_value.value if hasattr(status_value, "value") else str(status_value or "")
-                    ).strip()
-                    if status_text:
-                        summary = replace(summary, status=status_text.upper())
-                    queue_jobs.append(summary)
-                    summaries.append(summary.positive_prompt_preview or job.job_id)
-                except Exception as exc:
-                    logger.warning(f"Failed to convert job {job.job_id} to UnifiedJobSummary: {exc}")
-                    summaries.append(job.job_id)
-                    fallback_count += 1
-            else:
-                logger.debug(f"Job {job.job_id} missing NJR, using fallback queue summary")
-                summaries.append(job.job_id)
-                fallback_count += 1
-                try:
-                    status_value = str(getattr(job, "status", "queued")).lower()
-                    status = JobStatusV2(status_value) if status_value in JobStatusV2._value2member_map_ else JobStatusV2.QUEUED
-                    queue_jobs.append(UnifiedJobSummary.from_job(job, status))
-                except Exception:
-                    pass
+        projector = self.__dict__.get("_queue_projector")
+        if projector is None:
+            projector = self._queue_projector = QueueSummaryProjector()
+        result = projector.project(jobs)
         self._record_queue_projection_timing(
             elapsed_ms=(time.monotonic() - started_at) * 1000.0,
             job_count=len(jobs),
-            summary_count=len(queue_jobs),
-            fallback_count=fallback_count,
+            summary_count=len(result.summaries),
+            fallback_count=result.fallback_count,
         )
-        return summaries, queue_jobs
+        return result.items, result.summaries
 
     def _load_history_entries(self, limit: int | None = None) -> list[Any]:
         if not self.job_service:

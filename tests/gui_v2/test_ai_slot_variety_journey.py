@@ -149,7 +149,9 @@ def test_the_request_sends_goal_and_slots_only_from_the_workspace_matrix(variety
         (),
         (),
     )
-    assert request.positive_text == "" and SENTENCE not in json.dumps(dataclasses.asdict(request))
+    assert request.positive_text == "" and SENTENCE not in json.dumps(
+        dataclasses.asdict(request), default=repr
+    )
     assert request.content_class == "standard"
     assert "Suggest variety: request running" in dialog.status_var.get()
     assert dialog.variety_button.instate(["disabled"]) and dialog.cancel_button.instate(
@@ -535,7 +537,7 @@ def test_only_the_selected_slot_reaches_the_model_request(variety):
     j = variety
     _dialog, request = _ask(j, select=("lighting",))
     assert request.matrix_slots == (("lighting", ("soft light",)),)
-    blob = json.dumps(dataclasses.asdict(request))
+    blob = json.dumps(dataclasses.asdict(request), default=repr)
     assert "character" not in blob and "knight" not in blob and "forest" not in blob
     assert (request.variety_per_slot, request.variety_focus) == (3, "direct")
 

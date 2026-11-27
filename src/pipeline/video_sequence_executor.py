@@ -23,12 +23,14 @@ from __future__ import annotations
 
 import logging
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final
 
 from src.controller.runtime_state import CancellationError, CancelToken
+from src.pipeline.artifact_contract import OUTPUT_ROLE_PRIMARY, OUTPUT_ROLE_RETAINED_SOURCE
+from src.video.container_metadata import write_video_container_metadata
 from src.video.sequence_admission import verify_plan_source, verify_provided_anchors
 from src.video.sequence_assembly import assemble_sequence_frames
 from src.video.sequence_frames import (
@@ -89,6 +91,8 @@ from src.video.storyboard_cut import (
     take_manifest,
     write_cut_manifest,
 )
+from src.video.svd_errors import SVDExportError, SVDPostprocessError
+from src.video.video_interpolation import VideoInterpolationRequest, interpolate_cut_frames
 
 logger = logging.getLogger(__name__)
 
@@ -232,8 +236,13 @@ class VideoSequenceExecutor:
         assemble: Callable[..., Any] | None = None,
         on_persist: Callable[[Path, str, SequenceLedger], None] | None = None,
         replay_reference: Mapping[str, Any] | None = None,
+        smoothing: Mapping[str, Any] | None = None,
+        interpolate: Callable[..., Any] | None = None,
     ) -> None:
         self._plan = plan
+        #: VID-FRAME: the job's frozen ``cut_interpolation`` block; only the assembled cut is smoothed.
+        self._smoothing = smoothing
+        self._interpolate = interpolate or interpolate_cut_frames
         self._job_id = job_id
         self._run_dir = Path(
             run_dir
@@ -663,7 +672,55 @@ class VideoSequenceExecutor:
             "segments": used,
             "color_match_reference": str(reference) if matching else None,
         }
-        return str(outcome.output_path), str(outcome.manifest_path)
+        if self._smoothing and self._smoothing.get("enabled"):
+            self._smooth_movie(frames)
+        return str(self._ledger.assembly["output_path"]), str(outcome.manifest_path)
+
+    def _smooth_movie(self, frames: Sequence[Path]) -> None:
+        """VID-FRAME: the smoothed cut becomes the movie; the native-rate one stays on disk as retained."""
+
+        assert self._ledger.assembly is not None and self._smoothing is not None
+        native = Path(str(self._ledger.assembly["output_path"]))
+        try:
+            result = self._interpolate(
+                frame_paths=frames,
+                output_path=native.with_name(f"{native.stem}_smooth.mp4"),
+                source_fps=self._plan.fps,
+                request=VideoInterpolationRequest(
+                    multiplier=self._smoothing.get("multiplier"),
+                    executable_path=self._smoothing.get("executable_path"),
+                    model_dir=self._smoothing.get("model_dir"),
+                ),
+                cancel_token=self._cancel_token,
+            )
+        except (SVDPostprocessError, SVDExportError, OSError) as exc:
+            # Every segment is already generated: keep the native-rate movie and say why it is not smoothed.
+            logger.warning("The assembled movie was not smoothed: %s", exc)
+            self._ledger.assembly = {
+                **self._ledger.assembly,
+                "interpolation_error": f"{type(exc).__name__}: {exc}"[:500],
+            }
+            return
+        smoothed = Path(result.video_path)
+        for path, role in ((native, OUTPUT_ROLE_RETAINED_SOURCE), (smoothed, OUTPUT_ROLE_PRIMARY)):
+            write_video_container_metadata(
+                path, {"job_id": self._job_id, "stage": self._plan.stage, "output_role": role}
+            )
+        assembly = dict(self._ledger.assembly)
+        assembly["native"] = {
+            "output_path": str(native),
+            "output_sha256": self._hash_file(native),
+            "total_frames": assembly["total_frames"],
+            "fps": assembly["fps"],
+        }
+        assembly.update(
+            output_path=str(smoothed),
+            output_sha256=self._hash_file(smoothed),
+            total_frames=result.output_frame_count,
+            fps=result.output_fps,
+            interpolation=result.to_dict(),
+        )
+        self._ledger.assembly = assembly
 
     def _segment_outputs(self) -> list[str]:
         ordered: list[str] = []
@@ -892,6 +949,7 @@ def run_sequence_stage(
         cancel_token=cancel_token,
         hash_file=hash_file,
         replay_reference=replay,
+        smoothing=config_dict.get("cut_interpolation"),
         on_persist=lambda path, sha, ledger: metadata.__setitem__(
             "sequence_artifact",
             {

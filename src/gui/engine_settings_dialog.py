@@ -137,6 +137,7 @@ class EngineSettingsDialog(ttk.Frame):
         self._webui_total_timeout_var = tk.DoubleVar()
         self._output_dir_var = tk.StringVar()
         self._model_dir_var = tk.StringVar()
+        self._frame_cleanup_var = tk.BooleanVar()
         self._content_visibility_mode_var = tk.StringVar(
             value=normalize_content_visibility_mode(content_visibility_mode).value
         )
@@ -165,6 +166,7 @@ class EngineSettingsDialog(ttk.Frame):
             "webui_health_total_timeout_seconds": self._webui_total_timeout_var,
             "output_dir": self._output_dir_var,
             "model_dir": self._model_dir_var,
+            "video_frame_cleanup_enabled": self._frame_cleanup_var,
         }
 
         self.columnconfigure(0, weight=1)
@@ -243,6 +245,12 @@ class EngineSettingsDialog(ttk.Frame):
             wraplength=420,
             justify="left",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        ttk.Checkbutton(
+            paths_frame,
+            text="Delete a video's PNG frames one day after its clip is made (clips are always kept)",
+            variable=self._frame_cleanup_var,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         ttk.Radiobutton(
             visibility_frame,

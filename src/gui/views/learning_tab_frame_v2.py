@@ -8,7 +8,7 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Any
+from typing import Any, cast
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.app_state_v2 import AppStateV2
@@ -36,6 +36,10 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pane_workspace_column_specs,
 )
 from src.gui.view_contracts.status_banner_contract import update_status_banner
+from src.gui.view_contracts.workspace_mode_contract import (
+    hidden_study_slugs,
+    shows_discovered_outputs,
+)
 from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
 from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
@@ -1727,6 +1731,25 @@ class LearningTabFrame(ttk.Frame):
         except Exception:
             pass
         return False
+
+    # ------------------------------------------------------------------
+    # N6: Simple / Advanced workspace (presentation only; nothing is removed)
+    # ------------------------------------------------------------------
+
+    def set_workspace_mode(self, mode: str) -> None:
+        """Simple hides the Discovered Outputs view and the zero-use study types; Advanced shows them as before."""
+
+        discovered = getattr(self, "_discovered_tab_frame", None)
+        if discovered is not None:
+            shown = shows_discovered_outputs(mode)
+            notebook = cast(Any, self._mode_notebook)
+            if not shown and str(notebook.select()) == str(discovered):
+                notebook.select(self.body_frame)
+            notebook.tab(discovered, state="normal" if shown else "hidden")
+        panel = getattr(self, "experiment_panel", None)
+        hide = getattr(panel, "set_hidden_studies", None)
+        if callable(hide):
+            hide(hidden_study_slugs(mode))
 
     # ------------------------------------------------------------------
     # PR-GUI-LEARN-041: Discovered-review event handlers

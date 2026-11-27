@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.video.frame_retention import frames_were_removed
 from src.video.movie_assembly_models import (
     AUDIO_EXTENSIONS,
     MODE_SLIDESHOW,
@@ -99,8 +100,11 @@ def extract_source_paths_from_bundle(bundle: dict[str, Any] | None) -> list[str]
         return [str(primary)] if primary else []
 
     frame_paths = [str(item) for item in bundle.get("frame_paths") or [] if item]
-    if frame_paths:
+    # VID-FRAME: retention removes a day-old clip's PNGs; the clip itself is then the source.
+    if frame_paths and not frames_were_removed(Path(frame_paths[0]).parent):
         return frame_paths
+    if frame_paths and bundle.get("primary_path"):
+        return [str(bundle["primary_path"])]
     output_paths = [str(item) for item in bundle.get("output_paths") or [] if item]
     if output_paths:
         return output_paths

@@ -221,7 +221,8 @@ def test_illegal_intents_are_refused_before_anything_is_queued(tmp_path: Path) -
             {"segments": [{"frame_count": 17}, {"frame_count": 17, "bogus": 1}]},
             "unknown segment 1",
         ),
-        (_form(interpolation={"enabled": True}), _intent(2), "not applied inside a sequence"),
+        # VID-FRAME smooths the assembled cut, so only an unsupported factor is refused.
+        (_form(interpolation={"enabled": True, "multiplier": 3}), _intent(2), "multiplier"),
     ]
     for form, intent, needle in bad:
         with pytest.raises((SequencePlanError, ValueError), match=needle):

@@ -24,6 +24,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `events.py`: Content-free event record (owner decision D7: no training-data capture)
 - `framing.py`: The fixed instruction frame and the JSON Schema for one request
 - `host.py`: Read-only host seams: memory and generation activity
+- `image.py`: The one way a picture is prepared for a request: reduced, re-encoded and stripped of every metadata field
 - `manifests.py`: Pinned runtime manifest, provenance-gated model registry, local import and integrity verification
 - `observe.py`: Consume only the read capability minted by run_bounded for this request (F2)
 - `paths.py`: Where the offline AI runtime, weights and records live
@@ -58,6 +59,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
+- `frame_retention_service.py`: Run the video frame retention sweep in the background while the queue is empty (VID-FRAME)
 - `live_update.py`: Update the live checkout to an approved ``origin/main`` commit and restart (LAUNCH-UPDATE-1)
 - `live_update_remote.py`: The phone side of a live update, on the PC (LAUNCH-UPDATE-2): the ``pc_status`` publish and ``admin_request``
 - `live_update_service.py`: The running app's side of a live update (LAUNCH-UPDATE-1): switch, rate limit, drain, hand-off and receipt
@@ -217,6 +219,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `pack_model_batch_recipes.py`: N5 owner decision 3: in a packs x models batch, a model with a saved recipe uses its own settings
 - `pack_model_batch_service.py`: N5: packs x models batch builder - plan, count, estimate and queue one named batch on the existing path
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
+- `queue_projection.py`: Build the queue projection, converting each job's immutable NJR into its summary only once (RUN-LEAN)
 - `run_submission_service.py`: Bridge GUI run requests and witnessed previews to the queue submission worker
 - `runtime_projection_coordinator.py`: Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink
 - `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
@@ -272,12 +275,14 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `artifact_metadata_inspector_dialog.py`: Read-only artifact metadata inspector dialog
 - `base_generation_panel_v2.py`: Base generation panel for GUI V2
 - `batch_builder_dialog.py`: N5 Packs x Models batch builder: pick PromptPacks and models, see the exact totals, queue one named batch
+- `batch_model_picker.py`: DESK-QUICK: the batch builder's model list, with search and a status per model
 - `batch_operations_panel_v2.py`: Tk "Batches" view inside the Queue/History operator workflow (PR-BATCH-OPS-201)
 - `batch_retry_dialog.py`: Modal review of a selected retry (PR-BATCH-OPS-201)
 - `design_system_v2.py`: Tk/ttk style registration and primitive helpers for the StableNew V2 GUI
 - `dropdown_loader_v2.py`: Normalize WebUI resources and populate Pipeline dropdowns across the stage cards and sidebar
 - `engine_settings_dialog.py`: Modern engine settings dialog for GUI V2
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
+- `frame_cleanup_dialog.py`: The one-time confirmation before the first video frame cleanup (VID-FRAME)
 - `generation_profile_strip.py`: Compact generation-profile selector for the Base Generation panel (PR-IMG-PROFILE-630)
 - `gui_invoker.py`: Marshal worker-thread calls through a queue serviced by the Tk main loop
 - `guided_reprocess_dialog.py`: Editable guided draft using Review's established batch Preview and admission dialog
@@ -432,6 +437,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workspace_contract.py`: Format selected media and workflow capability summaries for Video Workflow and Movie Clips
 - `window_layout_contract.py`: Screen-aware main-window geometry policy (PR-GUI-100)
 - `workspace_density_contract.py`: Pure sizing/disclosure rules for the focused operator workspace (PR-GUI-110)
+- `workspace_mode_contract.py`: N6: the Simple / Advanced workspace mode, a Tk-free presentation contract
 
 ## src/gui/views/
 
@@ -444,6 +450,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `embedding_experiment_design_frame.py`: Embedding experiment authoring inside the existing scrollable Learning Design surface
 - `error_modal_v2.py`: Modal that presents structured error envelopes to the user
 - `experiment_design_panel.py`: Present Learning study selection, experiment inputs, and Preview controls
+- `generate_tab_frame_v2.py`: N6 Generate workspace: the Packs x Models batch builder, the Queue and Recent outputs on one page
 - `grid_design_frame.py`: Edit the two axes of a Learning grid and show proposed cell and image counts
 - `learning_analytics_panel.py`: Analytics display panel for learning system
 - `learning_baseline_editor.py`: Editor for Learning's own experiment baseline (the fixed settings every variant shares)
@@ -497,11 +504,14 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
 - `video_workflow_layout_v2.py`: Layout scaffolding for the Video Workflow tab (VID-UX-384)
 - `video_workflow_media_pane_v2.py`: Right-pane media and status column of the Video Workflow tab (VID-UX-384)
+- `video_workflow_motion_ai_host.py`: Suggest a motion phrase for the Video Workflow tab through AI Assist, and undo it (ASSIST-FIX)
+- `video_workflow_motion_intent_v2.py`: Motion preset, motion phrase and duration rows of the Video Workflow tab (V1-1)
 - `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_workflow_rate_review_v2.py`: Rate & review section of the Evaluate view (VID-UX-384 follow-up)
 - `video_workflow_recent_outputs_panel_v2.py`: Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
+- `video_workflow_rerun_host.py`: Re-run with tweaks for the Video Workflow tab (V1-2): read a finished job off the Tk thread, then fill the fo…
 - `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workflow_sections_v2.py`: Section builders for the Video Workflow tab's left pane (VID-UX-384)
 - `video_workflow_sequence_panel_v2.py`: Tk rendering of the Video Workflow "Multi-shot sequence" section (PR-VID-SEQ-331A)
@@ -925,8 +935,10 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `diagnostics_service_v2.py`: Coordinate diagnostic bundle creation and track asynchronous work through shutdown
 - `duration_stats_service.py`: Duration statistics service for queue ETA estimation
+- `model_file_health.py`: DESK-QUICK: one list of every model with missing files
 - `operator_readiness_service.py`: Read-only operator readiness projection built from existing authorities
 - `persistence_worker.py`: PR-HB-004: Async Persistence Worker
+- `queue_idle_report.py`: Log why nothing is running while jobs are queued (RUN-LEAN)
 - `runtime_transition_service.py`: PR-RUNTIME-100: coordinate release of conflicting StableNew-owned GPU runtimes
 - `runtime_warm_hold.py`: One idle warm hold of a StableNew-owned runtime between consecutive jobs (VID-WARM-373)
 - `ui_state_store.py`: UI state persistence for StableNew v2.6
@@ -1017,6 +1029,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `depth_map_resolver.py`: Validate supplied depth maps or materialize estimated depth images for conditioned video workflows
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
+- `frame_retention.py`: Remove a clip's retained PNG frames a day after the clip exists (VID-FRAME, owner decision 2026-11-27)
 - `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
 - `history_media_projection.py`: Read-only media-selection decisions over existing Job History entries
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
@@ -1025,6 +1038,9 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `motion_alignment_compatibility.py`: Source / driving-motion compatibility advisories (PR-VID-MOTION-420)
 - `motion_alignment_preparation.py`: Prepare the driving frames a workflow will consume with one explicit spatial alignment (PR-VID-MOTION-420)
 - `motion_alignment_support.py`: Which registered workflows can honestly be offered spatial alignment (PR-VID-MOTION-420)
+- `motion_intent.py`: The task-first motion intent layer (V1, ``docs/work_packages/V1_motion_controls.md`` sections 5.3, 5.4, 5.9 a…
+- `motion_presets.py`: Versioned motion presets for the task-first Video Workflow (V1, ``docs/work_packages/V1_motion_controls.md``…
+- `motion_rerun.py`: Re-run with tweaks: the intent snapshot of a finished clip and the typed tweak vocabulary (V1-2, section 5.9…
 - `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
 - `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories
@@ -1117,6 +1133,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_controls.py`: Neutral, spec-declared operator controls for workflow-owned generation inputs (PR-VID-192)
 - `workflow_frame_count.py`: Neutral, spec-declared generation-length contract (PR-VID-190)
 - `workflow_input_integrity.py`: Exact prepared-motion admission/dispatch policy, opt-in by workflow declaration
+- `workflow_launch_attention.py`: One resolver for the Comfy Kitchen attention launch profile a workflow declares
 - `workflow_motion_guidance.py`: Display-only, evidence-grounded motion guidance for a Video Workflow (PR-VID-196)
 - `workflow_picker.py`: Operator-facing workflow choices for the Video Workflow tab (PR-VID-UX-313)
 - `workflow_preflight.py`: Read-only readiness gates for a Comfy video workflow, answered before the job is queued (PR-VID-UX-311)
@@ -1124,7 +1141,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_registry.py`: Resolve exact workflow versions and list offerable entries under the catalog's governance rules
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
 - `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
-- `workflow_warnings.py`: The N1 warning for an experimental Comfy video workflow (``src/pipeline/policy_warnings.py``)
+- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow: experimental, and a cropped source (``policy_warnings.py``)
 
 ## src/video/motion/
 

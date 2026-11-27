@@ -301,8 +301,9 @@ def build_live_update_service(
 ) -> Any:
     """Compose the live update service (LAUNCH-UPDATE-1) around the running application; nothing starts here.
 
-    The checkout is the one this process runs from. The preflight compares ``origin`` with the expected repository and
-    runs the launcher's read-only environment check with this interpreter. The only queue effect is the in-memory
+    The checkout is the one this process runs from. The preflight compares ``origin`` with the expected repository,
+    asks GitHub whether it signed the target commit (SAFE-UPDATE; desktop and phone requests alike) and runs the
+    launcher's read-only environment check with this interpreter. The only queue effect is the in-memory
     update hold; the busy probe counts the runner's current job and any RUNNING job in the queue. Without a queue that
     supports the hold the service refuses every update (``queue_unavailable``).
     """
@@ -321,9 +322,15 @@ def build_live_update_service(
         read_file=lambda sha, path: lu.read_target_file(git, sha, path),
     )
 
+    signature_check = lu.github_signature_check()
+
     def preflight(expected_sha: str | None) -> lu.Preflight:
         return lu.preflight(
-            git, expected_sha=expected_sha, expected_origin=lu.EXPECTED_ORIGIN, env_check=env_check
+            git,
+            expected_sha=expected_sha,
+            expected_origin=lu.EXPECTED_ORIGIN,
+            env_check=env_check,
+            signature_check=signature_check,
         )
 
     queue = job_queue_of(app)
