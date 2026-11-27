@@ -9,9 +9,10 @@ idempotent by SHA-256 (the manifest goes first and the gateway names the bodies 
 holds is not sent again; an unchanged item is skipped from the ledger) and resumable (the ledger records an item only
 once the gateway reports it ready).
 
-Only a job's authoritative outputs are published. A file whose metadata names it ``retained_source`` (the un-smoothed
-clip behind a RIFE result) is kept on the PC and never sent, so it never reaches phone review or Immich. While a job
-runs, a video with no StableNew metadata yet waits: its job may still be about to record its role.
+Only a job's authoritative outputs are published: video frames and the un-smoothed clip behind a RIFE result stay on
+the PC (``src/app/review_gateway_sources.py``; a file whose metadata names it ``retained_source`` included), so they
+never reach phone review or Immich. While a job runs, a video with no StableNew metadata yet, or an image that could be
+its frame, waits: the job may still be about to record what it is.
 
 Everything here is blocking file and network work for the sync worker thread, never Tk.
 """
@@ -45,6 +46,7 @@ from src.app.review_gateway_protocol import (
     item_manifest,
     utc_text,
 )
+from src.app.review_gateway_sources import RETAINED, SourceFilter, may_be_unrecorded_frame
 from src.app.review_gateway_store import SyncLedger
 from src.app.site_media_files import SiteOutputError, checked_digest, open_scoped
 from src.app.site_output_library import LibraryItem, OutputLibrary
@@ -252,6 +254,7 @@ class GatewayPublisher:
         self._transcode = transcode
         self._now = now
         self._batch_of = batch_of
+        self._sources = SourceFilter(library.root)
 
     def _batch(self, client: GatewayClient, path: Path) -> Mapping[str, Any] | None:
         """The item's batch, only for a gateway that groups by it (an older one's schema refuses the field)."""
@@ -316,13 +319,17 @@ class GatewayPublisher:
         allow_transcode: Callable[[], bool] = lambda: True,
         hold_unlabelled_video: bool = False,
     ) -> PublishResult:
-        """``hold_unlabelled_video`` (a job is running) leaves a video without StableNew metadata pending."""
+        """``hold_unlabelled_video`` (a job is running) leaves a video without StableNew metadata, and an image that
+        could be its frame, pending."""
 
         result = PublishResult()
         for key, item in self.candidates(limit):
             if cancel.is_set():
                 break
-            if hold_unlabelled_video and item.kind == "video" and item.provenance == "unknown":
+            if hold_unlabelled_video and (
+                (item.kind == "video" and item.provenance == "unknown")
+                or may_be_unrecorded_frame(item)
+            ):
                 result.pending += 1
                 continue
             try:
@@ -366,7 +373,10 @@ class GatewayPublisher:
         if folder in _SKIPPED_FOLDERS or item.kind not in ("image", "video"):
             return self._skip(key, item, "skipped")
         if item.role == OUTPUT_ROLE_RETAINED_SOURCE:
-            return self._skip(key, item, "retained")
+            return self._skip(key, item, RETAINED)
+        excluded = self._sources.exclusion(item)
+        if excluded:
+            return self._skip(key, item, excluded)
         if item.mime not in CONTENT_TYPES:
             return self._skip(key, item, "unsupported")
         size = item.version[2]
