@@ -207,10 +207,13 @@ def test_an_acknowledgement_for_a_record_the_gateway_never_had_is_refused(rig) -
     assert response.json() == {"error": "unknown_record"}
 
 
-def test_health_names_the_contract_version(rig) -> None:
+def test_health_names_the_contract_version_and_its_features(rig) -> None:
+    # A PC sends the optional manifest "batch" only to a gateway that lists "item_batch": an older gateway's schema
+    # would refuse the whole manifest.
     assert rig.sync.get("/sync/v1/health").json() == {
         "status": "ok",
         "schema_version": "stablenew.review-gateway-sync.v1",
+        "features": ["item_batch"],
     }
 
 

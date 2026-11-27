@@ -63,7 +63,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `live_update_remote.py`: The phone side of a live update, on the PC (LAUNCH-UPDATE-2): the ``pc_status`` publish and ``admin_request``
 - `live_update_service.py`: The running app's side of a live update (LAUNCH-UPDATE-1): switch, rate limit, drain, hand-off and receipt
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
-- `review_gateway_actions.py`: Phone actions from the review gateway (RG-140 slice 1): prepare a summary, then admit what it showed
+- `review_gateway_actions.py`: Phone actions from the review gateway (RG-140 slices 1 and 2): prepare a summary, then admit what it showed
 - `review_gateway_apply.py`: Validate and apply review gateway outbox records on the PC (RG-120)
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
@@ -432,6 +432,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workspace_contract.py`: Format selected media and workflow capability summaries for Video Workflow and Movie Clips
 - `window_layout_contract.py`: Screen-aware main-window geometry policy (PR-GUI-100)
 - `workspace_density_contract.py`: Pure sizing/disclosure rules for the focused operator workspace (PR-GUI-110)
+- `workspace_mode_contract.py`: N6: the Simple / Advanced workspace mode, a Tk-free presentation contract
 
 ## src/gui/views/
 
@@ -444,6 +445,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `embedding_experiment_design_frame.py`: Embedding experiment authoring inside the existing scrollable Learning Design surface
 - `error_modal_v2.py`: Modal that presents structured error envelopes to the user
 - `experiment_design_panel.py`: Present Learning study selection, experiment inputs, and Preview controls
+- `generate_tab_frame_v2.py`: N6 Generate workspace: the Packs x Models batch builder, the Queue and Recent outputs on one page
 - `grid_design_frame.py`: Edit the two axes of a Learning grid and show proposed cell and image counts
 - `learning_analytics_panel.py`: Analytics display panel for learning system
 - `learning_baseline_editor.py`: Editor for Learning's own experiment baseline (the fixed settings every variant shares)

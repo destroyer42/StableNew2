@@ -17,13 +17,14 @@ import pytest
 from PIL import Image
 
 from src.app.review_gateway_actions import (
+    ActionInput,
     ActionRefused,
     AppActionCompiler,
     CompiledAction,
     GatewayActions,
 )
 from src.app.review_gateway_apply import RecordApplier
-from src.app.review_gateway_protocol import utc_text
+from src.app.review_gateway_protocol import ActionChoices, utc_text
 from src.app.review_gateway_publish import GatewayPublisher
 from src.app.review_gateway_store import GatewaySettingsStore, SyncLedger
 from src.app.review_gateway_sync import ReviewGatewaySync
@@ -66,20 +67,39 @@ class Clock:
         return self.now
 
 
+MODELS = (("m-jugg", "juggernautXL.safetensors"), ("m-pony", "ponyXL.safetensors"))
+
+
 class FakeCompiler:
     """Returns ordinary NJRs as the real compilers would; records every call."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, tuple[int, ...]]] = []
+        self.inputs: list[ActionInput] = []
+        self.listed: list[str] = []
         self.model = "juggernautXL.safetensors"
+        self.models = dict(MODELS)
         self.warnings: tuple[PolicyWarning, ...] = (WARNING,)
         self.fail: BaseException | None = None
         self.current: BaseException | None = None
 
-    def compile(self, action, path, digest, seeds):
-        self.calls.append((action, digest, seeds))
+    def choices(self, action, path, digest):
+        self.listed.append(action)
         if self.fail is not None:
             raise self.fail
+        if action == "another_model":
+            items = tuple((key, name, name == self.model) for key, name in self.models.items())
+        else:
+            items = (("1x1", "Square 1:1", False), ("2x3", "Portrait 2:3", True))
+        return ActionChoices(action, items)
+
+    def compile(self, action, path, digest, seeds, options=ActionInput()):
+        self.calls.append((action, digest, seeds))
+        self.inputs.append(options)
+        if self.fail is not None:
+            raise self.fail
+        if action == "another_model" and options.choice not in self.models:
+            raise ActionRefused("choice_unavailable")
         count = len(seeds) or 1
         records = tuple(make_test_njr(prompt="private prompt") for _ in range(count))
 
@@ -87,14 +107,18 @@ class FakeCompiler:
             if self.current is not None:
                 raise self.current
 
+        kinds = {"more_like_this": "followup", "make_video": "video"}
         return CompiledAction(
             records,
-            (f"Checkpoint {self.model}.",),
+            (f"Checkpoint {self.model}.", *((f"Adds: {options.text}",) if options.text else ())),
             self.warnings,
-            (action, self.model, digest, str(count)),
+            (action, self.model, digest, str(count), options.choice, options.text),
             reprocess=False,
-            kind="followup" if action == "more_like_this" else "rework",
+            kind=kinds.get(action, "rework"),
             require_current=require_current,
+            choices=self.choices(action, path, digest)
+            if action in ("another_model", "aspect_ratio")
+            else None,
         )
 
 
@@ -321,11 +345,174 @@ def test_a_changed_file_is_refused_before_anything_compiles(env):
     assert env.compiler.calls == []
 
 
-def test_a_reserved_action_is_refused(env):
-    ack = env.answer(env.request("another_model"))
+@pytest.mark.parametrize("action", ["rerun_clip", "continue_clip"])
+def test_a_reserved_action_is_refused(env, action):
+    """N8's clip actions stay reserved: they will call V1's shared functions, not build jobs here."""
+
+    ack = env.answer(env.request(action))
 
     assert (ack["outcome"], ack["reason_code"]) == ("refused", "invalid_record")
     assert env.compiler.calls == []
+
+
+# -- RG-140 slice 2 -------------------------------------------------------------------------------------------------
+
+
+def test_another_model_first_lists_the_pcs_checkpoints_and_admits_nothing(env):
+    prepared = env.request("another_model")
+    ack = env.answer(prepared)
+
+    assert ack["outcome"] == "applied"
+    assert set(ack["receipt"]) == {"choices"}
+    assert ack["receipt"]["choices"] == {
+        "action": "another_model",
+        "items": [
+            {"id": "m-jugg", "label": "juggernautXL.safetensors", "current": True},
+            {"id": "m-pony", "label": "ponyXL.safetensors"},
+        ],
+    }
+    assert env.compiler.calls == [] and env.submitted == []
+    # A list is not a summary: confirming it cannot admit anything.
+    refused = env.answer(env.confirm(prepared, "0" * 64, "another_model"))
+    assert refused["reason_code"] == "prepare_required"
+
+
+def test_another_model_summary_and_admission_use_the_chosen_checkpoint(env):
+    prepared = env.request("another_model", choice="m-pony")
+    ack = env.answer(prepared)
+
+    summary = _summary(ack)
+    assert (summary["action"], summary["title"], summary["queue_position"]) == (
+        "another_model",
+        "Run through another model",
+        "last",
+    )
+    assert ack["receipt"]["choices"]["selected"] == "m-pony"
+    confirmed = env.answer(env.confirm(prepared, summary["revision"], "another_model"))
+
+    assert confirmed["outcome"] == "applied" and len(confirmed["receipt"]["job_ids"]) == 1
+    assert [options.choice for options in env.compiler.inputs] == ["m-pony", "m-pony"]
+    [(records, policy)] = env.submitted
+    assert policy.priority is JobPriority.NORMAL  # only fixes run next (owner decision)
+    assert records[0].provenance.metadata[PHONE_SUBMISSION]["kind"] == "rework"
+
+
+def test_a_different_choice_is_a_different_summary(env):
+    pony = _summary(env.answer(env.request("another_model", choice="m-pony")))
+    jugg = _summary(env.answer(env.request("another_model", choice="m-jugg")))
+
+    assert pony["revision"] != jugg["revision"]
+
+
+def test_a_checkpoint_the_pc_no_longer_lists_is_refused(env):
+    ack = env.answer(env.request("another_model", choice="m-gone"))
+
+    assert (ack["outcome"], ack["reason_code"], ack["receipt"]["detail"]) == (
+        "refused",
+        "action_unavailable",
+        "choice_unavailable",
+    )
+
+
+def test_aspect_ratio_lists_ratios_then_admits_at_the_back(env):
+    listed = env.answer(env.request("aspect_ratio"))
+    assert [item["id"] for item in listed["receipt"]["choices"]["items"]] == ["1x1", "2x3"]
+
+    prepared = env.request("aspect_ratio", choice="1x1")
+    summary = _summary(env.answer(prepared))
+    assert summary["title"] == "Change the aspect ratio"
+    ack = env.answer(env.confirm(prepared, summary["revision"], "aspect_ratio"))
+
+    assert ack["outcome"] == "applied"
+    [(_records, policy)] = env.submitted
+    assert policy.priority is JobPriority.NORMAL
+
+
+def test_a_prompt_tweak_carries_the_owners_words_through_both_steps(env):
+    prepared = env.request("prompt_tweak", text="smiling, golden hour")
+    summary = _summary(env.answer(prepared))
+
+    assert summary["title"] == "Tweak the prompt"
+    assert "Adds: smiling, golden hour" in summary["lines"]
+    ack = env.answer(env.confirm(prepared, summary["revision"], "prompt_tweak"))
+
+    assert ack["outcome"] == "applied"
+    assert [options.text for options in env.compiler.inputs] == ["smiling, golden hour"] * 2
+    [(_records, policy)] = env.submitted
+    assert policy.priority is JobPriority.NORMAL
+
+
+def test_blank_prompt_words_are_refused_before_anything_compiles(env):
+    ack = env.answer(env.request("prompt_tweak", text="   "))
+
+    assert (ack["reason_code"], ack["receipt"]["detail"]) == (
+        "action_unavailable",
+        "prompt_required",
+    )
+    assert env.compiler.calls == []
+
+
+@pytest.mark.parametrize("text", [None, "she turns towards the window"])
+def test_make_video_queues_one_clip_with_a_fresh_seed(env, text):
+    params = {"text": text} if text else {}
+    prepared = env.request("make_video", **params)
+    summary = _summary(env.answer(prepared))
+
+    assert (summary["title"], summary["job_count"], summary["queue_position"]) == (
+        "Make a video",
+        1,
+        "last",
+    )
+    ack = env.answer(env.confirm(prepared, summary["revision"], "make_video"))
+
+    assert ack["outcome"] == "applied" and len(ack["receipt"]["job_ids"]) == 1
+    seeds = [call[2] for call in env.compiler.calls]
+    assert [len(group) for group in seeds] == [1, 1]
+    assert [options.text for options in env.compiler.inputs] == [text or ""] * 2
+    [(records, policy)] = env.submitted
+    assert policy.priority is JobPriority.NORMAL
+    assert records[0].provenance.metadata[PHONE_SUBMISSION]["kind"] == "video"
+
+
+def test_an_options_list_the_pc_cannot_make_is_a_closed_refusal(env):
+    env.compiler.fail = SiteOutputError("model_unavailable")
+
+    ack = env.answer(env.request("another_model"))
+
+    assert (ack["reason_code"], ack["receipt"]) == (
+        "action_unavailable",
+        {"detail": "model_unavailable"},
+    )
+
+
+def test_a_ledger_from_slice_one_keeps_its_prepares_and_gains_options(tmp_path):
+    path = tmp_path / "ledger.sqlite3"
+    first = SyncLedger(path)
+    first.get_meta("x")
+    with first._transaction() as db:
+        db.execute("DROP TABLE action_prepares")
+        db.execute(
+            "CREATE TABLE action_prepares (record_id TEXT PRIMARY KEY, device_id TEXT NOT NULL,"
+            " library_id TEXT NOT NULL, sha256 TEXT NOT NULL, action TEXT NOT NULL, seeds INTEGER,"
+            " revision TEXT NOT NULL, at TEXT NOT NULL, admitted_by TEXT, receipt TEXT)"
+        )
+        db.execute(
+            "INSERT INTO action_prepares VALUES ('r1', 'd', 'l', 's', 'fix_face', NULL, 'v',"
+            " '2026-11-26T12:00:00Z', NULL, NULL)"
+        )
+    first.close()
+
+    migrated = SyncLedger(path)
+    try:
+        old = migrated.prepared("r1")
+        assert (old["action"], migrated.prepare_options(old)) == ("fix_face", ActionInput())
+        migrated.remember_prepare(
+            "r2", "d", "l", "s", "prompt_tweak", None, "v", "2026-11-26T12:00:00Z",
+            options={"choice": "", "text": "smiling"},
+        )  # fmt: skip
+        assert migrated.prepare_options(migrated.prepared("r2")) == ActionInput(text="smiling")
+    finally:
+        migrated.close()
 
 
 def test_a_changed_summary_is_shown_again_and_can_be_confirmed(env):
