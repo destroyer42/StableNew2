@@ -423,7 +423,11 @@ def test_a_reused_prepared_clip_travels_in_the_submission_form():
     plan = driver_rerun_plan(snap, 49, verify=lambda p, s: True)
     form = rerun_submission_form(snap, snap, A14B_POLICY, driver=plan)
     assert form["prepared_motion_source"]["derived"]["path"] == "prep.mp4"
-    assert form["pose_video_path"] == "drv.mp4" and MOTION_INTENT_FIELD not in form
+    assert form["pose_video_path"] == "drv.mp4"
+    assert (
+        form[MOTION_INTENT_FIELD]["intent"] == "follow_clip"
+    )  # V1-3: provenance, as the desktop form records
+    assert form[MOTION_INTENT_FIELD]["motion_phrase"] == ""
 
 
 def test_other_engines_resolve_a_duration_tweak_to_their_own_lengths(world):

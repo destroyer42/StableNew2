@@ -2,7 +2,9 @@
 
 Decision record and work package. Status: **accepted**. The owner accepted all eight recommendations D1-D8 on
 2026-11-26 ("I accept all", relayed by the orchestrator session `local_ecb8e9b1-c2ce-4303-95cf-308e8cc92d9e`; section 9).
-Next slice: V1-1. No product code is changed by this record. Way Forward item V1 (owner-accepted 2026-11-25), paired with N8 (phone video
+V1-1 and V1-2 are merged. **Re-scoped 2026-11-27** (section 14, owner: "Accept re-scope"): V1-3 is rebuilt on
+Wan-Animate-2, V1-4 and V1-5 are deferred and an end-frame slice is added; section 14 wins where it differs from
+sections 5 to 10. Way Forward item V1 (owner-accepted 2026-11-25), paired with N8 (phone video
 actions) and governed by the N7 focus policy (no new engines; no motion evaluation layers that do not feed V1).
 
 ## 1. Problem and decision
@@ -425,3 +427,30 @@ Rough size: V1-1 and V1-6 about 1-2 days of agent work each, the others about 2-
   `docs/runbooks/motion_alignment.md` (inline preview, detected anchors); `STORYBOARDS.md` (continue entry points).
 - `STATUS.md`: one line in the video capability paragraph when V1-1 lands; no PR narrative. `docs/CODEX_MAP.md`: rows
   for `motion_intent.py`, `motion_presets.py`, `start_pose_match.py`. Generated code map regenerated per slice.
+
+## 14. Re-scope accepted 2026-11-27
+
+**Owner acceptance (chat, 2026-11-27): "Accept re-scope"** (relayed by the orchestrator session
+`local_ecb8e9b1-c2ce-4303-95cf-308e8cc92d9e`). Research basis: the 2026-11-27 value assessment notes (not committed):
+Wan-Animate-2 consumes a driving video directly, with no pose extraction or skeleton preprocessing; the stock
+`WanFirstLastFrameToVideo` node is in the managed ComfyUI and the neutral contract already declares an `end_anchor`
+control that no catalog workflow uses. Neither has been run on this machine by this record.
+
+**Slice order.** V1-1 (merged), V1-2 (merged), then:
+
+| Slice | Outcome | Acceptance |
+|---|---|---|
+| **A. Follow a driver** (V1-3 rebuilt) | Task-first panel on Wan-Animate-2: source image, driver clip, duration in seconds, preset, Queue. The driving video goes in directly (no pose files, no alignment dialog). Length from the duration and the driver; the window is trimmed and prepared automatically at natural speed with a size cap (D8). Engine settings under Advanced. | A driver clip is queued from the panel in under five steps and the panel shows no frame counts. Same compiler, NJR, `JobService` path. |
+| **B. End frame (A14B)** | Start image plus end image gives the clip between them, through the stock first-and-last-frame node, as a new catalog workflow id, **experimental until rated**. Offered to continue a clip only if that falls out cheaply, otherwise noted for V1-6. | The new workflow compiles with both images bound; Queue warns and records the opt-in; no other workflow's graph changes. |
+| V1-6 Continue a clip | unchanged (5.8) | unchanged |
+
+**Deferred (not cancelled): V1-4 start-pose matching and V1-5 inline alignment**, with their gaps G4, G5, G6 and
+sections 5.6 and 5.7. Align Motion stays the existing manual dialog under Advanced. **D1** (apply the best start pose
+automatically) and **D4** (fit alignment automatically) have no effect while those slices are deferred; they are not
+reversed. D2, D3, D5, D6 and D8 stand. D7's slice order is replaced by the table above.
+
+**Supersedes sections 4.2 and 8** only as far as slice B: one new workflow id and version using a stock ComfyUI node
+on the installed A14B experts. No new engine, model, download, custom node or evaluation layer.
+
+**Not in slice A** (left for later, not silently dropped): the compact tag-filtered driver picker (G9) and a separate
+Motion Library window; the library stays inline behind a button.

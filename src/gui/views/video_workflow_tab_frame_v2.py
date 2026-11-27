@@ -24,6 +24,9 @@ from src.gui.view_contracts.video_motion_alignment_contract import (
 )
 from src.gui.view_contracts.video_motion_alignment_contract import AlignInputs
 from src.gui.view_contracts.video_motion_prep_contract import (
+    BLOCKED_FIELD as PREP_BLOCKED_FIELD,
+)
+from src.gui.view_contracts.video_motion_prep_contract import (
     PREPARED_FIELD,
     MotionPreparationSession,
 )
@@ -44,6 +47,7 @@ from src.gui.views.video_eval_panel_v2 import VideoEvalPanel
 from src.gui.views.video_workflow_alignment_host import AlignmentHost, AlignmentRow
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
+from src.gui.views.video_workflow_driver_host_v2 import DriverClipHost, DriverInputs
 from src.gui.views.video_workflow_evaluate_view_v2 import VideoWorkflowEvaluateView
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
 from src.gui.views.video_workflow_harvest_host import HarvestHost
@@ -90,6 +94,7 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
 )
 from src.video.conditioning_inspection import build_inspection_context
+from src.video.driver_intent import DEFAULT_DRIVER_PROMPT, WHOLE_MOVEMENT_LABEL
 from src.video.motion_intent import (
     LONGEST_SUFFIX,
     MOTION_INTENT_FIELD,
@@ -110,13 +115,17 @@ from src.video.motion_library.handoff import (
 )
 from src.video.motion_library.harvest_service import HarvestSourceRef
 from src.video.motion_presets import (
+    CONTROL_FIELD_PREFIX,
     FIELD_MOTION_PHRASE,
+    INTENT_FOLLOW_DRIVER,
     INTENT_PROMPT_ONLY,
+    MOTION_PROMPT_CONTROL,
     NO_PRESET_ID,
     NO_PRESET_LABEL,
     intent_suggestions,
     preset_by_id,
     preset_by_label,
+    preset_duration_seconds,
     preset_is_modified,
 )
 from src.video.motion_rerun import (
@@ -170,6 +179,19 @@ _SETTINGS_FIELD_TITLES = {
     FIELD_MOTION_PHRASE: "Motion phrase",
 }
 _SETTINGS_FIELDS = frozenset({FIELD_ENGINE, *_SETTINGS_FIELD_TITLES})
+# V1-3: the declared controls a driving-video preset sets (pinned once the operator edits one).
+_PRESET_CONTROLS = (MOTION_PROMPT_CONTROL, "pose_strength", "reference_image_strength")
+
+
+def _control_text(value: Any) -> str:
+    return f"{value:g}" if isinstance(value, float) else str(value if value is not None else "")
+
+
+def _settings_title(field: str) -> str:
+    return (
+        _SETTINGS_FIELD_TITLES.get(field)
+        or field.removeprefix(CONTROL_FIELD_PREFIX).replace("_", " ").capitalize()
+    )
 
 
 def _frame_count_label(choice: dict[str, Any]) -> str:
@@ -205,6 +227,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     depth_path_entry: ttk.Entry
     depth_browse_button: ttk.Button
     motion_intent_panel: MotionIntentPanel
+    follow_clip_frame: ttk.Frame
+    pose_video_frame: ttk.Frame
+    pose_video_entry: ttk.Entry
 
     def __init__(
         self,
@@ -238,6 +263,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._preset_id = NO_PRESET_ID
         self._suggestion_basis: dict[str, str] = {}
         self._requested_seconds: tuple[float, int] | None = None
+        # V1-3: the driver clip of "Follow a driving video" (built once the body exists).
+        self._driver_host: DriverClipHost | None = None
+        self._duration_shown = ""
+        self._driver_typed = False
         # V1-2: the finished job a Re-run with tweaks opened (its lineage applies while the source is unchanged).
         self._rerun: RerunOpening | None = None
         # VID-UX-384: which half of the tab is showing (a GUI preference, saved with the form, never
@@ -379,6 +408,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         self._build_header()
         self._build_body()
+        self._driver_host = DriverClipHost(
+            self,
+            read_inputs=self._read_driver_inputs,
+            inspect=lambda path: self._experiment_controller().inspect_driving_video(path),
+            prep_panel=self.motion_prep_panel,
+            apply_frames=self._apply_driver_frames,
+            on_change=self._refresh_driver_view,
+        )
+        self.workflow_controls_panel.on_edit = lambda name: self._pins.pin(
+            CONTROL_FIELD_PREFIX + name
+        )
         self.show_media_var.trace_add("write", lambda *_args: self._apply_show_media())
         self._apply_show_media()
         self.show_experimental_var.trace_add("write", lambda *_args: self._sync_engine_choices())
@@ -713,7 +753,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.recent_outputs_panel = self._media_pane.recent_panel
 
     def _build_task_inputs(self, body: ttk.Frame) -> None:
-        """Row 0: the prompt (every task); row 4: the driving-clip inputs (their own task)."""
+        """Row 0: the prompt (every task); row 4: the driving-clip tools (their own task)."""
 
         prompt_label = ttk.Label(body, text="Prompt", style="Dark.TLabel")
         self.prompt_label = prompt_label  # relabelled from the workflow's operator projection
@@ -739,41 +779,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         inputs.columnconfigure(0, weight=1)
         # A permanent empty row keeps the stack shrinking when everything else in it is hidden.
         ttk.Frame(inputs, style="Panel.TFrame", height=0).grid(row=3, column=0, sticky="ew")
-        clip = ttk.Frame(inputs, style="Panel.TFrame")
-        clip.grid(row=0, column=0, sticky="ew")
-        clip.columnconfigure(0, weight=1)
-        clip.grid_remove()
-        self.follow_clip_frame = clip
         tools = ttk.Frame(inputs, style="Panel.TFrame")
         tools.grid(row=2, column=0, sticky="ew")
         tools.columnconfigure(0, weight=1)
         tools.grid_remove()
         self.follow_clip_tools = tools
-        self.pose_video_frame = ttk.Frame(clip, style="Panel.TFrame")
-        self.pose_video_frame.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        pose_video_label = ttk.Label(
-            self.pose_video_frame, text="Driving / Control Video", style="Dark.TLabel"
-        )
-        pose_video_label.pack(side="left", padx=(0, 6))
-        self.pose_video_entry = ttk.Entry(
-            self.pose_video_frame, textvariable=self.pose_video_var, style="Dark.TEntry", width=34
-        )
-        self.pose_video_entry.pack(side="left", fill="x", expand=True)
-        ttk.Button(
-            self.pose_video_frame,
-            text="Browse...",
-            style="Dark.TButton",
-            command=self._on_browse_pose_video,
-        ).pack(side="left", padx=(6, 0))
-        self._attach_setting_help(
-            "pose_video",
-            VIDEO_WORKFLOW_SETTING_HELP["pose_video"],
-            pose_video_label,
-            self.pose_video_entry,
-        )
-        # PR-VID-MOTION-210: optional exact preparation of the driving clip for this workflow.
+        # V1-3: preparation happens by itself; the window and alignment editors are folded away.
+        self.driver_tools_section = DisclosureSection(tools, title="Adjust window and alignment")
+        self.driver_tools_section.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        adjust = self.driver_tools_section.body
+        adjust.columnconfigure(0, weight=1)
+        # PR-VID-MOTION-210: exact preparation of the driving clip for this workflow.
         self.motion_prep_panel = WorkflowMotionPreparationPanel(
-            tools,
+            adjust,
             session=self._motion_prep_session,
             read_form=self._read_motion_prep_form,
             on_change=self._on_motion_prep_changed,
@@ -788,11 +806,18 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             media_allowed=self._alignment_media_allowed,
             on_change=self._invalidate_experiment_preview,
         )
-        self.alignment_row = AlignmentRow(tools, host=self.alignment_host)
+        self.alignment_row = AlignmentRow(adjust, host=self.alignment_host)
         self.alignment_row.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         # PR-VID-MOTION-LIB-353: local motion-reference catalog; Use as Driving Video fills the
         # driving-video field above and nothing else.
         self._recent_controller = self._experiment_controller()
+        self.motion_library_button = ttk.Button(
+            tools,
+            text="Show Motion Library",
+            style="Dark.TButton",
+            command=self._toggle_motion_library,
+        )
+        self.motion_library_button.grid(row=1, column=0, sticky="w", pady=(0, 6))
         self.motion_library_panel = WorkflowMotionLibraryPanel(
             tools,
             ports=self._motion_library_ports(),
@@ -807,6 +832,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_harvest=self.open_motion_harvest,
         )
         self.motion_library_panel.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        self.motion_library_panel.grid_remove()
 
     def _build_sequence_panel(self, body: ttk.Frame) -> None:
         """Row 5, built after the Settings block because the panel reads the form as it is created."""
@@ -1174,6 +1200,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                     state[FIELD_LIBRARY_BINDING] = binding
         if self.workflow_controls_panel.control_names:
             state["operator_controls"] = self.workflow_controls_panel.get_values()
+        if for_submission and self._task == TASK_FOLLOW_CLIP:
+            waiting = self._driver_block_reason()
+            if waiting:  # never queue the unprepared clip while the panel is still preparing it
+                state[PREP_BLOCKED_FIELD] = waiting
+            state[MOTION_INTENT_FIELD] = self._motion_intent_record("")
+            if not state["prompt"]:
+                state["prompt"] = DEFAULT_DRIVER_PROMPT  # shown under the prompt before Queue
+                state[MOTION_INTENT_FIELD]["basis"]["prompt"] = (
+                    "The prompt box was empty: the default was sent."
+                )
         phrase = self.motion_intent_panel.phrase_var.get().strip()
         if for_submission and self._task == TASK_ANIMATE:
             # V1-1 (D3, D5): the visible motion phrase is part of the submitted prompt; the preset and the basis of
@@ -1201,6 +1237,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if not isinstance(state, dict):
             return
         self._refresh_workflow_choices()
+        if self._driver_host is not None:
+            self._driver_host.release()  # a restored form is shown as saved, never re-prepared by itself
         self.select_view(VIEW_EVALUATE if state.get("view") == VIEW_EVALUATE else VIEW_CREATE)
         if "show_media" in state:
             self.show_media_var.set(bool(state.get("show_media")))
@@ -1244,7 +1282,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.smooth_var.set(isinstance(interpolation, dict) and bool(interpolation.get("enabled")))
         if self.pose_video_frame.winfo_manager():
             self.pose_video_var.set(str(state.get("pose_video_path") or ""))
-        self.workflow_controls_panel.set_values(state.get("operator_controls"))
+        controls = state.get("operator_controls")
+        self.workflow_controls_panel.set_values(controls)
+        if isinstance(controls, Mapping):
+            self._pins.pin_all(CONTROL_FIELD_PREFIX + str(name) for name in controls)
         self.motion_intent_panel.phrase_var.set(str(state.get("motion_phrase") or ""))
         # Restored values are the operator's own: suggestions never replace them (PR-VID-UX-360).
         self._pins.pin_all(_SETTINGS_FIELDS)
@@ -1348,7 +1389,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             for control in workflow_meta.get("operator_controls") or ()
         )
         # Required inputs, and the picker where an experimental engine is authorised, must not hide behind a header.
-        if required_control or workflow_meta.get("experimental"):
+        # V1-3: following a driver, Queue on the visible warning is the opt-in; the picker stays under Advanced.
+        if required_control or (
+            workflow_meta.get("experimental") and self._task != TASK_FOLLOW_CLIP
+        ):
             self.advanced_section.set_expanded(True)
             self._sync_settings_editor_label()
         self._refresh_queue_gate()
@@ -1362,6 +1406,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         if policy_reason:
             return str(policy_reason)
+        driver_reason = self._driver_block_reason()
+        if driver_reason:
+            return driver_reason
         runtime_reason = self._runtime_readiness_session.block_reason()
         if runtime_reason:
             # The full reason, and what to do about it, is in the Runtime readiness strip below.
@@ -1402,7 +1449,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             _frame_count_label(choice): int(choice["frames"]) for choice in choices
         }
         self.frame_count_combo["values"] = list(self._frame_count_labels)
-        self.frame_count_frame.grid()
+        self._sync_length_row()
         self.motion_intent_panel.show_duration(True)
         self._select_frame_count(projection.get("default"))
         self._sync_duration()
@@ -1524,7 +1571,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             seed_value = self.seed_var.get().strip() or "Random (frozen at admission)"
             effective_parts.append(f"seed={seed_value}")
         if self._frame_count_labels and self.frame_count_var.get():
-            effective_parts.append(f"length={self.frame_count_var.get()}")
+            policy, frames = self._length_policy(), self._current_frames()
+            shown = self.frame_count_var.get()
+            if self._task == TASK_FOLLOW_CLIP and policy is not None and frames is not None:
+                shown = duration_label(frames, policy)  # V1-3: this task never shows frame counts
+            effective_parts.append(f"length={shown}")
         effective_parts.extend(self.workflow_controls_panel.summary_parts())
         if (
             not visible
@@ -1562,6 +1613,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             alignment_row.refresh()
         self._refresh_advanced_status()
         self._refresh_suggested_line()
+        host = getattr(self, "_driver_host", None)
+        if host is not None:
+            host.replan()  # cheap unless the driver, source or engine changed
 
     def _refresh_advanced_status(self) -> None:
         """Collapsed-header hints: say so when a closed section holds something the operator set."""
@@ -1652,7 +1706,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self._motion_prep_session.clear()
             self.motion_prep_panel.refresh()
             self.alignment_host.discard()
+            if self._driver_host is not None:
+                self._driver_host.release()
         if task_id == TASK_FOLLOW_CLIP:
+            if previous != TASK_FOLLOW_CLIP and self._driver_host is not None:
+                self._driver_host.requested_seconds = preset_duration_seconds(
+                    preset_by_id(self._preset_id)
+                )
             self.follow_clip_frame.grid()
             self.follow_clip_tools.grid()
         else:
@@ -1662,7 +1722,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.sequence_panel.grid()
         else:
             self.sequence_panel.grid_remove()
-        self.motion_intent_panel.show_prompt_only(task_id == TASK_ANIMATE)
+        self.motion_intent_panel.show_mode(
+            phrase=task_id == TASK_ANIMATE, preset=task_id in (TASK_ANIMATE, TASK_FOLLOW_CLIP)
+        )
+        self._sync_length_row()
+        self._sync_duration()
         self._sync_batch_strip()
         self._sync_engine_choices()
         readiness = getattr(self, "motion_readiness_panel", None)
@@ -1727,6 +1791,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             # V1-1: the motion preset is one more suggestion source, through the same pins.
             overlay, intent_notes = intent_suggestions(self._task, self._preset_id, workflow_meta)
             suggestions.update(overlay)
+            if (
+                self._task == TASK_FOLLOW_CLIP
+                and self._driver_host is not None
+                and self._driver_host.engaged
+            ):
+                suggestions.pop(FIELD_LENGTH, None)  # V1-3: the length follows the driver
             if kept_length is None:
                 kept_length = self._frame_count_labels.get(self.frame_count_var.get())
             values, notes = reconcile(
@@ -1751,12 +1821,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             else:
                 reasons.append("Engine: Your choice.")
             reasons.extend(
-                f"{_SETTINGS_FIELD_TITLES[field]}: "
+                f"{_settings_title(field)}: "
                 + ("Your choice." if field in self._pins.pinned else suggestion.reason)
                 for field, suggestion in suggestions.items()
             )
         self.suggestion_reasons_var.set("\n".join(reasons))
         self._refresh_suggested_line()
+        if self._driver_host is not None:
+            self._driver_host.replan()
 
     def _write_suggested(self, field: str, value: Any) -> None:
         if field == FIELD_LENGTH:
@@ -1771,6 +1843,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self._set_text_value(self.negative_prompt_text, str(value))
         elif field == FIELD_MOTION_PHRASE:
             self.motion_intent_panel.phrase_var.set(str(value))
+        elif field.startswith(CONTROL_FIELD_PREFIX):
+            name = field.removeprefix(CONTROL_FIELD_PREFIX)
+            self.workflow_controls_panel.set_values({name: _control_text(value)})
 
     def _refresh_suggested_line(self) -> None:
         line = getattr(self, "suggested_line", None)
@@ -1786,7 +1861,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         seed = self.seed_var.get().strip()
         smooth = bool(self.smooth_var.get())
         policy, frames = self._length_policy(), self._current_frames()
-        preset = preset_by_id(self._preset_id) if self._task == TASK_ANIMATE else None
+        preset = (
+            preset_by_id(self._preset_id)
+            if self._task in (TASK_ANIMATE, TASK_FOLLOW_CLIP)
+            else None
+        )
         self._refresh_composed()
         self._refresh_preset_status()
         line.set_summary(
@@ -1828,19 +1907,41 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         policy, frames = self._length_policy(), self._current_frames()
         if policy is None or frames is None:
+            self._duration_shown = ""
             self.motion_intent_panel.set_duration("", "", "", ())
+            return
+        if self._task == TASK_FOLLOW_CLIP:
+            self._sync_driver_duration(policy, frames)
             return
         choice = choice_for_frames(frames, policy)
         options = [option.label for option in duration_options(policy)]
+        self._duration_shown = duration_label(frames, policy)
         self.motion_intent_panel.set_duration(
-            duration_label(frames, policy), choice.line(), choice.advisory, options
+            self._duration_shown, choice.line(), choice.advisory, options
         )
+
+    def _sync_driver_duration(self, policy: LengthPolicy, frames: int) -> None:
+        """V1-3: the duration of a driven clip, in seconds only; what the driver allows is said beside it."""
+
+        host = self._driver_host
+        requested = None if host is None else host.requested_seconds
+        clip = self.pose_video_var.get().strip()
+        whole = requested is None and (not clip or (host is not None and host.engaged))
+        self._duration_shown = WHOLE_MOVEMENT_LABEL if whole else duration_label(frames, policy)
+        status = host.status() if host is not None else ""
+        if not clip:
+            status = "Choose a driving video: the clip follows its movement."
+        options = [WHOLE_MOVEMENT_LABEL, *(option.label for option in duration_options(policy))]
+        self.motion_intent_panel.set_duration(self._duration_shown, "", status, options)
 
     def _on_duration_entered(self, text: str) -> None:
         """The operator chose or typed a duration: the nearest legal length becomes their (pinned) length."""
 
         policy = self._length_policy()
         if policy is None:
+            return
+        if self._task == TASK_FOLLOW_CLIP:
+            self._on_driver_duration(text, policy)
             return
         try:
             seconds = parse_seconds(text)
@@ -1855,19 +1956,88 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._requested_seconds = (seconds, choice.frames)
         self._select_frame_count(choice.frames)
 
+    def _on_driver_duration(self, text: str, policy: LengthPolicy) -> None:
+        """ "Whole movement" or seconds; the driver then decides how much of it fits."""
+
+        host = self._driver_host
+        if host is None or text == self._duration_shown:
+            return  # leaving the box unchanged is not a choice
+        seconds: float | None = None
+        if text.strip().lower() != WHOLE_MOVEMENT_LABEL.lower():
+            try:
+                seconds = parse_seconds(text)
+                chosen = frames_for_duration(seconds, policy).frames
+            except ValueError as exc:
+                self.status_var.set(str(exc))
+                self._sync_duration()
+                return
+        else:
+            chosen = policy.default
+        with self._pins.applying():
+            self._select_frame_count(
+                chosen
+            )  # without a driver this is the length; with one it is re-fitted
+        host.set_duration(seconds)
+        self._sync_duration()
+
     def _on_preset_chosen(self, label: str) -> None:
         preset = preset_by_label(label)
         self._preset_id = NO_PRESET_ID if preset is None else preset.preset_id
+        if self._task == TASK_FOLLOW_CLIP:
+            self._apply_driver_preset(preset)
+            return
         self._apply_suggestions()
+
+    def _apply_driver_preset(self, preset: Any) -> None:
+        """V1-3: a preset sets the motion controls and how long the clip should be; edited controls are kept."""
+
+        if preset is None:
+            meta = self._workflow_map.get(self.workflow_var.get().strip(), {})
+            defaults = {
+                control["name"]: ""
+                if control.get("kind") == "text"
+                else _control_text(control.get("default"))
+                for control in meta.get("operator_controls") or ()
+                if control["name"] in _PRESET_CONTROLS
+                and CONTROL_FIELD_PREFIX + control["name"] not in self._pins.pinned
+            }
+            self.workflow_controls_panel.set_values(defaults)
+        host = self._driver_host
+        if host is not None:
+            host.requested_seconds = preset_duration_seconds(preset)
+        self._apply_suggestions()
+        if host is not None:
+            host.engage()
+        self._sync_duration()
 
     def _on_reset_preset(self) -> None:
         """Forget the edits to what the preset sets (its duration and phrase) and take the preset's values again."""
 
         self._pins.pinned.difference_update({FIELD_LENGTH, FIELD_MOTION_PHRASE})
+        if self._task == TASK_FOLLOW_CLIP:
+            self._pins.pinned.difference_update(
+                CONTROL_FIELD_PREFIX + name for name in _PRESET_CONTROLS
+            )
+            self._apply_driver_preset(preset_by_id(self._preset_id))
+            return
         self._apply_suggestions()
 
     def _preset_modified(self) -> bool:
         meta = self._workflow_map.get(self.workflow_var.get().strip(), {})
+        preset = preset_by_id(self._preset_id)
+        if self._task == TASK_FOLLOW_CLIP:
+            host = self._driver_host
+            if (
+                preset is not None
+                and host is not None
+                and host.requested_seconds != preset_duration_seconds(preset)
+            ):
+                return True
+            values = self.workflow_controls_panel.get_values()
+            current_controls = {
+                CONTROL_FIELD_PREFIX + name: value for name, value in values.items()
+            }
+            return preset_is_modified(preset, INTENT_FOLLOW_DRIVER, meta, current_controls)
         current = {
             FIELD_LENGTH: self._current_frames(),
             FIELD_MOTION_PHRASE: self.motion_intent_panel.phrase_var.get(),
@@ -1880,7 +2050,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.motion_intent_panel.set_preset(NO_PRESET_LABEL, "", modified=False)
             return
         modified = self._preset_modified()
-        side = preset.prompt_only
+        side = preset.follow_driver if self._task == TASK_FOLLOW_CLIP else preset.prompt_only
         status = " ".join(
             part for part in ("Modified." if modified else "", side.basis, side.warning) if part
         )
@@ -1891,6 +2061,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         phrase = self.motion_intent_panel.phrase_var.get().strip()
         prompt = self.prompt_text.get("1.0", "end").strip()
+        if self._task == TASK_FOLLOW_CLIP:
+            self.motion_intent_panel.set_composed("" if prompt else DEFAULT_DRIVER_PROMPT)
+            return
         shown = phrase and self._task == TASK_ANIMATE
         self.motion_intent_panel.set_composed(compose_prompt(prompt, phrase) if shown else "")
 
@@ -1899,9 +2072,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         duration = None
         if policy is not None and frames is not None:
             typed = self._requested_seconds
-            duration = choice_for_frames(
-                frames, policy, typed[0] if typed is not None and typed[1] == frames else None
-            )
+            requested = typed[0] if typed is not None and typed[1] == frames else None
+            if self._task == TASK_FOLLOW_CLIP:
+                requested = (
+                    None if self._driver_host is None else self._driver_host.requested_seconds
+                )
+            duration = choice_for_frames(frames, policy, requested)
         basis = {
             field: "Your choice." if field in self._pins.pinned else reason
             for field, reason in self._suggestion_basis.items()
@@ -1916,6 +2092,60 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             duration=duration,
             basis=basis,
         )
+
+    # ------------------------------------------------------------------ follow a driving video (V1-3)
+
+    def _read_driver_inputs(self) -> DriverInputs:
+        session = getattr(self, "_batch_session", None)
+        return DriverInputs(
+            active=self._task == TASK_FOLLOW_CLIP,
+            clip_path=self.pose_video_var.get().strip(),
+            source_path=self.source_image_var.get().strip(),
+            record=self._workflow_map.get(self.workflow_var.get().strip(), {}),
+            batch=bool(session is not None and session.active),
+        )
+
+    def _apply_driver_frames(self, frames: int) -> None:
+        with (
+            self._pins.applying()
+        ):  # the driver's length is the form adapting, not an operator edit
+            self._select_frame_count(frames)
+
+    def _driver_block_reason(self) -> str:
+        host = getattr(self, "_driver_host", None)
+        return "" if host is None else host.block_reason()
+
+    def _refresh_driver_view(self) -> None:
+        self._sync_duration()
+        self._refresh_queue_gate()
+        self._refresh_suggested_line()
+
+    def _sync_length_row(self) -> None:
+        """The raw length list (frame counts) is for the other tasks; a driven clip is chosen in seconds."""
+
+        if self._frame_count_labels and self._task != TASK_FOLLOW_CLIP:
+            self.frame_count_frame.grid()
+        else:
+            self.frame_count_frame.grid_remove()
+
+    def _toggle_motion_library(self) -> None:
+        if self.motion_library_panel.winfo_manager():
+            self.motion_library_panel.grid_remove()
+            self.motion_library_button.configure(text="Show Motion Library")
+        else:
+            self.motion_library_panel.grid()
+            self.motion_library_button.configure(text="Hide Motion Library")
+
+    def _on_driver_typed(self, _event: Any = None) -> None:
+        self._driver_typed = True
+
+    def _on_driver_entered(self, _event: Any = None) -> None:
+        """A path typed or pasted into the driver field was committed (Return or leaving the field)."""
+
+        if self._driver_typed and self._driver_host is not None:
+            self._driver_typed = False
+            self._driver_host.choose(self.pose_video_var.get())
+            self._sync_duration()
 
     # ------------------------------------------------------------------ re-run with tweaks (V1-2)
 
@@ -2348,6 +2578,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._library_binding = plan.binding
         self._library_bound_path = plan.path
         self._invalidate_experiment_preview()
+        if self._driver_host is not None:
+            self._driver_host.choose(self.pose_video_var.get())
+            self._sync_duration()
         self.status_var.set(
             "Driving video set from the Motion Library. Preview the job to confirm it. "
             + " ".join(plan.advisories[:2])
@@ -2408,6 +2641,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         row = getattr(self, "alignment_row", None)
         if row is not None:
             row.refresh()  # the window or rate conversion changed: an applied alignment may be stale
+        if getattr(self, "_driver_host", None) is not None:
+            self._refresh_driver_view()
 
     def _alignment_media_allowed(self) -> bool:
         clip = self.pose_video_var.get().strip()
@@ -2617,6 +2852,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if path:
             self._last_folder = str(Path(path).parent)
             self.pose_video_var.set(path)
+            if self._driver_host is not None:
+                self._driver_host.choose(path)
+                self._sync_duration()
 
     def _on_browse_end_anchor(self) -> None:
         path = filedialog.askopenfilename(

@@ -64,13 +64,14 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
     bind_wraplength(reasons_label)
     reasons_label.grid_remove()
     tab.reasons_label = reasons_label
+    _build_driver_row(tab, visible, row=2)
     tab.motion_intent_panel = MotionIntentPanel(
         visible,
         on_preset=tab._on_preset_chosen,
         on_reset_preset=tab._on_reset_preset,
         on_duration=tab._on_duration_entered,
     )
-    tab.motion_intent_panel.grid(row=2, column=0, columnspan=4, sticky="ew")
+    tab.motion_intent_panel.grid(row=3, column=0, columnspan=4, sticky="ew")
     # Advanced (today's More settings): the section keeps its ``advanced_section`` name; it opens by itself for a
     # required control or an experimental engine (see _apply_workflow_visibility).
     tab.advanced_section = DisclosureSection(body, title="Advanced")
@@ -200,6 +201,37 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
         text="Opens the Stable Video Diffusion tab with this source image.",
         style="Muted.TLabel",
     ).pack(side="left", padx=(8, 0))
+
+
+def _build_driver_row(tab: Any, parent: ttk.Frame, *, row: int) -> None:
+    """V1-3: the driving video, above the preset and duration; shown for the follow-a-driver task only."""
+
+    clip = ttk.Frame(parent, style="Panel.TFrame")
+    clip.grid(row=row, column=0, columnspan=4, sticky="ew")
+    clip.columnconfigure(0, weight=1)
+    clip.grid_remove()
+    tab.follow_clip_frame = clip
+    tab.pose_video_frame = ttk.Frame(clip, style="Panel.TFrame")
+    tab.pose_video_frame.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+    label = ttk.Label(tab.pose_video_frame, text="Driving video", style="Dark.TLabel")
+    label.pack(side="left", padx=(0, 6))
+    tab.pose_video_entry = ttk.Entry(
+        tab.pose_video_frame, textvariable=tab.pose_video_var, style="Dark.TEntry", width=34
+    )
+    tab.pose_video_entry.pack(side="left", fill="x", expand=True)
+    tab.pose_video_entry.bind("<KeyRelease>", tab._on_driver_typed, add="+")
+    tab.pose_video_entry.bind("<<Paste>>", tab._on_driver_typed, add="+")
+    for sequence in ("<Return>", "<FocusOut>"):
+        tab.pose_video_entry.bind(sequence, tab._on_driver_entered, add="+")
+    ttk.Button(
+        tab.pose_video_frame,
+        text="Browse...",
+        style="Dark.TButton",
+        command=tab._on_browse_pose_video,
+    ).pack(side="left", padx=(6, 0))
+    tab._attach_setting_help(
+        "pose_video", VIDEO_WORKFLOW_SETTING_HELP["pose_video"], label, tab.pose_video_entry
+    )
 
 
 def build_keyframes_section(tab: Any, body: ttk.Frame) -> None:

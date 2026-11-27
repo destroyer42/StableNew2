@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Final
 
 from src.video.motion_intent import frames_for_duration, length_policy
-from src.video.workflow_tasks import FIELD_LENGTH, TASK_ANIMATE, Suggestion
+from src.video.workflow_tasks import FIELD_LENGTH, TASK_ANIMATE, TASK_FOLLOW_CLIP, Suggestion
 
 INTENT_PROMPT_ONLY: Final = "prompt_only"
 INTENT_FOLLOW_DRIVER: Final = "follow_driver"
@@ -38,6 +38,7 @@ MOTION_PROMPT_CONTROL: Final = "pose_prompt"
 NO_PRESET_ID: Final = "none"
 NO_PRESET_LABEL: Final = "None"
 REASON_NO_PRESET: Final = "No preset: nothing is added to the prompt."
+REASON_NO_DRIVER_PRESET: Final = "No preset: the engine's own default."
 
 _UNQUALIFIED: Final = "observed once, not qualified"
 _WORDING: Final = "prompt wording only; its effect on the clip is untested"
@@ -264,9 +265,13 @@ def intent_suggestions(
 ) -> tuple[dict[str, Suggestion], list[str]]:
     """What the motion intent adds to the engine's own suggestions for ``task_id``.
 
-    V1-1 covers the prompt-only task: the motion phrase is empty without a preset (so an untouched form submits what
-    it always did), and a chosen preset overlays its duration and phrase."""
+    The prompt-only task: the motion phrase is empty without a preset (so an untouched form submits what it always
+    did), and a chosen preset overlays its duration and phrase.  The follow-a-driver task (V1-3): the declared motion
+    controls return to their defaults without a preset, and a chosen preset overlays them; the length is not a
+    suggestion here, because it follows the driver (``driver_intent.plan_driver_clip``)."""
 
+    if task_id == TASK_FOLLOW_CLIP:
+        return _driver_suggestions(preset_by_id(preset_id), record)
     if task_id != TASK_ANIMATE:
         return {}, []
     suggestions = {FIELD_MOTION_PHRASE: Suggestion(FIELD_MOTION_PHRASE, "", REASON_NO_PRESET)}
@@ -276,6 +281,44 @@ def intent_suggestions(
     overlay, notes = preset_suggestions(preset, INTENT_PROMPT_ONLY, record)
     suggestions.update(overlay)
     return suggestions, notes
+
+
+def preset_duration_seconds(preset: MotionPreset | None) -> float | None:
+    """The seconds a follow-a-driver preset asks for; ``None`` means the whole movement."""
+
+    if preset is None:
+        return None
+    duration = preset.follow_driver.duration
+    return None if isinstance(duration, str) else float(duration)
+
+
+def _driver_suggestions(
+    preset: MotionPreset | None, record: Mapping[str, Any]
+) -> tuple[dict[str, Suggestion], list[str]]:
+    touched = (MOTION_PROMPT_CONTROL, "pose_strength", "reference_image_strength")
+    suggestions: dict[str, Suggestion] = {}
+    for control in record.get("operator_controls") or ():
+        if not isinstance(control, Mapping) or control.get("name") not in touched:
+            continue
+        name = CONTROL_FIELD_PREFIX + str(control["name"])
+        default = "" if control.get("kind") == "text" else control.get("default")
+        suggestions[name] = Suggestion(name, default, REASON_NO_DRIVER_PRESET)
+    if preset is None:
+        return suggestions, []
+    overlay, notes = preset_suggestions(preset, INTENT_FOLLOW_DRIVER, record)
+    overlay.pop(FIELD_LENGTH, None)
+    suggestions.update(overlay)
+    return suggestions, notes
+
+
+def _same_value(current: Any, suggested: Any) -> bool:
+    text = str(current if current is not None else "").strip()
+    if isinstance(suggested, (int, float)):
+        try:
+            return float(text) == float(suggested)
+        except ValueError:
+            return False
+    return text == str(suggested).strip()
 
 
 def preset_is_modified(
@@ -299,7 +342,7 @@ def preset_is_modified(
                     return True
             except (TypeError, ValueError):
                 return True
-        elif str(value if value is not None else "").strip() != str(suggestion.value).strip():
+        elif not _same_value(value, suggestion.value):
             return True
     return False
 
@@ -323,6 +366,7 @@ __all__ = [
     "ladder_step",
     "preset_by_id",
     "preset_by_label",
+    "preset_duration_seconds",
     "preset_is_modified",
     "preset_labels",
     "preset_suggestions",
