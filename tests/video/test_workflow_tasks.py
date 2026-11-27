@@ -166,7 +166,9 @@ def test_smoothing_off_without_rife_and_in_a_sequence():
     missing = _suggest(TASK_ANIMATE, rec, rife=False)[workflow_tasks.FIELD_SMOOTH]
     assert missing.value is False and "tools/rife" in missing.reason
     seq = _suggest(TASK_SEQUENCE, rec)[workflow_tasks.FIELD_SMOOTH]
-    assert seq.value is False and "sequence" in seq.reason
+    assert seq.value is True and "assembled movie" in seq.reason
+    bare = _suggest(TASK_SEQUENCE, rec, rife=False)[workflow_tasks.FIELD_SMOOTH]
+    assert bare.value is False and "tools/rife" in bare.reason
 
 
 def test_reconcile_keeps_legal_pins_and_replaces_illegal_ones():
@@ -191,4 +193,4 @@ def test_pinned_smoothing_without_rife_is_kept_and_warned():
     assert warn(TASK_ANIMATE, True, rife_available=False).startswith("Smoothing cannot run")
     assert warn(TASK_ANIMATE, True, rife_available=True) == ""
     assert warn(TASK_ANIMATE, False, rife_available=False) == ""
-    assert "sequence" in warn(TASK_SEQUENCE, True, rife_available=True)
+    assert warn(TASK_SEQUENCE, True, rife_available=True) == ""

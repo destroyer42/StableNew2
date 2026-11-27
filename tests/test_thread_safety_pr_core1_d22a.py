@@ -294,15 +294,16 @@ class TestShutdownThreadCleanup:
         def background_worker():
             time.sleep(0.3)
 
-        # Spawn several background threads
+        # Time from before the first spawn: the workers start sleeping as soon as
+        # they are spawned, so timing only the join can measure just under 0.3 s.
+        start = time.monotonic()
         _spawn_tracked_thread(background_worker, name="Worker1")
         _spawn_tracked_thread(background_worker, name="Worker2")
         _spawn_tracked_thread(background_worker, name="Worker3")
 
         # Simulate shutdown
-        start = time.time()
         _join_tracked_threads(timeout=1.0)
-        elapsed = time.time() - start
+        elapsed = time.monotonic() - start
 
         # Verify join waited for threads to complete
         assert elapsed >= 0.3  # Workers took 0.3s

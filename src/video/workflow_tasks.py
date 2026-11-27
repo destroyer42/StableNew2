@@ -199,13 +199,10 @@ REASON_SMOOTH_ON = "Smoother playback; RIFE was found."
 REASON_SMOOTH_NO_RUNTIME = (
     "Off: RIFE was not found. Put a RIFE release in tools/rife to enable smoothing."
 )
-REASON_SMOOTH_SEQUENCE = "Off: smoothing is not applied inside a sequence."
+REASON_SMOOTH_SEQUENCE = "The assembled movie is smoothed; RIFE was found."
 REASON_SEED = "Random; the seed is recorded with the job."
 REASON_NEGATIVE = "Left empty; the engine's own default applies."
 
-WARNING_SMOOTH_SEQUENCE = (
-    "Smoothing cannot run inside a sequence; turn it off to queue this sequence."
-)
 WARNING_SMOOTH_NO_RUNTIME = (
     "Smoothing cannot run: RIFE was not found. Turn it off, or put a RIFE release in tools/rife."
 )
@@ -259,8 +256,8 @@ def suggest_settings(
         add(FIELD_LENGTH, length, REASON_LENGTH)
     if visible.get("motion_profile", True):
         add(FIELD_MOTION, DEFAULT_MOTION_PROFILE, REASON_MOTION)
-    if task_id == TASK_SEQUENCE:
-        add(FIELD_SMOOTH, False, REASON_SMOOTH_SEQUENCE)
+    if rife_available and task_id == TASK_SEQUENCE:
+        add(FIELD_SMOOTH, True, REASON_SMOOTH_SEQUENCE)
     elif rife_available:
         add(FIELD_SMOOTH, True, REASON_SMOOTH_ON)
     else:
@@ -310,8 +307,6 @@ def smoothing_warning(task_id: str, smooth_on: bool, *, rife_available: bool) ->
 
     if not smooth_on:
         return ""
-    if task_id == TASK_SEQUENCE:
-        return WARNING_SMOOTH_SEQUENCE
     if not rife_available:
         return WARNING_SMOOTH_NO_RUNTIME
     return ""
