@@ -42,7 +42,7 @@ def test_refusal_text_says_nothing_was_queued_why_and_the_fix() -> None:
 
     assert text.startswith("Nothing was queued.")
     assert _BLOCK in text
-    assert "Preview is kept" in text
+    assert "queue again" in text
 
 
 def test_refusal_text_does_not_repeat_a_message_that_already_says_nothing_was_queued() -> None:

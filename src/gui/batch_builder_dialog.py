@@ -1,14 +1,18 @@
 """N5 Packs x Models batch builder: pick PromptPacks and models, see the exact totals, queue one named batch.
 
-The dialog only captures intent and renders the plan. Planning and Queue run on background tasks through
+The builder only captures intent and renders the plan. Planning and Queue run on background tasks through
 ``src/controller/app_controller_services/pack_model_batch_service.py``; their results come back on the Tk thread.
+
+``BatchBuilderPanel`` is the builder itself. The Pipeline tab's **Packs × Models…** button opens it in
+``BatchBuilderDialog``; the Generate workspace (N6) embeds the same panel. Both read their packs, models and stage
+toggles from the Pipeline tab's PromptPack card through ``batch_sources``.
 """
 
 from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from tkinter import ttk
 from typing import Any
 
@@ -24,8 +28,29 @@ PlanBatch = Callable[[BatchRequest, Callable[[BatchPlan], None], Callable[[Excep
 #: ``(plan, on_result, on_error)``: queue off the Tk thread; ``on_result`` gets the submitted job count.
 QueueBatch = Callable[[BatchPlan, Callable[[int], None], Callable[[Exception], None]], None]
 
+_EXPLANATION = (
+    "A model with a saved recipe uses its own sampler, steps, CFG and size; other models use the "
+    "Pipeline tab's settings. Clear \"Use each model's saved recipe\" to use the Pipeline tab's "
+    "settings for every model. Plan compiles every combination first, so the totals below are "
+    "exactly what Queue adds."
+)
 
-class BatchBuilderDialog(tk.Toplevel):
+
+@dataclass(frozen=True)
+class BatchSources:
+    """What the builder offers, read from the Pipeline tab's PromptPack card."""
+
+    packs: tuple[str, ...] = ()
+    models: tuple[tuple[str, str], ...] = ()  # (display, internal)
+    selected_packs: tuple[str, ...] = ()
+    selected_model: str = ""
+    adetailer: bool = False
+    upscale: bool = False
+
+
+class BatchBuilderPanel(ttk.Frame):
+    """The Packs x Models builder: lists, options, Plan, the exact summary and Queue batch."""
+
     def __init__(
         self,
         parent: Any,
@@ -39,37 +64,32 @@ class BatchBuilderDialog(tk.Toplevel):
         adetailer: bool = False,
         upscale: bool = False,
         load_model_status: LoadModelStatus | None = None,
+        on_close: Callable[[], None] | None = None,
+        summary_height: int = 14,
+        wraplength: int = 900,
     ) -> None:
-        super().__init__(parent)
-        self.title("Packs x Models batch")
-        self.geometry("980x640")
-        self.transient(parent.winfo_toplevel())
+        super().__init__(parent, padding=12)
         self._packs = list(packs)
         self._models = list(models)  # (display, internal)
         self._plan_batch, self._queue_batch = plan_batch, queue_batch
         self.plan: BatchPlan | None = None
         self._inflight = False
-        self.protocol("WM_DELETE_WINDOW", lambda: None if self._inflight else self.destroy())
 
-        frame = ttk.Frame(self, padding=12)
-        frame.pack(fill="both", expand=True)
-        frame.columnconfigure(0, weight=1)
-        frame.columnconfigure(1, weight=1)
-        frame.rowconfigure(1, weight=1)
-        frame.rowconfigure(5, weight=2)
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(1, weight=1)
+        self.rowconfigure(5, weight=2)
 
-        ttk.Label(frame, text="PromptPacks").grid(row=0, column=0, sticky="w")
-        ttk.Label(frame, text="Models").grid(row=0, column=1, sticky="w", padx=(8, 0))
-        self.pack_list = self._listbox(frame, self._packs, row=1, column=0)
-        self.model_picker = ModelListPicker(frame, self._models, load_status=load_model_status)
+        ttk.Label(self, text="PromptPacks").grid(row=0, column=0, sticky="w")
+        ttk.Label(self, text="Models").grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.pack_list = self._listbox(self, row=1, column=0)
+        self.model_picker = ModelListPicker(self, self._models, load_status=load_model_status)
         self.model_picker.grid(row=1, column=1, sticky="nsew", padx=(8, 0))
         self.model_list = self.model_picker.listbox
-        for index, name in enumerate(self._packs):
-            if name in selected_packs:
-                self.pack_list.selection_set(index)
-        self.model_picker.select([selected_model])
+        self._fill(self.pack_list, self._packs)
+        self._select(selected_packs, selected_model)
 
-        options = ttk.Frame(frame)
+        options = ttk.Frame(self)
         options.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         self.adetailer_var = tk.BooleanVar(master=self, value=bool(adetailer))
         self.upscale_var = tk.BooleanVar(master=self, value=bool(upscale))
@@ -93,37 +113,31 @@ class BatchBuilderDialog(tk.Toplevel):
         self._name_edited = False
         self.name_entry.bind("<Key>", lambda _event: self._mark_name_edited())
 
-        ttk.Label(
-            frame,
-            text=(
-                "A model with a saved recipe uses its own sampler, steps, CFG and size; other models use the "
-                "Pipeline tab's settings. Clear \"Use each model's saved recipe\" to use the Pipeline tab's "
-                "settings for every model. Plan compiles every combination first, so the totals below are "
-                "exactly what Queue adds."
-            ),
-            wraplength=900,
-            justify="left",
-        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        self.status_label = ttk.Label(frame, text="Pick PromptPacks and models, then Plan.")
+        ttk.Label(self, text=_EXPLANATION, wraplength=wraplength, justify="left").grid(
+            row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0)
+        )
+        self.status_label = ttk.Label(self, text="Pick PromptPacks and models, then Plan.")
         self.status_label.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 4))
-        self.summary = tk.Text(frame, height=14, wrap="word", state="disabled")
+        self.summary = tk.Text(self, height=summary_height, wrap="word", state="disabled")
         self.summary.grid(row=5, column=0, columnspan=2, sticky="nsew")
 
-        actions = ttk.Frame(frame)
-        actions.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        self.cancel_button = ttk.Button(actions, text="Close", command=self.destroy)
-        self.cancel_button.pack(side="right")
-        self.queue_button = ttk.Button(actions, text="Queue batch", command=self._queue)
+        self.actions = ttk.Frame(self)
+        self.actions.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.cancel_button: ttk.Button | None = None
+        if on_close is not None:
+            self.cancel_button = ttk.Button(self.actions, text="Close", command=on_close)
+            self.cancel_button.pack(side="right")
+        self.queue_button = ttk.Button(self.actions, text="Queue batch", command=self._queue)
         self.queue_button.pack(side="right", padx=8)
         self.queue_button.state(["disabled"])
-        self.plan_button = ttk.Button(actions, text="Plan", command=self._plan)
+        self.plan_button = ttk.Button(self.actions, text="Plan", command=self._plan)
         self.plan_button.pack(side="left")
         for listbox in (self.pack_list, self.model_list):
             listbox.bind("<<ListboxSelect>>", lambda _event: self._changed())
         self._refresh_default_name()
 
     @staticmethod
-    def _listbox(parent: Any, values: Sequence[str], *, row: int, column: int) -> tk.Listbox:
+    def _listbox(parent: Any, *, row: int, column: int) -> tk.Listbox:
         holder = ttk.Frame(parent)
         holder.grid(row=row, column=column, sticky="nsew", padx=(8 if column else 0, 0))
         holder.rowconfigure(0, weight=1)
@@ -133,9 +147,47 @@ class BatchBuilderDialog(tk.Toplevel):
         scroll = ttk.Scrollbar(holder, orient="vertical", command=listbox.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         listbox.configure(yscrollcommand=scroll.set)
+        return listbox
+
+    @staticmethod
+    def _fill(listbox: tk.Listbox, values: Sequence[str]) -> None:
+        listbox.delete(0, "end")
         for value in values:
             listbox.insert("end", value)
-        return listbox
+
+    def _select(self, packs: Sequence[str], model: str | Sequence[str]) -> None:
+        for index, name in enumerate(self._packs):
+            if name in packs:
+                self.pack_list.selection_set(index)
+        self.model_picker.select([model] if isinstance(model, str) else list(model))
+
+    @property
+    def inflight(self) -> bool:
+        return self._inflight
+
+    def set_sources(self, sources: BatchSources) -> None:
+        """Replace the pack and model lists (N6 Refresh), keeping the operator's selection where it still exists.
+
+        With nothing selected yet, the Pipeline tab's own selection is taken. Ignored while planning or queueing;
+        a changed list makes the current plan stale, exactly like a changed selection."""
+
+        if self._inflight:
+            return
+        packs, models = list(sources.packs), list(sources.models)
+        if packs == self._packs and models == self._models:
+            return
+        kept_packs = self.selected_packs()
+        kept_models = self.selected_models()
+        self._packs, self._models = packs, models
+        self._fill(self.pack_list, self._packs)
+        self.model_picker.set_models(self._models)
+        if kept_packs or kept_models:
+            self._select(kept_packs, kept_models)
+        else:
+            self._select(sources.selected_packs, sources.selected_model)
+            self.adetailer_var.set(bool(sources.adetailer))
+            self.upscale_var.set(bool(sources.upscale))
+        self._changed()
 
     # -- intent ------------------------------------------------------------------------------------------------
 
@@ -181,7 +233,8 @@ class BatchBuilderDialog(tk.Toplevel):
         self._inflight = busy
         self.status_label.configure(text=text)
         for button in (self.plan_button, self.cancel_button):
-            button.state(["disabled"] if busy else ["!disabled"])
+            if button is not None:
+                button.state(["disabled"] if busy else ["!disabled"])
         if busy:
             self.queue_button.state(["disabled"])
 
@@ -252,10 +305,46 @@ class BatchBuilderDialog(tk.Toplevel):
         return self.summary.get("1.0", "end").strip()
 
 
-def open_batch_builder(sidebar: Any) -> BatchBuilderDialog | None:
-    """Open the dialog from the Pipeline tab's PromptPack card, seeded with its current pack, model and stages."""
+class BatchBuilderDialog(tk.Toplevel):
+    """The Pipeline tab's Packs x Models window: one ``BatchBuilderPanel`` (``self.panel``)."""
 
-    from src.controller.app_controller_services import pack_model_batch_service as service
+    def __init__(
+        self,
+        parent: Any,
+        *,
+        packs: Sequence[str],
+        models: Sequence[tuple[str, str]],
+        plan_batch: PlanBatch,
+        queue_batch: QueueBatch,
+        selected_packs: Sequence[str] = (),
+        selected_model: str = "",
+        adetailer: bool = False,
+        upscale: bool = False,
+        load_model_status: LoadModelStatus | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.title("Packs x Models batch")
+        self.geometry("980x640")
+        self.transient(parent.winfo_toplevel())
+        self.panel = BatchBuilderPanel(
+            self,
+            packs=packs,
+            models=models,
+            plan_batch=plan_batch,
+            queue_batch=queue_batch,
+            selected_packs=selected_packs,
+            selected_model=selected_model,
+            adetailer=adetailer,
+            upscale=upscale,
+            load_model_status=load_model_status,
+            on_close=self.destroy,
+        )
+        self.panel.pack(fill="both", expand=True)
+        self.protocol("WM_DELETE_WINDOW", lambda: None if self.panel.inflight else self.destroy())
+
+
+def batch_sources(sidebar: Any) -> BatchSources | None:
+    """Packs, models and stage toggles from the Pipeline tab's PromptPack card; None when it cannot plan yet."""
 
     controller = getattr(sidebar, "controller", None)
     if controller is None or not hasattr(controller, "_background_tasks"):
@@ -269,22 +358,81 @@ def open_batch_builder(sidebar: Any) -> BatchBuilderDialog | None:
         else None
     )
     stages = getattr(sidebar, "stage_states", {}) or {}
-    return BatchBuilderDialog(
-        sidebar,
-        packs=names,
-        models=panel.model_choices() if panel is not None else [],
-        selected_packs=[names[index] for index in selection if index < len(names)],
+    return BatchSources(
+        packs=tuple(names),
+        models=tuple(panel.model_choices()) if panel is not None else (),
+        selected_packs=tuple(names[index] for index in selection if index < len(names)),
         selected_model=panel.selected_model_name() if panel is not None else "",
         adetailer=bool(stages["adetailer"].get()) if "adetailer" in stages else False,
         upscale=bool(stages["upscale"].get()) if "upscale" in stages else False,
-        plan_batch=lambda request, ok, err: service.request_batch_plan(
-            controller, request, on_result=ok, on_error=err
-        ),
-        queue_batch=lambda plan, ok, err: service.submit_batch_async(
-            controller, plan, on_result=ok, on_error=err
-        ),
+    )
+
+
+def batch_callbacks(controller_provider: Callable[[], Any]) -> tuple[PlanBatch, QueueBatch]:
+    """Plan and Queue through the N5 service, resolving the controller at call time."""
+
+    from src.controller.app_controller_services import pack_model_batch_service as service
+
+    def _controller() -> Any:
+        controller = controller_provider()
+        if controller is None or not hasattr(controller, "_background_tasks"):
+            raise RuntimeError("The batch builder is not connected yet; try again in a moment.")
+        return controller
+
+    def plan_batch(
+        request: BatchRequest,
+        on_result: Callable[[BatchPlan], None],
+        on_error: Callable[[Exception], None],
+    ) -> None:
+        try:
+            controller = _controller()
+        except RuntimeError as exc:
+            on_error(exc)
+            return
+        service.request_batch_plan(controller, request, on_result=on_result, on_error=on_error)
+
+    def queue_batch(
+        plan: BatchPlan,
+        on_result: Callable[[int], None],
+        on_error: Callable[[Exception], None],
+    ) -> None:
+        try:
+            controller = _controller()
+        except RuntimeError as exc:
+            on_error(exc)
+            return
+        service.submit_batch_async(controller, plan, on_result=on_result, on_error=on_error)
+
+    return plan_batch, queue_batch
+
+
+def open_batch_builder(sidebar: Any) -> BatchBuilderDialog | None:
+    """Open the dialog from the Pipeline tab's PromptPack card, seeded with its current pack, model and stages."""
+
+    sources = batch_sources(sidebar)
+    if sources is None:
+        return None
+    controller = sidebar.controller
+    plan_batch, queue_batch = batch_callbacks(lambda: controller)
+    return BatchBuilderDialog(
+        sidebar,
+        packs=sources.packs,
+        models=sources.models,
+        selected_packs=sources.selected_packs,
+        selected_model=sources.selected_model,
+        adetailer=sources.adetailer,
+        upscale=sources.upscale,
+        plan_batch=plan_batch,
+        queue_batch=queue_batch,
         load_model_status=model_status_loader(controller),
     )
 
 
-__all__ = ["BatchBuilderDialog", "open_batch_builder"]
+__all__ = [
+    "BatchBuilderDialog",
+    "BatchBuilderPanel",
+    "BatchSources",
+    "batch_callbacks",
+    "batch_sources",
+    "open_batch_builder",
+]

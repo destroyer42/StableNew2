@@ -23,7 +23,7 @@ def queue_refusal_text(refusal: BaseException | str) -> str:
     reason = str(refusal).strip() or f"{type(refusal).__name__} (see the log)"
     if "nothing was queued" not in reason.lower():
         reason = f"Nothing was queued. {reason}"
-    return f"{reason}\nThe Preview is kept: fix this, then queue again."
+    return f"{reason}\nFix this, then queue again."
 
 
 def report_queue_refusal(app_state: Any, refusal: BaseException | str | None) -> None:

@@ -141,8 +141,28 @@ class ModelListPicker(ttk.Frame):
 
     def set_models(self, models: Sequence[tuple[str, str]]) -> None:
         keep = set(self.selected())
+        changed = list(models) != self._models
         self._models = list(models)
         self._render(keep)
+        if changed:
+            self._loaded = False  # the status read before no longer covers this list
+
+    @property
+    def stale(self) -> bool:
+        """No status has been read for the current list."""
+
+        return not self._loaded
+
+    @property
+    def has_status_loader(self) -> bool:
+        return self._load_status is not None
+
+    def set_status_loader(self, load_status: LoadModelStatus) -> None:
+        """Supply (or renew) the status sources, for a list built before its controller (the Generate tab)."""
+
+        self._load_status = load_status
+        if self.stale and self.listbox.winfo_ismapped():
+            self.refresh_status()
 
     # -- rows --------------------------------------------------------------------------------------------------
 
@@ -246,6 +266,8 @@ class ModelListPicker(ttk.Frame):
     def show_missing_files(self) -> MissingFilesWindow:
         if self._loaded:
             lines = self._report.health.lines()
+        elif self._load_status is None:
+            lines = ["Model status is not available yet. Try again in a moment."]
         else:
             self.refresh_status()
             lines = ["Still checking the model files. Close this and open it again in a moment."]
