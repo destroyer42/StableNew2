@@ -109,6 +109,11 @@ Returning to a home, section or run list restores where it was scrolled.
 Double-tapping an image shows the full-resolution original with pinch zoom and pan; double-tapping again returns to
 fit, and from fit closes it. The rendition stays the default.
 
+### (k) A desk reprocess beside its original
+
+Reprocess results started at the desk are linked to the job's recorded input image (matched by SHA-256, ids only,
+history unchanged) and compared the same way; "original not found" where it is not available.
+
 ## Compatibility
 
 - Additive only: `schema_version` unchanged, new SQLite columns and tables, new optional manifest field behind a health
