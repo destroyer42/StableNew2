@@ -93,7 +93,9 @@ def test_the_ltx_suites_copy_the_382_cases_and_seeds_and_run_only_ltx_arms(tmp_p
     for key, entry in plan["suites"].items():
         data = (suites_dir / entry["file"]).read_bytes()
         assert entry["sha256"] == hashlib.sha256(data).hexdigest(), key
-    assert plan["thresholds"]["faster"]["warm_wall_time_median_ratio_at_most"] == 0.8
+    # no speed ratio across sessions (agreed with VID-CAND-382)
+    assert "faster" not in plan["thresholds"]
+    assert plan["thresholds"]["speed"]["verdict"].startswith("none")
 
 
 def test_a_rebuild_never_replaces_a_frozen_file(tmp_path: Path) -> None:
@@ -239,6 +241,30 @@ def test_the_sheet_hides_arm_names_and_its_ranking_scores_back_to_arms(tmp_path:
     assert scored["complete"] and scored["unanswered"] == 0
     assert scored["preference"]["a14b_base over ltx25_distilled"]["overall"] == 0.0
     assert scored["preference"]["a14b_base over hy15_8step"]["overall"] == 0.5
+
+
+def test_the_command_refuses_to_write_inside_a_source_run(tmp_path: Path) -> None:
+    prompts = {"c1": "walk"}
+    first = _run(tmp_path, "a14b_base", prompts)
+    second = _run(tmp_path, "ltx25_distilled", prompts)
+    arguments = [
+        "threeway",
+        "--source",
+        str(first),
+        "a14b_base",
+        "--source",
+        str(second),
+        "ltx25_distilled",
+        "--seed",
+        "382",
+        "--out-dir",
+    ]
+
+    for inside in (first, second / "compare"):
+        with pytest.raises(SystemExit, match="separate folder"):
+            cli.main([*arguments, str(inside)])
+    assert not (first / threeway.SHEET_NAME).exists() and not (second / "compare").exists()
+    assert cli.main([*arguments, str(tmp_path / "compare")]) == 0
 
 
 def test_the_shuffle_is_deterministic_and_does_not_follow_the_argument_order() -> None:

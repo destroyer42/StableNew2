@@ -74,7 +74,11 @@ def build(args: argparse.Namespace) -> int:
 
 def threeway(args: argparse.Namespace) -> int:
     _refuse_inside_repo(args.out_dir)
-    sources = [(arm, ranking.run_clips(Path(run), arm)) for run, arm in args.source]
+    out_dir = args.out_dir.resolve()
+    for run, _arm in args.source:  # source runs are only read; the sheet lives in its own folder
+        if out_dir.is_relative_to(Path(run).resolve()):
+            raise SystemExit(f"{args.out_dir} is inside the source run {run}; use a separate folder")
+    sources =[(arm, ranking.run_clips(Path(run), arm)) for run, arm in args.source]
     joined, skipped = ranking.join_cases(sources)
     result = ranking.build_sheet(joined, seed=args.seed, out_dir=args.out_dir)
     print(json.dumps({**result, "skipped": skipped}, indent=1))

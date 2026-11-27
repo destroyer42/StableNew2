@@ -42,7 +42,8 @@ FAIRNESS_RULES = (
     "engine, so the blind sheet hides names only.",
     "The visual comparison uses the silent LTX-2.5 workflow (StableNew-encoded frames, like every other arm). The audio "
     "workflow's picture is encoded by ComfyUI and is never compared with other engines' clips.",
-    "LTX-2.5 runs in a different host session than A14B and Hunyuan: its timings are labelled as such.",
+    "LTX-2.5 runs in a different host session than A14B and Hunyuan: its timings are labelled cross-session and no "
+    "speed ratio is applied unless the owner authorizes an A14B re-run in the same session.",
     "Ratings are the owner's. The three-way sheet is blind (names hidden, order shuffled with a recorded seed); it is "
     "only fully blind for cases the owner has not already rated with names visible. An agent never fills a sheet.",
     "No settings change after a resource failure within a frozen plan; a change is a new plan and digest.",
@@ -59,10 +60,11 @@ THRESHOLDS: dict[str, Any] = {
         "blind_preference": "three-way sheet: LTX-2.5 ranked above A14B in at least half of the answered rankings "
         "(ties split)",
     },
-    "faster": {
-        "warm_wall_time_median_ratio_at_most": 0.8,
-        "ratio": "LTX-2.5 warm job wall-time median / A14B warm median of the VID-CAND-382 run (different session)",
+    "speed": {
+        "verdict": "none: VID-CAND-382's warm-time ratio is not applied across sessions",
+        "reported": "LTX-2.5 cold and warm wall times, labelled cross-session beside VID-CAND-382's",
         "wall_time_source": "job repository started_at to completed_at",
+        "for_a_verdict": "an owner-authorized A14B re-run in the same host session, as a new plan",
     },
     "audio": "reported, not gated: whether the audio is present, usable and in step with the motion, and its extra time "
     "and memory",

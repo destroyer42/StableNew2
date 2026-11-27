@@ -147,7 +147,9 @@ the official one. Check the downloaded files against this list before any run.
 
 Agreed with the VID-CAND-382 session on 2026-11-27: LTX-2.5 runs its own suites on the same images, prompts and seeds;
 its comparison sheet goes in a separate folder; it stays off the GPU and the app until VID-CAND-382's stage 1 has
-finished; its timings are labelled as measured in another session. That agreement authorizes no LTX run.
+finished; its timings are labelled as measured in another session, with no speed ratio against A14B across sessions;
+cases are joined only on equal image hash, prompt, negative prompt and seed, and VID-CAND-382's run folders are only
+read. That agreement authorizes no LTX run.
 
 Rules, thresholds, stop rules and budget are in `tools/qualification/vid_cand_ltx25/plan.py` and copied into the plan.
 
@@ -169,7 +171,9 @@ Rules, thresholds, stop rules and budget are in `tools/qualification/vid_cand_lt
   critical identity break; mean fidelity or stability below 4; or a 2+ point drop or a new break against A14B on 2+
   cases.
 - **As good or better:** no NO-GO, stage 1 means within 0.25 of A14B, and LTX-2.5 ranked above A14B in at least half of
-  the blind rankings. **Faster:** warm wall-time median <= 0.8 x A14B's.
+  the blind rankings.
+- **Speed:** reported, no "faster" verdict. LTX-2.5 runs in another session, so its cold and warm times are labelled
+  cross-session. A verdict needs an A14B re-run in the same session, which is the owner's call and a new plan.
 - **Audio:** reported, not gated (present, usable, in step with the motion, extra time and memory).
 - **Recorded per job:** cold and warm wall time, VRAM, host commit and available RAM peaks, and failures.
 
