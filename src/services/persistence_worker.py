@@ -68,6 +68,7 @@ class PersistenceWorker:
         self._tasks_completed = 0
         self._tasks_dropped = 0
         self._tasks_failed = 0
+        self._failures: list[str] = []  # the latest failed writes, reported again at stop
 
     def start(self) -> None:
         """Start the background worker thread."""
@@ -87,6 +88,7 @@ class PersistenceWorker:
         self._queue.shutdown()
 
     def stop(self, timeout: float | None = 5.0) -> bool:
+        """Drain accepted writes. False only while work is still pending; a failed write is logged, not pending."""
         self.begin_shutdown()
         thread = self._worker_thread
         if thread is not None:
@@ -94,7 +96,13 @@ class PersistenceWorker:
             if thread.is_alive():
                 logger.warning("[PersistenceWorker] Worker did not stop within timeout")
                 return False
-        return self._queue.empty() and self._tasks_failed == 0
+        if self._tasks_failed:
+            logger.error(
+                "[PersistenceWorker] %d write(s) failed earlier: %s",
+                self._tasks_failed,
+                "; ".join(self._failures),
+            )
+        return self._queue.empty()
 
     def active_thread(self) -> threading.Thread | None:
         thread = self._worker_thread
@@ -209,6 +217,11 @@ class PersistenceWorker:
 
         except Exception as exc:
             self._tasks_failed += 1
+            self._failures.append(
+                f"{task.task_type} job={task.data.get('job_id') or 'unknown'} "
+                f"file={task.data.get('file_path')}: {exc}"
+            )
+            del self._failures[:-20]
             logger.exception(f"[PersistenceWorker] Failed to process {task.task_type}: {exc}")
 
     def _write_manifest(self, data: dict[str, Any]) -> None:
