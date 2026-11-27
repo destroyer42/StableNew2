@@ -130,6 +130,10 @@ def test_two_warm_jobs_count_final_outputs_and_keep_checkpoint(
         job_cleanup = [item for item in trace["operations"] if item["reason"] == "job_start"]
         assert len(job_cleanup) == 1 and not job_cleanup[0]["unload_checkpoint_requested"]
         assert job_cleanup[0]["operations"]["python_gc"]["outcome"] == "completed"
+        steps = [item["step"] for item in trace["steps"]]
+        assert steps[0] == "prepare_run" and steps[-2:] == ["assemble_result", "write_run_metadata"]
+        assert {"runtime_transition", "runtime_identity", "before_dispatch"} <= set(steps)
+        assert all(item["duration_ms"] >= 0 for item in trace["steps"])
     assert set(transport.models_at_dispatch) == {BASE}
     assert transport.model_writes == []
     assert "/sdapi/v1/unload-checkpoint" not in transport.paths("POST")

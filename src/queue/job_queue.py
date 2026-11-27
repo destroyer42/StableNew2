@@ -1147,6 +1147,10 @@ class JobQueue:
             try:
                 listener()
             except Exception:
+                logger.warning(
+                    "Queue state listener %r raised; the other listeners still run", listener,
+                    exc_info=True,
+                )
                 continue
 
     def restore_jobs(self, jobs: Iterable[Job]) -> None:
@@ -1188,5 +1192,9 @@ class _QueueStateNotificationBatch:
             try:
                 listener()
             except Exception:
+                logger.warning(
+                    "Queue state listener %r raised; the other listeners still run", listener,
+                    exc_info=True,
+                )
                 continue
         return False

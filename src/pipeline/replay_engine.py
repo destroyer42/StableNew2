@@ -241,12 +241,16 @@ class ReplayEngine:
                 if callable(persist):
                     persist()
 
+        # The queue's Cancel signals the job's own token; without it the pipeline never hears the operator (RUN-LEAN).
+        cancel_token = getattr(job, "_cancel_token", None)
+        if cancel_token is None:
+            cancel_token = self._cancel_token
         kwargs = resolve_run_njr_kwargs(
-            self._runner.run_njr, record, self._cancel_token, plan, checkpoint_callback
+            self._runner.run_njr, record, cancel_token, plan, checkpoint_callback
         )
         # Exactly one invocation per attempt: compatibility was proven above, so nothing raised from here on is an
         # argument mismatch and nothing is retried.
-        return self._runner.run_njr(record, self._cancel_token, **kwargs)
+        return self._runner.run_njr(record, cancel_token, **kwargs)
 
     def replay_history_record(self, record: HistoryRecord | Mapping[str, Any]) -> Any:
         """Validate history entry, hydrate NJR, then delegate to replay_njr."""
@@ -273,6 +277,10 @@ class ReplayEngine:
                 if isinstance(hydrated, NormalizedJobRecord):
                     return hydrated
             except Exception:
-                pass
+                logger.warning(
+                    "Stored NJR for job %s could not be rebuilt directly; trying the wrapped form",
+                    snapshot.get("job_id"),
+                    exc_info=True,
+                )
         normalized = snapshot if "normalized_job" in snapshot else {"normalized_job": snapshot}
         return normalized_job_from_snapshot(normalized)
