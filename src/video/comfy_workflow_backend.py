@@ -123,6 +123,12 @@ def _keep_warm_seconds(spec: Any) -> float:
     return float(value)
 
 
+def _output_stem(request: VideoExecutionRequest) -> str:
+    """NAME-INFO: the file stem the runner chose for this clip (``""`` for a direct backend call)."""
+
+    return str((request.context_metadata or {}).get("output_stem") or "")
+
+
 def _is_generated_output(descriptor: Mapping[str, Any]) -> bool:
     """Only files a workflow *produced* are artifacts.  Comfy also reports previews of inputs
     (for example ``LoadVideo`` echoes its source clip as ``type: input``) and temp previews;
@@ -814,6 +820,7 @@ class ComfyWorkflowVideoBackend:
         if str(spec.backend_defaults.get("output_transport") or "") == "comfy_view":
             history_entry = self._localize_comfy_outputs(
                 client, history_entry, Path(request.output_dir), cancel_token=token,
+                video_stem=_output_stem(request),
             )
         _raise_if_cancelled(token, "before finalizing workflow outputs")
         resolved_outputs = self._resolve_output_paths(
@@ -838,7 +845,7 @@ class ComfyWorkflowVideoBackend:
             frames_out_record = encode_frames_out(
                 frame_paths=playback_frames,
                 output_dir=request.output_dir,
-                stem=f"{spec.workflow_id}_{request.job_id or 'clip'}",
+                stem=_output_stem(request) or f"{spec.workflow_id}_{request.job_id or 'clip'}",
                 fps=frames_fps,
                 expected_frame_count=_expected_frame_count(stage_config),
                 cancel_token=request.cancel_token,
@@ -1615,12 +1622,14 @@ class ComfyWorkflowVideoBackend:
     @staticmethod
     def _localize_comfy_outputs(
         client: ComfyApiClient, history_entry: Mapping[str, Any], output_dir: Path,
-        *, cancel_token: Any = None,
+        *, cancel_token: Any = None, video_stem: str = "",
     ) -> dict[str, Any]:
         """Fetch Comfy-side outputs into the StableNew run directory (which stays the artifact
-        authority) and point the history descriptors at the local copies."""
+        authority) and point the history descriptors at the local copies. A clip is saved under ``video_stem``
+        (NAME-INFO) when one is given; working frames keep Comfy's names."""
 
         localized = deepcopy(dict(history_entry))
+        clips: dict[str, int] = {}
         outputs = localized.get("outputs")
         if not isinstance(outputs, dict):
             return localized
@@ -1642,9 +1651,15 @@ class ComfyWorkflowVideoBackend:
                         {"check_cancelled": lambda: _raise_if_cancelled(cancel_token, "during output download")}
                         if cancel_token is not None and isinstance(client, ComfyApiClient) else {}
                     )
+                    target = Path(name).name
+                    kind = Path(name).suffix.lower()
+                    if video_stem and kind in {".mp4", ".webm", ".mov", ".mkv", ".gif"}:
+                        clips[kind] = clips.get(kind, 0) + 1
+                        extra = f"_{clips[kind]}" if clips[kind] > 1 else ""
+                        target = f"{video_stem}{extra}{kind}"
                     local = client.download_view(
                         name,
-                        output_dir / Path(name).name,
+                        output_dir / target,
                         subfolder=str(descriptor.get("subfolder") or ""),
                         file_type=str(descriptor.get("type") or "output"),
                         **options,

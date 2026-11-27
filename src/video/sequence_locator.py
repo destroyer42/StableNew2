@@ -1,9 +1,10 @@
 """Find a sequence job's checkpoint ledger when its result did not record one (PR-VID-SEQ-331A).
 
 A failed or finished sequence records ``ledger_path`` in its result. A cancelled one records no result at all, but its
-run folder still holds ``sequence_state.json``, and that folder is named after the job (the runner builds it from the
-job id's first twelve characters). The locator reads only those folders, never the whole output tree, and trusts a file
-only when the ledger inside it names this very job; the resume itself then re-verifies the checkpoint as it always did.
+run folder still holds ``sequence_state.json``, and that folder is named after the job: it ends with the job's short id
+(NAME-INFO), and older folders hold the job id's first twelve characters. The locator reads only those folders, never
+the whole output tree, and trusts a file only when the ledger inside it names this very job; the resume itself then
+re-verifies the checkpoint as it always did.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Final
 
+from src.pipeline.output_naming import short_id
 from src.state.output_routing import KNOWN_OUTPUT_ROUTE_DIRS
 from src.video.sequence_ledger import LEDGER_FILE_NAME
 
@@ -51,6 +53,7 @@ def locate_ledger(job_id: str, output_roots: Iterable[str | os.PathLike[str]]) -
     token = folder_token(job_id)
     if not token:
         return None
+    ending = f"_{short_id(job_id)}"
     seen: set[Path] = set()
     for raw in output_roots:
         try:
@@ -63,7 +66,11 @@ def locate_ledger(job_id: str, output_roots: Iterable[str | os.PathLike[str]]) -
             seen.add(directory)
             try:
                 with os.scandir(directory) as entries:
-                    names = [e.name for e in entries if token in e.name and e.is_dir()]
+                    names = [
+                        e.name
+                        for e in entries
+                        if (token in e.name or e.name.endswith(ending)) and e.is_dir()
+                    ]
             except OSError:
                 continue
             # Newest first: a job re-queued by an app close has one run folder per attempt, named by start time.

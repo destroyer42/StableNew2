@@ -238,6 +238,8 @@ travel as the manifest's optional `info`, a closed list of bounded fields with p
 to a gateway that lists `item_info`. Short names come from `src/pipeline/output_naming.py` and
 `config/output_model_names.json`. An item published without `info` shows what it already has (model, batch, seed,
 date); items already on the phone are not published again for it. The page's code is `static/moreinfo.js`.
+A file named by the descriptive scheme (NAME-INFO slice 2) also sends its name, and Immich uploads under it; no
+other file name and no folder leaves the PC.
 
 ## 4. Retention (D4)
 

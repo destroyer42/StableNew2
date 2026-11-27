@@ -312,7 +312,7 @@ def job_info_reader(repository: Any, identity: Callable[[Any], Mapping[str, Any]
     describer = OutputDescriber(repository, batch_identity=identity)
 
     def read(path: Path, item: LibraryItem) -> Mapping[str, Any]:
-        return describer.describe(
+        info = describer.describe(
             path,
             kind=item.kind,
             made_at=datetime.fromtimestamp(item.effective_time / 1_000_000, UTC),
@@ -320,6 +320,8 @@ def job_info_reader(repository: Any, identity: Callable[[Any], Mapping[str, Any]
             workflow=item.workflow or "",
             seed=item.seed,
         )
+        # The name only, for Immich; the manifest keeps it only when it follows the descriptive scheme.
+        return {**info, "file_name": path.name}
 
     return read
 

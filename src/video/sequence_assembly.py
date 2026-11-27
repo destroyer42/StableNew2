@@ -9,6 +9,7 @@ frame before it encodes, honours the job's cancel token and removes any partial 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from src.controller.runtime_state import CancelToken
@@ -21,7 +22,7 @@ from src.video.movie_assembly_compiler import (
 )
 from src.video.movie_assembly_engine import MovieAssemblyOutcome, run_movie_assembly
 from src.video.movie_assembly_models import MODE_SEQUENCE, MovieAssemblySpec
-from src.video.sequence_plan import SequencePlan
+from src.video.sequence_plan import SequenceAssembly, SequencePlan
 
 
 class SequenceAssemblyError(RuntimeError):
@@ -68,10 +69,14 @@ def assemble_sequence_frames(
     run_dir: Path,
     job_id: str,
     cancel_token: CancelToken | None = None,
+    file_stem: str = "",
 ) -> MovieAssemblyOutcome:
-    """Encode ``frames`` as one movie under ``run_dir`` (raises ``CancellationError`` on cancel)."""
+    """Encode ``frames`` as one movie under ``run_dir`` (raises ``CancellationError`` on cancel). ``file_stem``
+    (NAME-INFO) names the movie when the plan keeps the default name."""
 
     spec = freeze_sequence_assembly(frames, plan)
+    if file_stem and plan.assembly.clip_name == SequenceAssembly().clip_name:
+        spec = replace(spec, clip_name=file_stem)
     outcome = run_movie_assembly(spec, run_dir=run_dir, cancel_token=cancel_token, job_id=job_id)
     if outcome.timeline.total_frames != len(frames) or outcome.timeline.fps != plan.fps:
         Path(outcome.output_path).unlink(missing_ok=True)

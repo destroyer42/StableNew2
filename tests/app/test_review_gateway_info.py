@@ -36,7 +36,8 @@ def test_info_goes_with_the_manifest_to_a_gateway_that_takes_it(env):
     manifests = publish(env, ["item_info"], job_info_reader(None, lambda _job: None))
     assert len(manifests) == 2
     for manifest in manifests:
-        assert set(manifest["info"]) == {"made_at"}  # these two files carry no StableNew record
+        # These two files carry no StableNew record, and their names are not descriptive ones (so not sent).
+        assert set(manifest["info"]) == {"made_at"}
         validate_def(manifest, "item_manifest")
         assert str(env.root) not in json.dumps(manifest)
 

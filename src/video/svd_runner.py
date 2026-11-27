@@ -238,7 +238,9 @@ class SVDRunner:
                     export_record["output_seconds"],
                 )
 
-            stem = build_svd_artifact_stem(source_image_path=source_path, job_id=job_id)
+            stem = str(
+                (provenance_context or {}).get("output_stem") or ""
+            ) or build_svd_artifact_stem(source_image_path=source_path, job_id=job_id)
             video_path = None
             gif_path = None
             frame_paths: list[Path] = []

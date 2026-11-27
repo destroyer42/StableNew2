@@ -72,6 +72,7 @@ from src.pipeline.model_synchronizer import (
     operator_model_title,
 )
 from src.pipeline.no_output_reason import empty_response_reason, exception_reason, operator_reason
+from src.pipeline.output_naming import PACK_BLOCK
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
@@ -322,6 +323,8 @@ class Pipeline:
         # PR-PIPE-001: Track current job ID for manifest linkage
         self._current_job_id: str | None = None
         self._current_njr_sha256: str | None = None
+        #: NAME-INFO: the pack block the job's images carry (set by the runner).
+        self._current_pack_block: dict[str, Any] | None = None
         # Images/records written without full provenance during the current run (audit B9); reset per run.
         self._provenance_incomplete: list[dict[str, Any]] = []
         # Stage tracking for runtime status
@@ -719,6 +722,9 @@ class Pipeline:
         )
         if not payload.get("job_id"):
             payload["job_id"] = getattr(self, "_current_job_id", "") or ""
+        # NAME-INFO: carried to later reprocesses and clips.
+        if block := getattr(self, "_current_pack_block", None):
+            payload.setdefault(PACK_BLOCK, dict(block))
         return payload
 
     def _resolve_run_dir(self, output_dir: Path) -> Path:

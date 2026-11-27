@@ -57,6 +57,8 @@ class Claim:
     content_type: str
     asset_id: str | None
     favorite_set: bool
+    #: NAME-INFO: the PC's descriptive file name, when the item was published with one.
+    file_name: str | None = None
 
     @property
     def key(self) -> tuple[str, str]:
@@ -106,7 +108,7 @@ def claim(db: sqlite3.Connection, now: str) -> Claim | None:
     row = db.execute(
         "SELECT owed.library_id, owed.sha256, owed.record_id, owed.favorite, item.run_id,"
         " item.created_at, item_media.digest, item_media.content_type, owed.asset_id,"
-        " owed.favorite_set"
+        " owed.favorite_set, json_extract(item.info, '$.file_name') AS file_name"
         " FROM immich_upload AS owed JOIN item USING (library_id, sha256)"
         " JOIN item_media ON item_media.library_id = owed.library_id"
         "  AND item_media.sha256 = owed.sha256 AND item_media.variant = 'original'"

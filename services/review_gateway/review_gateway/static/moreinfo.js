@@ -24,6 +24,7 @@ const MoreInfo = (() => {
       ["Seed", info.seed || display.seed],
       ["Batch", info.batch || batch.name],
       ["Duration", item.duration_s ? `${item.duration_s} s` : ""],
+      ["File", info.file_name],
     ].filter(([, value]) => value);
   }
 

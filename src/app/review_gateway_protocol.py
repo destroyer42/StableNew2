@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from src.pipeline.output_naming import DESCRIPTIVE_NAME
+
 SCHEMA_VERSION = "stablenew.review-gateway-sync.v1"
 #: PHONE-FAST: the phone's review sections (the schema's ``item_source``).
 ITEM_SOURCES = ("pipeline", "learning", "reprocess", "video", "testing", "other")
@@ -667,6 +669,9 @@ def _info(values: Mapping[str, Any]) -> dict[str, Any]:
     seed = values.get("seed")
     if isinstance(seed, str) and re.fullmatch(r"[0-9]{1,19}", seed):
         shown["seed"] = seed
+    name = values.get("file_name")
+    if isinstance(name, str) and DESCRIPTIVE_NAME.fullmatch(name):
+        shown["file_name"] = name
     made = values.get("made_at")
     if isinstance(made, str):
         try:

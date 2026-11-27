@@ -54,7 +54,7 @@ path-shaped is in any manifest; an older gateway receives no `info`.
 File: `{YYYYMMDD-HHMM}_{stage path}_{model}_{pack}_p{NN}v{NN}_{short id}.{ext}`
 
 - `20261127-1648_txt2img+adetailer_photoMomentum_000-Style_p01v02_8f87e4a2.png`
-- `20261127-1457_clip-A14B_from-photoMomentum_000-Style_p01v01_969e487e.mp4`
+- `20261127-1457_clip-A14B_from-photoMomentum_000-Style_p01_969e487e.mp4`
 
 Folder: `{YYYYMMDD_HHMMSS}_{pack}_{model}`.
 
@@ -71,8 +71,8 @@ Rules:
 - Only `A-Z a-z 0-9 . _ + -` and spaces turned into `-`; each part capped, whole name at most 140 characters.
 - Folders: pack jobs of one pack and model still share a folder as before. Jobs without a pack of their own (video,
   reprocess) keep one folder per job and carry the short id, so sequence ledgers cannot collide.
-- Learning uses the same scheme, with the experiment's variable and value in the file name; its folder label is
-  unchanged.
+- Learning keeps its own file and folder names: tests pin them (`build_learning_filename_prefix`), which is the
+  condition the task set for keeping them. Owner question 4.
 - Immich: the PC sends the file name (name only) when it follows this scheme, and the gateway uploads under it.
   Older files keep today's Immich name.
 
@@ -94,3 +94,7 @@ None blocking. Defaults taken, each easy to change:
 1. A pack-less job (video, reprocess) puts the short id at the end of its folder name.
 2. The VAE leaves the folder name (it stays in "More info" through the model's metadata and in the manifests).
 3. Date and time in names are the PC's local time, as folders are today.
+4. Learning keeps its long names. Default: keep. Switching is a small change plus new expectations in three
+   Learning tests.
+5. A clip name carries the source's prompt number without the variant (as in the owner example); the variant is
+   in More info.

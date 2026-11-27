@@ -367,7 +367,7 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   tampered, missing, conflicting or unsafe file refuses the resume; it never falls back to a full rerun, never restarts the original job and is never
   automatic after a device loss. A segment that was in flight is simply the first segment of the suffix; no generation request is replayed. A job that recorded
   no result (a cancelled one) is resumed from the checkpoint found in its own run folder by job id (`src/video/sequence_locator.py`: the route folders
-  of the output root, a folder named after the job, and a ledger that names that very job), or from a `sequence_state.json` the operator names (`ledger_path=`). `from_segment` may equal the segment count when only the
+  of the output root, a folder named after the job (its short id; older folders its id's first twelve characters), and a ledger that names that very job), or from a `sequence_state.json` the operator names (`ledger_path=`). `from_segment` may equal the segment count when only the
   assembly was left.
 - **Full replay** (`replay_sequence`, and any History replay) is different: it recomputes every segment from the frozen plan and never inherits a resume. When
   the original ledger is available it is pinned, and the replay's ledger records per segment whether the recomputed final frame equals the original's
