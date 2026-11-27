@@ -1,6 +1,6 @@
 # PHONE-CORE: the phone review page as modules, an installable app, and offline use
 
-Status: **design for owner approval, not built.** The direction was approved by the owner on 2026-11-27: "Build out a
+Status: **design approved with owner answers (section 8, 2026-11-27), not built.** The direction was approved by the owner on 2026-11-27: "Build out a
 robust design and plan to best: structure, organize, architecture, and build out the installable web-app with offline
 support." This package is documentation only. Each slice in section 7 is its own work package, PR and session.
 
@@ -327,10 +327,11 @@ Chrome needs raster icons of at least 144 px to mint a WebAPK.
 
 **Rendition cache cap and eviction.**
 
-- Default cap 500 MB (OD-2), or half of `navigator.storage.estimate().quota` when that is smaller. A phone rendition is
-  at most 1,080 px WebP, typically 150 to 400 KB, so 500 MB holds about 2,000 renditions: several walk-away batches.
+- Cap 1 GB (OD-2, owner), or half of `navigator.storage.estimate().quota` when that is smaller. A phone rendition is
+  at most 1,080 px WebP, typically 150 to 400 KB, so 1 GB holds about 4,000 renditions: several walk-away batches.
 - Eviction runs after each `put`, and on activate:
-  - entries older than the lifetime (default 7 days, the same `max-age=604800` the gateway sends, OD-2) go first;
+  - entries older than the lifetime (14 days, OD-2, owner) go first. The Cache API does not apply HTTP `max-age`, so
+    the gateway's 7-day header does not shorten it; the worker's own lifetime is the rule;
   - then renditions of items already decided;
   - then the least recently used, until the cache is under 90 % of the cap.
 - "Matches PHONE-FAST's cap", stated honestly: PHONE-FAST's cap is on the gateway (`cache_warn_gib`, 20 GiB, warn
@@ -437,7 +438,7 @@ Rules:
 
 ### 3.4 The offline review pack
 
-- While online and idle, the offline feature keeps the next N items of "Review all" (default 100 images, OD-3).
+- While online and idle, the offline feature keeps the next N items of "Review all" (300 images, OD-3, owner; about 75 to 120 MB).
 - It stores their rows in IndexedDB `pack` and asks the worker to cache their `preview` renditions (and `thumb` for
   grids).
 - The pack refreshes on each home load and drops items that were decided.
@@ -535,8 +536,8 @@ Attacker capabilities considered:
 
 | # | Class | Severity | Precondition | Affected | Control (required) |
 |---|---|---|---|---|---|
-| T1 | Media at rest | Medium | Lost or seized phone, unlocked or forensically read | `rg-media-1`, IndexedDB `pack` | Originals and video never cached. Renditions bounded (OD-2: 7 days, 500 MB). Wiped on 401 (4.3). Android file-based encryption and the lock screen are the at-rest protection. No authenticated JSON in any HTTP cache. |
-| T2 | Revocation of a lost phone | Medium | Phone lost | session, caches | Revoke on the desktop or console (S11). The owner removes the phone from the tailnet, so the gateway is unreachable at all. At the next contact the 401 wipes caches. **Residual R1:** a phone that never reconnects keeps its renditions until their lifetime runs out, and only while the app is opened (eviction is local, clock-based and can be defeated by changing the clock). No web platform offers remote wipe. Owner decision OD-6. |
+| T1 | Media at rest | Medium | Lost or seized phone, unlocked or forensically read | `rg-media-1`, IndexedDB `pack` | Originals and video never cached. Renditions bounded (OD-2: 14 days, 1 GB). Wiped on 401 (4.3). Android file-based encryption and the lock screen are the at-rest protection. No authenticated JSON in any HTTP cache. |
+| T2 | Revocation of a lost phone | Medium | Phone lost | session, caches | Revoke on the desktop or console (S11). The owner removes the phone from the tailnet, so the gateway is unreachable at all. At the next contact the 401 wipes caches. **Residual R1:** a phone that never reconnects keeps its renditions until their 14-day lifetime runs out, and only while the app is opened (eviction is local, clock-based and can be defeated by changing the clock). No web platform offers remote wipe. Accepted by the owner (OD-6). |
 | T3 | Cache poisoning | Low | A wrong or partial response stored as a rendition or shell file | `sw.js` put rules | Only same-origin `basic` 200 responses with an `image/*` type, for the two rendition URL patterns. Shell files are verified against `files.json` SHA-256 before the precache commits. URLs are content-addressed and immutable. Nothing is stored from a redirect or error. |
 | T4 | A persistent malicious worker after a gateway compromise | Medium (no new exposure) | Gateway code execution | worker lifetime | A compromised gateway already controls the page. The worker adds persistence until the next check: `updateViaCache: "none"`, at most 24 h, Repair, and the fixed deploy replaces it. The deployer installs only GitHub-signed `main` commits (DEPLOY-PROXMOX decisions 3 and 4). |
 | T5 | Worker registration hijack through injected script | Low | XSS despite CSP | `register()` | The Trusted Types policy `rg-sw` allows only `/sw.js`. CSP `trusted-types rg-sw`. `sw.js` is served only by its fixed route with a JavaScript type. Media routes send image types with `nosniff`, so they cannot be registered. Text still goes only through `textContent`. |
@@ -667,7 +668,10 @@ switch.
 - Locally: `python -m pytest -m phone_e2e tests/phone_e2e` needs `playwright install chromium` once. It is not part of
   `run_pr_gate.py`, which stays browser-free.
 
-## 6. Staging gateway
+## 6. Staging gateway (deferred, OD-7)
+
+**Deferred by the owner on 2026-11-27 ("Not now").** PS-1 is not scheduled. The design below is kept for when it is
+wanted. Until then, pre-merge evidence is CI's `phone-e2e` and changes land on production directly, as today.
 
 **Topology: a second container, not a second instance** (OD-7). Cookies are scoped by host, not port.
 
@@ -730,14 +734,14 @@ PC-0 adds only tests and CI, so it can start now on `main`.
 | **PW-2 rendition cache** | The `rg-media-1` LRU, its IndexedDB index, decided-first eviction, cap and lifetime from settings, prefetch through the worker, wipe on 401. | e2e with a small cap: eviction order, lifetime, no original ever stored, 401 wipe. PHONE-FAST's next-4 prefetch now served from cache (second view causes no network request). | Quota surprises on low-storage phones (cap = min(setting, quota/2)). | M | After PW-1. Parallel with PC-2. |
 | **PO-1 one outbox, offline sending** | IndexedDB `rg` database, the outbox store and migration, Web Locks, BroadcastChannel, the shared `outbox-send.js`, Background Sync, fallback triggers, the header pill and `#/waiting`, rating answers and submit through the outbox. | e2e: offline queue then online sends once (keys asserted on the gateway), migration from a pre-seeded `localStorage`, two tabs never double-send, held undo after `pagehide` sent by the worker, `dispatchSyncEvent` path, RG-160 PC-away journey unchanged. | Concurrency between tabs and the worker (one lock). Migration data loss (idempotent copy-then-delete). | M-L | After PW-1 and PC-2(e). Serial in the core lane. |
 | **PO-2 offline review** | The offline feature (pack rows and renditions), `paired_offline` boot from the snapshot, "as of" home, `based_on` on decisions with gateway 409 `decision_changed` and the phone's Use mine / Keep theirs. | e2e: cold start offline, review 5 from the pack, back online, applied. A conflict from a second device shows the choice. Gateway ASGI tests for `based_on`. | Stale snapshot confusion (always labelled "as of"). Gateway change must stay additive. | M | After PO-1 and PW-2. |
-| **PS-1 staging** | `--target` in `tools.review_gateway_deploy`, separate staging settings, `tools.review_gateway_stage seed/reset` reusing the PC-0 seeder, the "Staging" header label from gateway config, a runbook section, the owner steps of section 6. | Tool tests (closed target set, settings isolation: the app's sync settings are never read or written). After the owner's Proxmox steps: one deploy to staging and one promotion of the same SHA, recorded. | Owner time on Proxmox. Settings mix-up (separate file and name, tests). | M | After PC-0 (seeder). **Parallel with everything** (tools, deploy and docs only). |
+| **PS-1 staging (deferred, OD-7)** | `--target` in `tools.review_gateway_deploy`, separate staging settings, `tools.review_gateway_stage seed/reset` reusing the PC-0 seeder, the "Staging" header label from gateway config, a runbook section, the owner steps of section 6. | Tool tests (closed target set, settings isolation: the app's sync settings are never read or written). After the owner's Proxmox steps: one deploy to staging and one promotion of the same SHA, recorded. | Owner time on Proxmox. Settings mix-up (separate file and name, tests). | M | Deferred by the owner. When wanted: after PC-0 (seeder), parallel with everything. |
 | **PP-1 QR re-pair** | Desktop pairing dialog QR (`src/app` dialog, no new dependency if a QR encoder is already pinned, else a tiny vendored one, owner check), phone `#/pair/<code>` prefill and fragment removal, `last_seen_at` in `enrolled_devices` and the desktop list. | A Tk test that the dialog renders the QR. e2e: the fragment prefills and is removed from history. Sync contract test for the additive field. | QR library supply chain. | S-M | After PC-2(f). Parallel with PW and PO. |
 
 Order on the critical path:
 
 ```
 PC-0 → (RG-160, NAME-INFO merge) → PC-1a → PC-1b → { PC-2 a-f ∥ PW-1 → PW-2 } → PO-1 → PO-2
-PS-1 any time after PC-0
+PS-1 deferred (OD-7); when wanted, any time after PC-0
 PP-1 after PC-2(f)
 ```
 
@@ -753,19 +757,22 @@ PP-1 after PC-2(f)
 
 ## 8. Owner decisions
 
-| # | Decision | Recommended default |
-|---|---|---|
-| OD-1 | Which browser runs the installed app | **Chrome, installed as an app** (WebAPK). DuckDuckGo stays the everyday browser. It cannot install and clears data unless the gateway is Fireproofed. |
-| OD-2 | How long renditions stay on the phone, and the cap | **7 days** (the gateway's own `max-age`), **500 MB** or half the quota if smaller. The oldest and decided go first. Originals never. |
-| OD-3 | Size of the offline review pack | **The next 100 images** to review (about 25 to 40 MB), refreshed when online. |
-| OD-4 | Cache videos for offline viewing | **No** for now (Range requests, size). Revisit after PO-2. |
-| OD-5 | A longer-lived or recoverable device credential | **No.** Fix the cause (OD-1) and make re-pairing a QR scan (PP-1). Passkeys only if a Chrome install still loses pairing. |
-| OD-6 | Cached media on a lost and revoked phone | **Wipe at the next contact (401)**, and accept residual R1: a phone that never reconnects keeps renditions until their lifetime ends. Removing it from the tailnet is the first step when a phone is lost. |
-| OD-7 | Staging topology, and what may be deployed there | **(a) A separate CT 121, signed `main` commits only, promote the same SHA.** (b) is optional: also allow heads of branches in this repository on staging only. |
-| OD-8 | Offline decisions that conflict with a newer one | **Ask** ("Changed on another phone: Use mine / Keep theirs") through `based_on`. The alternative is last arrival wins, as today. |
-| OD-9 | Queue a rating Submit made offline | **Yes**, sent when back. The PC still checks and may refuse as today. |
-| OD-10 | The update prompt | **A banner with Reload, never forced.** The new version otherwise starts when the app is next fully closed. |
-| OD-11 | Browser e2e as a merge gate | **Yes, through `full-suite`** for any gateway change (no branch-protection change). Nightly as well. |
+Answered 2026-11-27: OD-1, OD-2, OD-3, OD-6 and OD-7 by the owner in chat, relayed by the orchestrator; OD-4, OD-5 and
+OD-8 to OD-11 adjudicated by the orchestrator with the recommended defaults.
+
+| # | Decision | Recommended default | Answer (2026-11-27) |
+|---|---|---|---|
+| OD-1 | Which browser runs the installed app | **Chrome, installed as an app** (WebAPK). DuckDuckGo stays the everyday browser. It cannot install and clears data unless the gateway is Fireproofed. | **Chrome app for review** (owner). DuckDuckGo stays for everyday browsing. |
+| OD-2 | How long renditions stay on the phone, and the cap | **7 days** (the gateway's own `max-age`), **500 MB** or half the quota if smaller. The oldest and decided go first. Originals never. | **Larger: 14 days, 1 GB** (owner). Decided items dropped first. |
+| OD-3 | Size of the offline review pack | **The next 100 images** to review (about 25 to 40 MB), refreshed when online. | **The next 300** (owner). |
+| OD-4 | Cache videos for offline viewing | **No** for now (Range requests, size). Revisit after PO-2. | No offline video (orchestrator, default). |
+| OD-5 | A longer-lived or recoverable device credential | **No.** Fix the cause (OD-1) and make re-pairing a QR scan (PP-1). Passkeys only if a Chrome install still loses pairing. | QR re-pair, no longer-lived credential (orchestrator, default). |
+| OD-6 | Cached media on a lost and revoked phone | **Wipe at the next contact (401)**, and accept residual R1: a phone that never reconnects keeps renditions until their lifetime ends. Removing it from the tailnet is the first step when a phone is lost. | **Accept, wipe on next contact** (owner). Recorded: a phone that never reconnects keeps images until expiry, which with OD-2 is 14 days. |
+| OD-7 | Staging topology, and what may be deployed there | **(a) A separate CT 121, signed `main` commits only, promote the same SHA.** (b) is optional: also allow heads of branches in this repository on staging only. | **Not now** (owner). PS-1 deferred; section 6 kept, marked deferred. |
+| OD-8 | Offline decisions that conflict with a newer one | **Ask** ("Changed on another phone: Use mine / Keep theirs") through `based_on`. The alternative is last arrival wins, as today. | Ask on conflict (orchestrator, default). |
+| OD-9 | Queue a rating Submit made offline | **Yes**, sent when back. The PC still checks and may refuse as today. | Queue an offline rating Submit (orchestrator, default). |
+| OD-10 | The update prompt | **A banner with Reload, never forced.** The new version otherwise starts when the app is next fully closed. | Banner, never forced (orchestrator, default). |
+| OD-11 | Browser e2e as a merge gate | **Yes, through `full-suite`** for any gateway change (no branch-protection change). Nightly as well. | `phone-e2e` gates merges through `full-suite`, plus nightly (orchestrator, default). |
 
 ## 9. Self-critique (one model; not an independent review)
 
