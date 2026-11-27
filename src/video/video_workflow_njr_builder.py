@@ -792,16 +792,15 @@ class VideoWorkflowNjrBuilder:
             extra_metadata["video_workflow"]["depth_input"] = depth_input
         if source_preparation:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
-            # VID-FRAME: how much of the source the chosen size cuts away.
+            # VID-FRAME: how much of the source the chosen size cuts away (absent: the whole picture).
             source_size = source_preparation["source_dimensions"]
             target_size = source_preparation["target_dimensions"]
-            extra_metadata["video_workflow"]["source_crop_fraction"] = round(
-                discarded_fraction(
-                    (source_size["width"], source_size["height"]),
-                    (target_size["width"], target_size["height"]),
-                ),
-                4,
+            cut = discarded_fraction(
+                (source_size["width"], source_size["height"]),
+                (target_size["width"], target_size["height"]),
             )
+            if round(cut, 4) > 0:
+                extra_metadata["video_workflow"]["source_crop_fraction"] = round(cut, 4)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
         if frozen_interpolation is not None:

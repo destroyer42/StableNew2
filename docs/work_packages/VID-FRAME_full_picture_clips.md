@@ -21,7 +21,7 @@ edits here stay minimal).
   3:4 alternative 528x704 has 7 % fewer pixels). 1024x1024 -> 624x624 (no crop).
 - A14B workflows have a 5 % crop limit, declared beside the specs so published versions stay byte-identical. Above it, an N1 warning (`video_source_cropped`, why and fix) is
   shown beside Queue, in the multi-image batch preview, and frozen in accepted warnings. It never refuses.
-- Provenance: `video_workflow.source_crop_fraction`; the chosen size is already `source_preparation.target_dimensions`.
+- Provenance: `video_workflow.source_crop_fraction` (absent when nothing is cut); the chosen size is already `source_preparation.target_dimensions`.
 - Touch points: `workflow_source_preparation.resolve_declared_target`, `workflow_warnings`, `policy_warnings`,
   `video_workflow_njr_builder`, `video_workflow_batch.assess` (its `warnings` list), `list_workflow_specs`,
   `video_workflow_tab_frame_v2._experimental_warning_text` plus a source-change trace to `_refresh_queue_gate`.
