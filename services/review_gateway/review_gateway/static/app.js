@@ -47,7 +47,7 @@ const DETAILS = {
   not_an_image: "only images can be fixed",
   source_changed: "the image changed on the PC",
   provenance_unverified: "the PC cannot find the job that made this image",
-  recipe_not_variable: "this image's recipe has more than one stage, so it cannot be varied yet",
+  recipe_not_variable: "this image cannot be re-run with new seeds (it was made from another image, such as a face or hands fix)",
   model_unavailable: "the checkpoint is not available",
   model_family_refused: "the checkpoint cannot run this fix",
   adetailer_unavailable: "ADetailer is not available; connect Forge on the PC",
