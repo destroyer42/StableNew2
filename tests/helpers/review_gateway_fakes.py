@@ -151,6 +151,8 @@ class FakeGateway:
 
     def __init__(self, secret: str = SECRET) -> None:
         self.secret = secret
+        #: What health lists; ``None`` is a gateway from before the list existed.
+        self.features: list[str] | None = None
         self.media: dict[str, bytes] = {}
         self.manifests: dict[str, dict[str, Any]] = {}
         self.outbox: list[Any] = []
@@ -191,7 +193,12 @@ class FakeGateway:
         split = urlsplit(path)
         route, query = split.path, parse_qs(split.query)
         if route == "/sync/v1/health" and method == "GET":
-            body_ok = {"status": "ok", "schema_version": "stablenew.review-gateway-sync.v1"}
+            body_ok: dict[str, Any] = {
+                "status": "ok",
+                "schema_version": "stablenew.review-gateway-sync.v1",
+            }
+            if self.features is not None:
+                body_ok["features"] = self.features
             return Response(200, json.dumps(body_ok).encode())
         if route.startswith("/sync/v1/media/"):
             digest = route.rsplit("/", 1)[1]

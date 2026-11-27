@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import Future
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+
+from PIL import Image, ImageOps
 
 from src.app.site_media_files import SiteOutputError
 from src.app.site_native_review import NativeImageReview
@@ -18,8 +20,14 @@ from src.controller.app_controller_services.pack_draft_service import (
     build_pack_config,
     build_pack_entries,
 )
-from src.controller.review_batch_service import AdetailerPasses, prepare_review_batch
+from src.controller.outpaint_edit_service import OutpaintSettings, prepare_outpaint_edit
+from src.controller.review_batch_service import (
+    AdetailerPasses,
+    prepare_review_batch,
+    review_output_dir,
+)
 from src.pipeline.job_models_v2 import SourceKind
+from src.pipeline.outpaint_canvas import extents_for_aspect, plan_geometry
 from src.pipeline.policy_warnings import with_pending_warnings
 from src.queue.job_model import JobStatus
 from src.queue.job_repository import JobRepository
@@ -216,3 +224,93 @@ class PhonePreviewHost:
             raise SiteOutputError("source_changed")
         job = with_pending_warnings(job, verdict.warnings)
         return PhonePreviewInput(path.name, (job,), preview.require_queueable)
+
+    # -- RG-140 slice 2 ------------------------------------------------------------------------------------------------
+
+    def gateway_models(self) -> tuple[str, ...]:
+        """The checkpoints the connected image backend lists, as the model picker has them (read on the Tk thread)."""
+
+        app = self._app
+
+        def read() -> tuple[str, ...]:
+            resources = getattr(app.app_state, "resources", None)
+            entries = resources.get("models") if isinstance(resources, Mapping) else None
+            names = (str(getattr(entry, "name", entry) or "").strip() for entry in entries or ())
+            return tuple(dict.fromkeys(name for name in names if name))
+
+        return self._capture(read)
+
+    def image_baseline(self, path: Path) -> dict[str, Any]:
+        """The recipe recorded in the image itself (model, prompt, settings), as Review reads it."""
+
+        return dict(self._app._extract_reprocess_baseline_from_image(path) or {})
+
+    def compile_gateway_img2img(
+        self, path: Path, digest: str, *, model: str | None = None, prompt_add: str = ""
+    ) -> PhonePreviewInput:
+        """RG-140 slice 2: the Review img2img re-work of exactly the image at ``path``.
+
+        ``model`` swaps the checkpoint ("another model"); ``prompt_add`` is appended to the recorded prompt ("prompt
+        tweak"). The desktop's current img2img settings (denoise included) are read on the Tk thread. The job writes
+        under ``<output>/Reprocess`` with its parent artifact recorded.
+        """
+
+        app = self._app
+        fallback = self._capture(lambda: deepcopy(app._build_reprocess_config(["img2img"])))
+        preview = prepare_review_batch(
+            app,
+            image_paths=[str(path)],
+            stages=["img2img"],
+            fallback_config=fallback,
+            prompt_delta=prompt_add,
+            prompt_mode="append",
+            model_override=model,
+        )
+        if preview.blocked or len(preview.jobs) != 1:
+            blocked = preview.blocked[0] if preview.blocked else None
+            if blocked is not None and blocked.assessment is not None:
+                raise SiteOutputError("operation_unsupported")
+            raise SiteOutputError("compile_failed")
+        job = preview.jobs[0]
+        if job.source.parent_artifact_id != f"sha256:{digest}":
+            raise SiteOutputError("source_changed")
+        return PhonePreviewInput(path.name, (job,), preview.require_queueable)
+
+    def compile_gateway_outpaint(
+        self, path: Path, digest: str, *, ratio: tuple[int, int]
+    ) -> PhonePreviewInput:
+        """RG-140 slice 2: Review's canvas extension to ``ratio``: every original pixel kept, the new space generated.
+
+        The new space is described by the image's own recorded prompt. Refusals are closed codes: ``no_change`` (the
+        image already has the ratio), ``size_unsupported`` (beyond the outpaint size limit), ``prompt_required``.
+        """
+
+        app = self._app
+        fallback = self._capture(lambda: deepcopy(app._build_reprocess_config(["img2img"])))
+        baseline = self.image_baseline(path)
+        prompt = str(baseline.get("prompt") or "").strip()
+        if not prompt:
+            raise SiteOutputError("prompt_required")
+        with Image.open(path) as image:
+            size = ImageOps.exif_transpose(image).size
+        extents = extents_for_aspect(size, ratio)
+        if extents is None:
+            raise SiteOutputError("no_change")
+        try:
+            plan_geometry(size, extents)
+        except ValueError as exc:
+            raise SiteOutputError("size_unsupported") from exc
+        try:
+            preview = prepare_outpaint_edit(
+                source_path=str(path),
+                source_sha256=digest,
+                settings=OutpaintSettings(prompt, extents),
+                fallback_config=fallback,
+                baseline=baseline,
+                output_dir=review_output_dir(app),
+            )
+        except ValueError as exc:  # the target cannot outpaint (N1b real block) or the source moved
+            raise SiteOutputError("operation_unsupported") from exc
+        if preview.job.source.parent_artifact_id != f"sha256:{digest}":
+            raise SiteOutputError("source_changed")
+        return PhonePreviewInput(path.name, (preview.job,), preview.require_queueable)

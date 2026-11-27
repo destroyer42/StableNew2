@@ -47,7 +47,10 @@ def test_the_inbox_groups_items_by_run_newest_first_with_counts(rig) -> None:
     runs = rig.phone.get("/api/runs").json()["runs"]
 
     assert [run["run_id"] for run in runs] == ["20261126_090000_second run", RUN]
-    counts = {key: runs[1][key] for key in runs[1] if key not in ("run_id", "covers")}
+    assert [(run["kind"], run["name"]) for run in runs] == [("run", None), ("run", None)]
+    counts = {
+        key: runs[1][key] for key in runs[1] if key not in ("run_id", "covers", "kind", "name")
+    }
     assert counts == {
         "total": 3,
         "undecided": 1,
@@ -61,6 +64,106 @@ def test_the_inbox_groups_items_by_run_newest_first_with_counts(rig) -> None:
     assert {cover["library_id"] for cover in runs[1]["covers"]} <= {
         i["library_id"] for i in items(rig)
     }
+
+
+BATCH = {
+    "batch_id": "5b0c4f8e-2a1d-4e3b-9c7a-1f2e3d4c5b6a",
+    "name": "2026-11-26 portraits +1 x 2 models",
+    "cell": {"pack": "portraits", "model": "juggernautXL.safetensors"},
+}
+
+
+def test_the_inbox_groups_a_named_batch_across_run_folders(rig) -> None:
+    """N5: a batch spans many run folders; the phone groups it by its name, and anything else by run folder."""
+
+    first = rig.publish("cell-a", run_id="20261126_100000_portraits", batch=BATCH)
+    other_cell = {**BATCH, "cell": {"pack": "landscapes", "model": "ponyXL.safetensors"}}
+    second = rig.publish("cell-b", run_id="20261126_101500_landscapes", batch=other_cell)
+    rig.clock.advance(minutes=5)
+    loose = rig.publish("loose", run_id="20261126_103000_manual")
+    rig.pair()
+    rig.decide(first, "keep")
+
+    runs = rig.phone.get("/api/runs").json()["runs"]
+
+    assert [(run["kind"], run["name"]) for run in runs] == [
+        ("run", None),
+        ("batch", BATCH["name"]),
+    ]
+    assert runs[0]["run_id"] == "20261126_103000_manual"
+    group = runs[1]
+    assert group["run_id"] == f"batch:{BATCH['batch_id']}"
+    assert (group["total"], group["undecided"], group["keep"]) == (2, 1, 1)
+    response = rig.phone.get(f"/api/runs/{group['run_id']}")
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == BATCH["name"]
+    listed = response.json()["items"]
+    assert [item["library_id"] for item in listed] == [first["library_id"], second["library_id"]]
+    assert [item["batch"] for item in listed] == [BATCH, other_cell]
+    [plain] = items(rig, "20261126_103000_manual")
+    assert plain["library_id"] == loose["library_id"] and plain["batch"] is None
+    assert (
+        items(rig, "20261126_100000_portraits") == []
+    )  # a batched item is listed under its batch only
+
+
+def test_a_republished_item_moves_into_its_batch(rig) -> None:
+    """A manifest is idempotent by item: publishing it again with a batch moves it out of its run folder group."""
+
+    rig.publish("again", run_id="20261126_100000_portraits")
+    rig.publish("again", run_id="20261126_100000_portraits", batch=BATCH)
+    rig.pair()
+
+    [group] = rig.phone.get("/api/runs").json()["runs"]
+    assert (group["kind"], group["total"]) == ("batch", 1)
+
+
+def test_an_unknown_batch_group_lists_nothing(rig) -> None:
+    rig.publish("one", batch=BATCH)
+    rig.pair()
+
+    assert items(rig, "batch:00000000-0000-4000-8000-000000000000") == []
+    assert items(rig, "batch:not-a-uuid") == []
+
+
+@pytest.mark.parametrize(
+    "batch",
+    [
+        {"batch_id": "not-a-uuid", "name": "x"},
+        {"batch_id": BATCH["batch_id"], "name": ""},
+        {"batch_id": BATCH["batch_id"]},
+        {**BATCH, "path": "C:\\\\output"},
+        {**BATCH, "cell": {"pack": "p", "folder": "x"}},
+    ],
+)
+def test_a_batch_the_contract_does_not_allow_is_refused(rig, batch) -> None:
+    manifest, _blobs = rig.manifest("bad", batch=batch)
+
+    assert rig.sync.post("/sync/v1/items", json=manifest).status_code == 422
+
+
+def test_an_inbox_made_before_batches_gains_them(rig, tmp_path, clock) -> None:
+    from tests.review_gateway_service.conftest import Rig
+
+    rig.publish("old")
+    with rig.gateway.store.write() as database:
+        database.execute("DROP INDEX IF EXISTS item_batch")
+        database.execute("ALTER TABLE item DROP COLUMN batch")
+        database.execute("ALTER TABLE item DROP COLUMN batch_id")
+    rig.close()
+
+    reopened = Rig(tmp_path, clock)
+    try:
+        reopened.pair()
+        [group] = reopened.phone.get("/api/runs").json()["runs"]
+        assert (group["kind"], group["run_id"], group["total"]) == ("run", RUN, 1)
+        reopened.publish("new", batch=BATCH)
+        assert {run["kind"] for run in reopened.phone.get("/api/runs").json()["runs"]} == {
+            "run",
+            "batch",
+        }
+    finally:
+        reopened.close()
 
 
 def test_a_run_name_with_spaces_opens(rig) -> None:
