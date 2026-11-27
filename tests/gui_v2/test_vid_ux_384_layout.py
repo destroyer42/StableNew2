@@ -155,18 +155,23 @@ def test_compare_one_control_explains_when_it_is_unavailable(env):
 
 
 def test_the_settings_people_change_are_visible_without_opening_anything(env):
+    # V1-1 (section 5.2) supersedes the VID-UX-384 placement: motion, preset and duration are in the open, the
+    # engine, raw length, seed and smoothing sit under Advanced, and the summary line names them.
     tab = env.tab
     assert not tab.advanced_section.is_expanded()
-    for widget in (tab.workflow_combo, tab.seed_entry, tab.smooth_check, tab.frame_count_frame):
+    panel = tab.motion_intent_panel
+    for widget in (panel.phrase_entry, panel.preset_combo, panel.duration_combo):
         assert widget.winfo_manager()
+    assert panel.master is tab.settings_block
     assert tab.settings_block.winfo_manager() == "grid"
+    for widget in (tab.workflow_combo, tab.seed_entry, tab.smooth_check, tab.frame_count_frame):
+        assert widget.master is tab.advanced_section.body
+    assert tab.workflow_label_var.get() in tab.suggested_line.summary_var.get()
 
 
-def test_more_settings_keeps_the_rare_controls_and_the_old_attribute_name(env):
+def test_advanced_keeps_the_rare_controls_and_the_old_attribute_name(env):
     tab = env.tab
-    assert str(tab.advanced_section.toggle_button.cget("text")).startswith("More settings") or (
-        "More settings" in str(tab.advanced_section.toggle_button.cget("text"))
-    )
+    assert "Advanced" in str(tab.advanced_section.toggle_button.cget("text"))
     assert tab.negative_prompt_text.master is tab.advanced_section.body
 
 
@@ -179,7 +184,8 @@ def test_default_task_shows_source_queue_prompt_and_settings_at_1280x680(env):
     root.update()
     canvas = tab._body_scroll._canvas
     top, bottom = canvas.winfo_rooty(), canvas.winfo_rooty() + canvas.winfo_height()
-    for widget in (tab.prompt_text, tab.workflow_combo, tab.seed_entry, tab.smooth_check):
+    panel = tab.motion_intent_panel
+    for widget in (tab.prompt_text, panel.phrase_entry, panel.duration_combo, tab.suggested_line):
         assert widget.winfo_rooty() >= top
         assert widget.winfo_rooty() + widget.winfo_height() <= bottom + 1
     header_bottom = tab._header_frame.winfo_rooty() + tab._header_frame.winfo_height()
