@@ -27,7 +27,7 @@ except Exception:  # pragma: no cover - Tk not ready
 
 
 from src.gui import main_window
-from src.utils.gpu_survivor_telemetry import start_gpu_session_telemetry
+from src.utils.gpu_survivor_telemetry import start_gpu_session_telemetry_in_background
 from src.utils.graceful_exit import graceful_exit
 from src.utils.single_instance import SingleInstanceLock
 
@@ -760,8 +760,9 @@ def main() -> None:
 
     atexit.register(shutdown_persistence_worker, timeout=None)
 
-    # Observation-only GPU state record for the whole app session, stopped by the coordinator.
-    start_gpu_session_telemetry()
+    # Observation-only GPU state record for the whole app session, stopped by the coordinator. Started off
+    # this (Tk) thread: its first record inspects every process and froze the window at startup.
+    start_gpu_session_telemetry_in_background()
 
     try:
         root.mainloop()

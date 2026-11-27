@@ -284,6 +284,9 @@ class GpuSurvivorTelemetry:
 
 _session_lock = threading.Lock()
 _session: GpuSurvivorTelemetry | None = None
+#: The background starter of the session recorder, so a stop can wait for a start still in progress.
+_starter: threading.Thread | None = None
+_STARTER_JOIN_S = 20.0
 
 
 def start_gpu_session_telemetry(
@@ -328,10 +331,39 @@ def start_gpu_session_telemetry(
         return recorder
 
 
+def start_gpu_session_telemetry_in_background(**kwargs: Any) -> threading.Thread | None:
+    """``start_gpu_session_telemetry`` on a tracked worker, for callers on the Tk thread.
+
+    The first record inspects every process (seconds on a busy PC), which froze the window at startup.
+    Returns the starter thread, or ``None`` when the recorder is disabled or the worker could not start.
+    """
+
+    global _starter
+    env = kwargs.get("environ")
+    env = os.environ if env is None else env
+    if str(env.get(SESSION_ENV_FLAG, "1")).strip().lower() in _SESSION_DISABLED_VALUES:
+        return None
+    try:
+        _starter = get_thread_registry().spawn(
+            target=start_gpu_session_telemetry,
+            kwargs=kwargs,
+            name="GpuSessionTelemetryStart",
+            daemon=False,
+            purpose="Start the app-session GPU recorder off the GUI thread",
+        )
+    except Exception:
+        logger.exception("GPU session telemetry could not start")
+        return None
+    return _starter
+
+
 def stop_gpu_session_telemetry(outcome: str = "app_exit") -> None:
     """Stop the app-session recorder if one is running. Idempotent and never raises."""
 
-    global _session
+    global _session, _starter
+    starter, _starter = _starter, None
+    if starter is not None:
+        starter.join(timeout=_STARTER_JOIN_S)
     with _session_lock:
         recorder, _session = _session, None
     if recorder is None:

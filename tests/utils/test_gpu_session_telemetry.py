@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -205,3 +206,66 @@ def test_records_carry_their_scope_so_session_samples_are_not_mistaken_for_job_w
         recorder.start()
         recorder.close(outcome="done")
         assert {record["scope"] for record in _read_records(recorder.path)} == {lifecycle}
+
+
+def test_background_start_returns_while_the_recorder_is_still_starting(tmp_path) -> None:
+    """Startup process inspection takes seconds; the caller (the Tk thread) must not wait for it."""
+
+    release = threading.Event()
+    started_on: list[str] = []
+
+    class _SlowRecorder(_StubRecorder):
+        def start(self) -> None:
+            started_on.append(threading.current_thread().name)
+            assert release.wait(5.0)
+            super().start()
+
+    created: list[_StubRecorder] = []
+
+    def _factory(**kwargs) -> _StubRecorder:
+        created.append(_SlowRecorder(**kwargs))
+        return created[-1]
+
+    try:
+        thread = module.start_gpu_session_telemetry_in_background(
+            base_dir=tmp_path, environ={}, factory=_factory
+        )
+        assert thread is not None and thread.is_alive()
+        assert created == [] or created[0].started == 0
+        release.set()
+        thread.join(5.0)
+        assert created[0].started == 1
+        assert started_on != [threading.current_thread().name]
+    finally:
+        release.set()
+        module.stop_gpu_session_telemetry("test_cleanup")
+
+
+def test_stop_waits_for_a_background_start_so_no_recorder_is_left_running(tmp_path) -> None:
+    release = threading.Event()
+    created: list[_StubRecorder] = []
+
+    def _factory(**kwargs) -> _StubRecorder:
+        assert release.wait(5.0)
+        created.append(_StubRecorder(**kwargs))
+        return created[-1]
+
+    try:
+        module.start_gpu_session_telemetry_in_background(
+            base_dir=tmp_path, environ={}, factory=_factory
+        )
+        threading.Timer(0.05, release.set).start()
+        module.stop_gpu_session_telemetry("app_exit")
+        assert created and created[0].closed == ["app_exit"]
+    finally:
+        release.set()
+        module.stop_gpu_session_telemetry("test_cleanup")
+
+
+def test_background_start_is_skipped_when_disabled(tmp_path) -> None:
+    assert (
+        module.start_gpu_session_telemetry_in_background(
+            base_dir=tmp_path, environ={module.SESSION_ENV_FLAG: "0"}, factory=_StubRecorder
+        )
+        is None
+    )
