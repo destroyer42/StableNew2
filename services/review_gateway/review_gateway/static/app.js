@@ -547,6 +547,12 @@ function showPairing() {
   const error = el("p", { class: "error", role: "alert" });
   const form = el("form", { class: "pair" }, [
     el("p", { text: "In StableNew on the PC, create a pairing code and enter it here within five minutes." }),
+    el("p", {
+      class: "muted",
+      text:
+        "Paired before? This browser has lost the pairing, usually because it cleared this site's data. " +
+        "In DuckDuckGo, open the ⋮ menu on this page and choose Fireproof this site, then pair once more.",
+    }),
     code,
     label,
     el("button", { type: "submit", class: "primary", text: "Pair this phone" }),
