@@ -139,7 +139,8 @@ terms were accepted by the owner, not by an agent.
 Total **39,709,872,236 bytes (39.7 GB, 37.0 GiB)**. The first three and the last go to the desktop ComfyUI models
 folders the managed runtime already searches. Its model-path file maps no `latent_upscale_models` folder, so the
 upscaler goes into the managed install's own folder (under
-`%LOCALAPPDATA%\StableNew\ManagedComfy\v0.38.0-py313`); a runtime reinstall would drop it. Not downloaded unless a
+`%LOCALAPPDATA%\StableNew\ManagedComfy\v0.38.0-py313`); a runtime reinstall would drop it. StableNew's missing-model
+check (`src/services/model_file_health.py`) looks for it there. Not downloaded unless a
 later version needs it: the convolutional VAE (1,452,269,922 bytes), the stage-1 fallback if the diffusion decoder does
 not fit.
 
@@ -235,7 +236,7 @@ three-way sheet can be built only after it does.
 
 | Category | What |
 |---|---|
-| Implementation | Spec module and registration, picker tier, `tools/qualification/vid_cand_ltx25`, this record, VIDEO_PIPELINE, CODEX_MAP, CODE_MAP and tools README entries |
+| Implementation | Spec module and registration, picker tier, the upscaler folder in the missing-model check, `tools/qualification/vid_cand_ltx25`, this record, VIDEO_PIPELINE, CODEX_MAP, CODE_MAP and tools README entries |
 | Demonstration | `tests/video/test_vid_cand_ltx25.py` and `tests/tools/test_vid_cand_ltx25_eval.py`: registry, opt-in, pins, graphs, probe, fake-Comfy runs, eval-kit admission, three-way sheet, all on synthetic data. Graph inputs were checked by reading the installed node sources; **the real ComfyUI has not validated either graph** |
 | Qualification | None. No ledger entry |
 | Held or unverified | All physical stages, ratings, and every value marked unmeasured |
