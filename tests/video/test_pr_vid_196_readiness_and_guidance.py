@@ -621,6 +621,7 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
         "wan_animate2_drive_i2v_v1@1.0.0": "c610171704dc2aff829a1cc7e494f3b01cff0108eb9a64ed830fedaa63f0704e",
         "wan_animate2_drive_i2v_v1@1.1.0": "75da00b523e0762d2d42e67dca30a328e99ace1175d6d7fa23041394de68d9d3",
         "wan_animate2_drive_i2v_v1@1.2.0": "57ca14d77b305beca3626fbfa5dde75144c06bb49b065807ba88666ac8f979db",
+        "wan_animate2_drive_i2v_v1@1.3.0": "53635637b93be7d8ee9e053429c0b0db402f3d45752fe6b1221e0b7338b42e59",
         "wan_animate2_prompt_i2v_v1@1.0.0": "fdf40c2c1c7539eafd3eb59a16fd2a4283cb0677e9548489919c178ea9a74e2d",
         "wan_animate2_prompt_i2v_v1@1.1.0": "4fc2170abcfcc83e16ea113509b8e083807dce722a051d93d9a0742de5d7d3ba",
         "wan_animate2_prompt_i2v_v1@1.2.0": "7fde86f85e8f5f3f654459ce21eb48fb95e52ac10f0758176d008a1629ef755d",

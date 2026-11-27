@@ -540,7 +540,7 @@ def test_prepare_preview_and_queue_use_the_same_file_end_to_end(tk_root, tmp_pat
     view = panel.last_view
     assert view.state == STATE_READY, view.status
     assert len(view.frames) == 3 and len(panel._thumb_labels) == 3
-    assert any("Enters: wan_animate2_drive_i2v_v1 1.2.0" in line for line in view.identity_lines)
+    assert any("Enters: wan_animate2_drive_i2v_v1 1.3.0" in line for line in view.identity_lines)
     assert any("converted from 30 fps to 24 fps" in line for line in view.explanation_lines)
 
     record = panel._session.submission_fields()[PREPARED_FIELD]

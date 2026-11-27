@@ -65,6 +65,10 @@ STATUS_UNSUPPORTED_SECONDS = 600.0
 IDLE_PUBLISH_BATCH = 8
 MAX_PAGES_PER_CYCLE = 10
 PAGE_SIZE = 100
+#: After the PC answers a phone action, the phone is usually about to send the next step ("Queue" after the summary),
+#: so for a short window only the outbox is read, every second, instead of every ``SYNC_INTERVAL``.
+ACTION_FOLLOW_INTERVAL = 1.0
+ACTION_FOLLOW_WINDOW = 60.0
 
 _MESSAGES = {
     "not_configured": "Not set up. Enter the gateway address, certificate fingerprint and sync secret.",
@@ -133,6 +137,8 @@ class ReviewGatewaySync:
         self._settings_loaded = False
         self._last_busy_publish = -BUSY_PUBLISH_SECONDS
         self._backoff = 0.0
+        self._follow_until = -1.0
+        self._last_full_cycle = -interval
         self._status_source: Callable[[], dict[str, Any] | None] | None = None
         self._last_status: dict[str, Any] | None = None
         self._last_status_at = 0.0
@@ -290,13 +296,21 @@ class ReviewGatewaySync:
             self._refresh_status()
             return self._interval
         client = GatewayClient(self._transport_factory(settings), settings.secret)
+        now = self._monotonic()
+        quick = now < self._follow_until and now - self._last_full_cycle < self._interval
         try:
+            if quick:
+                self._flush_owed(client)
+                self._pull(client)
+                self._backoff = 0.0
+                return self._next_delay()
             client.health()
             self._flush_owed(client)
             self._pull(client)
             self._pull_immich(client)
             self._send_status(client)
             self._publish(client)
+            self._last_full_cycle = now
         except GatewayPinMismatch:
             return self._fail("certificate_mismatch")
         except GatewayUnauthorized:
@@ -310,6 +324,11 @@ class ReviewGatewaySync:
         self._backoff = 0.0
         self._set_state("idle", address=settings.address)
         self._refresh_status()
+        return self._next_delay()
+
+    def _next_delay(self) -> float:
+        if self._monotonic() < self._follow_until:
+            return min(self._interval, ACTION_FOLLOW_INTERVAL)
         return self._interval
 
     def _fail(self, state: str) -> float:
@@ -366,6 +385,12 @@ class ReviewGatewaySync:
                     continue
                 if result.outcome == IN_PROGRESS:
                     continue  # a remote update under way: asked again next cycle, answered once it has a receipt
+                if (
+                    isinstance(raw, dict)
+                    and raw.get("kind") == "action_request"
+                    and result.outcome == "applied"
+                ):
+                    self._follow_until = self._monotonic() + ACTION_FOLLOW_WINDOW
                 client.acknowledge(
                     acknowledgement(
                         result.record_id,

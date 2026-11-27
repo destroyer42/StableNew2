@@ -34,7 +34,7 @@ from src.video.managed_comfy_runtime import (
 )
 from src.video.runtime_version_check import qualified_comfyui_version, runtime_version_warning
 from src.video.workflow_asset_integrity import configured_asset_issues
-from src.video.workflow_catalog_wan_a14b import a14b_launch_attention
+from src.video.workflow_launch_attention import launch_attention
 from src.video.workflow_readiness import WorkflowResourceReadiness, required_launch_flags
 
 GATE_OK = "ok"
@@ -153,7 +153,7 @@ def _launch_facts(probes: PreflightProbes) -> ComfyLaunchFacts:
 
 def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> PreflightGate | None:
     workflow_flags = required_launch_flags(spec)
-    profile = a14b_launch_attention(spec)
+    profile = launch_attention(spec)
     facts = _launch_facts(probes)
     command = facts.command_in_force
     if state == ENDPOINT_HEALTHY and not facts.owns_runtime:
@@ -220,7 +220,7 @@ def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> Prefli
             "launch_flags",
             "Launch flags",
             GATE_OK,
-            f"CLI checked for A14B {profile} attention. StableNew will apply the profile at launch "
+            f"CLI checked for {profile} attention. StableNew will apply the profile at launch "
             "and verify the serving process before dispatch.",
         )
     return PreflightGate(
