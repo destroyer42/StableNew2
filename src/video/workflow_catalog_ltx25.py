@@ -179,7 +179,9 @@ def _prompt_template(audio: bool) -> dict[str, Any]:
 
     graph = {
         "1": node("UNETLoader", unet_name=LTX25_TRANSFORMER, weight_dtype="default"),
-        "2": node("CLIPLoader", clip_name=LTX25_TEXT_ENCODER, type=LTX25_CLIP_TYPE, device="default"),
+        "2": node(
+            "CLIPLoader", clip_name=LTX25_TEXT_ENCODER, type=LTX25_CLIP_TYPE, device="default"
+        ),
         "3": node("VAELoader", vae_name=LTX25_VIDEO_VAE),
         "4": node("LatentUpscaleModelLoader", model_name=LTX25_UPSCALER),
         "5": node("LoadImage", image="{{input.source_image}}"),
@@ -189,8 +191,12 @@ def _prompt_template(audio: bool) -> dict[str, Any]:
         "8": node("CLIPTextEncode", clip=["2", 0], text="{{input.negative_prompt}}"),
         "9": node("LTXVConditioning", positive=["7", 0], negative=["8", 0], frame_rate=LTX25_FPS),
         # Stage 1 runs at half the frozen target; the expression's second output is the integer.
-        "10": node("ComfyMathExpression", expression="a/2", **{"values.a": "{{input.target_width}}"}),
-        "11": node("ComfyMathExpression", expression="a/2", **{"values.a": "{{input.target_height}}"}),
+        "10": node(
+            "ComfyMathExpression", expression="a/2", **{"values.a": "{{input.target_width}}"}
+        ),
+        "11": node(
+            "ComfyMathExpression", expression="a/2", **{"values.a": "{{input.target_height}}"}
+        ),
         "12": node(
             "EmptyLTXVLatentVideo",
             width=["10", 1],

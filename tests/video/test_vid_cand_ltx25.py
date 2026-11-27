@@ -148,9 +148,10 @@ def test_the_licence_restriction_is_visible_to_the_operator(workflow_id: str) ->
     assert "sexually explicit" in spec.description
     assert "sexually explicit" in spec.governance_notes
     assert "Acceptable Use Policy" in spec.backend_defaults["provenance"]["license"]
-    assert "sexually explicit" in spec.backend_defaults["operator_projection"]["fixed_settings"][
-        "licence"
-    ]
+    assert (
+        "sexually explicit"
+        in spec.backend_defaults["operator_projection"]["fixed_settings"]["licence"]
+    )
 
 
 # --- pinned files and provenance --------------------------------------------------------------
@@ -189,9 +190,7 @@ PINNED_SPEC_SHA256 = {
 
 @pytest.mark.parametrize("workflow_id", LTX25_IDS)
 def test_the_registered_specs_are_pinned_byte_for_byte(workflow_id: str) -> None:
-    text = json.dumps(
-        _spec(workflow_id).to_dict(), sort_keys=True, ensure_ascii=False, default=str
-    )
+    text = json.dumps(_spec(workflow_id).to_dict(), sort_keys=True, ensure_ascii=False, default=str)
     assert hashlib.sha256(text.encode("utf-8")).hexdigest() == PINNED_SPEC_SHA256[workflow_id]
 
 
@@ -309,9 +308,7 @@ def test_the_probe_accepts_a_runtime_that_advertises_everything(workflow_id: str
     ],
 )
 def test_a_missing_file_or_node_is_named_by_the_probe(kwargs: dict[str, str], missing: str) -> None:
-    result = ComfyDependencyProbe().probe_workflow(
-        _spec(LTX25_ID), object_info=_info(**kwargs)
-    )
+    result = ComfyDependencyProbe().probe_workflow(_spec(LTX25_ID), object_info=_info(**kwargs))
     assert not result.ready and missing in result.missing_required
 
 
@@ -368,9 +365,7 @@ def test_a_job_without_the_opt_in_or_without_gpu_headroom_never_reaches_comfy(
 ) -> None:
     client = _FramesFake(tmp_path, save_node=SAVE_FRAMES_NODE, info=_info(workflow_id))
     with pytest.raises(KeyError, match="explicit experimental opt-in"):
-        _a14b_backend(client, tmp_path).execute(
-            None, _request(tmp_path, workflow_id, opt_in=False)
-        )
+        _a14b_backend(client, tmp_path).execute(None, _request(tmp_path, workflow_id, opt_in=False))
     low = _FramesFake(
         tmp_path,
         save_node=SAVE_FRAMES_NODE,

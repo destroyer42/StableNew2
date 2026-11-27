@@ -167,10 +167,14 @@ def score_sheet(sheet: Path, key_file: Path) -> dict[str, Any]:
                 places = parse_ranking(text, sorted(mapping))
                 by_arm = {mapping[label]: place for label, place in places.items()}
                 for first, second in combinations(sorted(by_arm), 2):
-                    score = 0.5 if by_arm[first] == by_arm[second] else float(by_arm[first] < by_arm[second])
-                    totals.setdefault(f"{first} over {second}", {}).setdefault(dimension, []).append(
-                        score
+                    score = (
+                        0.5
+                        if by_arm[first] == by_arm[second]
+                        else float(by_arm[first] < by_arm[second])
                     )
+                    totals.setdefault(f"{first} over {second}", {}).setdefault(
+                        dimension, []
+                    ).append(score)
     preference = {
         pair: {
             **{d: round(sum(values) / len(values), 4) for d, values in per.items()},
@@ -183,7 +187,11 @@ def score_sheet(sheet: Path, key_file: Path) -> dict[str, Any]:
         }
         for pair, per in totals.items()
     }
-    return {"preference": preference, "unanswered": unanswered, "complete": bool(preference) and not unanswered}
+    return {
+        "preference": preference,
+        "unanswered": unanswered,
+        "complete": bool(preference) and not unanswered,
+    }
 
 
 __all__ = [

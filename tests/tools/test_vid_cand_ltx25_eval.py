@@ -29,8 +29,10 @@ def _sources(folder: Path) -> tuple[Path, Path]:
     """Stand-ins for the frozen VID-CAND-382 stage 1 and stage 2 suites, with their images beside them."""
 
     paths = []
-    for name, document in (("stage1", base.example_suites()["stage1"]),
-                           ("stage2", base.example_suites()["stage2"])):
+    for name, document in (
+        ("stage1", base.example_suites()["stage1"]),
+        ("stage2", base.example_suites()["stage2"]),
+    ):
         for case in document["cases"]:
             image = folder / case["image"]
             image.parent.mkdir(parents=True, exist_ok=True)
@@ -48,11 +50,16 @@ def _build(tmp_path: Path) -> tuple[Path, Path, Path]:
     code = cli.main(
         [
             "build",
-            "--stage1-suite", str(stage1),
-            "--stage2-suite", str(stage2),
-            "--suites-out", str(suites),
-            "--plan-out", str(private),
-            "--base-commit", "0" * 40,
+            "--stage1-suite",
+            str(stage1),
+            "--stage2-suite",
+            str(stage2),
+            "--suites-out",
+            str(suites),
+            "--plan-out",
+            str(private),
+            "--base-commit",
+            "0" * 40,
         ]
     )
     assert code == 0
@@ -95,11 +102,16 @@ def test_a_rebuild_never_replaces_a_frozen_file(tmp_path: Path) -> None:
         cli.main(
             [
                 "build",
-                "--stage1-suite", str(stage1_path),
-                "--stage2-suite", str(stage1_path),
-                "--suites-out", str(suites_dir),
-                "--plan-out", str(plan_file.parent),
-                "--base-commit", "0" * 40,
+                "--stage1-suite",
+                str(stage1_path),
+                "--stage2-suite",
+                str(stage1_path),
+                "--suites-out",
+                str(suites_dir),
+                "--plan-out",
+                str(plan_file.parent),
+                "--base-commit",
+                "0" * 40,
             ]
         )
 
