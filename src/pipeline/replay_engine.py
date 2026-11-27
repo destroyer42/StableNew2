@@ -216,6 +216,7 @@ class ReplayEngine:
 
         checkpoint_callback = None
         if job is not None:
+            from src.queue.job_history_store import APP_CLOSE_REQUEUE_CONTROL_ACTION
             from src.queue.job_model import JobStatus, StageCheckpoint
 
             def checkpoint_callback(
@@ -224,7 +225,10 @@ class ReplayEngine:
                 execution_metadata = getattr(job, "execution_metadata", None)
                 if execution_metadata is None:
                     return
-                if getattr(job, "status", None) == JobStatus.QUEUED:
+                if (
+                    getattr(job, "status", None) == JobStatus.QUEUED
+                    and execution_metadata.last_control_action == APP_CLOSE_REQUEUE_CONTROL_ACTION
+                ):
                     return  # re-queued by an app close while this stage was still returning: it runs whole again
                 sanitized_paths = [str(path) for path in output_paths if path]
                 checkpoint = StageCheckpoint(
