@@ -230,3 +230,13 @@ button {
 .sheet-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.8rem; }
 .warning { margin: 0.6rem 0; padding: 0.5rem 0.6rem; border-left: 3px solid var(--favorite); background: var(--bg); }
 .warning-title { font-weight: 600; color: var(--favorite); }
+
+/* Remote update (LAUNCH-UPDATE-2) */
+.pc-link { width: 100%; margin-bottom: 0.75rem; }
+.run.pc { cursor: default; }
+.run.pc p { margin: 0.25rem 0; overflow-wrap: anywhere; }
+#view > .primary { width: 100%; min-height: 3rem; }
+.updates { list-style: none; margin: 0; padding: 0; }
+.updates li { border-top: 1px solid var(--line); padding: 0.5rem 0; }
+.updates p { margin: 0.15rem 0; overflow-wrap: anywhere; }
+.section-title { font-size: 1rem; margin: 1rem 0 0.25rem; }

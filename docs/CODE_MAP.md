@@ -59,6 +59,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
 - `live_update.py`: Update the live checkout to an approved ``origin/main`` commit and restart (LAUNCH-UPDATE-1)
+- `live_update_remote.py`: The phone side of a live update, on the PC (LAUNCH-UPDATE-2): the ``pc_status`` publish and ``admin_request``
 - `live_update_service.py`: The running app's side of a live update (LAUNCH-UPDATE-1): switch, rate limit, drain, hand-off and receipt
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
 - `review_gateway_actions.py`: Phone actions from the review gateway (RG-140 slice 1): prepare a summary, then admit what it showed
