@@ -195,3 +195,66 @@ def test_a_starved_watchdog_thread_is_reported_with_every_threads_current_site(
     assert sites[parked.thread.name].count("in ") >= 1
     assert "ui_heartbeat_age_s" in payload
     assert isinstance(payload["system"], dict)
+
+
+def _stall_once(watchdog: SystemWatchdogV2, app: SimpleNamespace) -> None:
+    watchdog._check()
+    watchdog._check()
+    app.last_ui_heartbeat_ts = time.monotonic()
+    watchdog._check()
+
+
+def test_a_stall_records_how_much_cpu_the_tk_thread_and_the_process_used(
+    parked, stall_records
+) -> None:
+    """Near-zero Tk CPU means it was waiting (GIL, modal loop, pause); high means it was working in Tcl."""
+
+    app = _app(ui_age_s=3.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+    readings = iter([(1.0, 10.0), (1.1, 14.5)])
+    watchdog._cpu_times = lambda: next(readings)
+
+    _stall_once(watchdog, app)
+
+    (record,) = stall_records()
+    assert record.json_payload["tk_cpu_s"] == pytest.approx(0.1)
+    assert record.json_payload["process_cpu_s"] == pytest.approx(4.5)
+    assert record.json_payload["observed_s"] >= 0.0
+
+
+def test_cpu_times_reads_the_watched_thread_and_the_process() -> None:
+    watchdog = SystemWatchdogV2(_app(ui_age_s=0.0), None, ui_thread_ident=threading.get_ident())
+
+    reading = watchdog._cpu_times()
+
+    assert reading is not None
+    tk_cpu, process_cpu = reading
+    assert 0.0 <= tk_cpu <= process_cpu + 1.0
+
+
+def test_a_mainloop_only_sample_also_records_what_the_other_threads_were_doing(
+    parked, stall_records
+) -> None:
+    """With no Python frame on the Tk thread, a GIL holder shows up only on another thread."""
+
+    app = _app(ui_age_s=3.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=-1)
+    watchdog._capture_ui_stack = lambda: ("__init__.py:1625 in mainloop", "src/main.py:757 in main")
+
+    _stall_once(watchdog, app)
+
+    (record,) = stall_records()
+    others = "\n".join(item["site"] for item in record.json_payload["other_threads"])
+    assert "fake-tk-thread" in others and "_count_everything_on_disk" in others
+    assert "SystemWatchdog" not in others
+    assert record.json_payload["other_threads"][0]["samples"] == 2
+
+
+def test_an_attributed_stall_does_not_list_other_threads(parked, stall_records) -> None:
+    app = _app(ui_age_s=3.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+
+    _stall_once(watchdog, app)
+
+    (record,) = stall_records()
+    assert record.json_payload["other_threads"] == []

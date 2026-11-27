@@ -19,6 +19,8 @@ _NEVER_TRIGGERED = float("-inf")
 #: Frames kept per sampled stack (innermost first), and distinct stacks reported per stall episode.
 _STACK_DEPTH = 16
 _STACKS_PER_EPISODE = 4
+#: Other threads' sites reported for samples where the Tk thread showed only ``mainloop``.
+_OTHER_THREADS = 8
 
 
 @dataclass
@@ -38,6 +40,11 @@ class _UiStallEpisode:
     peak_age_s: float = 0.0
     sample_count: int = 0
     stacks: dict[tuple[str, ...], _StackSample] = field(default_factory=dict)
+    started_at: float = 0.0
+    #: ``(tk_thread_cpu_s, process_cpu_s)`` when sampling began.
+    cpu_start: tuple[float, float] | None = None
+    #: Other threads' call sites, counted only for samples with no Python frame above ``mainloop``.
+    other_threads: dict[str, int] = field(default_factory=dict)
 
 
 class SystemWatchdogV2:
@@ -269,6 +276,8 @@ class SystemWatchdogV2:
                 episode = self._ui_episode = _UiStallEpisode(
                     operation=getattr(self.app, "current_operation_label", None),
                     last_ui_action=getattr(self.app, "last_ui_action", None),
+                    started_at=time.monotonic(),
+                    cpu_start=self._cpu_times(),
                 )
             episode.peak_age_s = max(episode.peak_age_s, ui_age)
             episode.sample_count += 1
@@ -279,13 +288,47 @@ class SystemWatchdogV2:
                     sample = episode.stacks[frames] = _StackSample(frames, first_age_s=ui_age)
                 sample.samples += 1
                 sample.last_age_s = ui_age
+                if frames[0].endswith(" in mainloop"):
+                    for site in self._other_thread_sites():
+                        episode.other_threads[site] = episode.other_threads.get(site, 0) + 1
             return
         episode, self._ui_episode = self._ui_episode, None
         if episode is not None:
-            self._report_ui_stall(episode)
+            self._report_ui_stall(episode, self._cpu_times())
+
+    def _cpu_times(self) -> tuple[float, float] | None:
+        """``(Tk thread CPU seconds, process CPU seconds)``; ``None`` when they cannot be read."""
+
+        try:
+            psutil = importlib.import_module("psutil")
+            native = next(
+                t.native_id for t in threading.enumerate() if t.ident == self._ui_thread_ident
+            )
+            process = psutil.Process()
+            thread = next(t for t in process.threads() if t.id == native)
+            return (
+                float(thread.user_time + thread.system_time),
+                float(sum(process.cpu_times()[:2])),
+            )
+        except Exception:  # noqa: BLE001 - diagnostics must never break the watchdog
+            return None
+
+    def _other_thread_sites(self) -> list[str]:
+        """``thread name: innermost frames`` for every thread but the Tk thread and this watchdog."""
+
+        try:
+            frames = sys._current_frames()
+            skip = {self._ui_thread_ident, threading.get_ident()}
+            return [
+                f"{thread.name}: " + " <- ".join(describe_stack(frames.get(thread.ident), depth=3))
+                for thread in threading.enumerate()
+                if thread.ident is not None and thread.ident not in skip and thread.ident in frames
+            ]
+        except Exception:  # noqa: BLE001 - diagnostics must never break the watchdog
+            return []
 
     @staticmethod
-    def _report_ui_stall(episode: _UiStallEpisode) -> None:
+    def _report_ui_stall(episode: _UiStallEpisode, cpu_end: tuple[float, float] | None) -> None:
         ranked = sorted(episode.stacks.values(), key=lambda item: item.samples, reverse=True)
         stacks = [
             {
@@ -300,6 +343,13 @@ class SystemWatchdogV2:
             }
             for item in ranked[:_STACKS_PER_EPISODE]
         ]
+        # CPU used while sampling: Tk CPU near ``observed_s`` means Tcl was busy; near zero means it was waiting
+        # (another thread holding the GIL, a Windows move/menu loop or a paused process).
+        tk_cpu = process_cpu = None
+        if episode.cpu_start is not None and cpu_end is not None:
+            tk_cpu = round(cpu_end[0] - episode.cpu_start[0], 2)
+            process_cpu = round(cpu_end[1] - episode.cpu_start[1], 2)
+        others = sorted(episode.other_threads.items(), key=lambda item: item[1], reverse=True)
         log_with_ctx(
             logger,
             logging.WARNING,
@@ -312,6 +362,12 @@ class SystemWatchdogV2:
                 "operation": episode.operation,
                 "last_ui_action": episode.last_ui_action,
                 "stacks": stacks,
+                "observed_s": round(time.monotonic() - episode.started_at, 2),
+                "tk_cpu_s": tk_cpu,
+                "process_cpu_s": process_cpu,
+                "other_threads": [
+                    {"samples": count, "site": site} for site, count in others[:_OTHER_THREADS]
+                ],
             },
         )
 
