@@ -59,6 +59,7 @@ is refused at startup, so there is no plain-HTTP LAN mode. Every request carries
 | `POST /sync/v1/acknowledgements` | `acknowledgement` | `{"status":"recorded"\|"already_acknowledged"}`; 404 `unknown_record` |
 | `POST /sync/v1/pairing-offers` | `pairing_offer` | `{"status":"accepted"}`; 409 `offer_conflict`; 422 `offer_expired` |
 | `POST /sync/v1/device-revocations` | `device_revocation` | `{"status":"revoked"\|"unknown_device"}` |
+| `POST /sync/v1/withdrawals` | `item_withdrawal` | `{"withdrawn": n}` (section 3.0) |
 | `GET /sync/v1/immich-receipts?cursor=` | - | `immich_receipt_page` (section 5); 400 `invalid_cursor` |
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
 
@@ -91,7 +92,8 @@ Rules:
     `action_summary`, `job_ids` and `detail` (section 7).
 13. `features` in the health reply lists the optional parts of v1 this gateway accepts. The PC sends an optional part
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
-    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1).
+    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`,
+    the withdrawals route (section 3.0).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -115,6 +117,13 @@ Rules:
   with Try again and Dismiss; it is never dropped silently. The unsent list is shared safely between tabs.
 - The decision buttons and swipes stay off until the item has loaded. If it cannot load, the owner may retry or choose
   to decide without seeing it.
+
+### 3.0 What the PC publishes (PHONE-FAST)
+
+- **One-time withdrawal.** Frames and un-smoothed clips published before the rule above are withdrawn once: the PC
+  classifies its publish ledger and posts `item_withdrawal` to a gateway listing `item_withdraw`. The gateway purges
+  those items without recording a decision or touching Immich, and leaves any item with a decision or a request the
+  PC has not refused. No PC file changes.
 
 ### 3.1 Inbox grouped by batch
 

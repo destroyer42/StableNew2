@@ -25,8 +25,8 @@ PAGE_DEFAULT = 200
 PAGE_LIMIT = 500
 #: Optional parts of the v1 contract this gateway accepts, listed by health so a PC sends them only here (an older
 #: gateway's schema would refuse the whole payload). ``item_batch``: the manifest's ``batch`` (N5 inbox grouping).
-#: ``item_parent``: the manifest's ``parent`` (PHONE-FAST rework lineage).
-FEATURES = ("item_batch", "item_parent")
+#: ``item_parent``: the manifest's ``parent`` (PHONE-FAST rework lineage). ``item_withdraw``: the withdrawals route.
+FEATURES = ("item_batch", "item_parent", "item_withdraw")
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
 
@@ -147,6 +147,11 @@ def build_sync_app(
         await run_in_threadpool(store.set_pc_status, await payload(request, "pc_status"))
         return JSONResponse({"status": "stored"})
 
+    async def withdrawals(request: Request) -> Response:
+        body = await payload(request, "item_withdrawal")
+        count = await run_in_threadpool(store.withdraw, body["library_ids"])
+        return JSONResponse({"withdrawn": count})
+
     async def immich_receipts(request: Request) -> Response:
         cursor = request.query_params.get("cursor", "")
         return JSONResponse(await run_in_threadpool(store.immich_receipts, cursor))
@@ -181,6 +186,7 @@ def build_sync_app(
             Route("/sync/v1/deploy-requests", deploy_requests, methods=["POST"]),
             Route("/sync/v1/deploy-status", deploy_status, methods=["GET"]),
             Route("/sync/v1/pc-status", pc_status, methods=["PUT"]),
+            Route("/sync/v1/withdrawals", withdrawals, methods=["POST"]),
         ],
         middleware=[Middleware(_SyncSecret, secret=secret)],
         exception_handlers=EXCEPTION_HANDLERS,

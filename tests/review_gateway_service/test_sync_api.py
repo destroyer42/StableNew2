@@ -22,6 +22,7 @@ SYNC_ROUTES = (
     ("POST", "/sync/v1/deploy-requests"),
     ("GET", "/sync/v1/deploy-status"),
     ("PUT", "/sync/v1/pc-status"),
+    ("POST", "/sync/v1/withdrawals"),
 )
 
 
@@ -213,7 +214,7 @@ def test_health_names_the_contract_version_and_its_features(rig) -> None:
     assert rig.sync.get("/sync/v1/health").json() == {
         "status": "ok",
         "schema_version": "stablenew.review-gateway-sync.v1",
-        "features": ["item_batch"],
+        "features": ["item_batch", "item_parent", "item_withdraw"],
     }
 
 

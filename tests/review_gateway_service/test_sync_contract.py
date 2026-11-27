@@ -104,6 +104,7 @@ def sample(kind: str) -> dict:
                 "finished_at": NOW,
             },
         },
+        "item_withdrawal": {"library_ids": ["lib-00000001"]},
     }
     return {"schema_version": SCHEMA_VERSION, "type": kind, **payloads[kind]}
 
@@ -118,6 +119,7 @@ KINDS = (
     "deploy_request",
     "deploy_status",
     "pc_status",
+    "item_withdrawal",
 )
 
 

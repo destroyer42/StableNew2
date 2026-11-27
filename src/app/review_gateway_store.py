@@ -376,6 +376,15 @@ class SyncLedger:
                 [(key, version, path, kind, at) for key, version, path, kind in rows],
             )
 
+    def published_after(self, rowid: int, limit: int) -> list[sqlite3.Row]:
+        """``(rowid, library_id, rel_path, kind)`` of sent items, oldest ledger row first."""
+
+        return self._read(
+            "SELECT rowid, library_id, rel_path, kind FROM published"
+            " WHERE rowid > ? AND state = 'published' ORDER BY rowid LIMIT ?",
+            (rowid, limit),
+        )
+
     def set_rendition(self, library_id: str) -> None:
         with self._transaction() as db:
             db.execute("INSERT OR IGNORE INTO renditions VALUES (?)", (library_id,))

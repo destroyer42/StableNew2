@@ -508,6 +508,7 @@ class ReviewGatewaySync:
                 return
             if self._publisher is None:
                 return
+        self._publisher.withdraw_unpublishable(client, self._stop)
         busy = self._busy()
         if busy and self.fresh_outputs_wanted():
             since = int((utc_now().timestamp() - FRESH_OUTPUT_S) * 1_000_000)

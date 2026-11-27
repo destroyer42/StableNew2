@@ -73,6 +73,9 @@ MAX_DEFER_S = 600.0
 #: Bound on file checks in one look for candidates, so a long run of gone files cannot hold the worker.
 MAX_FILE_CHECKS = 2000
 MISSING = "missing"
+#: The one-time withdrawal of frames published earlier: ledger rows per request, and requests per pass.
+WITHDRAW_PAGE = 500
+WITHDRAW_PAGES = 10
 _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
@@ -409,6 +412,35 @@ class GatewayPublisher:
         if seconds is None:
             seconds = min(MAX_DEFER_S, 2.0 ** min(failures - 1, 10))
         self._deferred[key] = (version, failures, self._monotonic() + seconds)
+
+    def withdraw_unpublishable(self, client: GatewayClient, cancel: Event) -> None:
+        """Once per ledger: ask the gateway to stop showing frames and un-smoothed clips published earlier.
+
+        Kept in steps, so a stop or an unreachable gateway resumes where it was.
+        """
+
+        if "item_withdraw" not in client.features or not self.root.is_dir():
+            return
+        if self._ledger.get_meta("sources_withdrawn") == "done":
+            return
+        cursor = int(self._ledger.get_meta("sources_withdraw_cursor") or 0)
+        for _ in range(WITHDRAW_PAGES):
+            if cancel.is_set():
+                return
+            rows = self._ledger.published_after(cursor, WITHDRAW_PAGE)
+            if not rows:
+                self._ledger.set_meta({"sources_withdrawn": "done"})
+                return
+            unwanted = [
+                str(row["library_id"])
+                for row in rows
+                if self._sources.exclusion_of(str(row["rel_path"]), str(row["kind"]))
+            ]
+            if unwanted and not client.withdraw_items(unwanted):
+                log.info("Review gateway did not accept the withdrawal of earlier frames")
+                return
+            cursor = int(rows[-1]["rowid"])
+            self._ledger.set_meta({"sources_withdraw_cursor": str(cursor)})
 
     def publish(
         self,

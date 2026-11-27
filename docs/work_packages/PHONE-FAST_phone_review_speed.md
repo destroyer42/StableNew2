@@ -36,7 +36,13 @@ PR 1 holds (a) to (d); PR 2 holds (e) and (f).
 - A clip recorded as the retained (un-smoothed) source is never published, including one written before files carried
   `output_role`.
 - While a job runs, an image with no StableNew metadata waits (its job may not have written its manifest yet).
-- Items already published stay published.
+- Items already published are withdrawn once (below).
+
+**One-time withdrawal.** The gateway cannot tell a frame from any other image, so the PC classifies the items in its
+publish ledger with the same source filter and asks the gateway (`item_withdraw` feature) to stop showing the frames
+and un-smoothed clips. A withdrawal is not a decision: nothing enters the outbox or goes to Immich, no PC file is
+touched, and an item with a decision or a request the PC has not refused is left alone. It runs once, in steps, and
+waits for a gateway that offers it.
 
 ### (b) Publisher fixes
 
@@ -87,4 +93,4 @@ PR 1 holds (a) to (d); PR 2 holds (e) and (f).
 
 ## Out of scope
 
-Republishing or removing frames already on the gateway, video transcode changes, notifications, pagination.
+Republishing withdrawn items, video transcode changes, notifications, pagination.

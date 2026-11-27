@@ -803,6 +803,14 @@ class ActionChoices:
         return body
 
 
+def item_withdrawal(library_ids: Sequence[str]) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "type": "item_withdrawal",
+        "library_ids": [_text(library_id, LIBRARY_ID) for library_id in library_ids],
+    }
+
+
 def device_revocation(device_id: str, *, at: datetime | None = None) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
