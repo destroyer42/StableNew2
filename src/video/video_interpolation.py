@@ -249,13 +249,13 @@ def interpolate_cut_frames(
     out_dir = work_dir / "frames"
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] | None = None
     try:
         for start in range(0, len(paths), CUT_CHUNK_FRAMES):
             if cancel_token is not None and cancel_token.is_cancelled():
                 raise CancellationError("video interpolation cancelled")
             chunk = paths[start : start + CUT_CHUNK_FRAMES + 1]
-            frames = []
+            frames: list[Image.Image] = []
             for path in chunk:
                 with Image.open(path) as image:
                     frames.append(image.convert("RGB"))
