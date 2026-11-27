@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
+from functools import partial
 from tkinter import ttk
 
 from src.app.frame_retention_service import (
@@ -35,6 +36,15 @@ def summary_text(preview: FrameSweep) -> str:
     )
 
 
+def ask_with_dialog(parent: tk.Misc) -> Callable[[FrameSweep, Callable[[str], None]], None]:
+    """The ``ask`` the retention scheduler takes: show the dialog over ``parent``."""
+
+    def ask(preview: FrameSweep, choose: Callable[[str], None]) -> None:
+        show_frame_cleanup_dialog(parent, preview, choose)
+
+    return ask
+
+
 def show_frame_cleanup_dialog(
     parent: tk.Misc, preview: FrameSweep, choose: Callable[[str], None]
 ) -> tk.Toplevel:
@@ -59,11 +69,11 @@ def show_frame_cleanup_dialog(
             ("Turn off", CHOICE_TURN_OFF),
         )
     ):
-        ttk.Button(frame, text=label, command=lambda value=choice: finish(value)).grid(
+        ttk.Button(frame, text=label, command=partial(finish, choice)).grid(
             row=3, column=column, sticky="w", padx=(0, 8)
         )
     window.protocol("WM_DELETE_WINDOW", lambda: finish(CHOICE_NOT_NOW))
     return window
 
 
-__all__ = ["show_frame_cleanup_dialog", "summary_text"]
+__all__ = ["ask_with_dialog", "show_frame_cleanup_dialog", "summary_text"]
