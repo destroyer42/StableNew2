@@ -77,6 +77,7 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
             ("wan22_i2v_a14b_4step_v1", "1.1.0"),
             ("wan22_i2v_a14b_4step_v1", "1.2.0"),
             ("wan22_i2v_a14b_4step_v1", "1.3.0"),
+            ("wan22_i2v_a14b_4step_full_picture_v1", "1.0.0"),  # VID-FRAME full-picture sizes
             # VID-CAND-382 HunyuanVideo 1.5 eval candidates.
             ("hunyuan_video15_i2v_480p_8step_v1", "1.0.0"),
             ("hunyuan_video15_i2v_480p_12step_v1", "1.0.0"),
@@ -95,7 +96,7 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
             (WAN_ANIMATE2_DRIVE_ID, "1.3.0"),  # PR-VID-ANIMATE-CK-WARM
         }
     )
-    assert len(states) == 27
+    assert len(states) == 28
 
 
 def test_only_approved_versions_are_runnable_without_opt_in() -> None:
@@ -104,7 +105,7 @@ def test_only_approved_versions_are_runnable_without_opt_in() -> None:
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
     ] == [A14B_APPROVED, TI2V_720P_APPROVED, APPROVED, APPROVED_FRAMES_OUT]
-    assert len(registry.list_offerable_specs("comfy")) == 27
+    assert len(registry.list_offerable_specs("comfy")) == 28
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:

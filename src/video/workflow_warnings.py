@@ -1,4 +1,4 @@
-"""The N1 warnings for a Comfy video workflow (``src/pipeline/policy_warnings.py``): experimental and licence.
+"""The N1 warnings for a Comfy video workflow: experimental, licence and a cropped source (``policy_warnings.py``).
 
 Experimental means *not production-promoted*, not *refused*: the Queue summary shows this warning and selecting
 Queue records the job's own opt-in (``AGENTS.md`` section 2, ``VIDEO_PIPELINE.md`` section 10 invariant 4).  A
@@ -9,13 +9,22 @@ licence restricts what may be generated; it is shown and recorded the same way a
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 from src.pipeline.policy_warnings import (
     CODE_VIDEO_EXPERIMENTAL,
     CODE_VIDEO_LICENCE_RESTRICTION,
+    CODE_VIDEO_SOURCE_CROPPED,
     PolicyWarning,
 )
+from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_CROP_WARNED_IDS,
+    WAN_A14B_MAX_CROP_FRACTION,
+)
+from src.video.workflow_source_preparation import discarded_fraction, resolve_declared_target
 
 DEFAULT_WHY = "It has not been promoted for production use, so its output can vary and it has no qualification record."
 
@@ -81,11 +90,63 @@ def workflow_warning_records(spec: Any) -> list[dict[str, str]]:
     return [warning.as_dict() for warning in accepted_workflow_warnings(spec, opted_in=True)]
 
 
+def _crop_warning(policy: Any, subject: str, width: int, height: int) -> PolicyWarning | None:
+    """VID-FRAME: the warning when ``policy``'s size for a ``width`` x ``height`` source crops more than it allows."""
+
+    workflow_id = subject.partition("@")[0]
+    if not isinstance(policy, Mapping) or not policy or workflow_id not in WAN_A14B_CROP_WARNED_IDS:
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    target = resolve_declared_target(policy, width, height)[1]
+    cut = discarded_fraction((width, height), (target["width"], target["height"]))
+    if cut <= WAN_A14B_MAX_CROP_FRACTION:
+        return None
+    sizes = policy.get("aspect_targets") or (policy["portrait_target"], policy["landscape_target"])
+    offered = ", ".join(f"{size['width']}x{size['height']}" for size in sizes)
+    return PolicyWarning(
+        code=CODE_VIDEO_SOURCE_CROPPED,
+        subject=subject,
+        title=f"{cut:.0%} of the source picture is cut away.",
+        why=(
+            f"The source is {width}x{height} and the closest size this workflow offers, "
+            f"{target['width']}x{target['height']}, has a different shape."
+        ),
+        fix=(
+            "Queue runs it with the crop. To keep the whole picture, first crop or pad the source "
+            f"to the shape of one of: {offered}."
+        ),
+        source_gate="workflow_source_preparation",
+    )
+
+
+def source_crop_warning(spec: Any, width: int, height: int) -> PolicyWarning | None:
+    policy = (getattr(spec, "backend_defaults", None) or {}).get("source_preparation")
+    return _crop_warning(policy, workflow_subject(spec), width, height)
+
+
+def source_crop_warning_for_path(policy: Any, subject: str, path: str) -> PolicyWarning | None:
+    """The same warning for a file, read from its header only; ``None`` when it cannot be read."""
+
+    if not isinstance(policy, Mapping) or not path or not Path(path).is_file():
+        return None
+    try:
+        with Image.open(path) as image:
+            width, height = image.size
+            if int(image.getexif().get(0x0112, 1) or 1) >= 5:  # rotated a quarter turn on load
+                width, height = height, width
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
+        return None
+    return _crop_warning(policy, subject, width, height)
+
+
 __all__ = [
     "DEFAULT_WHY",
     "accepted_workflow_warnings",
     "experimental_workflow_warning",
     "licence_workflow_warning",
+    "source_crop_warning",
+    "source_crop_warning_for_path",
     "workflow_subject",
     "workflow_warning_records",
 ]

@@ -55,6 +55,10 @@ _PICKER_TIERS: Mapping[str, PickerTier] = {
     "wan22_i2v_a14b_4step_ck_v1": PickerTier(
         TIER_EXPERIMENTAL_ONLY, "Unrated speed arm of Wan2.2 I2V-A14B 4-step (CK attention)."
     ),
+    "wan22_i2v_a14b_4step_full_picture_v1": PickerTier(
+        TIER_EXPERIMENTAL_ONLY,
+        "Unrated full-picture sizes of Wan2.2 I2V-A14B 4-step; not yet tested on the GPU.",
+    ),
     "wan22_i2v_a14b_svi": PickerTier(
         TIER_EXPERIMENTAL_ONLY, "Unrated SVI 2.0 arm of Wan2.2 I2V-A14B 4-step."
     ),

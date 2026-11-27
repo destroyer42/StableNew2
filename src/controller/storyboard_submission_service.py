@@ -23,6 +23,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Final, Literal
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.video.rife_runtime import find_rife_executable
 from src.video.sequence_admission import LEAD_IN_OVERLAP
 from src.video.sequence_job_build import build_sequence_njr
 from src.video.sequence_plan import (
@@ -127,7 +128,9 @@ class StoryboardSubmissionService:
         new_id: Callable[[], str] = lambda: uuid.uuid4().hex,
         draw_seed: Callable[[], int] = lambda: secrets.randbelow(2**31),
         clip_importer: ClipImporter | None = None,
+        smooth_takes: Callable[[], bool] = lambda: False,
     ) -> None:
+        self._smooth_takes = smooth_takes
         self._njr_builder = njr_builder
         self._registry = workflow_registry
         self._job_service = job_service
@@ -391,6 +394,8 @@ class StoryboardSubmissionService:
         """The root's inherited settings; the experimental opt-in only from this request, never from the file."""
 
         form: dict[str, Any] = dict(tree.root.to_dict()["settings"])
+        if self._smooth_takes():  # VID-FRAME: a take's stitched cut is smoothed when RIFE is here
+            form["interpolation"] = {"enabled": True}
         if request.experimental_opt_in:
             form[EXPERIMENTAL_OPT_IN_FIELD] = True
         return form
@@ -590,4 +595,5 @@ def build_storyboard_service(controller: Any) -> StoryboardSubmissionService:
         job_service=controller._job_service,
         repository=lambda: getattr(controller._job_service(), "history_store", None),
         output_root=lambda: getattr(controller._app_controller, "output_dir", None) or "output",
+        smooth_takes=lambda: find_rife_executable() is not None,
     )

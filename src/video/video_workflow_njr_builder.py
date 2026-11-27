@@ -67,10 +67,11 @@ from src.video.workflow_input_integrity import (
     workflow_identity,
 )
 from src.video.workflow_source_preparation import (
+    discarded_fraction,
     passthrough_declared_workflow_source,
     prepare_declared_workflow_source,
 )
-from src.video.workflow_warnings import accepted_workflow_warnings
+from src.video.workflow_warnings import accepted_workflow_warnings, source_crop_warning
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 # Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
@@ -333,7 +334,9 @@ class VideoWorkflowNjrBuilder:
             if "seed" in spec.declared_input_names:
                 parse_seed_input(form_data.get("seed"))
                 if requires_exact_motion(spec) and parse_seed_input(form_data.get("seed")) is None:
-                    raise ValueError("Choose a concrete seed before Preview for this controlled-motion workflow.")
+                    raise ValueError(
+                        "Choose a concrete seed before Preview for this controlled-motion workflow."
+                    )
             if frame_count_policy(spec) is not None:
                 parse_frame_count(spec, form_data.get("frame_count"))
             resolve_operator_controls(spec, form_data)
@@ -413,8 +416,9 @@ class VideoWorkflowNjrBuilder:
         if blocked:
             raise ValueError(blocked)
         prepared = form_data.get(PREPARED_MOTION_SOURCE_FIELD)
-        verify_exact_motion(spec, prepared, frame_count=form_data.get("frame_count"),
-                            original_path=driving_text)
+        verify_exact_motion(
+            spec, prepared, frame_count=form_data.get("frame_count"), original_path=driving_text
+        )
         if prepared:
             # An optional, explicit preparation: every byte is re-verified now, and the derived
             # clip (what actually runs) is frozen together with the record of where it came from.
@@ -457,7 +461,9 @@ class VideoWorkflowNjrBuilder:
         if "end_anchor" in declared_inputs and end_anchor_text:
             add("end anchor", end_anchor_text)
         if "mid_anchors" in declared_inputs:
-            for position, candidate in enumerate(mid_anchor_list(form_data.get("mid_anchor_paths"))):
+            for position, candidate in enumerate(
+                mid_anchor_list(form_data.get("mid_anchor_paths"))
+            ):
                 add(f"mid anchor {position + 1}", candidate)
         if any(name in declared_inputs for name in ("depth_map", "controlnet_model")):
             depth_input = _normalize_depth_input(form_data)
@@ -533,9 +539,7 @@ class VideoWorkflowNjrBuilder:
         declares a preparation policy the frame is recorded as is (it must already be the target
         size) instead of being cover-cropped and re-saved."""
 
-        self._require_valid(
-            source_image_path, form_data, prompt_per_segment=prompt_per_segment
-        )
+        self._require_valid(source_image_path, form_data, prompt_per_segment=prompt_per_segment)
         spec = self.spec_for(form_data)
         declared_inputs = set(spec.declared_input_names)
         if shared is None:
@@ -720,7 +724,8 @@ class VideoWorkflowNjrBuilder:
         if requires_exact_motion(spec):
             self.verify_unchanged(frozen)
             workflow_config["reference_identity"] = {
-                "original_path": frozen.source_image_path, "original_sha256": frozen.source_sha256,
+                "original_path": frozen.source_image_path,
+                "original_sha256": frozen.source_sha256,
                 "prepared_path": frozen.prepared_source_path,
                 "prepared_sha256": frozen.prepared_source_sha256,
             }
@@ -751,7 +756,9 @@ class VideoWorkflowNjrBuilder:
         # Optional RIFE smoothing of the finished clip (PR-VID-SMOOTH-302). Validated here, so a missing
         # runtime or an unsupported factor is refused at admission, and frozen as resolved values so the queued
         # job and any replay smooth the same way.
-        smoothing = normalize_interpolation_request(form_data.get("interpolation"))
+        # VID-FRAME: a sequence smooths its assembled cut (``cut_interpolation``), never a segment's clip.
+        interpolation_key = "interpolation" if sequence_plan is None else "cut_interpolation"
+        smoothing = normalize_interpolation_request(form_data.get(interpolation_key))
         frozen_interpolation: dict[str, Any] | None = None
         if smoothing is not None:
             resolved_executable = find_rife_executable(smoothing.executable_path)
@@ -765,7 +772,7 @@ class VideoWorkflowNjrBuilder:
                 else str(resolved_executable),
                 "model_dir": smoothing.model_dir,
             }
-            workflow_config["interpolation"] = frozen_interpolation
+            workflow_config[interpolation_key] = frozen_interpolation
         if sequence_plan is not None:
             # One NJR, N sequential segments (PR-VID-SEQ-330-CORE): the plan was frozen at admission and the
             # runner executes it inside this single job.
@@ -793,6 +800,15 @@ class VideoWorkflowNjrBuilder:
             extra_metadata["video_workflow"]["depth_input"] = depth_input
         if source_preparation:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
+            # VID-FRAME: how much of the source the chosen size cuts away (absent: the whole picture).
+            source_size = source_preparation["source_dimensions"]
+            target_size = source_preparation["target_dimensions"]
+            cut = discarded_fraction(
+                (source_size["width"], source_size["height"]),
+                (target_size["width"], target_size["height"]),
+            )
+            if round(cut, 4) > 0:
+                extra_metadata["video_workflow"]["source_crop_fraction"] = round(cut, 4)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
         if frozen_interpolation is not None:
@@ -843,10 +859,17 @@ class VideoWorkflowNjrBuilder:
             }
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
-        # N1: the job's opt-in is the operator's Queue on a summary that showed these warnings.
-        accepted = accepted_workflow_warnings(
-            spec, opted_in=extra_metadata["video_workflow"]["experimental_opt_in"] is True
+        # N1: the operator's Queue on a summary that showed these warnings accepts them.
+        accepted = list(
+            accepted_workflow_warnings(
+                spec, opted_in=extra_metadata["video_workflow"]["experimental_opt_in"] is True
+            )
         )
+        size = (source_preparation or {}).get("source_dimensions")
+        if size:
+            crop = source_crop_warning(spec, size["width"], size["height"])
+            if crop is not None:
+                accepted.append(crop)
         if accepted:
             surface = str(form_data.get(WARNING_SURFACE_FIELD) or SURFACE_DESKTOP)
             extra_metadata = merge_accepted_warnings(extra_metadata, accepted, surface=surface)

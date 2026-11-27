@@ -32,6 +32,8 @@ KNOWN_SURFACES = frozenset({SURFACE_DESKTOP, SURFACE_PHONE})
 CODE_VIDEO_EXPERIMENTAL = "video_experimental_workflow"
 #: A video workflow whose model licence restricts what may be generated with it (declared by its catalog entry).
 CODE_VIDEO_LICENCE_RESTRICTION = "video_licence_restriction"
+#: VID-FRAME: the video workflow's closest size cuts away more of the source picture than the workflow allows.
+CODE_VIDEO_SOURCE_CROPPED = "video_source_cropped"
 #: A checkpoint StableNew has no qualified profile for (for example a FLUX layout without a profile).
 CODE_IMAGE_MODEL_UNQUALIFIED = "image_model_unqualified"
 #: N1b: an SDXL-only feature on a checkpoint the registry could not classify (``src/image_backends/sdxl_target.py``).
@@ -197,6 +199,7 @@ __all__ = [
     "CODE_IMAGE_MODEL_UNQUALIFIED",
     "CODE_VIDEO_EXPERIMENTAL",
     "CODE_VIDEO_LICENCE_RESTRICTION",
+    "CODE_VIDEO_SOURCE_CROPPED",
     "CONTRACT",
     "KNOWN_SURFACES",
     "PENDING_WARNINGS_KEY",
