@@ -48,6 +48,7 @@ from src.app.review_gateway_protocol import (
     item_manifest,
     utc_text,
 )
+from src.app.review_gateway_scrub import Unclean, scrub_image
 from src.app.review_gateway_sources import RETAINED, SourceFilter, may_be_unrecorded_frame
 from src.app.review_gateway_store import SyncLedger
 from src.app.site_media_files import SiteOutputError, checked_digest, open_scoped
@@ -609,8 +610,16 @@ class GatewayPublisher:
         thumb = self._library.grid_preview(item, cancel=cancel)
         if thumb is None or not thumb.ready or thumb.mime not in CONTENT_TYPES:
             return "pending"
+        # An image already sent as it is stays that item: a second copy of it would be a second item.
+        as_before = (
+            item.kind == "image"
+            and known is not None
+            and known["state"] == "published"
+            and known["version"] == version
+            and known["sha256"] == digest
+        )
         with (
-            self._original(item, path, digest, size, cancel) as original,
+            self._original(item, path, digest, size, cancel, as_before) as original,
             self._extra_bodies(item, path, cancel, allow_transcode) as extra,
         ):
             if original is None:
@@ -661,13 +670,46 @@ class GatewayPublisher:
 
     @contextmanager
     def _original(
-        self, item: LibraryItem, path: Path, digest: str, size: int, cancel: Event
+        self,
+        item: LibraryItem,
+        path: Path,
+        digest: str,
+        size: int,
+        cancel: Event,
+        as_before: bool,
     ) -> Iterator[_Body | None]:
-        """What is sent as the original: an image as it is, a video without its metadata (``None`` when it cannot be
-        stripped, so it is not sent at all). The item is known to the gateway by the bytes sent."""
+        """What is sent as the original, without PC paths in its metadata (``None`` when that cannot be assured, so it
+        is not sent at all): an image keeps its other metadata, a video loses all of it. The item is known to the
+        gateway by the bytes sent."""
 
+        unchanged = _Body(MediaVariant(digest, size, item.mime, item.width, item.height), path=path)
         if item.kind != "video":
-            yield _Body(MediaVariant(digest, size, item.mime, item.width, item.height), path=path)
+            if as_before:
+                yield unchanged
+                return
+            with open_scoped(self.root, path) as stream:
+                data = stream.read(IMAGE_LIMIT + 1)
+            try:
+                clean = scrub_image(data)
+            except Unclean:
+                log.warning(
+                    "Review gateway: an image was not sent; its metadata could not be cleaned"
+                )
+                yield None
+                return
+            if clean is data:
+                yield unchanged
+                return
+            yield _Body(
+                MediaVariant(
+                    hashlib.sha256(clean).hexdigest(),
+                    len(clean),
+                    item.mime,
+                    item.width,
+                    item.height,
+                ),
+                data=clean,
+            )
             return
         with tempfile.TemporaryDirectory(prefix="stablenew-gateway-") as scratch:
             target = Path(scratch) / f"original{path.suffix.lower()}"
