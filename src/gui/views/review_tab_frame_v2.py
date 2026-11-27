@@ -9,6 +9,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.controller.app_controller_services.pack_model_batch_service import batch_identity
 from src.controller.batch_operations_service import build_batch_operations_service
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
@@ -88,7 +89,11 @@ from src.review.review_evidence import (
     save_disposition,
     save_inspection,
 )
-from src.review.review_lineage import repository_of, resolve_result_images
+from src.review.review_lineage import (
+    batch_of_job_reader,
+    repository_of,
+    resolve_result_images,
+)
 from src.review.workflow_adapter import (
     ReviewWorkflowAdapter,
     ReviewWorkspaceHandoff,
@@ -254,6 +259,7 @@ class ReviewTabFrame(ttk.Frame):
         self._adetailer_outcome_widgets: list[Any] = []
         self._provenance_view: EffectivePromptView | None = None
         self._writer: Any = None
+        self._batch_of_job: Any = None
         self._poll_id: str | None = None
         self._last_session_message = ""
         self._batch_saves = 0
@@ -2450,6 +2456,10 @@ class ReviewTabFrame(ttk.Frame):
 
         self._writer = self._resolve_evidence_writer()
         self._archive_context = (self._output_root(), job_queue_of(self.app_controller))
+        repository = self._review_repository()
+        self._batch_of_job = (
+            batch_of_job_reader(repository, batch_identity) if repository is not None else None
+        )
         return self._writer
 
     def _output_root(self) -> Path:
@@ -2488,6 +2498,7 @@ class ReviewTabFrame(ttk.Frame):
             disposition=disposition,
             artifact_sha256=digest or None,
             source_job_id=job_id,
+            batch_of_job=self._batch_of_job,
         )
 
     def _write_inspection(self, draft: InspectionDraft) -> Any:

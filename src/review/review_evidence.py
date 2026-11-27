@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,6 +39,8 @@ from src.utils.image_metadata import (
     resolve_prompt_fields,
 )
 
+log = logging.getLogger(__name__)
+
 RATING_KIND = "review_tab_feedback"
 RATING_SOURCE = "review_tab"
 DISPOSITION_KIND = "review_disposition"
@@ -56,6 +59,8 @@ DISPOSITION_CLEARED = "cleared"
 REVIEW_FAVORITE = "review_favorite"
 REVIEW_TAGS = "review_tags"
 REVIEW_GATEWAY_RECEIPT = "review_gateway_receipt"
+#: LEARN-JOIN: the named batch the image's job was queued in, copied onto the decision row when it is written.
+REVIEW_BATCH = "review_batch"
 
 INSPECTION_KIND = "review_inspection"
 #: Distinct from ``RATING_SOURCE`` and ``DISPOSITION_SOURCE``: rating listing, disposition lookup and "Undo Last Save"
@@ -432,6 +437,30 @@ def build_disposition_with_prior_settings(records_path: Path, **kwargs: Any) -> 
     return record
 
 
+def stamp_review_batch(
+    record: LearningRecord, batch_of_job: Callable[[str], Mapping[str, Any] | None] | None
+) -> None:
+    """Add the batch of the row's ``source_job_id`` as ``review_batch`` (``batch_id`` and ``name``), if it has one.
+
+    Additive and best effort: a decision is never held back or refused because its batch could not be read.
+    ``batch_of_job`` is injected so review evidence stays free of queue and controller imports.
+    """
+
+    job_id = str(record.metadata.get("source_job_id") or "")
+    if not job_id or batch_of_job is None or record.metadata.get(REVIEW_BATCH):
+        return
+    try:
+        batch = batch_of_job(job_id)
+    except Exception:  # noqa: BLE001 - the read-time join still finds the batch
+        log.debug("A review decision could not read its job's batch")
+        return
+    if batch and batch.get("batch_id") and batch.get("name"):
+        record.metadata[REVIEW_BATCH] = {
+            "batch_id": str(batch["batch_id"]),
+            "name": str(batch["name"]),
+        }
+
+
 def disposition_favorite(row: Mapping[str, Any] | None) -> bool:
     """Whether a stored disposition row is a Retain marked Favorite (rows without the flag are not)."""
 
@@ -443,9 +472,15 @@ def disposition_favorite(row: Mapping[str, Any] | None) -> bool:
     )
 
 
-def save_disposition(writer: LearningRecordWriter, **kwargs: Any) -> LearningRecord:
+def save_disposition(
+    writer: LearningRecordWriter,
+    *,
+    batch_of_job: Callable[[str], Mapping[str, Any] | None] | None = None,
+    **kwargs: Any,
+) -> LearningRecord:
     """Append a disposition through the one writer; raises ``OSError`` when it was not confirmed saved."""
     record = build_disposition_with_prior_settings(writer.records_path, **kwargs)
+    stamp_review_batch(record, batch_of_job)
     if writer.append_record(record) is False:
         raise OSError("The review decision was not confirmed saved; see the log before retrying.")
     return record

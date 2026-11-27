@@ -199,6 +199,18 @@ def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
     return GatewayActions(ledger, compiler, admit, owner_of=gateway_owner)
 
 
+def _gateway_batch_of_job(app: Any, identity: Any) -> Any:
+    """LEARN-JOIN: the batch stamped on a phone decision, read when it is applied (``None`` without a repository)."""
+
+    from src.review.review_lineage import batch_of_job_reader, repository_of
+
+    def read(job_id: str) -> Any:
+        repository = repository_of(app)
+        return batch_of_job_reader(repository, identity)(job_id) if repository is not None else None
+
+    return read
+
+
 def build_review_gateway_sync(
     app: Any,
     *,
@@ -250,6 +262,7 @@ def build_review_gateway_sync(
         records,
         active_inputs=active,
         actions=_gateway_actions(app, ledger, root, records),
+        batch_of_job=_gateway_batch_of_job(app, batch_identity),
     )
 
     def busy() -> bool:

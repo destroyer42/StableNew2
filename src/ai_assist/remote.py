@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import threading
@@ -17,10 +18,10 @@ from src.ai_assist.contracts import (
     AssistOutcome,
     AssistRequest,
     OutcomeCode,
-    SuggestionKind,
 )
 from src.ai_assist.framing import FramingError, build_json_schema, render_prompt
 from src.ai_assist.remote_preview import (
+    VISION_MODELS,
     DuplicateRemoteKeyError,
     RemoteApproval,
     RemoteSettings,
@@ -44,45 +45,6 @@ HEALTH_LIMIT = 128 * 1024
 READY_TTL = 8.0
 RECOVERY_INTERVAL = 3.0
 MAX_OUTPUT_BYTES = 256 * 1024
-
-
-_SUCCESS_PAYLOAD = {
-    SuggestionKind.PROMPT_REWRITE: (
-        "Write the revised prompts in positive and negative. If NEGATIVE_PROMPT is empty, return an empty negative. "
-        "Only reproduce protected tokens that occur in the authored prompts."
-    ),
-    SuggestionKind.TARGET_FIT_ADVICE: "Set target to one exact identifier from Allowed targets.",
-    SuggestionKind.WORKFLOW_CHOICE: "Set workflow to one exact identifier from Allowed workflows.",
-    SuggestionKind.PLAN_PROPOSAL: (
-        "Put the ordered advice in steps. Copy identifiers exactly, including capitalization and punctuation. "
-        "For an image step, set target and use null for workflow. For a video step, set workflow and use null for target."
-    ),
-    SuggestionKind.SLOT_PROPOSAL: (
-        "Put the proposals in proposals. Each needs a new slot_name, its values, the insertion_point number copied from "
-        "the numbered positions listed in the data, and a rationale."
-    ),
-    SuggestionKind.PHRASE_SLOT: (
-        "Put the proposals in phrase_slots. Each needs a new slot_name, its alternative values for the selected phrase, "
-        "and a rationale."
-    ),
-    SuggestionKind.SLOT_VARIETY: (
-        "Put the proposals in slots. Copy each slot name exactly into slot and put the new phrases in values. "
-        "Follow the requested category for each value."
-    ),
-}
-
-
-def _ollama_prompt(request: AssistRequest) -> str:
-    # A refusal was the only concrete response shape in the shared frame. Describe both paths without
-    # placing a copyable refusal object in front of the model. The wire schema still constrains both.
-    return render_prompt(
-        request,
-        response_instructions=(
-            'For a suggestion, set status to "ok" and use the schema id and kind given above. '
-            + _SUCCESS_PAYLOAD[request.kind]
-            + ' If you cannot or will not help, set status to "refused" and provide a short refusal_reason.'
-        ),
-    )
 
 
 class RemoteState(StrEnum):
@@ -125,19 +87,25 @@ def _wire_problem(output: str, schema: dict[str, Any]) -> str:
         return ""
     if not isinstance(document, dict):
         return ""
-    for branch in schema["oneOf"]:
-        fields = branch["properties"]
-        if document.get("status") != fields["status"]["const"]:
-            continue
-        if not set(branch["required"]) <= document.keys() <= fields.keys():
-            return "remote_response_fields"
-        if any(
-            fields[key].get("type") == "string" and not isinstance(value, str)
-            for key, value in document.items()
-        ):
-            return "remote_response_field_type"
-        break
+    fields = schema["properties"]
+    if document.get("status") != fields["status"]["const"]:
+        return ""  # a refusal or an unknown status is the canonical validator's to classify
+    if not set(schema["required"]) <= document.keys() <= fields.keys():
+        return "remote_response_fields"
+    if any(
+        fields[key].get("type") == "string" and not isinstance(value, str)
+        for key, value in document.items()
+    ):
+        return "remote_response_field_type"
     return ""
+
+
+def _complete_json(text: str) -> bool:
+    try:
+        json.loads(text)
+    except (RecursionError, ValueError):
+        return False
+    return True
 
 
 class RemoteAssist:
@@ -322,14 +290,24 @@ class RemoteAssist:
         token: AiCancelToken,
         limits: RunLimits,
         sampling: Sampling,
+        *,
+        retry: bool = False,
     ) -> RuntimeResult:
         started = time.monotonic()
+        if request.image_jpeg and identity.model not in VISION_MODELS:
+            return RuntimeResult(OutcomeCode.UNAVAILABLE, "image_model_unsupported")
+        pictures = (
+            {"images": [base64.b64encode(request.image_jpeg).decode("ascii")]}
+            if request.image_jpeg
+            else {}
+        )
         try:
             schema = build_json_schema(request)
             body = json.dumps(
                 {
                     "model": identity.model_reference,
-                    "prompt": _ollama_prompt(request),
+                    "prompt": render_prompt(request, retry=retry),
+                    **pictures,
                     "format": schema,
                     "stream": False,
                     "think": False,
@@ -376,10 +354,15 @@ class RemoteAssist:
             if response.get("done") is not True or not isinstance(output, str):
                 raise TransportFailure("invalid_response")
             raw_output = output.encode("utf-8")
-            if problem := _wire_problem(output, schema):
+            problem = _wire_problem(output, schema)
+            if response.get("done_reason") == "length" and not _complete_json(output):
+                problem = "remote_truncated"
+            if problem:
+                # The model's own output, so the service may retry it; it is never a suggestion.
                 return RuntimeResult(
                     OutcomeCode.MALFORMED,
                     problem,
+                    stdout=raw_output,
                     elapsed_ms=int((time.monotonic() - started) * 1000),
                 )
         except UnicodeError:

@@ -66,7 +66,8 @@ def locate_ledger(job_id: str, output_roots: Iterable[str | os.PathLike[str]]) -
                     names = [e.name for e in entries if token in e.name and e.is_dir()]
             except OSError:
                 continue
-            for name in sorted(names):
+            # Newest first: a job re-queued by an app close has one run folder per attempt, named by start time.
+            for name in sorted(names, reverse=True):
                 candidate = directory / name / LEDGER_FILE_NAME
                 if candidate.is_file() and _ledger_names_job(candidate, job_id):
                     return str(candidate)

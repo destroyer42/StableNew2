@@ -62,6 +62,7 @@ from src.review.review_evidence import (
     REVIEW_TAGS,
     build_disposition_with_prior_settings,
     image_source_job,
+    stamp_review_batch,
 )
 
 if TYPE_CHECKING:
@@ -110,6 +111,7 @@ class RecordApplier:
         active_inputs: Callable[[], Collection[str]] | None,
         actions: GatewayActions | None = None,
         admin: AdminRequests | None = None,
+        batch_of_job: Callable[[str], Mapping[str, Any] | None] | None = None,
     ) -> None:
         self._ledger = ledger
         self._root = output_root
@@ -117,6 +119,7 @@ class RecordApplier:
         self._active_inputs = active_inputs
         self._actions = actions
         self.admin = admin
+        self._batch_of_job = batch_of_job
 
     def handle(self, raw: Any) -> Applied | None:
         """The outcome for one raw outbox record; ``None`` when it has no acknowledgeable record id.
@@ -290,6 +293,7 @@ class RecordApplier:
             artifact_sha256=record.target.sha256,
             source_job_id=image_source_job(path) if image else "",
         )
+        stamp_review_batch(evidence, self._batch_of_job)
         if disposition == "retain" and decision.favorite:
             evidence.metadata[REVIEW_FAVORITE] = True
         if decision.tags:

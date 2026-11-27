@@ -76,6 +76,11 @@ MAX_PHRASE_SLOTS = 3
 MIN_PHRASE_VALUES = 2
 MAX_PHRASE_VALUES = 5
 
+#: Motion phrase (ASSIST-FIX): one short line for the video prompt, from the source picture and the prompt. The picture
+#: is the only binary a request can carry; it is a reduced JPEG made by ``src.ai_assist.image``.
+MAX_MOTION_PHRASE_CHARS = 160
+MAX_IMAGE_BYTES = 256 * 1024
+
 VARIETY_FOCUS_DIRECT = "direct"
 VARIETY_FOCUS_EXPLORE = "explore"
 VARIETY_FOCUS_MODES: frozenset[str] = frozenset({VARIETY_FOCUS_DIRECT, VARIETY_FOCUS_EXPLORE})
@@ -98,6 +103,8 @@ class SuggestionKind(str, Enum):
     #: A slot name and alternatives for ONE phrase the operator selected in the sentence (AI-230g). Applied only by an explicit
     #: per-proposal operator action that replaces exactly that span with the slot's ``[[marker]]``.
     PHRASE_SLOT = "phrase_slot"
+    #: A motion phrase for a video made from one source picture (ASSIST-FIX). Needs a vision model on the remote worker.
+    MOTION_PHRASE = "motion_phrase"
 
 
 class OutcomeCode(str, Enum):
@@ -194,6 +201,8 @@ class AssistRequest:
     #: as context); ``existing_slot_names`` is used as for a slot proposal. There is no list of positions: the span is the
     #: operator's own selection and the model can never move it.
     phrase_text: str = ""
+    #: ``MOTION_PHRASE`` only: the reduced source picture (``positive_text`` is the video prompt). Never logged.
+    image_jpeg: bytes = field(default=b"", repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.request_id, str) or not _REQUEST_ID.match(self.request_id):
@@ -233,9 +242,13 @@ class AssistRequest:
             self._check_proposal()
         elif self.kind is SuggestionKind.PHRASE_SLOT:
             self._check_phrase()
+        elif self.kind is SuggestionKind.MOTION_PHRASE:
+            self._check_motion()
         elif self.goal_text or self.allowed_stages:
             raise ValueError("goal_text and allowed_stages belong to plan requests only")
         self._check_current_target()
+        if self.image_jpeg and self.kind is not SuggestionKind.MOTION_PHRASE:
+            raise ValueError("an image belongs to motion-phrase requests only")
         if self.kind is not SuggestionKind.SLOT_VARIETY and (
             self.variety_per_slot != DEFAULT_VARIETY_PER_SLOT
             or self.variety_focus != VARIETY_FOCUS_DIRECT
@@ -426,6 +439,24 @@ class AssistRequest:
             raise ValueError("the phrase must be part of the sentence")
         self._check_existing_slot_names()
 
+    def _check_motion(self) -> None:
+        if (
+            self.negative_text
+            or self.target_policy_id
+            or self.goal_text
+            or self.allowed_targets
+            or self.allowed_workflows
+            or self.allowed_stages
+        ):
+            raise ValueError("a motion-phrase request carries only the prompt and the picture")
+        image = self.image_jpeg
+        if (
+            not isinstance(image, bytes)
+            or not image.startswith(b"\xff\xd8")
+            or len(image) > MAX_IMAGE_BYTES
+        ):
+            raise ValueError("a motion-phrase request needs one reduced JPEG picture")
+
     def matrix_chars(self) -> int:
         return sum(
             len(name) + sum(len(value) for value in values) for name, values in self.matrix_slots
@@ -482,6 +513,8 @@ class AssistRequest:
             # Appended only for this kind, so every other kind keeps its digest (AI-230g).
             payload += "phrase:" + self.phrase_text
             payload += "" + "".join(self.existing_slot_names)
+        if self.kind is SuggestionKind.MOTION_PHRASE:
+            payload += "\x1fimage:" + hashlib.sha256(self.image_jpeg).hexdigest()
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
@@ -558,6 +591,8 @@ class AssistSuggestion:
     slot_proposals: tuple[SlotProposal, ...] = ()
     #: ``PHRASE_SLOT`` only.
     phrase_slots: tuple[PhraseSlot, ...] = ()
+    #: ``MOTION_PHRASE`` only.
+    motion_phrase: str | None = None
 
     def to_diagnostics(self) -> dict[str, Any]:
         """Content-free view (kind, counts, codes) safe for logs and the event record."""
@@ -635,7 +670,9 @@ __all__ = [
     "VARIETY_FOCUS_MODES",
     "MAX_GOAL_CHARS",
     "MAX_LABEL_CHARS",
+    "MAX_IMAGE_BYTES",
     "MAX_LIST_ITEMS",
+    "MAX_MOTION_PHRASE_CHARS",
     "MAX_NAME_CHARS",
     "MAX_PLAN_STEPS",
     "MAX_PLAN_TOTAL_COUNT",

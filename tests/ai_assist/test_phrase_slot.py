@@ -188,7 +188,7 @@ def test_the_phrase_marker_is_reserved_in_the_sentence_and_the_phrase() -> None:
 
 def test_the_schema_is_closed_bounded_and_requires_every_payload_field() -> None:
     schema = build_json_schema(REQUEST)
-    ok = schema["oneOf"][0]
+    ok = schema
     assert ok["required"][3:] == ["phrase_slots"]
     items = ok["properties"]["phrase_slots"]
     assert items["minItems"] == 1 and items["maxItems"] == MAX_PHRASE_SLOTS
