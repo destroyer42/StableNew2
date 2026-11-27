@@ -92,7 +92,8 @@ def test_pack_config_buttons_say_which_side_is_written() -> None:
     assert "changes the pack files" in contract.SAVE_PACK_CONFIG_TIP
 
 
-def test_ten_stable_tab_identities_and_legacy_order_are_unchanged() -> None:
+def test_stable_tab_identities_and_legacy_order_are_unchanged() -> None:
+    # The historic ten keep their indices; N6 appended the Generate workspace after them.
     assert LEGACY_TAB_ORDER == (
         "prompt",
         "pipeline",
@@ -104,5 +105,6 @@ def test_ten_stable_tab_identities_and_legacy_order_are_unchanged() -> None:
         "svd",
         "video_workflow",
         "storyboard",
+        "generate",
     )
     assert sorted(all_tab_ids()) == sorted(LEGACY_TAB_ORDER)
