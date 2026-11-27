@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 SETTING_KEY = "video_frame_cleanup_enabled"
 FIRST_RUN_MS = 5 * 60 * 1000
-REPEAT_MS = 60 * 60 * 1000
+REPEAT_MS = 6 * 60 * 60 * 1000  # a pass walks the whole output folder (minutes on a large one)
 
 
 def run_frame_retention(
@@ -50,7 +50,7 @@ def run_frame_retention(
 
 
 def schedule_frame_retention(root: Any, app: Any) -> Callable[[], None]:
-    """Sweep five minutes after start and hourly after that; returns the call that stops it."""
+    """Sweep five minutes after start and every six hours after that; returns the call that stops it."""
 
     stop = threading.Event()
     running = threading.Lock()

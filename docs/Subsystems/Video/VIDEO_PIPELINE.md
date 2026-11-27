@@ -136,7 +136,7 @@ chosen. An A14B crop above 5% (declared beside the specs) is an N1 warning (`vid
 Queue, in the batch preview and in the job's accepted warnings, and `video_workflow.source_crop_fraction` records it.
 
 **Frame retention (VID-FRAME).** `src/video/frame_retention.py` removes a frames-out clip's PNGs a day after the clip
-exists (setting `video_frame_cleanup_enabled`, default on, Engine Settings; runs only while the queue is empty). It keeps
+exists (setting `video_frame_cleanup_enabled`, default on, Engine Settings; runs only while the queue is empty, five minutes after start and every six hours). It keeps
 the clip, every recorded output, the first and last frame, frames a cut manifest or Storyboard file names, and skips
 sequence runs, evaluations and the archive; `frames_removed.json` marks a swept run. Continue in Storyboard then decodes
 that clip, and the Movie Clips handoff uses the clip. Deletion cannot be undone.

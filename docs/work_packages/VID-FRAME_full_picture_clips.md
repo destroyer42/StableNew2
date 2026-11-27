@@ -66,7 +66,9 @@ whichever merges second must add one to the two counts in `test_pr_vid_gov_316_t
 ## d2. Frame retention
 
 Setting `video_frame_cleanup_enabled` (default on, per the owner decision), a checkbox in Engine Settings. The sweep
-runs only while no job is queued or running, off the GUI thread. Deletion cannot be undone; turning the setting off
+runs only while no job is queued or running, off the GUI thread, five minutes after start and every six hours.
+A read-only dry run on 2026-11-27 found 100,268 removable frames (64.6 GB, 1,232 clip folders; 14 sequence runs
+skipped, 1,691 protected names) in about 3.5 minutes. Deletion cannot be undone; turning the setting off
 only stops further deletion.
 
 Delete only PNGs listed in a backend manifest's `frames_out` block, inside that run folder, under the output root, and
