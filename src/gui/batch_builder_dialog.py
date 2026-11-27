@@ -21,6 +21,7 @@ from src.controller.app_controller_services.pack_model_batch_service import (
     BatchRequest,
     default_batch_name,
 )
+from src.gui.batch_model_picker import LoadModelStatus, ModelListPicker, model_status_loader
 
 #: ``(request, on_result, on_error)``: plan off the Tk thread.
 PlanBatch = Callable[[BatchRequest, Callable[[BatchPlan], None], Callable[[Exception], None]], None]
@@ -62,6 +63,7 @@ class BatchBuilderPanel(ttk.Frame):
         selected_model: str = "",
         adetailer: bool = False,
         upscale: bool = False,
+        load_model_status: LoadModelStatus | None = None,
         on_close: Callable[[], None] | None = None,
         summary_height: int = 14,
         wraplength: int = 900,
@@ -81,9 +83,10 @@ class BatchBuilderPanel(ttk.Frame):
         ttk.Label(self, text="PromptPacks").grid(row=0, column=0, sticky="w")
         ttk.Label(self, text="Models").grid(row=0, column=1, sticky="w", padx=(8, 0))
         self.pack_list = self._listbox(self, row=1, column=0)
-        self.model_list = self._listbox(self, row=1, column=1)
+        self.model_picker = ModelListPicker(self, self._models, load_status=load_model_status)
+        self.model_picker.grid(row=1, column=1, sticky="nsew", padx=(8, 0))
+        self.model_list = self.model_picker.listbox
         self._fill(self.pack_list, self._packs)
-        self._fill(self.model_list, [display for display, _ in self._models])
         self._select(selected_packs, selected_model)
 
         options = ttk.Frame(self)
@@ -153,13 +156,10 @@ class BatchBuilderPanel(ttk.Frame):
             listbox.insert("end", value)
 
     def _select(self, packs: Sequence[str], model: str | Sequence[str]) -> None:
-        wanted_models = {model} if isinstance(model, str) else set(model)
         for index, name in enumerate(self._packs):
             if name in packs:
                 self.pack_list.selection_set(index)
-        for index, (display, internal) in enumerate(self._models):
-            if wanted_models & {display, internal} - {""}:
-                self.model_list.selection_set(index)
+        self.model_picker.select([model] if isinstance(model, str) else list(model))
 
     @property
     def inflight(self) -> bool:
@@ -180,7 +180,7 @@ class BatchBuilderPanel(ttk.Frame):
         kept_models = self.selected_models()
         self._packs, self._models = packs, models
         self._fill(self.pack_list, self._packs)
-        self._fill(self.model_list, [display for display, _ in self._models])
+        self.model_picker.set_models(self._models)
         if kept_packs or kept_models:
             self._select(kept_packs, kept_models)
         else:
@@ -195,7 +195,7 @@ class BatchBuilderPanel(ttk.Frame):
         return [self._packs[index] for index in self.pack_list.curselection()]  # type: ignore[no-untyped-call]
 
     def selected_models(self) -> list[str]:
-        return [self._models[index][1] for index in self.model_list.curselection()]  # type: ignore[no-untyped-call]
+        return self.model_picker.selected()
 
     def request(self) -> BatchRequest:
         packs, models = self.selected_packs(), self.selected_models()
@@ -320,6 +320,7 @@ class BatchBuilderDialog(tk.Toplevel):
         selected_model: str = "",
         adetailer: bool = False,
         upscale: bool = False,
+        load_model_status: LoadModelStatus | None = None,
     ) -> None:
         super().__init__(parent)
         self.title("Packs x Models batch")
@@ -335,6 +336,7 @@ class BatchBuilderDialog(tk.Toplevel):
             selected_model=selected_model,
             adetailer=adetailer,
             upscale=upscale,
+            load_model_status=load_model_status,
             on_close=self.destroy,
         )
         self.panel.pack(fill="both", expand=True)
@@ -422,6 +424,7 @@ def open_batch_builder(sidebar: Any) -> BatchBuilderDialog | None:
         upscale=sources.upscale,
         plan_batch=plan_batch,
         queue_batch=queue_batch,
+        load_model_status=model_status_loader(controller),
     )
 
 

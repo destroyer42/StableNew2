@@ -17,6 +17,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.batch_builder_dialog import BatchBuilderPanel, batch_callbacks, batch_sources
+from src.gui.batch_model_picker import model_status_loader
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
@@ -138,6 +139,7 @@ class GenerateTabFrameV2(ttk.Frame):
             )
             return False
         self.batch_panel.set_sources(sources)
+        self.batch_panel.model_picker.set_status_loader(model_status_loader(self._controller()))
         return True
 
     def _on_map(self, event: tk.Event) -> None:

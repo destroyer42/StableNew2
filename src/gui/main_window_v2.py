@@ -25,7 +25,12 @@ from src.gui.panels_v2.operator_readiness_panel_v2 import (
 )
 from src.gui.presentation_actions import TkPresentationActions
 from src.gui.status_bar_v2 import StatusBarV2
-from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
+from src.gui.theme_v2 import (
+    BACKGROUND_ELEVATED,
+    SUBMISSION_ERROR_LABEL_STYLE,
+    TEXT_PRIMARY,
+    apply_theme,
+)
 from src.gui.ui_dispatcher import TkUiDispatcher, release_tk_dispatcher, tk_dispatcher_for
 from src.gui.view_contracts.task_navigation_contract import (
     DEFAULT_TAB_ID,
@@ -104,6 +109,42 @@ class HeaderZone(ttk.Frame):
             ]
         ):
             btn.grid(row=0, column=idx, padx=4, pady=4)
+
+        # DESK-QUICK: a Queue refusal is shown under the header so it is seen from whichever tab queued.
+        self._app_state: Any = None
+        self.queue_refusal_label = ttk.Label(
+            self,
+            text="",
+            wraplength=900,
+            justify="left",
+            cursor="hand2",
+            style=SUBMISSION_ERROR_LABEL_STYLE,
+        )
+        self.queue_refusal_label.bind("<Button-1>", lambda _event: self.dismiss_queue_refusal())
+
+    def bind_queue_refusal(self, app_state: Any) -> None:
+        subscribe = getattr(app_state, "subscribe", None)
+        if callable(subscribe):
+            self._app_state = app_state
+            subscribe("queue_refusal", self._show_queue_refusal)
+            self._show_queue_refusal()
+
+    def dismiss_queue_refusal(self) -> None:
+        if self._app_state is not None:
+            self._app_state.set_queue_refusal(None)
+
+    def _show_queue_refusal(self) -> None:
+        text = str(getattr(self._app_state, "queue_refusal", None) or "")
+        try:
+            if text:
+                self.queue_refusal_label.configure(text=f"{text} (click to dismiss)")
+                self.queue_refusal_label.grid(
+                    row=1, column=0, columnspan=12, sticky="w", padx=4, pady=(0, 4)
+                )
+            else:
+                self.queue_refusal_label.grid_remove()
+        except tk.TclError:
+            return
 
 
 class LeftZone(ttk.Frame):
@@ -271,6 +312,7 @@ class MainWindowV2:
 
         # --- Create and grid all V2 zones ---
         self.header_zone = HeaderZone(self.root)
+        self.header_zone.bind_queue_refusal(self.app_state)
         self.header_zone.grid(**get_root_zone_config("header"))
 
         self.center_notebook = ttk.Notebook(self.root)

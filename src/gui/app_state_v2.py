@@ -99,6 +99,8 @@ class AppStateV2:
     preview_jobs: list[NormalizedJobRecord] = field(default_factory=list)
     preview_revision: int = 0
     preview_error: str | None = None
+    #: Why the last Queue / Run / Replay queued nothing, for the Preview panel (``None``: nothing to show).
+    queue_refusal: str | None = None
     #: Serializes the Preview lifecycle (invalidate / claim for admission / guarded publish) across the UI thread,
     #: background Preview builds and queue-submission workers.
     _preview_lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
@@ -420,6 +422,11 @@ class AppStateV2:
             self.last_error = value
             self._notify("last_error")
 
+    def set_queue_refusal(self, value: str | None) -> None:
+        if self.queue_refusal != value:
+            self.queue_refusal = value
+            self._notify("queue_refusal")
+
     def set_learning_enabled(self, value: bool) -> None:
         if self.learning_enabled != value:
             self.learning_enabled = value
@@ -731,6 +738,7 @@ class AppStateV2:
         self.preview_revision += 1
         self.preview_jobs = []
         self.preview_error = None
+        self.queue_refusal = None  # a changed draft: the old refusal no longer describes it
 
     def snapshot_accepted_preview(self) -> tuple[int, tuple[NormalizedJobRecord, ...]]:
         """Read the accepted Preview and its revision as one observation."""

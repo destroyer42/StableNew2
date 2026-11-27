@@ -76,7 +76,9 @@ def test_main_starts_the_gpu_session_recorder_before_the_loop_and_stops_it_after
     monkeypatch.setattr(
         main_module, "build_v2_app", lambda **_kwargs: (root, object(), object(), _FakeWindow())
     )
-    monkeypatch.setattr(main_module, "start_gpu_session_telemetry", lambda: events.append("start"))
+    monkeypatch.setattr(
+        main_module, "start_gpu_session_telemetry_in_background", lambda: events.append("start")
+    )
     main_module.main()
 
     assert events == ["start", "mainloop", "exit:mainloop-exit"]
