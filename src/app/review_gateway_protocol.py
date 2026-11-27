@@ -20,6 +20,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 SCHEMA_VERSION = "stablenew.review-gateway-sync.v1"
+#: PHONE-FAST: the phone's review sections (the schema's ``item_source``).
+ITEM_SOURCES = ("pipeline", "learning", "reprocess", "video", "testing", "other")
 
 SHA256 = re.compile(r"[0-9a-f]{64}")
 LIBRARY_ID = re.compile(r"[A-Za-z0-9_-]{8,64}")
@@ -569,6 +571,7 @@ def item_manifest(
     display: Mapping[str, Any] | None = None,
     batch: Mapping[str, Any] | None = None,
     parent: ItemRef | None = None,
+    source: str = "",
 ) -> dict[str, Any]:
     """Build a manifest; refuses anything the contract does not allow rather than trimming silently.
 
@@ -603,6 +606,8 @@ def item_manifest(
         "created_at": utc_text(created_at),
         "media": {name: variant.payload() for name, variant in media.items()},
     }
+    if source:
+        body["source"] = _source(source)
     if duration_s is not None and 0 <= duration_s <= 3600:
         body["duration_s"] = round(float(duration_s), 3)
     shown = _display(display or {})
@@ -809,6 +814,25 @@ def item_withdrawal(library_ids: Sequence[str]) -> dict[str, Any]:
         "type": "item_withdrawal",
         "library_ids": [_text(library_id, LIBRARY_ID) for library_id in library_ids],
     }
+
+
+def item_sources(items: Sequence[tuple[str, str]]) -> dict[str, Any]:
+    """``(library_id, source)`` of items published before manifests carried a source."""
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "type": "item_sources",
+        "items": [
+            {"library_id": _text(library_id, LIBRARY_ID), "source": _source(source)}
+            for library_id, source in items
+        ],
+    }
+
+
+def _source(value: str) -> str:
+    if value not in ITEM_SOURCES:
+        raise ProtocolError("invalid_source")
+    return value
 
 
 def device_revocation(device_id: str, *, at: datetime | None = None) -> dict[str, Any]:

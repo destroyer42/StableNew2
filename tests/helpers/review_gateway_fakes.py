@@ -173,6 +173,9 @@ class FakeGateway:
         self.offers_pc_status = True  # False: an older gateway without the route (404)
         self.withdrawn: list[str] = []  # PHONE-FAST library ids the PC asked to withdraw
         self.refuse_withdrawals = False
+        self.sources: dict[
+            str, str
+        ] = {}  # PHONE-FAST review sections the PC named for earlier items
 
     def request(
         self,
@@ -284,6 +287,11 @@ class FakeGateway:
                 return Response(422, b'{"error":"invalid_payload"}')
             self.withdrawn.extend(withdrawal["library_ids"])
             return Response(200, json.dumps({"withdrawn": len(withdrawal["library_ids"])}).encode())
+        if route == "/sync/v1/item-sources" and method == "POST":
+            labels = json.loads(data or b"")
+            validate_def(labels, "item_sources")
+            self.sources.update({entry["library_id"]: entry["source"] for entry in labels["items"]})
+            return Response(200, json.dumps({"labelled": len(labels["items"])}).encode())
         if route == "/sync/v1/immich-receipts" and method == "GET":
             page = self.immich_pages.get(query.get("cursor", [""])[0], self.immich_page)
             if page is None:

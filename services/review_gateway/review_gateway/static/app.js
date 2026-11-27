@@ -111,8 +111,39 @@ const mediaUrl = (item, variant) =>
 // A group is a named batch ("batch:<id>", N5) or an output run folder; batch names come from the server.
 const groupNames = new Map();
 
+// PHONE-FAST: the review sections, by the category id the PC sends. Evaluation sittings are not a section here.
+const SECTIONS = {
+  pipeline: "Pipeline runs",
+  learning: "Learning runs",
+  reprocess: "Reprocess and rework",
+  video: "Movie clips",
+  testing: "Test runs",
+  other: "Other",
+};
+const SEEN_KEY = "rg.seen"; // section -> the gateway's time when this phone last opened it
+const COUNT_KEY = "rg.count"; // "new" shows what arrived since then; otherwise what is left to review
+const isStream = (runId) => runId === "all" || runId.startsWith("all:");
+let section = ""; // the section being looked in, where "back" from one of its runs returns to
+
+// Per-phone settings; a phone without storage just keeps the default.
+function readSetting(name, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(name)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeSetting(name, value) {
+  try {
+    localStorage.setItem(name, JSON.stringify(value));
+  } catch {
+    /* private browsing */
+  }
+}
+
 function runName(runId) {
-  if (runId === "all") return "To review";
+  if (isStream(runId)) return runId === "all" ? "To review" : `To review: ${SECTIONS[runId.slice(4)] || "Other"}`;
   if (runId.startsWith("batch:")) return groupNames.get(runId) || "Batch";
   const match = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}_(.*)$/.exec(runId);
   if (!match) return runId;
@@ -522,7 +553,7 @@ function runCard(run) {
       })
     : null;
   if (run.kind === "batch" && run.name) groupNames.set(run.run_id, run.name);
-  return el("section", { class: "run", tabindex: "0", onclick: open }, [
+  return el("section", { class: "run", tabindex: "0", "data-anchor": run.run_id, onclick: open }, [
     el("h2", { text: runName(run.run_id) }),
     run.kind === "batch" ? el("p", { class: "muted", text: "Batch" }) : null,
     el("div", { class: "counts" }, [
@@ -542,22 +573,76 @@ function runCard(run) {
 
 const needsReview = (item) => ["undecided", "refused", "rejected"].includes(item.state);
 
-async function showInbox(serial) {
-  const { runs } = await api("/api/runs");
+function reviewAllButton(count, runId) {
+  if (!count) return null;
+  const open = () => {
+    filter = "todo";
+    location.hash = `#/triage/${runId}`;
+  };
+  return el("button", { type: "button", class: "primary wide", text: `Review all (${count})`, onclick: open });
+}
+
+function sectionRow(entry, countNew) {
+  const count = countNew ? entry.new : entry.unreviewed;
+  const label = SECTIONS[entry.id] || "Other";
+  return el(
+    "button",
+    {
+      type: "button",
+      class: "folder",
+      "data-anchor": entry.id,
+      "aria-label": `${label}, ${count} ${countNew ? "new" : "to review"}`,
+      onclick: () => (location.hash = `#/section/${entry.id}`),
+    },
+    [
+      el("span", { class: "folder-icon", "aria-hidden": "true", text: "📁" }),
+      el("span", { class: "folder-name", text: label }),
+      count ? el("span", { class: "chip todo", text: String(count) }) : null,
+    ],
+  );
+}
+
+// The home screen: one row per source of outputs. The top row is where other review tabs sit.
+async function showHome(serial) {
+  const seen = readSetting(SEEN_KEY, {});
+  const query = new URLSearchParams(seen).toString();
+  const { sections } = await api(`/api/sections${query ? `?${query}` : ""}`);
   await loadScopes();
-  const status = await api("/api/status").catch(() => null); // extra: the inbox shows without it
+  const status = await api("/api/status").catch(() => null); // extra: the home screen shows without it
   if (serial !== renderSerial) return;
-  const waiting = runs.reduce((sum, run) => sum + run.undecided + run.refused, 0);
-  const content = runs.length
-    ? runs.map(runCard)
-    : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
+  const countNew = readSetting(COUNT_KEY, "todo") === "new";
+  const counting = (value, text) =>
+    el("button", {
+      type: "button",
+      text,
+      "aria-pressed": String((value === "new") === countNew),
+      onclick: () => {
+        writeSetting(COUNT_KEY, value);
+        route();
+      },
+    });
+  const waiting = sections.reduce((sum, entry) => sum + entry.unreviewed, 0);
   const update = canUpdate()
     ? el("button", { type: "button", class: "pc-link", text: "Update the PC…", onclick: () => (location.hash = "#/update") })
     : null;
-  const stream = waiting
-    ? el("button", { type: "button", class: "primary", text: `Review all (${waiting})`, onclick: () => (location.hash = "#/triage/all") })
-    : null;
-  show("Review", false, ...[...statusLines(status), stream, update, ...content].filter(Boolean));
+  const content = sections.length
+    ? [
+        el("div", { class: "tools counting" }, [counting("todo", "To review"), counting("new", "New since opened")]),
+        ...sections.map((entry) => sectionRow(entry, countNew)),
+      ]
+    : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
+  show("Review", false, ...[...statusLines(status), reviewAllButton(waiting, "all"), ...content, update].filter(Boolean));
+}
+
+async function showSection(name, serial) {
+  const { runs } = await api(`/api/runs?source=${encodeURIComponent(name)}`);
+  const clock = await api("/api/status").catch(() => null);
+  if (serial !== renderSerial) return;
+  section = name;
+  if (clock) writeSetting(SEEN_KEY, { ...readSetting(SEEN_KEY, {}), [name]: clock.now });
+  const waiting = runs.reduce((sum, run) => sum + run.undecided + run.refused, 0);
+  const content = runs.length ? runs.map(runCard) : [el("p", { class: "muted", text: "Nothing here any more." })];
+  show(SECTIONS[name], true, ...[reviewAllButton(waiting, `all:${name}`), ...content].filter(Boolean));
 }
 
 const STATE_BADGES = { unsent: "…", pending: "⏳", applied: "✓", refused: "!", rejected: "!", rework: "↻" };
@@ -573,6 +658,7 @@ function tile(runId, item) {
     {
       type: "button",
       class: classes.join(" "),
+      "data-anchor": item.library_id,
       "aria-label": `${item.kind}, ${label}`,
       onclick: () => (location.hash = `#/triage/${encodeURIComponent(runId)}/${item.library_id}`),
     },
@@ -1522,12 +1608,19 @@ function advance() {
     renderItem();
     triage.lockedUntil = Date.now() + 250; // a double tap must not decide the next item unseen
   } else {
-    toast(triage.runId === "all" ? "Nothing more to review" : "End of this run");
-    location.hash = triage.runId === "all" ? "" : `#/run/${encodeURIComponent(triage.runId)}`;
+    toast(isStream(triage.runId) ? "Nothing more to review" : "End of this run");
+    location.hash = leaving(triage.runId);
   }
 }
 
 // --- routing ------------------------------------------------------------------------------------------------------
+
+// Where "back" goes from a run or from reviewing it: the grid, else the section it was opened from, else home.
+function leaving(runId, fromTriage = true) {
+  if (fromTriage && !isStream(runId)) return `#/run/${encodeURIComponent(runId)}`;
+  const name = runId.startsWith("all:") ? runId.slice(4) : runId === "all" ? "" : section;
+  return name ? `#/section/${name}` : "";
+}
 
 async function route() {
   const serial = ++renderSerial;
@@ -1539,7 +1632,8 @@ async function route() {
     else if (page === "run" && run) await showRun(decodeURIComponent(run), serial);
     else if (page === "rejected") showRejected();
     else if (page === "update") await showUpdate(serial);
-    else await showInbox(serial);
+    else if (page === "section" && SECTIONS[run]) await showSection(run, serial);
+    else await showHome(serial);
   } catch (error) {
     if (serial !== renderSerial) return;
     if (error.status === 401) showPairing();
@@ -1577,8 +1671,11 @@ async function refresh() {
     } else if (page === "update") {
       await showUpdate(serial);
       window.scrollTo(0, scroll);
+    } else if (page === "section" && SECTIONS[run]) {
+      await showSection(run, serial);
+      window.scrollTo(0, scroll);
     } else if (!page) {
-      await showInbox(serial);
+      await showHome(serial);
       window.scrollTo(0, scroll);
     }
   } catch (error) {
@@ -1588,7 +1685,7 @@ async function refresh() {
 
 back.addEventListener("click", () => {
   const [, page, run] = location.hash.split("/");
-  location.hash = page === "triage" && run && run !== "all" ? `#/run/${run}` : "";
+  location.hash = (page === "triage" || page === "run") && run ? leaving(decodeURIComponent(run), page === "triage") : "";
 });
 window.addEventListener("hashchange", route);
 window.addEventListener("online", () => flush());

@@ -25,6 +25,7 @@ from src.app.review_gateway_protocol import (
     SHA256,
     ProtocolError,
     encode_json,
+    item_sources,
     item_withdrawal,
     parse_json,
 )
@@ -45,6 +46,7 @@ ROUTES = {
     "deploy_status": "/sync/v1/deploy-status",
     "pc_status": "/sync/v1/pc-status",
     "withdrawals": "/sync/v1/withdrawals",
+    "item_sources": "/sync/v1/item-sources",
 }
 #: The gateway's refusal codes for a deploy request (DEPLOY-2) that the operator tool explains.
 DEPLOY_REFUSALS = frozenset({"remote_deploy_disabled", "deploy_pending"})
@@ -266,6 +268,15 @@ class GatewayClient:
         """PHONE-FAST: stop showing these items; ``False`` when the gateway did not accept the request."""
 
         response = self._post("withdrawals", item_withdrawal(library_ids))
+        if response.status in (404, 422):
+            return False
+        self._require(response, 200, 201)
+        return True
+
+    def label_items(self, items: Sequence[tuple[str, str]]) -> bool:
+        """PHONE-FAST: name the sections of items published earlier; ``False`` when the gateway did not accept it."""
+
+        response = self._post("item_sources", item_sources(items))
         if response.status in (404, 422):
             return False
         self._require(response, 200, 201)

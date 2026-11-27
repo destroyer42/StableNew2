@@ -59,6 +59,7 @@ is refused at startup, so there is no plain-HTTP LAN mode. Every request carries
 | `POST /sync/v1/acknowledgements` | `acknowledgement` | `{"status":"recorded"\|"already_acknowledged"}`; 404 `unknown_record` |
 | `POST /sync/v1/pairing-offers` | `pairing_offer` | `{"status":"accepted"}`; 409 `offer_conflict`; 422 `offer_expired` |
 | `POST /sync/v1/device-revocations` | `device_revocation` | `{"status":"revoked"\|"unknown_device"}` |
+| `POST /sync/v1/item-sources` | `item_sources` | `{"labelled": n}` (section 3.4) |
 | `POST /sync/v1/withdrawals` | `item_withdrawal` | `{"withdrawn": n}` (section 3.0) |
 | `GET /sync/v1/immich-receipts?cursor=` | - | `immich_receipt_page` (section 5); 400 `invalid_cursor` |
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
@@ -94,6 +95,7 @@ Rules:
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
     the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch`
     (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`, the withdrawals route (section 3.0).
+    `item_source`, the manifest's `source` and the item-sources route (section 3.4).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -197,6 +199,20 @@ A packs × models batch (N5) writes many run folders, but the owner queued it as
 - **Status.** `GET /api/status` gives every review phone the PC's last reported queue (state and number queued, with
   when it arrived) and the cache size. A PC reports it only where live update is available. This is the one status
   route.
+
+### 3.4 Review sections (PHONE-FAST)
+
+The phone's home screen lists one folder per source of outputs: Pipeline runs, Learning runs, Reprocess and rework,
+Movie clips, Test runs and Other. The PC derives the category from the top output folder and the kind (a learning
+output stays under Learning; any other video is a movie clip) and sends only the category id (`source`, to a gateway
+listing `item_source`). A rework result takes its original's section. Items published earlier are named once from the
+PC's publish ledger (`item_sources`); until then they count as Other.
+
+- `GET /api/sections?<id>=<stamp>` returns, per non-empty section, `total`, `unreviewed` and `new`. `new` counts what
+  arrived since that stamp, the gateway's own time when this phone last opened the section; a section never opened
+  counts what is left to review. The stamps and the badge choice (to review, or new) are kept on the phone.
+- `GET /api/runs?source=<id>` lists one section's groups; `GET /api/runs/all:<id>` is its review stream.
+- Evaluation sittings are not a section. They belong to the phone's rating tab (RG-170).
 
 ## 4. Retention (D4)
 

@@ -110,6 +110,22 @@ button {
 .covers img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 0.4rem; background: var(--line); }
 .run .open { width: 100%; margin-top: 0.6rem; }
 
+/* PHONE-FAST: one row per source of outputs */
+.folder {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 3.4rem;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+.folder-icon { font-size: 1.4rem; }
+.folder-name { flex: 1; }
+.folder .chip { font-size: 0.85rem; font-weight: 600; }
+.wide { width: 100%; min-height: 3rem; margin-bottom: 0.75rem; }
+.counting button { font-size: 0.85rem; }
+
 /* grid */
 .tools { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 .tools .grow { flex: 1; }
