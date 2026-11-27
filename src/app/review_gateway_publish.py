@@ -226,7 +226,8 @@ def job_batch_reader(
             return None
         if batch is None or not isinstance(batch.get("name"), str):
             return None
-        cell = batch.get("cell") if isinstance(batch.get("cell"), Mapping) else {}
+        listed = batch.get("cell")
+        cell: Mapping[str, Any] = listed if isinstance(listed, Mapping) else {}
         return {
             "batch_id": batch.get("batch_id"),
             "name": batch["name"],

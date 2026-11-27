@@ -112,8 +112,8 @@ def reseed_refusals(record: NormalizedJobRecord) -> tuple[str, ...]:
     return tuple(reasons)
 
 
-def _with_seed(record: NormalizedJobRecord, seed: int) -> NormalizedJobRecord:
-    """``record`` with ``seed`` wherever the runner reads one (provenance first, then the txt2img and top-level config)."""
+def _seeded_workload(record: NormalizedJobRecord, seed: int) -> Any:
+    """``record``'s workload with ``seed`` in the txt2img and top-level config (the provenance seed is set by the caller)."""
 
     if type(seed) is not int or not 0 <= seed <= _SEED_MAX:
         raise ValueError(f"Seed must be an integer from 0 through {_SEED_MAX}.")
@@ -125,11 +125,7 @@ def _with_seed(record: NormalizedJobRecord, seed: int) -> NormalizedJobRecord:
     nested = config.get("txt2img")
     if isinstance(nested, dict):
         nested["seed"] = seed
-    return replace(
-        record,
-        workload=replace(record.workload, config=config),
-        provenance=replace(record.provenance, seed=seed),
-    )
+    return replace(record.workload, config=config)
 
 
 def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> NormalizedJobRecord:
@@ -158,10 +154,13 @@ def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> 
         metadata[VERSIONED_DESCRIPTOR_KEY] = dict(intent.batch)
     directed = _with_run_directives(parent, intent.run_directives)
     source_metadata = dict(parent.source.metadata)
+    workload = None
+    provenance = replace(directed.provenance, metadata=metadata)
     if intent.seed is not None:
-        directed = _with_seed(directed, intent.seed)
+        workload = _seeded_workload(directed, intent.seed)
         metadata["reseed"] = {"parent_seed": parent.seed}
         source_metadata["reseed"] = True
+        provenance = replace(directed.provenance, metadata=metadata, seed=intent.seed)
     return derive_njr(
         directed,
         NjrDerivation(
@@ -171,7 +170,8 @@ def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> 
                 parent_artifact_id=intent.parent_artifact_id,
                 metadata=source_metadata,
             ),
-            provenance=replace(directed.provenance, metadata=metadata),
+            workload=workload,
+            provenance=provenance,
         ),
     )
 
