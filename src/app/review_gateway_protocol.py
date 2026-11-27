@@ -572,6 +572,8 @@ def item_manifest(
     batch: Mapping[str, Any] | None = None,
     parent: ItemRef | None = None,
     source: str = "",
+    made_from: ItemRef | None = None,
+    made_from_missing: bool = False,
 ) -> dict[str, Any]:
     """Build a manifest; refuses anything the contract does not allow rather than trimming silently.
 
@@ -620,6 +622,12 @@ def item_manifest(
         _text(parent.library_id, LIBRARY_ID)
         _text(parent.sha256, SHA256)
         body["parent"] = {"library_id": parent.library_id, "sha256": parent.sha256}
+    elif made_from is not None:
+        _text(made_from.library_id, LIBRARY_ID)
+        _text(made_from.sha256, SHA256)
+        body["input"] = {"library_id": made_from.library_id, "sha256": made_from.sha256}
+    elif made_from_missing:
+        body["input_missing"] = True
     return body
 
 

@@ -27,7 +27,8 @@ PAGE_LIMIT = 500
 #: gateway's schema would refuse the whole payload). ``item_batch``: the manifest's ``batch`` (N5 inbox grouping).
 #: ``item_parent``: the manifest's ``parent`` (PHONE-FAST rework lineage). ``item_withdraw``: the withdrawals route.
 #: ``item_source``: the manifest's ``source`` and the item-sources route (PHONE-FAST review sections).
-FEATURES = ("item_batch", "item_parent", "item_withdraw", "item_source")
+#: ``item_input``: the manifest's ``input`` and ``input_missing`` (the image a desk job started from).
+FEATURES = ("item_batch", "item_parent", "item_withdraw", "item_source", "item_input")
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
 
