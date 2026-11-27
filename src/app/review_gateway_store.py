@@ -200,6 +200,8 @@ CREATE TABLE IF NOT EXISTS published (
 CREATE INDEX IF NOT EXISTS published_digest ON published (sha256);
 -- PHONE-FAST: images whose phone rendition has been sent (a table, so an older app's inserts still work).
 CREATE TABLE IF NOT EXISTS renditions (library_id TEXT PRIMARY KEY);
+-- PHONE-FAST: images already looked at for the input image they were made from.
+CREATE TABLE IF NOT EXISTS input_checked (library_id TEXT PRIMARY KEY);
 -- PHONE-FAST: which admitted job reworks which item, and which published result came from which original.
 CREATE TABLE IF NOT EXISTS rework_jobs (job_id TEXT PRIMARY KEY, library_id TEXT NOT NULL, sha256 TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS rework_result (
@@ -440,6 +442,32 @@ class SyncLedger:
             (limit,),
         )
         return [str(row["library_id"]) for row in rows]
+
+    def set_input_checked(self, library_id: str) -> None:
+        with self._transaction() as db:
+            db.execute("INSERT OR IGNORE INTO input_checked VALUES (?)", (library_id,))
+
+    def without_input_check(self, limit: int) -> list[str]:
+        """Published images not yet looked at for an input image, newest first."""
+
+        rows = self._read(
+            "SELECT library_id FROM published WHERE state = 'published' AND kind = 'image'"
+            " AND library_id NOT IN (SELECT library_id FROM input_checked) ORDER BY at DESC LIMIT ?",
+            (limit,),
+        )
+        return [str(row["library_id"]) for row in rows]
+
+    def sent_image(self, file_sha256: str) -> tuple[str, str] | None:
+        """``(library_id, sha256 sent)`` of a published image whose file on this PC has this digest."""
+
+        rows = self._read(
+            "SELECT published.library_id, published.sha256 FROM published"
+            " LEFT JOIN public_digest ON public_digest.library_id = published.library_id"
+            " WHERE published.state = 'published' AND published.kind = 'image'"
+            " AND (published.sha256 = ? OR public_digest.file_sha256 = ?) ORDER BY published.at LIMIT 1",
+            (file_sha256, file_sha256),
+        )
+        return (str(rows[0]["library_id"]), str(rows[0]["sha256"])) if rows else None
 
     def remember_rework(self, job_ids: Sequence[str], library_id: str, sha256: str) -> None:
         with self._transaction() as db:

@@ -220,6 +220,7 @@ class Store:
             display["seed"] = str(int(display["seed"]))  # beyond JavaScript's exact integers
         batch = manifest.get("batch")
         parent = manifest.get("parent") or {}
+        made_from = manifest.get("input") or {}
         with self.write() as db:
             row = db.execute(
                 "SELECT purged_at, parent_library_id, parent_sha256 FROM item"
@@ -269,6 +270,17 @@ class Store:
                     source,
                 ),
             )
+            if made_from or manifest.get("input_missing"):
+                db.execute(
+                    "UPDATE item SET input_library_id = ?, input_sha256 = ?, input_missing = ?"
+                    " WHERE library_id = ? AND sha256 = ?",
+                    (
+                        made_from.get("library_id"),
+                        made_from.get("sha256"),
+                        0 if made_from else 1,
+                        *key,
+                    ),
+                )
             db.execute("DELETE FROM item_media WHERE library_id = ? AND sha256 = ?", key)
             missing: list[str] = []
             for variant, entry in media.items():
@@ -504,10 +516,19 @@ class Store:
                 for row in rows
                 if row["parent_library_id"]
             }
+            for row in rows:
+                if row["input_library_id"] and not row["parent_library_id"]:
+                    originals[(row["library_id"], row["sha256"])] = self._input_of(
+                        db, row, reworked, waiting
+                    )
         available = self._available(variants)
         items = []
         for row in rows:
             state, decision, reason = _item_state(row, reworked)
+            # A result still to be judged is shown beside what it was made from, or says that is not here.
+            open_result = state in ("undecided", "refused")
+            original = originals.get((row["library_id"], row["sha256"])) if open_result else None
+            had_input = bool(row["input_library_id"] or row["input_missing"])
             items.append(
                 {
                     "library_id": row["library_id"],
@@ -523,10 +544,8 @@ class Store:
                     "reason_code": reason,
                     # RG-160: requests for this image still waiting for the PC.
                     "waiting": waiting.get((row["library_id"], row["sha256"]), []),
-                    # A rework result still to be judged is shown beside the original it was made from.
-                    "compare": originals.get((row["library_id"], row["sha256"]))
-                    if state in ("undecided", "refused")
-                    else None,
+                    "compare": original,
+                    "original_missing": open_result and had_input and original is None,
                 }
             )
         if stream == STREAM:
@@ -601,6 +620,26 @@ class Store:
                 key, []
             ),  # RG-160: "Keep rework" deletes it, so the phone warns first
         }
+
+    def _input_of(
+        self,
+        db: sqlite3.Connection,
+        row: sqlite3.Row,
+        reworked: set[tuple[str, str]],
+        waiting: dict[tuple[str, str], list[str]],
+    ) -> dict[str, Any] | None:
+        """The image a desk job made this one from, as ``_original``. The PC may name it by its file's digest when
+        it was sent as other bytes (metadata paths removed), so the library id then finds it."""
+
+        found = db.execute(
+            "SELECT sha256 FROM item WHERE library_id = ? AND ready_at IS NOT NULL AND purged_at IS NULL"
+            " ORDER BY sha256 = ? DESC, ready_at DESC LIMIT 1",
+            (row["input_library_id"], row["input_sha256"]),
+        ).fetchone()
+        if found is None:
+            return None
+        original = self._original(db, row["input_library_id"], found["sha256"], reworked, waiting)
+        return {**original, "desk": True} if original else None
 
     def media_file(self, library_id: str, sha256: str, variant: str) -> tuple[Path, str]:
         with self.connection() as db:
@@ -1190,6 +1229,17 @@ class Store:
                 if now - _instant(row["answered_at"]) >= window:
                     expired.append((row["library_id"], row["sha256"]))
             expired += self._stale_undecided(db, now)
+            # An original stays while a result made from it is still to be judged beside it.
+            wanted = {
+                library_id
+                for row in db.execute(
+                    "SELECT parent_library_id, input_library_id FROM item"
+                    " WHERE purged_at IS NULL AND ready_at IS NOT NULL AND latest_record_id IS NULL"
+                )
+                for library_id in row
+                if library_id
+            }
+            expired = [key for key in expired if key[0] not in wanted]
             db.executemany(
                 "UPDATE item SET purged_at = ? WHERE library_id = ? AND sha256 = ?",
                 [(stamp(now), *key) for key in expired],
@@ -1280,8 +1330,17 @@ def _migrate(db: sqlite3.Connection) -> None:
         if column not in item_columns:
             db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS item_batch ON item (batch_id, created_at, library_id)")
-    # PHONE-FAST: the original a rework result was made from, and the item's review section.
-    for column in ("parent_library_id", "parent_sha256", "source"):
+    # PHONE-FAST: the image a desk job made an item from, or that it cannot be found.
+    if "input_missing" not in item_columns:
+        db.execute("ALTER TABLE item ADD COLUMN input_missing INTEGER")
+    # PHONE-FAST: the original a rework result was made from, the item's review section and its desk input.
+    for column in (
+        "parent_library_id",
+        "parent_sha256",
+        "source",
+        "input_library_id",
+        "input_sha256",
+    ):
         if column not in item_columns:
             db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")
 

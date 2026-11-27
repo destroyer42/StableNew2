@@ -266,6 +266,14 @@
         "source": {
           "$ref": "#/$defs/item_source"
         },
+        "input": {
+          "description": "PHONE-FAST: the image a desk job made this one from, shown beside it; it does not regroup the item. Sent only to a gateway whose health lists item_input, and never with parent.",
+          "$ref": "#/$defs/item_ref"
+        },
+        "input_missing": {
+          "description": "PHONE-FAST: the item was made from an input image the PC cannot find among its outputs.",
+          "const": true
+        },
         "parent": {
           "description": "PHONE-FAST: the item this one is a phone rework of. Sent only to a gateway whose health lists item_parent.",
           "$ref": "#/$defs/item_ref"

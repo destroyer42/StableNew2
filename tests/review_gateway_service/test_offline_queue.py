@@ -467,3 +467,16 @@ def test_the_compare_view_says_what_is_waiting_for_the_original(world) -> None:
     result = listed(world)[manifest["item"]["library_id"]]
 
     assert result["compare"]["waiting"] == ["make_video", "fix_face"]
+
+
+def test_a_desk_reprocess_compare_says_what_is_waiting_for_its_input(world) -> None:
+    queued(world, "make_video")
+    manifest, blobs = world.manifest("desk", run_id="20261125_130000_Reprocess")
+    manifest["input"] = world.item
+    for digest in world.sync.post("/sync/v1/items", json=manifest).json()["missing"]:
+        assert world.sync.put(f"/sync/v1/media/{digest}", content=blobs[digest]).is_success
+
+    items = world.phone.get("/api/runs/20261125_130000_Reprocess").json()["items"]
+
+    [compare] = [item["compare"] for item in items if item["compare"]]
+    assert (compare["desk"], compare["waiting"]) == (True, ["make_video"])

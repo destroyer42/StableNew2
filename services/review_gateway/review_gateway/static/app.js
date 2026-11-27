@@ -914,7 +914,11 @@ async function showTriage(runId, libraryId, serial) {
 
 function statusText(item) {
   if (item.state === "rework") return "Sent for rework";
-  if (!item.decision) return item.compare ? "Rework result: which is better?" : "Not decided";
+  if (!item.decision) {
+    if (item.original_missing) return "Not decided · original not found";
+    if (!item.compare) return "Not decided";
+    return item.compare.desk ? "Reprocess result: which is better?" : "Rework result: which is better?";
+  }
   const choice = item.decision.favorite ? "Favorite" : item.decision.verdict === "keep" ? "Keep" : "Delete";
   if (item.state === "unsent") return `${choice} · sending…`;
   if (item.state === "pending") return `${choice} · waiting for PC`;
@@ -1115,9 +1119,10 @@ function renderCompare(item) {
   const { list, index, runId } = triage;
   const original = item.compare;
   const current = triage;
+  const result = original.desk ? "Reprocess" : "Rework";
   const sides = [
     ["Original", original],
-    ["Rework", item],
+    [result, item],
   ];
   const images = sides.map(([name, side]) =>
     el("img", {
@@ -1207,7 +1212,8 @@ function renderCompare(item) {
     el("button", { type: "button", class: className, text, "aria-label": text, onclick });
   const choices = [
     button("keep", "Keep original", () => pick(original, item)),
-    button("keep", "Keep rework", () => pick(item, original)),
+    button("keep", `Keep ${result.toLowerCase()}`, () => pick(item, original)),
+    button("keep", "Keep both", () => pick(item, original, true)),
   ];
   const allow = () => {
     if (triage !== current || current.list[current.index] !== item) return;
@@ -1256,17 +1262,19 @@ function renderCompare(item) {
   prefetch(list.slice(index + 1, index + 1 + PREFETCH));
 }
 
-function pick(winner, loser, confirmed = false) {
+function pick(winner, loser, both = false, confirmed = false) {
   if (!triage || Date.now() < triage.lockedUntil) return;
   if (!triage.ready) {
     toast("Still loading");
     return;
   }
-  if (!confirmed && Queued.waitingOn(loser)) return Queued.confirmDelete(() => pick(winner, loser, true));
+  if (!both && !confirmed && Queued.waitingOn(loser)) {
+    return Queued.confirmDelete(() => pick(winner, loser, false, true));
+  }
   decideUndoably(
     [
       [winner, "keep"],
-      [loser, "delete"],
+      [loser, both ? "keep" : "delete"],
     ].map(([side, verdict]) => {
       const before = side.decision;
       const tags = before ? before.tags : [];
@@ -1279,7 +1287,7 @@ function pick(winner, loser, confirmed = false) {
     }),
   );
   if (navigator.vibrate) navigator.vibrate(15);
-  toast("Picked; the other goes to the archive");
+  toast(both ? "Both kept" : "Picked; the other goes to the archive");
   advance();
 }
 
