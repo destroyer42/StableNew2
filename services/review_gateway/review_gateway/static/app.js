@@ -928,7 +928,14 @@ function renderItem() {
 }
 
 // --- compare a rework with its original (PHONE-FAST) --------------------------------------------------------------
-// Side by side first; tap one to see it alone, then tap or swipe to flip. Picking keeps one and discards the other.
+// Three views, the phone's choice: side by side (tap one to see it alone), flip (tap or swipe) and a before/after
+// slider. Picking keeps one and discards the other.
+const COMPARE_KEY = "rg.compare";
+const COMPARE_MODES = [
+  ["side", "Side by side"],
+  ["flip", "Flip"],
+  ["slider", "Slider"],
+];
 
 function renderCompare(item) {
   const { list, index, runId } = triage;
@@ -948,23 +955,50 @@ function renderCompare(item) {
   const figures = sides.map(([name], position) =>
     el("figure", {}, [el("figcaption", { text: name }), images[position]]),
   );
-  const stage = el("div", { class: "stage compare" }, figures);
-  const layout = el("button", { type: "button", text: "Side by side" });
+  const divider = el("div", { class: "divider", "aria-hidden": "true" });
+  const stage = el("div", { class: "stage compare" }, [...figures, divider]);
+  let mode = "side";
   let shown = 1;
+  let split = 50; // the slider: the original left of it, the rework right of it
+  const toggles = COMPARE_MODES.map(([value, text]) =>
+    el("button", {
+      type: "button",
+      text,
+      onclick: () => {
+        writeSetting(COMPARE_KEY, value);
+        setMode(value);
+      },
+    }),
+  );
   const showSide = (position) => {
     shown = position;
-    stage.classList.add("single");
     figures.forEach((figure, i) => figure.classList.toggle("shown", i === shown));
-    layout.hidden = false;
   };
-  layout.hidden = true;
-  layout.addEventListener("click", () => {
-    stage.classList.remove("single");
-    layout.hidden = true;
-  });
+  const slide = (percent) => {
+    split = Math.min(100, Math.max(0, percent));
+    figures[1].style.clipPath = mode === "slider" ? `inset(0 0 0 ${split}%)` : "";
+    divider.style.left = `${split}%`;
+  };
+  const setMode = (value) => {
+    mode = value;
+    stage.className = `stage compare ${mode}`;
+    toggles.forEach((toggle, i) => toggle.setAttribute("aria-pressed", String(COMPARE_MODES[i][0] === mode)));
+    divider.hidden = mode !== "slider";
+    showSide(shown);
+    slide(split);
+  };
+  const saved = readSetting(COMPARE_KEY, "side");
+  setMode(COMPARE_MODES.some(([value]) => value === saved) ? saved : "side");
+  const across = (event) => {
+    const box = stage.getBoundingClientRect();
+    return ((event.clientX - box.left) / (box.width || 1)) * 100;
+  };
   let start = null;
   stage.addEventListener("pointerdown", (event) => {
     start = event.isPrimary ? { x: event.clientX, y: event.clientY, target: event.target } : null;
+  });
+  stage.addEventListener("pointermove", (event) => {
+    if (start && mode === "slider" && Math.abs(event.clientX - start.x) >= 8) slide(across(event));
   });
   stage.addEventListener("pointercancel", () => (start = null));
   stage.addEventListener("pointerup", (event) => {
@@ -977,10 +1011,13 @@ function renderCompare(item) {
     if (zoomed) return;
     const tap = Math.abs(dx) < 8 && Math.abs(dy) < 8;
     const swipe = Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy);
-    if (stage.classList.contains("single")) {
+    if (mode === "slider") {
+      if (tap) slide(across(event));
+    } else if (mode === "flip") {
       if (tap || swipe) showSide(1 - shown);
     } else if (tap && touched >= 0) {
-      showSide(touched);
+      shown = touched;
+      setMode("flip"); // one alone for a closer look; the saved view stays side by side
     }
   });
 
@@ -1025,9 +1062,9 @@ function renderCompare(item) {
     el("div", { class: "triage" }, [
       el("div", { class: "status" }, [
         el("span", { id: "state", role: "status" }),
-        layout,
         el("button", { type: "button", text: `${index + 1} / ${list.length} · info`, onclick: () => (info.hidden = !info.hidden) }),
       ]),
+      el("div", { class: "modes", role: "group", "aria-label": "Compare view" }, toggles),
       stage,
       actionRow(item),
       el("div", { class: "actions compare-actions" }, [previous, ...choices, next]),
