@@ -120,7 +120,7 @@ from src.video.motion_presets import (
 )
 from src.video.recent_video_outputs import RecentVideoOutput
 from src.video.workflow_frame_count import frame_count_advisory
-from src.video.workflow_picker import workflow_choices
+from src.video.workflow_picker import offered_workflow_ids, workflow_choices
 from src.video.workflow_tasks import (
     FIELD_ENGINE,
     FIELD_LENGTH,
@@ -234,6 +234,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # the operator opened the motion-readiness details from the header chip.
         self._view = VIEW_CREATE
         self.show_media_var = tk.BooleanVar(master=self, value=True)
+        # N13: unrated speed arms and superseded arms are offered only when this is on (saved with the form).
+        self.show_experimental_var = tk.BooleanVar(master=self, value=False)
         self._readiness_opened = False
 
         defaults = self._load_defaults()
@@ -368,6 +370,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._build_body()
         self.show_media_var.trace_add("write", lambda *_args: self._apply_show_media())
         self._apply_show_media()
+        self.show_experimental_var.trace_add("write", lambda *_args: self._sync_engine_choices())
         self.bind("<Map>", self._on_map, add="+")
         self._refresh_workflow_choices()
         self._set_text_value(self.prompt_text, str(defaults.get("prompt") or ""))
@@ -962,6 +965,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
     def _on_workflow_id_changed(self) -> None:
         self._sync_workflow_label()
+        self._sync_engine_choices()  # a hidden engine left behind drops out of the picker
         self._invalidate_experiment_preview()
         self._refresh_queue_gate()
 
@@ -1093,7 +1097,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
         visible = dict(workflow_meta.get("form_visibility") or {})
         supported = (lambda key: bool(visible.get(key, True))) if visible else (lambda key: True)
-        state = {
+        state: dict[str, Any] = {
             "workflow_id": self.workflow_var.get().strip(),
             "workflow_version": str(workflow_meta.get("workflow_version") or "").strip(),
             "source_image_path": self.source_image_var.get().strip(),
@@ -1177,6 +1181,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             # VID-UX-384: layout preferences, saved with the form and never part of a job.
             state["view"] = self._view
             state["show_media"] = bool(self.show_media_var.get())
+            state["show_experimental"] = bool(self.show_experimental_var.get())  # N13
         return state
 
     def restore_video_workflow_state(self, state: dict[str, Any] | None) -> None:
@@ -1188,6 +1193,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.show_media_var.set(bool(state.get("show_media")))
         preset = preset_by_id(state.get("motion_preset"))
         self._preset_id = NO_PRESET_ID if preset is None else preset.preset_id
+        if "show_experimental" in state:
+            self.show_experimental_var.set(bool(state.get("show_experimental")))
         self._restore_task_and_engine(state)
         self._invalidate_experiment_preview()
         self._refresh_queue_gate()
@@ -1582,7 +1589,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if self._task == TASK_BATCH and task_id != TASK_BATCH and not self._leave_batch_mode():
             self.task_selector.set_task(self._task)
             return False
-        records = list(self._workflow_map.values())
         current = self.workflow_var.get().strip()
         if FIELD_ENGINE in self._pins.pinned and current:
             self._engine_by_task[self._task] = (
@@ -1591,7 +1597,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         pinned = pinned_workflow_id or self._engine_by_task.get(task_id, "")
         if not pinned and FIELD_ENGINE in self._pins.pinned:
             pinned = current
-        choice = choose_workflow(task_id, records, pinned)
+        choice = choose_workflow(task_id, self._offered_records(pinned), pinned)
         if choice is None:
             self.task_selector.set_task(self._task)
             self.status_var.set(NO_ENGINE_MESSAGE)
@@ -1667,7 +1673,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         if not hasattr(self, "task_selector"):
             return
-        records = list(self._workflow_map.values())
+        # N13: only offered engines (Show experimental decides the unrated arms), plus the selected one.
+        records = self._offered_records(self.workflow_var.get().strip())
         eligible = {record["workflow_id"] for record in eligible_workflows(self._task, records)}
         self.workflow_combo["values"] = [
             label
@@ -1680,6 +1687,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 for task in TASKS
             }
         )
+
+    def _offered_records(self, *keep: str) -> list[dict[str, Any]]:
+        """N13: the records the picker offers now, plus ``keep`` (a selected or pinned engine stays offered)."""
+
+        records = list(self._workflow_map.values())
+        show = bool(self.show_experimental_var.get())
+        offered = offered_workflow_ids(records, show_experimental=show, keep=keep)
+        return [record for record in records if record["workflow_id"] in offered]
 
     def _rife_available(self) -> bool:
         getter = getattr(self._experiment_controller(), "rife_available", None)

@@ -161,7 +161,7 @@ def run(args):
             shell.isVisible() and shell.painted and shell.windowHandle().isExposed()
         )
         checks["navigation"] = (
-            len(all_tab_ids()) == 10 and get_destination("invalid-proof-id") is None
+            len(all_tab_ids()) == 11 and get_destination("invalid-proof-id") is None
         )
         data["import_closures"] = {
             name: import_probe(name)
