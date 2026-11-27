@@ -168,6 +168,18 @@ def _recorded_model(value: Any) -> str:
     return "" if text.lower() in ("", "unknown", "none", "automatic") else text
 
 
+def original_source(config: Any, fallback: Any = None) -> Any:
+    """A video job's input as the operator chose it. Source preparation hands the backend a resized copy that carries
+    no StableNew record, so who made the picture is read from the original (``source_preparation`` in the job's frozen
+    stage config)."""
+
+    for section in config.values() if isinstance(config, Mapping) else ():
+        prepared = section.get("source_preparation") if isinstance(section, Mapping) else None
+        if isinstance(prepared, Mapping) and prepared.get("original_source_path"):
+            return prepared["original_source_path"]
+    return fallback
+
+
 def recorded_naming(payload: Any) -> RecordedNaming:
     """Stages, model and job of an embedded StableNew image payload (empty for any other mapping)."""
 
@@ -199,6 +211,7 @@ __all__ = [
     "STAGE_LABELS",
     "model_names",
     "model_short_name",
+    "original_source",
     "recorded_naming",
     "stage_id",
     "stage_ids",
