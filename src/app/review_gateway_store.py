@@ -368,6 +368,11 @@ class SyncLedger:
                 (library_id, version, rel_path, sha256, kind, state, at),
             )
 
+    def published_items(self) -> list[sqlite3.Row]:
+        """Every item the gateway was sent and still holds, as far as this PC knows."""
+
+        return self._read("SELECT * FROM published WHERE state = 'published' ORDER BY library_id")
+
     def publish_counts(self) -> dict[str, int]:
         rows = self._read("SELECT state, count(*) AS n FROM published GROUP BY state")
         return {str(row["state"]): int(row["n"]) for row in rows}

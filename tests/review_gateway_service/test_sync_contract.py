@@ -136,8 +136,8 @@ def test_the_schema_is_a_valid_2020_12_schema() -> None:
 def test_every_top_level_payload_in_the_schema_has_a_sample() -> None:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 
-    # The RG-170 payloads have their samples in rating_samples.py, checked by test_rating.py.
-    rating = ["rating_task", "rating_submission_page", "rating_acknowledgement"]
+    # The RG-170 payloads have their samples and checks in test_rating.py and test_item_withdrawal.py.
+    rating = ["rating_task", "rating_submission_page", "rating_acknowledgement", "item_withdrawal"]
     assert [entry["$ref"].rsplit("/", 1)[1] for entry in schema["oneOf"]] == [*KINDS, *rating]
 
 

@@ -51,6 +51,7 @@ from src.app.review_gateway_protocol import (
 )
 from src.app.review_gateway_publish import GatewayPublisher
 from src.app.review_gateway_store import Device, GatewaySettings, GatewaySettingsStore, SyncLedger
+from src.app.review_gateway_withdraw import EvalWithdrawal
 from src.app.site_media_files import SiteOutputError
 from src.utils.thread_registry import get_thread_registry
 
@@ -142,6 +143,7 @@ class ReviewGatewaySync:
         self._last_full_cycle = -interval
         self._status_source: Callable[[], dict[str, Any] | None] | None = None
         self._ratings: Any = None
+        self._withdrawal = EvalWithdrawal(ledger, monotonic=monotonic)
         self._last_status: dict[str, Any] | None = None
         self._last_status_at = 0.0
         self._status_retry_at = 0.0
@@ -320,6 +322,8 @@ class ReviewGatewaySync:
             self._pull_immich(client)
             self._send_status(client)
             self._publish(client)
+            if self._publisher is not None:
+                self._withdrawal.step(client, self._publisher.root, self._stop)
             if self._ratings is not None:
                 self._ratings.step(client, busy=self._busy(), cancel=self._stop)
             self._last_full_cycle = now

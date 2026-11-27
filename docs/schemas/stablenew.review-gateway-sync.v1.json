@@ -39,6 +39,9 @@
     },
     {
       "$ref": "#/$defs/rating_acknowledgement"
+    },
+    {
+      "$ref": "#/$defs/item_withdrawal"
     }
   ],
   "$defs": {
@@ -1891,6 +1894,27 @@
           "items": {
             "$ref": "#/$defs/rating_reveal_table"
           }
+        }
+      }
+    },
+    "item_withdrawal": {
+      "description": "PC to gateway (RG-170): take this item out of the Review inbox (an eval clip, rated blind elsewhere). It records no decision. Sent only to a gateway whose health lists 'item_withdrawal'.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "item"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "item_withdrawal"
+        },
+        "item": {
+          "$ref": "#/$defs/item_ref"
         }
       }
     }
