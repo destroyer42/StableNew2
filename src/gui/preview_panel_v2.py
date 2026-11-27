@@ -28,6 +28,7 @@ from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
     STATUS_LABEL_STYLE,
     STATUS_STRONG_LABEL_STYLE,
+    SUBMISSION_ERROR_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
     TEXT_PRIMARY,
 )
@@ -339,6 +340,13 @@ class PreviewPanelV2(ttk.Frame):
             self.actions_frame, text="", wraplength=440, style=STATUS_LABEL_STYLE
         )
         self.preview_error_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.queue_refusal_label = ttk.Label(
+            self.actions_frame,
+            text="",
+            wraplength=440,
+            justify=tk.LEFT,
+            style=SUBMISSION_ERROR_LABEL_STYLE,
+        )
 
         self._update_action_states(None)
         self._bind_app_state_previews()
@@ -744,6 +752,24 @@ class PreviewPanelV2(ttk.Frame):
             pass
         if self._manage_app_state_subscriptions:
             self._on_preview_jobs_changed()
+        try:
+            # Always subscribed: a refusal must show even when the Pipeline shell owns the preview refresh.
+            for key in ("queue_refusal", "preview_jobs"):
+                self.app_state.subscribe(key, self._show_queue_refusal)
+        except (AttributeError, TypeError):
+            return
+        self._show_queue_refusal()
+
+    def _show_queue_refusal(self) -> None:
+        text = str(getattr(self.app_state, "queue_refusal", None) or "")
+        try:
+            self.queue_refusal_label.configure(text=text)
+            if text:
+                self.queue_refusal_label.grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            else:
+                self.queue_refusal_label.grid_remove()
+        except tk.TclError:
+            return
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(
