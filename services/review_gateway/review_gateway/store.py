@@ -34,14 +34,28 @@ DISCARD_UNDO = timedelta(hours=48)
 KEEP_AFTER_ANSWER = timedelta(days=14)
 STALE_FILE_S = 24 * 3600
 _SEEN_RESOLUTION = timedelta(hours=1)
+#: The phone inbox's group key for a named batch (N5); every other group is an output run folder name.
+BATCH_GROUP = "batch:"
+#: RG-140 slices 1 and 2. The schema reserves the others (N8's clip actions); the PC refuses anything it does not
+#: implement, so an older PC answers a slice-2 request with ``invalid_record``.
+PHONE_ACTIONS = frozenset(
+    {
+        "fix_face",
+        "fix_hands",
+        "fix_both",
+        "more_like_this",
+        "another_model",
+        "aspect_ratio",
+        "prompt_tweak",
+        "make_video",
+    }
+)
 #: RG-140: not a quota (the owner set none, 2026-11-26). A technical bound on one phone's *unanswered* action requests,
 #: far above a person's use (a whole 300-item batch fixed while the PC sleeps fits). It protects the outbox and the PC's
 #: next sync from a phone stuck resending in a loop with fresh keys; answered requests never count.
 MAX_PENDING_ACTIONS = 1000
 #: RG-140 slice 1. The schema reserves the others for later slices; the PC refuses anything it does not implement.
 SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
-#: The phone inbox's group key for a named batch (N5); every other group is an output run folder name.
-BATCH_GROUP = "batch:"
 
 _TABLES = """
 CREATE TABLE IF NOT EXISTS item (
@@ -488,7 +502,7 @@ class Store:
             self.contract.validate("outbox_record", record)
         except ContractError as error:
             raise GatewayError(422, "invalid_record") from error
-        if action_request["action"] not in SLICE_ONE_ACTIONS:
+        if action_request["action"] not in PHONE_ACTIONS:
             raise GatewayError(422, "invalid_record")
         key = (target["library_id"], target["sha256"])
         with self.write() as db:

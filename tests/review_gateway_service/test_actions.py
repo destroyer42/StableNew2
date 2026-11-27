@@ -112,8 +112,26 @@ def test_a_prepare_becomes_an_outbox_request_and_leaves_the_decision_alone(queue
     "action, params",
     [
         ("rm_rf", {"step": "prepare"}),
-        ("another_model", {"step": "prepare"}),  # reserved for a later slice
+        ("rerun_clip", {"step": "prepare"}),  # N8: reserved, it will call V1's shared functions
+        ("continue_clip", {"step": "prepare"}),
         ("fix_face", {"step": "prepare", "count": 2}),  # count belongs to more_like_this
+        ("fix_face", {"step": "prepare", "choice": "2x3"}),  # choice belongs to slice-2 pickers
+        ("make_video", {"step": "prepare", "choice": "2x3"}),
+        ("another_model", {"step": "prepare", "text": "smiling"}),  # text belongs to tweak/video
+        ("prompt_tweak", {"step": "prepare"}),  # the words are required
+        ("prompt_tweak", {"step": "prepare", "text": "a\nb"}),
+        ("prompt_tweak", {"step": "prepare", "text": "smiling\n"}),
+        ("prompt_tweak", {"step": "prepare", "text": "x" * 201}),
+        ("aspect_ratio", {"step": "prepare", "choice": "../x"}),
+        (
+            "another_model",
+            {
+                "step": "confirm",
+                "choice": "m1",
+                "prepared_record": str(uuid.uuid4()),
+                "summary_revision": REVISION,
+            },
+        ),
         ("more_like_this", {"step": "prepare", "count": 9}),
         ("fix_face", {}),
         ("fix_face", {"step": "run"}),
@@ -130,6 +148,46 @@ def test_actions_and_params_are_a_closed_list(queue_rig, action, params) -> None
 
     assert response.status_code == 422, response.text
     assert queue_rig.outbox()["records"] == []
+
+
+@pytest.mark.parametrize(
+    "action, params",
+    [
+        ("another_model", {"step": "prepare"}),
+        ("another_model", {"step": "prepare", "choice": "3f2a9c0d11e4b5a6"}),
+        ("aspect_ratio", {"step": "prepare", "choice": "16x9"}),
+        ("prompt_tweak", {"step": "prepare", "text": "smiling, golden hour"}),
+        ("make_video", {"step": "prepare"}),
+        ("make_video", {"step": "prepare", "text": "she turns to the window"}),
+    ],
+)
+def test_slice_two_actions_become_outbox_requests(queue_rig, action, params) -> None:
+    response = prepare(queue_rig, queue_rig.item, action, **params)
+
+    assert response.status_code == 200, response.text
+    [record] = queue_rig.outbox()["records"]
+    assert record["action_request"] == {"action": action, "params": {"step": "prepare", **params}}
+
+
+def test_a_list_of_choices_from_the_pc_is_shown(queue_rig) -> None:
+    record_id = prepare(queue_rig, queue_rig.item, "another_model").json()["record_id"]
+    queue_rig.outbox()
+    choices = {
+        "action": "another_model",
+        "items": [
+            {"id": "3f2a9c0d11e4b5a6", "label": "juggernautXL.safetensors", "current": True},
+            {"id": "77aa00bb11cc22dd", "label": "<b>pony</b>XL.safetensors"},
+        ],
+    }
+
+    assert queue_rig.acknowledge(record_id, receipt={"choices": choices}).is_success
+
+    answered = queue_rig.phone.get(f"/api/actions/{record_id}").json()
+    assert (answered["state"], answered["receipt"]) == ("applied", {"choices": choices})
+    bad = prepare(queue_rig, queue_rig.item, "another_model").json()["record_id"]
+    queue_rig.outbox()
+    broken = {**choices, "items": [{"id": "C:\\models", "label": "x"}]}
+    assert queue_rig.acknowledge(bad, receipt={"choices": broken}).status_code == 422
 
 
 def test_unknown_fields_and_unknown_items_are_refused(queue_rig) -> None:

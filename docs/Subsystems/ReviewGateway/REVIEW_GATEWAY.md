@@ -6,8 +6,9 @@ Status: Living document. The following exist and are deployed and in use (proven
 - the PC sync worker (RG-120);
 - the gateway's Immich uploader (RG-130).
 
-Phone actions (RG-140 slice 1) are built and tested hermetically only, against a fake gateway and a fake compiler.
-They have not been run on the live phone or with a real Forge ADetailer pass. See section 7 and
+Phone actions: RG-140 slice 1 (fixes, more like this) is proven live. Slice 2 (another model, aspect ratio, prompt
+tweak, Make Video, and "more like this" for whole recipes) and the inbox grouped by N5 batch (section 3.1) are tested
+hermetically only. They have not been run on the live phone or with a real backend. See section 7 and
 [RG-140](../../work_packages/RG-140_phone_actions.md).
 
 Decisions, invariants and security controls: [RG-100](../../work_packages/RG-100_phone_review_gateway.md). Payloads:
@@ -82,8 +83,8 @@ Rules:
     `enrolled_devices`; the PC decides whether to refuse its records (`revoked_device`).
 12. Action requests (RG-140) are outbox records of kind `action_request`, listed in the same pages. They never become
     an item's decision. They never change `latest_record_id`, an Immich upload or the decision state, and they are
-    never superseded. Their answer is the ordinary acknowledgement; its `receipt` may carry `action_summary`,
-    `job_ids` and `detail` (section 7).
+    never superseded. Their answer is the ordinary acknowledgement; its `receipt` may carry `choices`,
+    `action_summary`, `job_ids` and `detail` (section 7).
 13. `features` in the health reply lists the optional parts of v1 this gateway accepts. The PC sends an optional part
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
     the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1).
@@ -197,16 +198,36 @@ dependencies are exact pins in `requirements-dev.txt` that a test holds equal to
 fake HTTP server on loopback (`fake_immich.py`) with the request and reply shapes read from Immich's v2.0.0 and v3.4.2
 sources; no real Immich has been used.
 
-## 7. Phone actions (RG-140 slice 1)
+## 7. Phone actions (RG-140 slices 1 and 2)
 
-**What.** On an image, a phone with the `queue` grant can ask for one of four actions:
+**What.** On an image, a phone with the `queue` grant can ask for one of eight actions:
 
 - **Fix face**, **Fix hands** or **Fix both**: the executor's ADetailer face pass, hand pass, or both, on that exact
   image. The existing Review re-work compile writes the result under `Reprocess` and records the parent artifact.
-- **More like this**: the same prompt, checkpoint and settings with 4 new seeds (1 to 8 if asked), through the History
-  variation compiler. A recipe with more than one stage is refused for now (`recipe_not_variable`).
+- **More like this**: the same prompt, checkpoint and settings with 4 new seeds (1 to 8 if asked). A single-stage
+  txt2img image goes through the History variation compiler. Any other image whose whole recipe can be re-run, such
+  as a multi-stage chain or an N5 batch member, is a Replay with only the seed changed (slice 2). A recipe that does
+  not start with txt2img, used a source image or makes several images is refused (`recipe_not_variable`).
+- **Another model** (slice 2): the Review img2img re-work of that exact image through another checkpoint the PC
+  lists. The recorded VAE is dropped and the desktop's current img2img settings apply.
+- **Aspect ratio** (slice 2): Review's canvas extension (outpaint) to one of seven ratios. Every original pixel is
+  kept; only the new space is generated, from the image's own prompt.
+- **Tweak prompt** (slice 2): up to 200 characters of the owner's words appended to the recorded prompt, then the
+  Review img2img re-work of the image.
+- **Make video** (slice 2): the desktop's Make Video hand-off with the recommended approved workflow (today Wan2.2
+  I2V-A14B 4-step) at its default length. The motion prompt is the owner's optional words, or else the image's own
+  prompt.
 
-The other actions in the schema stay reserved and are refused.
+`rerun_clip` and `continue_clip` (N8) stay reserved and are refused (`invalid_record`). They will call V1's shared
+functions.
+
+**Picking a checkpoint or a ratio (slice 2).** A prepare of `another_model` or `aspect_ratio` without
+`params.choice` is answered `applied` with `receipt.choices`: up to 100 items of `id`, `label` and `current` (the
+image's own). It has no summary and cannot be confirmed. The phone shows the list and prepares again with
+`params.choice`. That summary's receipt repeats the choices with `selected`, so the phone offers **Change**. A
+checkpoint id is a hash prefix of its name, never a path; labels are file names. `params.text` (tweak, video) is one
+line of plain text, checked on the gateway and the PC, and only ever used as prompt text. The confirm repeats
+neither: the PC confirms what the prepare it remembers chose.
 
 **Queueing flag (owner decision 2026-11-26).** Queueing is a per-phone flag that is on by default.
 
@@ -224,7 +245,7 @@ The other actions in the schema stay reserved and are refused.
    admits nothing. It answers `applied` with `receipt.action_summary`, which holds:
    - a title and up to 8 PC-written lines;
    - the job count;
-   - `queue_position` (`next` for fixes, `last` for "more like this");
+   - `queue_position` (`next` for fixes, `last` for every other action);
    - every N1 warning, with its why and fix;
    - `revision`, a fingerprint of everything shown plus the recipe, without job ids or seeds.
 
@@ -242,7 +263,7 @@ relay uses, into `JobService.submit_njrs`. Fixes go through `submit_reprocess_nj
   twice.
 - The shown warnings are frozen in provenance as `accepted_warnings` with `surface: phone`.
 - Fixes are admitted at `JobPriority.HIGH`, the queue's existing durable priority. They run after the current job and
-  before NORMAL work, and never preempt it. "More like this" is NORMAL.
+  before NORMAL work, and never preempt it. Every other action is NORMAL.
 - Results come back to the phone through ordinary publishing.
 
 **Refusals.**
@@ -252,10 +273,10 @@ relay uses, into `JobService.submit_njrs`. Fixes go through `submit_reprocess_nj
 | `not_granted` | The phone has no `queue` grant. |
 | `revoked_device` | The phone was revoked. |
 | `unknown_item`, `digest_mismatch` | The item is not one the PC published, or its file changed. |
-| `invalid_record` | An action reserved for a later slice. |
+| `invalid_record` | An action reserved for a later slice; from a PC older than slice 2, any slice-2 action (the phone then asks for a PC update). |
 | `prepare_required` | The confirm names a prepare that is unknown, from another phone, for another item or action, or older than 30 minutes. |
 | `summary_changed` | The summary changed since the phone showed it. |
-| `action_unavailable` | The action cannot be prepared. `receipt.detail` gives a closed code: `adetailer_unavailable`, `detector_unavailable`, `model_family_refused`, `provenance_unverified`, `recipe_not_variable`, `source_changed`, `not_an_image`, `compile_failed` and others. Compiler text never crosses. |
+| `action_unavailable` | The action cannot be prepared. `receipt.detail` gives a closed code: `adetailer_unavailable`, `detector_unavailable`, `model_family_refused`, `provenance_unverified`, `recipe_not_variable`, `source_changed`, `not_an_image`, `compile_failed` and others. Slice 2 adds `choice_unavailable` (the PC no longer lists that option), `no_change` (the image already has that checkpoint or ratio), `prompt_required` (no words and no recorded prompt), `size_unsupported` (the canvas would exceed 4,096 px) and `video_unavailable` (no approved Make Video workflow). Compiler text never crosses. |
 | `admission_refused` | The job could not be admitted (for example `app_shutting_down`). |
 
 An unexpected compiler error is answered as `compile_failed`, so it never stalls the records behind it.
@@ -265,7 +286,8 @@ remains guards against duplicates and malformed input, not against volume:
 
 - Idempotency: the gateway is unique per device and key (a reused key is 409 `idempotency_conflict`). The PC ledger
   answers a re-sent record with its first outcome and admits once per prepare.
-- Input bounds: one job per fix and 1 to 8 seeds for "more like this"; JSON bodies of at most 64 KiB.
+- Input bounds: one job per action and 1 to 8 seeds for "more like this"; 200 characters of words; 100 choices;
+  JSON bodies of at most 64 KiB.
 - A technical bound: at most 1,000 *unanswered* action requests per phone on the gateway (`too_many_pending`). It
   protects the outbox and the PC's next sync from a phone stuck resending in a loop. Answered requests never count.
 
@@ -276,6 +298,11 @@ remains guards against duplicates and malformed input, not against volume:
 | `POST /api/actions` | Body `{library_id, sha256, action, params, idempotency_key}`. Answers `{record_id, state}`, or 404 `unknown_item` or 422 `not_an_image`. |
 | `GET /api/actions/{record_id}` | The phone's own request and the PC's answer (`state`, `reason_code`, `receipt`). |
 | `GET /api/actions?library_id=&sha256=` | The phone's last 20 requests for one item. |
+
+**Phone (slice 2).** The action row adds Another model, Aspect ratio, Tweak prompt and Make video. Tweak prompt and
+Make video first ask for the words (required for the tweak, optional for the video). The two pickers first show the
+PC's list. Everything is put on screen as text. The PC ledger's `action_prepares` gains `options` (a slice-2
+prepare's choice and words) the first time it is opened.
 
 The phone polls every 2 s while the summary sheet is open.
 

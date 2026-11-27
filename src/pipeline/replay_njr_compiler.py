@@ -77,6 +77,59 @@ class ReplayIntent:
     parent_artifact_id: str | None = None
     batch: Mapping[str, Any] | None = None
     run_directives: Mapping[str, Mapping[str, Any]] | None = None
+    #: Re-run the whole frozen recipe with this seed instead of the recorded one (RG-140 slice 2 "more like this").
+    #: Only an image recipe that ``reseed_refusals`` accepts may be reseeded.
+    seed: int | None = None
+
+
+_SEED_MAX = 4_294_967_295
+
+
+def reseed_refusals(record: NormalizedJobRecord) -> tuple[str, ...]:
+    """Why a persisted job's whole recipe cannot be re-run with a new seed (empty means it can).
+
+    A reseed keeps every frozen value, the prompt and every stage after txt2img included, and changes only the seed, so
+    unlike an edited variation it may carry a multi-stage chain, batch membership (archived as ``replay_origin``) or a
+    Matrix/randomizer expansion (already frozen into the record). Reasons never contain prompt text.
+    """
+
+    from src.pipeline.job_models_v2 import WorkloadKind
+
+    if record.workload_kind is not WorkloadKind.IMAGE:
+        return ("Only still-image recipes can be re-run with new seeds.",)
+    reasons: list[str] = []
+    chain = record.stage_chain_labels
+    if not chain or chain[0] != "txt2img":
+        reasons.append("Only a recipe that starts with text-to-image can be re-run with new seeds.")
+    if record.input_image_paths:
+        reasons.append(
+            "This recipe used a source image; a new seed would not reproduce that input."
+        )
+    if record.images_per_prompt != 1 or record.loop_count != 1:
+        reasons.append("Multi-image or looped recipes cannot be re-run one seed at a time.")
+    if record.provenance.learning_context is not None:
+        reasons.append("Learning experiment arms are not re-run with new seeds.")
+    return tuple(reasons)
+
+
+def _with_seed(record: NormalizedJobRecord, seed: int) -> NormalizedJobRecord:
+    """``record`` with ``seed`` wherever the runner reads one (provenance first, then the txt2img and top-level config)."""
+
+    if type(seed) is not int or not 0 <= seed <= _SEED_MAX:
+        raise ValueError(f"Seed must be an integer from 0 through {_SEED_MAX}.")
+    refusals = reseed_refusals(record)
+    if refusals:
+        raise ValueError(" ".join(refusals))
+    config = thaw_json(record.workload.config)
+    config["seed"] = seed
+    nested = config.get("txt2img")
+    if isinstance(nested, dict):
+        nested["seed"] = seed
+    return replace(
+        record,
+        workload=replace(record.workload, config=config),
+        provenance=replace(record.provenance, seed=seed),
+    )
 
 
 def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> NormalizedJobRecord:
@@ -104,6 +157,11 @@ def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> 
     if intent.batch is not None:
         metadata[VERSIONED_DESCRIPTOR_KEY] = dict(intent.batch)
     directed = _with_run_directives(parent, intent.run_directives)
+    source_metadata = dict(parent.source.metadata)
+    if intent.seed is not None:
+        directed = _with_seed(directed, intent.seed)
+        metadata["reseed"] = {"parent_seed": parent.seed}
+        source_metadata["reseed"] = True
     return derive_njr(
         directed,
         NjrDerivation(
@@ -111,11 +169,11 @@ def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> 
             source=history_lineage(
                 parent,
                 parent_artifact_id=intent.parent_artifact_id,
-                metadata=parent.source.metadata,
+                metadata=source_metadata,
             ),
-            provenance=replace(parent.provenance, metadata=metadata),
+            provenance=replace(directed.provenance, metadata=metadata),
         ),
     )
 
 
-__all__ = ["ReplayIntent", "compile_replay_intent"]
+__all__ = ["ReplayIntent", "compile_replay_intent", "reseed_refusals"]

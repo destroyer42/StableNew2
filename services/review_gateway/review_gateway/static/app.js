@@ -28,7 +28,21 @@ const ACTIONS = [
   ["fix_hands", "Fix hands"],
   ["fix_both", "Fix both"],
   ["more_like_this", "More like this"],
+  ["another_model", "Another model"],
+  ["aspect_ratio", "Aspect ratio"],
+  ["prompt_tweak", "Tweak prompt"],
+  ["make_video", "Make video"],
 ];
+// Slice 2. A picker action first asks the PC for its options; a words action asks the owner first.
+const PICKERS = {
+  another_model: "Choose a checkpoint on the PC. The image is run through it with img2img.",
+  aspect_ratio: "Choose a shape. Outpainting adds space around the image; every original pixel is kept.",
+};
+const WORDS = {
+  prompt_tweak: { required: true, hint: "Words added to this image's prompt, then img2img of the image.", placeholder: "smiling, golden hour" },
+  make_video: { required: false, hint: "What should move? Leave it empty to use the image's own prompt.", placeholder: "she turns towards the window" },
+};
+const SLICE_TWO = new Set(["another_model", "aspect_ratio", "prompt_tweak", "make_video"]);
 const DETAILS = {
   not_an_image: "only images can be fixed",
   source_changed: "the image changed on the PC",
@@ -39,6 +53,11 @@ const DETAILS = {
   adetailer_unavailable: "ADetailer is not available; connect Forge on the PC",
   detector_unavailable: "Forge lists no detector for this pass",
   operation_unsupported: "the backend cannot run this",
+  choice_unavailable: "that option is not on the PC any more; choose again",
+  no_change: "that is what the image already has",
+  prompt_required: "there are no words to use for the prompt",
+  size_unsupported: "the new canvas would be too large",
+  video_unavailable: "the PC has no approved Make Video workflow",
   app_busy: "StableNew was busy; try again",
   app_shutting_down: "StableNew is shutting down",
   compile_failed: "the PC could not prepare it",
@@ -705,8 +724,59 @@ function actionRow(item) {
     "div",
     { class: "fixes", role: "group", "aria-label": "Ask the PC" },
     ACTIONS.map(([action, text]) =>
-      el("button", { type: "button", text, onclick: () => openAction(item, action) }),
+      el("button", {
+        type: "button",
+        text,
+        onclick: () => (WORDS[action] ? askWords(item, action) : openAction(item, action)),
+      }),
     ),
+  );
+}
+
+const actionLabel = (action) => Object.fromEntries(ACTIONS)[action];
+
+function askWords(item, action) {
+  const { required, hint, placeholder } = WORDS[action];
+  const label = actionLabel(action);
+  const input = el("input", { maxlength: "200", placeholder, "aria-label": label, autocomplete: "off" });
+  const error = el("p", { class: "error", role: "alert" });
+  const go = () => {
+    // One line of plain text: the PC refuses control characters, so they never leave the phone.
+    const text = input.value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 200);
+    if (required && !text) {
+      error.textContent = "Type a few words first.";
+      return;
+    }
+    openAction(item, action, text ? { text } : {});
+  };
+  input.addEventListener("keydown", (event) => event.key === "Enter" && go());
+  sheet(
+    el("h2", { text: label }),
+    el("p", { class: "muted", text: hint }),
+    input,
+    error,
+    el("div", { class: "sheet-actions" }, [
+      el("button", { type: "button", text: "Cancel", onclick: closeSheet }),
+      el("button", { type: "button", class: "primary", text: "Ask the PC", onclick: go }),
+    ]),
+  );
+  input.focus();
+}
+
+function showChoices(item, action, choices) {
+  const buttons = choices.items.map((choice) =>
+    el("button", {
+      type: "button",
+      text: choice.current ? `${choice.label} (this image)` : choice.label,
+      "aria-pressed": String(choice.id === choices.selected),
+      onclick: () => openAction(item, action, { choice: choice.id }),
+    }),
+  );
+  return sheet(
+    el("h2", { text: actionLabel(action) }),
+    el("p", { class: "muted", text: PICKERS[action] }),
+    el("div", { class: "choices", role: "group", "aria-label": "Options" }, buttons),
+    el("div", { class: "sheet-actions" }, [el("button", { type: "button", text: "Cancel", onclick: closeSheet })]),
   );
 }
 
@@ -743,6 +813,10 @@ function waitFor(recordId, alive) {
 }
 
 function refusalText(answer) {
+  // A PC from before RG-140 slice 2 knows only the first four actions: it refuses the others as invalid.
+  if (answer.reason_code === "invalid_record" && SLICE_TWO.has(answer.action)) {
+    return "StableNew on the PC does not offer this action yet. Update it and try again.";
+  }
   const reason = REASONS[answer.reason_code] || "no reason given";
   const detail = answer.receipt && DETAILS[answer.receipt.detail];
   return detail ? `${reason}: ${detail}.` : `${reason}.`;
@@ -779,17 +853,20 @@ async function sendAction(body) {
   }
 }
 
-async function openAction(item, action) {
-  const label = Object.fromEntries(ACTIONS)[action];
-  const node = sheet(el("h2", { text: label }), el("p", { class: "muted", text: "Asking the PC for a summary…" }));
+async function openAction(item, action, extra = {}) {
+  const label = actionLabel(action);
+  const asking = PICKERS[action] && !extra.choice ? "Asking the PC for its options…" : "Asking the PC for a summary…";
+  const node = sheet(el("h2", { text: label }), el("p", { class: "muted", text: asking }));
   const alive = () => document.getElementById("sheet") === node;
   const cancel = el("button", { type: "button", text: "Close", onclick: closeSheet });
   const fail = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel);
+  const params = { step: "prepare", ...extra };
+  if (action === "more_like_this") params.count = 4;
   const body = {
     library_id: item.library_id,
     sha256: item.sha256,
     action,
-    params: action === "more_like_this" ? { step: "prepare", count: 4 } : { step: "prepare" },
+    params,
     idempotency_key: idempotencyKey(),
   };
   try {
@@ -802,9 +879,11 @@ async function openAction(item, action) {
 }
 
 function showAnswer(item, action, recordId, answer, cancel, fail) {
-  const label = Object.fromEntries(ACTIONS)[action];
+  const label = actionLabel(action);
   if (answer.state === "pending") return fail("The PC has not answered yet. It may be off; ask again later.");
   const summary = answer.receipt && answer.receipt.action_summary;
+  const choices = answer.receipt && answer.receipt.choices;
+  if (answer.state === "applied" && choices && !summary) return showChoices(item, action, choices);
   if (answer.state === "refused" && !(answer.reason_code === "summary_changed" && summary)) {
     return fail(`Not possible: ${refusalText(answer)}`);
   }
@@ -823,6 +902,7 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
     ...summaryView(summary),
     el("div", { class: "sheet-actions" }, [
       el("button", { type: "button", text: "Cancel", onclick: closeSheet }),
+      choices ? el("button", { type: "button", text: "Change", onclick: () => showChoices(item, action, choices) }) : null,
       el("button", {
         type: "button",
         class: "primary",
@@ -830,6 +910,8 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
         onclick: async (event) => {
           event.currentTarget.disabled = true;
           const alive = () => document.getElementById("sheet") === node;
+          // This sheet replaced the one the request started on, so a refusal is shown while this one is open.
+          const failHere = (text) => alive() && sheet(el("h2", { text: label }), el("p", { class: "error", text }), cancel);
           try {
             const sent = await sendAction({
               library_id: item.library_id,
@@ -840,9 +922,9 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
             });
             node.querySelector(".sheet-actions").replaceChildren(el("p", { class: "muted", text: "Waiting for the PC…" }));
             const result = await waitFor(sent.record_id, alive);
-            if (result) showAnswer(item, action, sent.record_id, result, cancel, fail);
+            if (result) showAnswer(item, action, sent.record_id, result, cancel, failHere);
           } catch (error) {
-            fail(`Not sent: ${error.code || "no connection"}.`);
+            failHere(`Not sent: ${error.code || "no connection"}.`);
           }
         },
       }),

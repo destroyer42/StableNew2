@@ -151,6 +151,8 @@ class FakeGateway:
 
     def __init__(self, secret: str = SECRET) -> None:
         self.secret = secret
+        #: What health lists; ``None`` is a gateway from before the list existed.
+        self.features: list[str] | None = None
         self.media: dict[str, bytes] = {}
         self.manifests: dict[str, dict[str, Any]] = {}
         self.outbox: list[Any] = []
@@ -167,8 +169,6 @@ class FakeGateway:
         self.declared: set[str] = set()
         self.listed: set[Any] = set()
         self.refuse_offers = False
-        #: What health lists; ``None`` is a gateway from before the list existed.
-        self.features: list[str] | None = None
 
     def request(
         self,

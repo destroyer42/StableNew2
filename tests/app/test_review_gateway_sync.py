@@ -534,7 +534,7 @@ def test_forged_and_unauthorized_records_are_refused(env):
         record = gateway.decide(library_id, sha, "keep")
         record.pop("decision")
         record.update(
-            kind="action_request", action_request={"action": action, "params": {"step": "prepare"}}
+            kind="action_request", action_request={"action": action, "params": _prepare(action)}
         )
         actions.append(record)
     env.sync.run_cycle()
@@ -781,6 +781,12 @@ def test_no_inbound_socket_is_opened(env, monkeypatch):
             assert forbidden not in text, (module.name, forbidden)
 
 
+def _prepare(action: str) -> dict:
+    """A well-formed prepare for ``action`` (a prompt tweak carries its words, RG-140 slice 2)."""
+
+    return {"step": "prepare", **({"text": "smiling"} if action == "prompt_tweak" else {})}
+
+
 def _gateway_modules():
     return [*SRC.glob("app/review_gateway_*.py"), SRC / "gui" / "review_gateway_dialog.py"]
 
@@ -857,7 +863,7 @@ def test_no_phone_record_can_reach_the_runner(tmp_path):
             record.pop("decision")
             record.update(
                 kind="action_request",
-                action_request={"action": action, "params": {"step": "prepare"}},
+                action_request={"action": action, "params": _prepare(action)},
             )
             records.append(record)
         sync.run_cycle()
