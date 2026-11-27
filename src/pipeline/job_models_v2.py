@@ -59,7 +59,11 @@ def _coerce_iso_timestamp(value: float | str | datetime | None) -> str:
         try:
             return datetime.fromtimestamp(value).isoformat()
         except (OverflowError, OSError, ValueError):
-            logger.warning("Timestamp %r could not be converted; the current time is used", value, exc_info=True)
+            logger.warning(
+                "Timestamp %r could not be converted; the current time is used",
+                value,
+                exc_info=True,
+            )
     if isinstance(value, str) and value:
         return value
     return datetime.utcnow().isoformat()

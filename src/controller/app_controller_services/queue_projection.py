@@ -51,7 +51,7 @@ class QueueSummaryProjector:
                 if record:
                     try:
                         entry = self._entry(job, record, previous.get(job.job_id))
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - one job's bad record must not blank the queue list; logged below
                         logger.warning(
                             "Failed to convert job %s to UnifiedJobSummary",
                             job.job_id,
@@ -75,7 +75,7 @@ class QueueSummaryProjector:
                         else JobStatusV2.QUEUED
                     )
                     summaries.append(UnifiedJobSummary.from_job(job, status))
-                except Exception:
+                except Exception:  # noqa: BLE001 - one job's bad record must not blank the queue list; logged below
                     logger.warning(
                         "Job %s is left out of the queue list: no summary",
                         job.job_id,

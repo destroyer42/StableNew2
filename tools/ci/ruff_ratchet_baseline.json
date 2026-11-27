@@ -98,7 +98,6 @@
       "src/pipeline/exact_profile_effective_config.py",
       "src/pipeline/executor.py",
       "src/pipeline/global_prompt_policy.py",
-      "src/pipeline/job_models_v2.py",
       "src/pipeline/openpose_compile.py",
       "src/pipeline/pipeline_runner.py",
       "src/pipeline/prompt_pack_job_builder.py",
@@ -413,9 +412,6 @@
       "src/controller/app_controller_services/application_runtime_coordinator.py": {
         "BLE001": 3,
         "S110": 3
-      },
-      "src/controller/app_controller_services/queue_projection.py": {
-        "BLE001": 2
       },
       "src/controller/app_controller_services/run_submission_service.py": {
         "BLE001": 1,
