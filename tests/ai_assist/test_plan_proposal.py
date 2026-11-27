@@ -231,7 +231,9 @@ def test_framing_declares_the_goal_as_data_and_the_schema_is_closed() -> None:
     items = ok_branch["properties"]["steps"]["items"]
     assert ok_branch["properties"]["steps"]["maxItems"] == MAX_PLAN_STEPS
     image, video = items["oneOf"]
-    assert image["properties"]["stage"]["enum"] + video["properties"]["stage"]["enum"] == list(STAGES)
+    assert image["properties"]["stage"]["enum"] + video["properties"]["stage"]["enum"] == list(
+        STAGES
+    )
     assert image["properties"]["target"]["enum"] == list(TARGETS)
     assert video["properties"]["target"]["enum"] == [None]
     assert image["properties"]["count"]["maximum"] == MAX_STEP_COUNT

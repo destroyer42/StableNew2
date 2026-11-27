@@ -322,9 +322,7 @@ def test_the_schema_has_the_decided_shape(kind: SuggestionKind) -> None:
 
 
 def test_the_payload_requirements_are_per_kind() -> None:
-    required = {
-        kind: framing.build_json_schema(REQUESTS[kind])["required"] for kind in REQUESTS
-    }
+    required = {kind: framing.build_json_schema(REQUESTS[kind])["required"] for kind in REQUESTS}
     assert required[SuggestionKind.PROMPT_REWRITE][3:] == ["positive", "negative"]
     assert required[SuggestionKind.TARGET_FIT_ADVICE][3:] == ["target"]
     assert required[SuggestionKind.WORKFLOW_CHOICE][3:] == ["workflow"]

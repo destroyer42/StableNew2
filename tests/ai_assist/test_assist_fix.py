@@ -108,7 +108,9 @@ def test_a_refusal_written_into_the_content_is_still_a_refusal(kind, payload) ->
 
 
 def test_authored_text_that_opens_like_a_refusal_is_not_called_one() -> None:
-    request = AssistRequest("c2", SuggestionKind.PROMPT_REWRITE, positive_text="I can't stop dancing")
+    request = AssistRequest(
+        "c2", SuggestionKind.PROMPT_REWRITE, positive_text="I can't stop dancing"
+    )
     document = {
         "schema": SUGGESTION_SCHEMA_ID,
         "status": "ok",
@@ -127,7 +129,11 @@ def test_a_malformed_answer_is_retried_once_with_a_tighter_instruction(installat
     first, second = worker.prompts()
     assert framing.RETRY_INSTRUCTION not in first and framing.RETRY_INSTRUCTION in second
     event = last_event(installation)
-    assert (event["attempts"], event["first_reason"], event["outcome"]) == (2, "not_json", "suggestion")
+    assert (event["attempts"], event["first_reason"], event["outcome"]) == (
+        2,
+        "not_json",
+        "suggestion",
+    )
 
 
 def test_two_malformed_answers_stay_malformed(installation) -> None:

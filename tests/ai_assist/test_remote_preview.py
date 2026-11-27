@@ -495,7 +495,11 @@ def test_invalid_registry_backed_remote_plan_is_rejected_without_repair(
     assert outcome.code is OutcomeCode.MALFORMED and outcome.reason == reason
     assert outcome.suggestion is None and outcome.details["fallback"] is False
     # A malformed answer is retried once (ASSIST-FIX); the retry never repairs it.
-    assert [path for path, _body in worker.calls] == ["/api/version", "/api/tags", "/api/generate"] * 2
+    assert [path for path, _body in worker.calls] == [
+        "/api/version",
+        "/api/tags",
+        "/api/generate",
+    ] * 2
     assert spy.calls == 0
 
 
