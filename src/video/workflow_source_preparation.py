@@ -142,6 +142,14 @@ def cover_crop_box(
     return left, top, left + crop_width, top + crop_height
 
 
+def discarded_fraction(source_size: tuple[int, int], target_size: tuple[int, int]) -> float:
+    """Share of the source a centred cover crop to ``target_size``'s shape cuts away."""
+
+    source = source_size[0] / source_size[1]
+    target = target_size[0] / target_size[1]
+    return max(0.0, 1.0 - min(source / target, target / source))
+
+
 def _source_orientation(width: int, height: int) -> str:
     if width == height:
         return "square"
@@ -329,6 +337,9 @@ def resolve_declared_target(
 ) -> tuple[str, dict[str, int], str]:
     """Orientation, target dimensions and orientation rule the policy assigns to a source size.
 
+    A policy that declares ``aspect_targets`` gets the declared size that crops the source least (the first of
+    equals); otherwise the portrait or landscape target of the source's orientation.
+
     Pure and read-only: the same decision ``prepare_declared_workflow_source`` applies, available
     without decoding or writing anything so a preview can report it truthfully."""
 
@@ -342,6 +353,14 @@ def resolve_declared_target(
     orientation = "landscape" if width > height else "portrait"
     if width == height:
         orientation = square_orientation
+    declared = policy.get("aspect_targets")
+    if declared:
+        targets = [_dimensions(item, "aspect_targets") for item in declared]
+        best = min(
+            targets,
+            key=lambda item: discarded_fraction((width, height), (item["width"], item["height"])),
+        )
+        return orientation, best, "the declared size that crops the source least"
     target = landscape_target if orientation == "landscape" else portrait_target
     rule = (
         "landscape when source width is greater than height; otherwise portrait"
@@ -384,6 +403,7 @@ __all__ = [
     "TransformedWorkflowSource",
     "WorkflowSourceGeometry",
     "cover_crop_box",
+    "discarded_fraction",
     "passthrough_declared_workflow_source",
     "prepare_declared_workflow_source",
     "prepared_source_destination",
