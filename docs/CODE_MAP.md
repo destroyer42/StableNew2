@@ -1136,7 +1136,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_registry.py`: Resolve exact workflow versions and list offerable entries under the catalog's governance rules
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
 - `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
-- `workflow_warnings.py`: The N1 warning for an experimental Comfy video workflow (``src/pipeline/policy_warnings.py``)
+- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow (``src/pipeline/policy_warnings.py``): experimental and licence
 
 ## src/video/motion/
 

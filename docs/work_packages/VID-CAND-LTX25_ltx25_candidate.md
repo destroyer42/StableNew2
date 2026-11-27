@@ -38,6 +38,8 @@ official model card links `https://github.com/Lightricks/LTX-2/blob/main/LICENSE
   and reusing them, he chose "I'll vouch for the 16": he confirms they are non-explicit and allows them for LTX-2.5. They
   are reused exactly as frozen (same paths and hashes). No agent opened them to check. This covers these 16 files only;
   every prompt must still be non-explicit.
+- **Download, 2026-11-27:** the owner accepted the gate himself and the five files of section 5 were downloaded at the
+  pinned revision (13:22-13:30 UTC), each matching its size and SHA-256, and placed as section 5 says. Nothing has run.
 
 Other terms: free below USD 10M annual revenue (personal use free); the licensee must not remove or disable provenance
 marks or watermarks and must disclose that disseminated content is machine generated; the licensor reserves the right
