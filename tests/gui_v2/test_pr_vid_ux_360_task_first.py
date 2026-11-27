@@ -189,9 +189,9 @@ def test_task_follows_an_engine_chosen_some_other_way(env):
     assert env.tab.follow_clip_frame.winfo_manager()
 
 
-def test_sequence_turns_smoothing_off_and_shows_the_shot_list(env):
+def test_sequence_smooths_the_cut_and_shows_the_shot_list(env):
     assert env.tab.select_task("sequence")
-    assert env.tab.smooth_var.get() is False
+    assert env.tab.smooth_var.get() is True  # VID-FRAME: the assembled cut is smoothed
     assert env.tab.sequence_panel.winfo_manager()
     assert env.tab.select_task("animate")
     assert env.tab.smooth_var.get() is True
