@@ -20,7 +20,7 @@ _NEVER_TRIGGERED = float("-inf")
 _STACK_DEPTH = 16
 _STACKS_PER_EPISODE = 4
 #: Other threads' sites reported for samples where the Tk thread showed only ``mainloop``.
-_OTHER_THREADS = 8
+_OTHER_THREADS = 32
 
 
 @dataclass
