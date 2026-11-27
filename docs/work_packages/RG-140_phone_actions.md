@@ -1,8 +1,10 @@
-# RG-140 — Phone actions from the review gateway (first slice)
+# RG-140 — Phone actions from the review gateway (slices 1 and 2)
 
-Status: **slice 1 implemented; hermetic evidence only (live phone and real ADetailer run pending).** Contract and decisions: [RG-100](RG-100_phone_review_gateway.md) (D6, D8, invariants
-1–6, controls S4, S8, S12). Payloads: [`stablenew.review-gateway-sync.v1`](../schemas/stablenew.review-gateway-sync.v1.json).
-Living document: [`REVIEW_GATEWAY.md`](../Subsystems/ReviewGateway/REVIEW_GATEWAY.md).
+Status: **slice 1 implemented and proven live (2026-11-26). Slice 2 implemented with hermetic evidence only: no live
+phone, real backend or generated output yet** (section "Slice 2" below). Contract and decisions:
+[RG-100](RG-100_phone_review_gateway.md) (D6, D8, invariants 1–6, controls S4, S8, S12). Payloads:
+[`stablenew.review-gateway-sync.v1`](../schemas/stablenew.review-gateway-sync.v1.json). Living document:
+[`REVIEW_GATEWAY.md`](../Subsystems/ReviewGateway/REVIEW_GATEWAY.md).
 
 ## Objective
 
@@ -20,15 +22,15 @@ Living document: [`REVIEW_GATEWAY.md`](../Subsystems/ReviewGateway/REVIEW_GATEWA
   - Gateway routes, the gateway store, phone UI, the PC sync worker, PC admission, and the desktop pairing checkbox
     and queueing toggle.
   - Tests and documentation.
-- **Explicit exclusions (later slices, each its own package):** another model, aspect ratio, prompt tweak, make video,
-  re-run a clip and continue a clip (N4/N8 remainder). The N8 video actions (re-run a clip with tweaks, continue a
+- **Explicit exclusions (later slices, each its own package):** another model, aspect ratio, prompt tweak, make video
+  (all four done in slice 2, below), re-run a clip and continue a clip (N4/N8 remainder). The N8 video actions (re-run a clip with tweaks, continue a
   clip) must call the V1 facade, not build jobs themselves. V1 is
   [`V1_motion_controls.md`](V1_motion_controls.md) section 7: the intent snapshot, the tweak vocabulary and the Tk-free
   `continue_clip` facade. Slice 1's image actions do not need them. Also excluded:
   - live job progress on the phone after the receipt;
   - telling the gateway when the desktop withdraws a phone's queueing (a `device_grant` payload). Until then the
     phone still shows the action buttons, and the PC refuses the requests as `not_granted`;
-  - "more like this" for multi-stage recipes (Q2, owner decision: a later slice);
+  - "more like this" for multi-stage recipes (Q2, owner decision: a later slice; done in slice 2);
   - the touch-up lane on the AI worker (RG-145);
   - eval ratings on the phone (RG-150).
 
@@ -172,6 +174,76 @@ Gateway rules:
 - `REVIEW_GATEWAY.md`: phone actions, sync binding rules, retention note.
 - The schema (A8).
 - `STATUS.md`: the Operator Site line.
+
+## Slice 2 (2026-11-26)
+
+### Objective
+
+- **Owner outcome:** four more one-tap asks on an image, through the same prepare and confirm flow: run it through
+  another of the PC's checkpoints, change its aspect ratio, add a few words to its prompt, or make a video of it.
+  "More like this" also works for multi-stage recipes and for images from an N5 batch.
+- **In scope:** the actions `another_model`, `aspect_ratio`, `prompt_tweak` and `make_video`; "more like this" for
+  whole recipes; the schema, the PC codec and compilers, the gateway's accepted list and the phone UI.
+- **Explicit exclusions:** `rerun_clip` and `continue_clip` (N8) stay reserved and are refused as
+  `invalid_record`. They will call V1's shared functions. Also excluded: resize-and-img2img for the aspect ratio, a
+  free-form prompt editor, and per-model recipes for "another model".
+- **Same package, separate commit:** the phone inbox grouped by N5 batch (`REVIEW_GATEWAY.md` section 3.1).
+
+### Decisions taken in this slice (agent defaults; owner questions below)
+
+| # | Decision | Taken |
+|---|---|---|
+| B1 | How the phone picks a model or a ratio | **The PC lists, the phone picks, then the normal prepare.** A prepare of `another_model` or `aspect_ratio` without `params.choice` is answered `applied` with `receipt.choices` (`action_choices`: up to 100 items of `id`, `label`, `current`). It has no summary, so it cannot be confirmed (`prepare_required`). The phone prepares again with `params.choice` set to one id. That summary's receipt carries the choices again, with `selected`, so the phone can change it. A checkpoint id is the first 16 hex characters of the SHA-256 of its name: stable, and never a path. Ratio ids are fixed: `1x1`, `4x5`, `2x3`, `9x16`, `5x4`, `3x2` and `16x9`. |
+| B2 | Another model | **The Review img2img re-work of that exact image with the checkpoint swapped.** `prepare_review_batch` gains `model_override`. The recorded VAE is dropped, because it belongs to the recorded checkpoint, and every other recorded setting is kept. The desktop's current img2img settings, denoise included, fill the rest, as for any Review re-work. The checkpoint list is what the model picker has (`app_state.resources["models"]`). Choosing the image's own checkpoint is refused as `no_change`. N1: the checkpoint's model warning is shown (`shown_model_warnings`). |
+| B3 | Aspect ratio | **Outpaint, not resize-and-img2img.** It uses Review's canvas extension (`prepare_outpaint_edit`), so every original pixel is kept and restored at finalization. Only the new space is generated, from the image's own recorded prompt. Space is added evenly on the two short sides and aligned to 8 (`extents_for_aspect`). An image within 2% of the ratio is `no_change`. A canvas beyond 4,096 px on a side is `size_unsupported`. A target that cannot outpaint is refused as `operation_unsupported` (N1b real block); an unclassified SDXL checkpoint runs with its warning. |
+| B4 | Prompt tweak | **Words appended to the recorded prompt, then the Review img2img re-work** (`prompt_mode="append"`, the existing prompt delta). Same checkpoint. `params.text` is required: one line of plain text, 1 to 200 characters, no control characters. The PC collapses its whitespace, and a blank one is `prompt_required`. The words are shown back in the summary, scrubbed like every summary line. |
+| B5 | Make Video | **The desktop's Make Video hand-off, compiled without the Video Workflow tab** (`gateway_make_video` in `src/app/site_phone_video.py`). It uses the recommended approved workflow (`make_video_default`, today Wan2.2 I2V-A14B 4-step) at its default frame count and default negative prompt, one clip, with a fresh seed at each step. The motion prompt is the optional `params.text`, or else the image's own recorded prompt; with neither it is `prompt_required`. The prepared source is frozen and verified as the desktop does it. No approved workflow is `video_unavailable`. |
+| B6 | More like this, widened (Q2 follow-up) | **A single-stage txt2img image keeps slice 1's path** (the History variation compiler). **Any other image whose whole recipe can be re-run is a Replay with a new seed per job** (`ReplayIntent.seed`, `reseed_refusals`). That covers multi-stage chains such as txt2img → ADetailer → upscale, N5 batch members and Matrix-expanded jobs. Every frozen value is kept and only the seed changes. The parent's batch keys are archived under `replay_origin`, as for every Replay. The proof is of identity (`verified_recipe_source`): the embedded job id names a completed History job that recorded exactly this file, and the embedded NJR fingerprint matches its snapshot. A recipe that does not start with txt2img, used a source image, makes several images or is a Learning arm stays `recipe_not_variable`. |
+| B7 | Priorities and limits | **Unchanged owner decisions.** Only the fixes are HIGH; the four new actions and "more like this" are NORMAL (`queue_position: last`). There is no quota. Input bounds: one job per action (1 to 8 for "more like this"), 200 characters of text and 100 choices. Queueing stays on by default. |
+| B8 | Compatibility | **Additive schema, no version bump.** New: `params.choice` and `params.text`, with which actions and step they belong to; `choice_id`; `action_choices`; `receipt.choices`; and five detail codes (`choice_unavailable`, `no_change`, `prompt_required`, `size_unsupported`, `video_unavailable`). An older gateway refuses the new actions (422) and never forwards them, so it never sees `receipt.choices`. An older PC refuses them as `invalid_record`; the new phone then says the PC needs updating. The PC ledger's `action_prepares` gains an `options` column (the prepare's choice and text) when it is opened. |
+
+### Owner questions (defaults are in force until answered)
+
+1. Aspect ratio: is outpainting (add space, keep every pixel) the right default, or should a resize-and-img2img option
+   be offered too?
+2. Another model: should it apply the chosen checkpoint's saved recipe (N5 decision 3: sampler, steps, CFG, size,
+   VAE) instead of the image's recorded settings? Today a cross-family swap, such as SDXL to FLUX, keeps SDXL settings.
+3. Prompt tweak: img2img of the image with the words appended (any image, multi-stage included), or "Regenerate with
+   Changes" from the recipe with the same seed (single-stage txt2img only)?
+4. Make Video: is the image's own prompt a good default motion prompt, and is one clip at the workflow's default
+   length right?
+5. Should the result of a phone action on an N5 batch image appear in the same batch group on the phone? Today it
+   does not: a re-work writes under `Reprocess` and a Replay starts a new submission.
+
+### Acceptance and evidence (slice 2)
+
+- Each new action can be prepared and confirmed on a published image. It is admitted once through `admit_phone_records`
+  into `JobService.submit_njrs` at NORMAL priority, with the shown warnings frozen as `surface: phone`. A picker
+  lists before it summarizes. A changed choice or text changes the revision. An unlisted choice, an unchanged model,
+  blank words and a reserved clip action are refused with closed codes.
+- "More like this" on a multi-stage N5 batch image re-runs the whole recipe with new seeds and archives the batch keys.
+- Evidence mode: hermetic tests only, no qualification claim.
+  - `tests/app/test_review_gateway_actions.py`: the flow, with a fake compiler and the real JobService and
+    repository.
+  - `tests/app/test_review_gateway_actions_slice2.py`: the application compiler against a recording host; the host
+    against the real Review img2img and outpaint compilers; Make Video against the real workflow catalog and NJR
+    builder.
+  - `tests/pipeline/test_replay_reseed_rg140.py` and `tests/pipeline/test_outpaint_aspect_rg140.py`.
+  - The protocol and the gateway's ASGI tests.
+- Not demonstrated: the live phone, a real Forge img2img or outpaint, a real A14B run, and the live app.
+
+### Execution class, model and surface
+
+- Execution class: Standard-high (security boundary, within the approved RG-100 design; no queue-concurrency change).
+  Model recommendation: Claude Code Opus 5.5 High; Codex GPT-6 Astra High.
+- Start: 2026-11-26, branch `claude/rg-140-slice2-batch-inbox` from `origin/main` `dbbd1e87`. Coordinated with
+  PR #458 (LAUNCH-UPDATE-2), which also extends the schema; the additions do not overlap.
+- PC surface: `src/app/review_gateway_{protocol,actions,store}.py`, `src/app/site_phone_{preview_host,followup,video}.py`,
+  `src/controller/review_batch_service.py` (one keyword), and `src/pipeline/{replay_njr_compiler,outpaint_canvas}.py`
+  (two pure additions). Gateway surface: `store.py` (the accepted list) and `static/app.js`, `static/app.css`.
+  Controllers: no ratcheted controller changes.
+- Token-efficient validation: the gateway, protocol and action suites first, then `tests/system`, the PR gate,
+  `tests/tools/test_code_map.py`, the ruff ratchets and the gateway's py311 ruff configuration.
 
 ## Completion report
 

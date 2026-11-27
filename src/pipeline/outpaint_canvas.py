@@ -132,6 +132,38 @@ def aligned_extents(original_size: tuple[int, int], extents: Extents) -> Extents
     )
 
 
+#: Within this relative difference an image already has a ratio, and extending it would add a sliver, not a change.
+ASPECT_TOLERANCE = 0.02
+
+
+def has_aspect(original_size: tuple[int, int], ratio: tuple[int, int]) -> bool:
+    width, height = original_size
+    target = ratio[0] / ratio[1]
+    return abs(width / height - target) <= ASPECT_TOLERANCE * target
+
+
+def extents_for_aspect(original_size: tuple[int, int], ratio: tuple[int, int]) -> Extents | None:
+    """The canvas extension that gives ``original_size`` the ``ratio`` (width, height) by adding space only.
+
+    The new space is split evenly between left and right (a wider ratio) or top and bottom (a taller one), then aligned
+    by ``aligned_extents``. ``None`` when the image already has the ratio (``has_aspect``). The caller still checks the
+    result against ``plan_geometry`` limits.
+    """
+
+    width, height = original_size
+    if width <= 0 or height <= 0 or ratio[0] <= 0 or ratio[1] <= 0:
+        raise ValueError("Sizes and ratios must be positive")
+    if has_aspect(original_size, ratio):
+        return None
+    if width * ratio[1] < height * ratio[0]:  # too narrow: add width
+        extra = -(-height * ratio[0] // ratio[1]) - width
+        extents = Extents(left=extra // 2, right=extra - extra // 2)
+    else:  # too wide: add height
+        extra = -(-width * ratio[1] // ratio[0]) - height
+        extents = Extents(top=extra // 2, bottom=extra - extra // 2)
+    return aligned_extents(original_size, extents)
+
+
 def plan_geometry(
     original_size: tuple[int, int], extents: Extents, *, steps: int | None = None
 ) -> CanvasGeometry:

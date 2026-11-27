@@ -148,6 +148,69 @@ def verified_history_source(
     return record, snapshot
 
 
+_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
+
+
+def _recorded_images(result: Any) -> set[Path]:
+    """Every still image a job's result records as its output (the artifact and its variants)."""
+
+    payload = result if isinstance(result, Mapping) else {}
+    artifacts = [payload.get("artifact")] + [
+        variant.get("artifact")
+        for variant in payload.get("variants") or []
+        if isinstance(variant, Mapping)
+    ]
+    found: set[Path] = set()
+    for artifact in artifacts:
+        if not isinstance(artifact, Mapping):
+            continue
+        values = [artifact.get(key) for key in ("primary_path", "output_path", "path")]
+        listed = artifact.get("output_paths")
+        values += list(listed) if isinstance(listed, list) else []
+        for value in values:
+            if isinstance(value, str) and Path(value).suffix.lower() in _IMAGE_SUFFIXES:
+                found.add(Path(value).absolute())
+    return found
+
+
+def verified_recipe_source(
+    repository: JobRepository, path: Path, raw: bytes
+) -> tuple[NormalizedJobRecord, str]:
+    """The completed job that wrote the image at ``path``, for re-running its whole recipe (RG-140 slice 2).
+
+    ``verified_history_source`` admits only what Iterate can edit (one txt2img stage, no batch). "More like this" of a
+    multi-stage or batched recipe changes nothing but the seed, so here the proof is only of identity: the image's
+    embedded job id names a completed History job that recorded exactly this file, and its embedded NJR fingerprint
+    matches that job's snapshot. Anything else is ``followup_provenance_unverified``.
+    """
+
+    metadata = read_image_metadata(path, source_bytes=raw)
+    job_id = metadata.get(ImageMetadataContractV26.KEY_JOB_ID)
+    entry = repository.get_job(job_id) if job_id else None
+    snapshot = getattr(entry, "snapshot", None)
+    status = getattr(entry, "status", None)
+    if (
+        entry is None
+        or str(getattr(status, "value", status) or "") != JobStatus.COMPLETED.value
+        or not isinstance(snapshot, Mapping)
+        or not snapshot
+    ):
+        raise SiteOutputError("followup_provenance_unverified")
+    try:
+        record = normalized_job_from_snapshot(snapshot)
+    except (TypeError, ValueError, KeyError) as error:
+        raise SiteOutputError("followup_provenance_unverified") from error
+    fingerprint_ = snapshot_fingerprint(snapshot)
+    if (
+        record is None
+        or record.job_id != job_id
+        or path.absolute() not in _recorded_images(getattr(entry, "result", None))
+        or metadata.get(ImageMetadataContractV26.KEY_NJR_SHA256) != fingerprint_
+    ):
+        raise SiteOutputError("followup_provenance_unverified")
+    return record, fingerprint_
+
+
 @dataclass(frozen=True)
 class _Plan:
     objective: str
