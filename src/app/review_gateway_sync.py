@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from threading import Event, Lock, Thread
 from typing import Any
 
-from src.app.review_gateway_apply import IN_PROGRESS, ApplyDeferred, RecordApplier
+from src.app.review_gateway_apply import ApplyDeferred, RecordApplier
 from src.app.review_gateway_client import (
     GatewayClient,
     GatewayError,
@@ -35,6 +35,7 @@ from src.app.review_gateway_client import (
     Transport,
 )
 from src.app.review_gateway_protocol import (
+    IN_PROGRESS,
     SCHEMA_VERSION,
     PairingOffer,
     ProtocolError,

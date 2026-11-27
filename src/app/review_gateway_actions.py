@@ -134,6 +134,8 @@ class ActionCompiler(Protocol):
 
     def choices(self, action: str, path: Path, digest: str) -> ActionChoices: ...
 
+    def ready(self, action: str) -> bool: ...
+
 
 #: ``(owner, receipt id, compiled action, warnings shown, runs next) -> admitted job ids``.
 Admit = Callable[[str, str, CompiledAction, tuple[PolicyWarning, ...], bool], list[str]]
