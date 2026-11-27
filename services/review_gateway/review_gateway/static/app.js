@@ -475,6 +475,42 @@ async function loadRun(runId) {
   return items;
 }
 
+// --- scroll position (PHONE-FAST) ---------------------------------------------------------------------------------
+// The home, section and run lists come back where they were left. A place is remembered by the entries on screen, so
+// it holds when reviewed ones have left the list; the pixel offset is the fallback.
+
+const places = new Map(); // list address -> { y, seen: [[entry id, distance from the top of the window]] }
+let listed = null; // the address of the list on screen ("" is home), null for any other view
+
+const listName = (hash) => hash.replace(/^#\/?/, "");
+const entries = () => [...view.querySelectorAll("[data-anchor]")];
+
+function savePlace() {
+  if (listed === null) return;
+  const header = document.getElementById("bar")?.offsetHeight || 0;
+  const seen = entries()
+    .map((node) => [node.getAttribute("data-anchor"), node.getBoundingClientRect()])
+    .filter(([, box]) => box.bottom > header)
+    .slice(0, 12)
+    .map(([id, box]) => [id, box.top]);
+  places.set(listed, { y: window.scrollY, seen });
+}
+
+function restorePlace(name) {
+  listed = name;
+  const place = places.get(name);
+  window.scrollTo(0, place ? place.y : 0);
+  if (!place) return;
+  const present = new Map(entries().map((node) => [node.getAttribute("data-anchor"), node]));
+  for (const [id, top] of place.seen) {
+    const node = present.get(id);
+    if (node) {
+      window.scrollBy(0, node.getBoundingClientRect().top - top);
+      return;
+    }
+  }
+}
+
 // --- views --------------------------------------------------------------------------------------------------------
 
 function show(heading, canGoBack, ...nodes) {
@@ -1656,12 +1692,15 @@ function advance() {
 function leaving(runId, fromTriage = true) {
   if (fromTriage && !isStream(runId)) return `#/run/${encodeURIComponent(runId)}`;
   const name = runId.startsWith("all:") ? runId.slice(4) : runId === "all" ? "" : section;
-  return name ? `#/section/${name}` : "";
+  return name ? `#/section/${name}` : "#/";
 }
 
 async function route() {
   const serial = ++renderSerial;
   const [, page, run, libraryId] = location.hash.split("/");
+  const name = listName(location.hash);
+  savePlace();
+  listed = null;
   triage = null;
   closeSheet();
   try {
@@ -1671,6 +1710,8 @@ async function route() {
     else if (page === "update") await showUpdate(serial);
     else if (page === "section" && SECTIONS[run]) await showSection(run, serial);
     else await showHome(serial);
+    const isList = !page || page === "run" || page === "section";
+    if (isList && serial === renderSerial) restorePlace(name);
   } catch (error) {
     if (serial !== renderSerial) return;
     if (error.status === 401) showPairing();
@@ -1722,7 +1763,7 @@ async function refresh() {
 
 back.addEventListener("click", () => {
   const [, page, run] = location.hash.split("/");
-  location.hash = (page === "triage" || page === "run") && run ? leaving(decodeURIComponent(run), page === "triage") : "";
+  location.hash = (page === "triage" || page === "run") && run ? leaving(decodeURIComponent(run), page === "triage") : "#/";
 });
 window.addEventListener("hashchange", route);
 window.addEventListener("online", () => flush());
@@ -1736,6 +1777,7 @@ document.addEventListener("visibilitychange", () => document.hidden && releaseHe
 window.addEventListener("pagehide", releaseHeld);
 setInterval(refresh, REFRESH_MS);
 
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 showBadges();
 flush();
 route();
