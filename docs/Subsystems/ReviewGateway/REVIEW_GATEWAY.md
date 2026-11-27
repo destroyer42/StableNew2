@@ -148,6 +148,22 @@ A packs × models batch (N5) writes many run folders, but the owner queued it as
   new to an older gateway. Items published before both sides were updated are not published again, so they keep
   their run folder groups.
 
+### 3.2 Sent for rework, then compare (PHONE-FAST)
+
+- **Rework** actions are those with one result to compare: Fix face, Fix hands, Fix both, Another model and Aspect
+  ratio. More like this, Tweak prompt and Make video do not change the original.
+- A queued rework (a `confirm`, or a one-step `queue`, that the PC has not refused and the phone has not cancelled)
+  gives an undecided original the state `rework`: it counts as reviewed and can still be decided from the grid. A
+  refusal returns it. The state is derived from the outbox and is not a decision.
+- **PC.** Every admitted rework job is recorded with its original (`rework_jobs`). When an image of such a job is
+  published, the lineage is kept (`rework_result`) and the manifest names `parent`, only to a gateway that lists
+  `item_parent`.
+- **Gateway.** A result sits beside its original: it takes the original's batch, or its run folder group when the
+  original has no batch (so a kept result goes to the original's Immich album).
+- **Phone.** While the original is on the gateway and not deleted, the result is shown beside it. Tap one to see it
+  alone and tap or swipe to flip, then **Keep original** or **Keep rework**. The pick is two ordinary decisions: keep
+  one, delete (archive) the other. The kept one keeps its Favorite mark and tags.
+
 ## 4. Retention (D4)
 
 Hourly, and by `review-gateway-admin purge`. An item is purged only when it has no unanswered record and its latest

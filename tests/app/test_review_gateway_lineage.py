@@ -35,8 +35,10 @@ def publish(env, features):
     client.health()
     indexed(env, 2)
     assert env.publisher.publish(client, limit=8, cancel=Event()).published == 2
-    return {env.ledger.published(key)["rel_path"].split("/")[-1]: (key, manifest)
-            for key, manifest in env.gateway.manifests.items()}
+    return {
+        env.ledger.published(key)["rel_path"].split("/")[-1]: (key, manifest)
+        for key, manifest in env.gateway.manifests.items()
+    }
 
 
 def test_rework_actions_are_the_ones_with_one_result_to_compare():

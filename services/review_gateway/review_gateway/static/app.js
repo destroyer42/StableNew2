@@ -836,7 +836,14 @@ function pick(winner, loser) {
     [winner, "keep"],
     [loser, "delete"],
   ]) {
-    queueDecision(side, verdict, false, []);
+    const before = side.decision;
+    const tags = before ? before.tags : [];
+    queueDecision(
+      side,
+      verdict,
+      verdict === "keep" && Boolean(before && before.favorite),
+      verdict === "keep" ? tags : tags.filter((tag) => tag !== "needs_fix"),
+    );
     for (const copy of findItem(key(side))) {
       copy.decision = side.decision;
       copy.state = side.state;

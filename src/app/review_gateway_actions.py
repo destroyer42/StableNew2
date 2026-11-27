@@ -296,7 +296,26 @@ class GatewayActions:
             # The phone shows this one instead; confirming this record admits it (it acts as a prepare).
             self._remember(record, request.action, count, options, summary, now)
             return _refused(SUMMARY_CHANGED, action_summary=summary.payload())
-        receipt_id = str(prepared["record_id"]).replace("-", "")
+        outcome = self._admit_compiled(
+            record, str(prepared["record_id"]).replace("-", ""), compiled, summary
+        )
+        if outcome.outcome == "applied":
+            self._ledger.mark_prepare_admitted(
+                str(prepared["record_id"]), record.record_id, outcome.receipt
+            )
+        return outcome
+
+    def _admit_compiled(
+        self,
+        record: OutboxRecord,
+        receipt_id: str,
+        compiled: CompiledAction,
+        summary: ActionSummary,
+    ) -> ActionOutcome:
+        """Admit what was compiled. Every admission path goes through here, so each rework is remembered."""
+
+        request = record.action_request
+        assert request is not None
         try:
             compiled.require_current()
             job_ids = self._admit(
@@ -314,10 +333,9 @@ class GatewayActions:
         except Exception as error:  # noqa: BLE001 - answered, never retried into a second admission
             log.error("A phone action was not admitted (%s)", type(error).__name__)
             return _refused(ADMISSION_REFUSED, detail="compile_failed")
-        receipt = {"job_ids": job_ids, "action_summary": summary.payload()}
-        self._ledger.mark_prepare_admitted(str(prepared["record_id"]), record.record_id, receipt)
         if request.action in REWORK_ACTIONS:
             self._ledger.remember_rework(job_ids, record.target.library_id, record.target.sha256)
+        receipt = {"job_ids": job_ids, "action_summary": summary.payload()}
         return ActionOutcome("applied", receipt=receipt)
 
     # -- summary ---------------------------------------------------------------------------------------------------

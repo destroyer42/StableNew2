@@ -204,10 +204,25 @@ class Store:
         parent = manifest.get("parent") or {}
         with self.write() as db:
             row = db.execute(
-                "SELECT purged_at FROM item WHERE library_id = ? AND sha256 = ?", key
+                "SELECT purged_at, parent_library_id, parent_sha256 FROM item"
+                " WHERE library_id = ? AND sha256 = ?",
+                key,
             ).fetchone()
             if row is not None and row["purged_at"] is not None:
                 return "purged", []
+            run_id = manifest["run_id"]
+            batch_id = batch["batch_id"].lower() if batch else None
+            batch_text = json.dumps(batch) if batch else None
+            # A rework result sits beside its original: it joins the original's batch, or its run folder group.
+            origin = db.execute(
+                "SELECT run_id, batch_id, batch FROM item WHERE library_id = ? AND sha256 = ?",
+                (
+                    parent.get("library_id") or (row["parent_library_id"] if row else None),
+                    parent.get("sha256") or (row["parent_sha256"] if row else None),
+                ),
+            ).fetchone()
+            if origin is not None:
+                run_id, batch_id, batch_text = origin["run_id"], origin["batch_id"], origin["batch"]
             db.execute(
                 "INSERT INTO item (library_id, sha256, run_id, kind, created_at, duration_s, display,"
                 " batch_id, batch, parent_library_id, parent_sha256)"
@@ -220,13 +235,13 @@ class Store:
                 " parent_sha256 = COALESCE(excluded.parent_sha256, parent_sha256)",
                 (
                     *key,
-                    manifest["run_id"],
+                    run_id,
                     manifest["kind"],
                     stamp(_instant(manifest["created_at"])),
                     manifest.get("duration_s"),
                     json.dumps(display),
-                    batch["batch_id"].lower() if batch else None,
-                    json.dumps(batch) if batch else None,
+                    batch_id,
+                    batch_text,
                     parent.get("library_id"),
                     parent.get("sha256"),
                 ),
@@ -1106,12 +1121,14 @@ def _state(status: str) -> str:
 
 
 def _reworked(db: sqlite3.Connection) -> set[tuple[str, str]]:
-    """Items with a queued rework: a confirm the PC has not refused. Derived from the outbox, so an older PC counts."""
+    """Items with a queued rework: a confirm (or a one-step ``queue``, RG-160) the PC has not refused and the phone has
+    not cancelled. Derived from the outbox, so an older PC counts."""
 
     marks = ",".join("?" * len(REWORK_ACTIONS))
     rows = db.execute(
-        "SELECT library_id, sha256 FROM outbox WHERE kind = 'action_request' AND status <> 'refused'"
-        " AND json_extract(record, '$.action_request.params.step') = 'confirm'"
+        "SELECT library_id, sha256 FROM outbox WHERE kind = 'action_request'"
+        " AND status NOT IN ('refused', 'superseded')"
+        " AND json_extract(record, '$.action_request.params.step') IN ('confirm', 'queue')"
         f" AND json_extract(record, '$.action_request.action') IN ({marks})",
         REWORK_ACTIONS,
     ).fetchall()

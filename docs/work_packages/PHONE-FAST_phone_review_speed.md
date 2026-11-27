@@ -72,6 +72,7 @@ waits for a gateway that offers it.
 - A result whose original is still on the gateway and not deleted is shown with it: tap to flip between the two, then
   "Keep original" or "Keep rework". The pick is kept and the other is discarded (to the archive), as two ordinary
   decisions.
+- A result joins the original's batch group (its run folder group when it has no batch).
 - Lineage stays in the PC ledger (`rework_result`) and on the gateway item.
 
 ### (e) Continuous triage (PR 2)
