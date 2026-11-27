@@ -910,3 +910,41 @@ def test_a_refused_secret_is_reported(env):
     client = GatewayClient(env.gateway, "wrong-secret-" + "y" * 30)
     with pytest.raises(GatewayUnauthorized):
         client.outbox(None)
+
+
+def test_an_answered_phone_action_makes_the_next_pulls_quick(tmp_path, monkeypatch):
+    """After the PC answers a phone action the next step ("Queue") is picked up within a second, not five."""
+
+    from src.app.review_gateway_apply import Applied
+    from src.app.review_gateway_sync import (
+        ACTION_FOLLOW_INTERVAL,
+        ACTION_FOLLOW_WINDOW,
+        SYNC_INTERVAL,
+    )
+
+    clock = [1000.0]
+    env = Env(tmp_path, monotonic=lambda: clock[0])
+    assert env.sync.run_cycle() == SYNC_INTERVAL  # idle: the usual cadence
+    monkeypatch.setattr(env.applier, "handle", lambda raw: Applied(raw["record_id"], "applied"))
+    record = env.gateway.decide("a" * 32, "b" * 64, "keep")
+    record.pop("decision")
+    record.update(
+        kind="action_request", action_request={"action": "fix_face", "params": {"step": "prepare"}}
+    )
+
+    clock[0] += SYNC_INTERVAL
+    assert env.sync.run_cycle() == ACTION_FOLLOW_INTERVAL
+
+    env.gateway.calls.clear()
+    clock[0] += ACTION_FOLLOW_INTERVAL
+    assert env.sync.run_cycle() == ACTION_FOLLOW_INTERVAL
+    paths = {path for _method, path in env.gateway.calls}
+    assert paths and "health" not in str(paths)  # quick cycles skip health, Immich and publishing
+
+    clock[0] += SYNC_INTERVAL  # a full cycle still runs every SYNC_INTERVAL inside the window
+    env.gateway.calls.clear()
+    env.sync.run_cycle()
+    assert any("outbox" not in path for _method, path in env.gateway.calls)
+
+    clock[0] += ACTION_FOLLOW_WINDOW
+    assert env.sync.run_cycle() == SYNC_INTERVAL
