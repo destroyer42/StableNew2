@@ -24,11 +24,14 @@ def readiness_has_warning(view: Any) -> bool:
 
 
 def readiness_is_relevant(view: Any, *, follow_clip_task: bool, opened: bool) -> bool:
-    """Details show for the driving-clip task, an engine that takes a driving video, a problem, or on request."""
+    """Details show for a problem, on request, or for an engine that takes a driving video outside its task.
 
-    return bool(
-        follow_clip_task or view.accepts_driving_video or readiness_has_warning(view) or opened
-    )
+    The follow-a-driver task (V1-3) keeps them behind the header chip unless the source cannot be read: they are
+    inspection, not control, and they count frames, which that task never shows."""
+
+    if follow_clip_task:
+        return bool(opened or view.source_state == "error")
+    return bool(view.accepts_driving_video or readiness_has_warning(view) or opened)
 
 
 def readiness_chip_text(view: Any, *, has_source: bool) -> str:

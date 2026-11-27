@@ -44,6 +44,7 @@ _KEY_LABELS = (
     "start",
     "end",
     "frame-rate conversion",
+    "working frame",
 )
 
 
@@ -61,6 +62,8 @@ class PrepInputs:
     start_text: str = ""
     end_text: str = ""
     convert: bool = False
+    #: The frame (width, height) a large driver is scaled down to cover (V1-3); ``None`` keeps its own size.
+    cover: tuple[int, int] | None = None
 
     def key(self) -> tuple[Any, ...]:
         return (
@@ -71,6 +74,7 @@ class PrepInputs:
             self.start_text.strip(),
             self.end_text.strip(),
             bool(self.convert),
+            self.cover,
         )
 
 
@@ -211,6 +215,7 @@ class MotionPreparationSession:
                 "end": end,
                 "unit": "seconds",
                 "fps_conversion": "workflow_rate" if inputs.convert else "none",
+                **({"cover": list(inputs.cover)} if inputs.cover else {}),
             },
         )
         self._inflight, self._state, self._message = work, STATE_RUNNING, ""
@@ -319,13 +324,18 @@ class MotionPreparationSession:
             record = self._outcome.record
             original, derived = record["original"], record["derived"]
             contract = record["contract"]
+            kept = (
+                "lossless"
+                if (record.get("processing") or {}).get("lossless", True)
+                else "scaled to fit"
+            )
             identity = [
                 f"Original: {original['width']}x{original['height']}, "
                 f"{original.get('frame_count') or '?'} frames at {original.get('frame_rate') or '?'} fps, "
                 f"sha256 {_short(original['sha256'])}",
                 f"Prepared: {derived['width']}x{derived['height']}, {derived['frames']} frames at "
                 f"{derived['frame_rate']} fps, {_megabytes(derived.get('size_bytes'))}, "
-                f"sha256 {_short(derived['sha256'])} (lossless, content-addressed)",
+                f"sha256 {_short(derived['sha256'])} ({kept}, content-addressed)",
                 f"Enters: {contract['workflow_id']} {contract['workflow_version']} as its driving "
                 "video. The job reads the prepared file, not the original.",
             ]

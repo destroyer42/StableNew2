@@ -9,9 +9,10 @@ idempotent by SHA-256 (the manifest goes first and the gateway names the bodies 
 holds is not sent again; an unchanged item is skipped from the ledger) and resumable (the ledger records an item only
 once the gateway reports it ready).
 
-Only a job's authoritative outputs are published. A file whose metadata names it ``retained_source`` (the un-smoothed
-clip behind a RIFE result) is kept on the PC and never sent, so it never reaches phone review or Immich. While a job
-runs, a video with no StableNew metadata yet waits: its job may still be about to record its role.
+Only a job's authoritative outputs are published: video frames and the un-smoothed clip behind a RIFE result stay on
+the PC (``src/app/review_gateway_sources.py``; a file whose metadata names it ``retained_source`` included), so they
+never reach phone review or Immich. While a job runs, a video with no StableNew metadata yet, or an image that could be
+its frame, waits: the job may still be about to record what it is.
 
 Everything here is blocking file and network work for the sync worker thread, never Tk.
 """
@@ -24,11 +25,13 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import tempfile
+import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
 from typing import Any, BinaryIO
@@ -45,6 +48,8 @@ from src.app.review_gateway_protocol import (
     item_manifest,
     utc_text,
 )
+from src.app.review_gateway_scrub import Unclean, scrub_image
+from src.app.review_gateway_sources import RETAINED, SourceFilter, may_be_unrecorded_frame
 from src.app.review_gateway_store import SyncLedger
 from src.app.site_media_files import SiteOutputError, checked_digest, open_scoped
 from src.app.site_output_library import LibraryItem, OutputLibrary
@@ -59,8 +64,20 @@ PREVIEW_EDGE = 1080
 #: A clip at or under this size, already MP4/WebM, is played on the phone from its original (no transcode).
 MOBILE_DIRECT_LIMIT = 64 * 1024 * 1024
 MOBILE_EDGE = 1280
-#: Only items this recent (relative to when the gateway was first configured) are published.
+#: The rolling backfill window; it reaches further back only to where the publisher last caught up.
 BACKFILL_DAYS = 3
+#: Overlap kept behind the last catch-up, for rows the index adds late.
+CAUGHT_UP_MARGIN_DAYS = 1
+#: A row whose file was gone is looked at again after this long.
+MISSING_RETRY_S = 86400
+#: Longest a row that keeps failing is set aside.
+MAX_DEFER_S = 600.0
+#: Bound on file checks in one look for candidates, so a long run of gone files cannot hold the worker.
+MAX_FILE_CHECKS = 2000
+MISSING = "missing"
+#: The one-time withdrawal of frames published earlier: ledger rows per request, and requests per pass.
+WITHDRAW_PAGE = 500
+WITHDRAW_PAGES = 10
 _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
@@ -108,13 +125,12 @@ def _display(item: LibraryItem) -> dict[str, Any]:
 
 
 def encode_preview_1080(stream: BinaryIO, mime: str) -> tuple[bytes, str, int, int] | None:
-    """A 1080 px (long edge) WebP, or JPEG when WebP is unavailable; ``None`` when not needed or not decodable."""
+    """The phone rendition: a WebP (JPEG when WebP is unavailable) with a long edge of at most 1080 px, never
+    enlarged; ``None`` when the image cannot be decoded."""
 
     try:
         with Image.open(stream) as image:
             if image.width * image.height > site_library_video.MAX_PIXELS:
-                return None
-            if max(image.width, image.height) <= PREVIEW_EDGE:
                 return None
             image.thumbnail((PREVIEW_EDGE, PREVIEW_EDGE))
             rgb = ImageOps.exif_transpose(image).convert("RGB")
@@ -131,6 +147,53 @@ def encode_preview_1080(stream: BinaryIO, mime: str) -> tuple[bytes, str, int, i
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError):
         return None
     return None
+
+
+#: Drop every container, stream and chapter tag (PHONE-FAST): StableNew videos carry the workflow description and PC
+#: paths there. Bit-exact, so the same file always gives the same bytes.
+_NO_METADATA = ("-map_metadata", "-1", "-map_chapters", "-1", "-fflags", "+bitexact")
+
+
+def ffmpeg_strip_metadata(source: BinaryIO, target: Path, cancelled: Callable[[], bool]) -> bool:
+    """A copy of the video's picture and sound, not re-encoded, without any metadata; ``False`` when FFmpeg is absent
+    or fails. The PC's own file is only read."""
+
+    from src.pipeline.video import resolve_ffmpeg_executable
+    from src.utils.managed_process import run_bounded
+
+    tool = resolve_ffmpeg_executable()
+    if tool is None:
+        return False
+    faststart = ["-movflags", "+faststart"] if target.suffix in (".mp4", ".mov") else []
+    source.seek(0)
+    outcome = run_bounded(
+        [
+            str(tool),
+            *site_library_video.INPUT_OPTIONS,
+            "-nostdin",
+            "-i",
+            "fd:",
+            "-map",
+            "0:V",
+            "-map",
+            "0:a?",
+            "-c",
+            "copy",
+            *_NO_METADATA,
+            *faststart,
+            "-y",
+            str(target),
+        ],
+        timeout_seconds=600,
+        max_stdout_bytes=64 * 1024,
+        max_stderr_bytes=4096,
+        stdin_file=source,
+        below_normal=True,
+        cancel=cancelled,
+        memory_limit_mb=1024,
+        allow_unenforced_memory_limit=True,
+    )
+    return outcome.returncode == 0 and target.is_file() and target.stat().st_size > 0
 
 
 def ffmpeg_mobile_transcode(source: BinaryIO, target: Path, cancelled: Callable[[], bool]) -> bool:
@@ -178,6 +241,7 @@ def ffmpeg_mobile_transcode(source: BinaryIO, target: Path, cancelled: Callable[
             "aac",
             "-b:a",
             "96k",
+            *_NO_METADATA,
             "-movflags",
             "+faststart",
             "-y",
@@ -214,13 +278,13 @@ def job_batch_reader(
 
     def read(path: Path) -> Mapping[str, Any] | None:
         from src.review.review_evidence import image_source_job
+        from src.review.review_lineage import batch_of_job_reader
 
         if path.suffix.lower() not in _IMAGE_SUFFIXES:
             return None
         try:
             job_id = (job_id_of or image_source_job)(path)
-            entry = repository.get_job(job_id) if job_id else None
-            batch = identity(getattr(entry, "snapshot", None) or {})
+            batch = batch_of_job_reader(repository, identity)(job_id) if job_id else None
         except Exception:  # noqa: BLE001 - grouping is display only; it must never hold publishing back
             log.debug("Review gateway publish could not read an item's batch")
             return None
@@ -246,12 +310,19 @@ class GatewayPublisher:
         transcode: Transcode | None = ffmpeg_mobile_transcode,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         batch_of: BatchOf | None = None,
+        monotonic: Callable[[], float] = time.monotonic,
+        strip: Transcode = ffmpeg_strip_metadata,
     ) -> None:
         self._library = library
         self._ledger = ledger
         self._transcode = transcode
         self._now = now
         self._batch_of = batch_of
+        self._sources = SourceFilter(library.root)
+        self._monotonic = monotonic
+        self._strip = strip
+        #: key -> (index version, failures, not before): rows set aside so they never keep older rows waiting.
+        self._deferred: dict[str, tuple[str, int, float]] = {}
 
     def _batch(self, client: GatewayClient, path: Path) -> Mapping[str, Any] | None:
         """The item's batch, only for a gateway that groups by it (an older one's schema refuses the field)."""
@@ -269,7 +340,7 @@ class GatewayPublisher:
         return self._library.root
 
     def publish_since(self) -> int:
-        """Microseconds since the epoch; fixed the first time the worker publishes."""
+        """The oldest moment ever published, in microseconds; fixed the first time the worker publishes."""
 
         stored = self._ledger.get_meta("publish_since")
         if stored.isdigit():
@@ -278,14 +349,35 @@ class GatewayPublisher:
         self._ledger.set_meta({"publish_since": str(since)})
         return since
 
-    def candidates(self, limit: int) -> list[tuple[str, LibraryItem]]:
-        """Up to ``limit`` unpublished (or changed) index rows, newest first."""
+    def _microseconds(self, **ago: float) -> int:
+        return int((self._now() - timedelta(**ago)).timestamp() * 1_000_000)
+
+    def window_start(self) -> int:
+        """Where a look begins: the rolling window, or earlier while a backlog since the last catch-up remains."""
+
+        floor = self.publish_since()
+        stored = self._ledger.get_meta("publish_caught_up_at")
+        if not stored.isdigit():
+            return floor
+        caught_up = int(stored) - CAUGHT_UP_MARGIN_DAYS * 86400 * 1_000_000
+        return max(floor, min(self._microseconds(days=BACKFILL_DAYS), caught_up))
+
+    def candidates(
+        self, limit: int, *, newer_than: int | None = None
+    ) -> list[tuple[str, LibraryItem]]:
+        """Up to ``limit`` unpublished (or changed) index rows, newest first.
+
+        Rows set aside after a failure are passed over, and rows whose file is gone are recorded as ``missing``, so
+        neither keeps the rows behind them waiting. ``newer_than`` (microseconds) looks only at fresh rows.
+        """
 
         self._library.start()
-        since = self.publish_since()
+        since = self.window_start() if newer_than is None else newer_than
+        now = self._monotonic()
         found: list[tuple[str, LibraryItem]] = []
-        offset = 0
-        while len(found) < limit:
+        offset = checks = 0
+        waiting = False
+        while len(found) < limit and checks < MAX_FILE_CHECKS:
             with self._library.store.connection() as db:
                 rows = list(
                     db.execute(
@@ -297,15 +389,87 @@ class GatewayPublisher:
             if not rows:
                 break
             offset += len(rows)
+            known_rows = self._ledger.published_many([str(row["key"]) for row in rows])
+            gone: list[tuple[str, str, str, str]] = []
             for row in rows:
-                known = self._ledger.published(row["key"])
-                if known is not None and known["version"] == row["version"]:
+                key, version = str(row["key"]), str(row["version"])
+                known = known_rows.get(key)
+                if known is not None and known["version"] == version and not self._retry(known):
+                    continue
+                deferred = self._deferred.get(key)
+                if deferred is not None and deferred[0] == version and now < deferred[2]:
+                    # A row that has only just started failing still counts as work to do.
+                    waiting = waiting or deferred[1] < 5
                     continue
                 item = LibraryItem.from_row(row)
-                found.append((str(row["key"]), item))
-                if len(found) >= limit:
+                checks += 1
+                if os.path.lexists(self.root / item.path) or not self.root.is_dir():
+                    found.append((key, item))
+                elif known is not None and known["state"] == "published":
+                    # A published row stays as it is: phone decisions are resolved through it.
+                    self.defer(key, version, MAX_DEFER_S)
+                else:
+                    gone.append((key, version, item.path, item.kind))
+                if len(found) >= limit or checks >= MAX_FILE_CHECKS:
                     break
+            if gone:
+                self._ledger.mark_missing(gone, utc_text(self._now()))
+        if newer_than is None and not found and not waiting and checks < MAX_FILE_CHECKS:
+            self._note_caught_up(since)
         return found
+
+    def _retry(self, known: sqlite3.Row) -> bool:
+        if known["state"] != MISSING:
+            return False
+        age = self._now() - datetime.fromisoformat(str(known["at"]).replace("Z", "+00:00"))
+        return age >= timedelta(seconds=MISSING_RETRY_S)
+
+    def _note_caught_up(self, since: int) -> None:
+        with self._library.store.connection() as db:
+            unread = db.execute(
+                "SELECT 1 FROM media WHERE enriched = 0 AND kind = 'image' AND timestamp >= ? LIMIT 1",
+                (since,),
+            ).fetchone()
+        if unread is None:
+            self._ledger.set_meta({"publish_caught_up_at": str(self._microseconds())})
+
+    def defer(self, key: str, version: str, seconds: float | None = None) -> None:
+        """Pass this row over for a while: ``seconds``, or longer each time it fails again."""
+
+        previous = self._deferred.get(key)
+        failures = previous[1] + 1 if previous is not None and previous[0] == version else 1
+        if seconds is None:
+            seconds = min(MAX_DEFER_S, 2.0 ** min(failures - 1, 10))
+        self._deferred[key] = (version, failures, self._monotonic() + seconds)
+
+    def withdraw_unpublishable(self, client: GatewayClient, cancel: Event) -> None:
+        """Once per ledger: ask the gateway to stop showing frames and un-smoothed clips published earlier.
+
+        Kept in steps, so a stop or an unreachable gateway resumes where it was.
+        """
+
+        if "item_withdraw" not in client.features or not self.root.is_dir():
+            return
+        if self._ledger.get_meta("sources_withdrawn") == "done":
+            return
+        cursor = int(self._ledger.get_meta("sources_withdraw_cursor") or 0)
+        for _ in range(WITHDRAW_PAGES):
+            if cancel.is_set():
+                return
+            rows = self._ledger.published_after(cursor, WITHDRAW_PAGE)
+            if not rows:
+                self._ledger.set_meta({"sources_withdrawn": "done"})
+                return
+            unwanted = [
+                str(row["library_id"])
+                for row in rows
+                if self._sources.exclusion_of(str(row["rel_path"]), str(row["kind"]))
+            ]
+            if unwanted and not client.withdraw_items(unwanted):
+                log.info("Review gateway did not accept the withdrawal of earlier frames")
+                return
+            cursor = int(rows[-1]["rowid"])
+            self._ledger.set_meta({"sources_withdraw_cursor": str(cursor)})
 
     def publish(
         self,
@@ -315,34 +479,92 @@ class GatewayPublisher:
         cancel: Event,
         allow_transcode: Callable[[], bool] = lambda: True,
         hold_unlabelled_video: bool = False,
+        newer_than: int | None = None,
     ) -> PublishResult:
-        """``hold_unlabelled_video`` (a job is running) leaves a video without StableNew metadata pending."""
+        """``hold_unlabelled_video`` (a job is running) leaves a video without StableNew metadata, and an image that
+        could be its frame, pending."""
 
         result = PublishResult()
-        for key, item in self.candidates(limit):
+        rows = (
+            self.candidates(limit)
+            if newer_than is None
+            else self.candidates(limit, newer_than=newer_than)
+        )
+        for key, item in rows:
             if cancel.is_set():
                 break
-            if hold_unlabelled_video and item.kind == "video" and item.provenance == "unknown":
+            version = json.dumps(list(item.version))
+            if hold_unlabelled_video and (
+                (item.kind == "video" and item.provenance == "unknown")
+                or may_be_unrecorded_frame(item)
+            ):
                 result.pending += 1
+                self.defer(key, version, 10.0)
                 continue
             try:
                 state = self._publish_one(client, key, item, cancel, allow_transcode)
             except (GatewayConflict, GatewayRejected):
                 result.pending += 1
+                self.defer(key, version)
                 continue
             except (SiteOutputError, OSError):
                 log.debug("Review gateway publish deferred an item that changed or is unreadable")
                 result.pending += 1
+                self.defer(key, version)
                 continue
             if state == "published":
                 result.published += 1
             elif state == "pending":
                 result.pending += 1
+                if not cancel.is_set():
+                    self.defer(key, version)
             else:
                 result.skipped += 1
+        if newer_than is None and not hold_unlabelled_video and len(rows) < limit:
+            self._add_renditions(client, limit - len(rows), cancel, result)
         return result
 
+    def _add_renditions(
+        self, client: GatewayClient, limit: int, cancel: Event, result: PublishResult
+    ) -> None:
+        """Images published before every image had a phone rendition are sent again, a few at a time when idle.
+
+        Only ever adds: a row that is gone, changed or now excluded is marked done and stays as it was.
+        """
+
+        for key in self._ledger.without_rendition(limit):
+            if cancel.is_set():
+                return
+            with self._library.store.connection() as db:
+                row = db.execute(
+                    "SELECT body, version FROM media WHERE key = ? AND enriched = 1", (key,)
+                ).fetchone()
+            known = self._ledger.published(key)
+            item = LibraryItem.from_row(row) if row is not None else None
+            if (
+                item is None
+                or known is None
+                or known["version"] != row["version"]
+                or not os.path.lexists(self.root / item.path)
+                or self._sources.exclusion(item)
+            ):
+                self._ledger.set_rendition(key)
+                continue
+            try:
+                state = self._publish_one(client, key, item, cancel, lambda: False)
+            except (GatewayConflict, GatewayRejected, SiteOutputError, OSError):
+                self._ledger.set_rendition(
+                    key
+                )  # it stays as published; the phone shows the original
+                continue
+            if state == "published":
+                result.published += 1
+
     def _skip(self, key: str, item: LibraryItem, state: str) -> str:
+        known = self._ledger.published(key)
+        if known is not None and known["state"] == "published":
+            self.defer(key, json.dumps(list(item.version)), MAX_DEFER_S)
+            return state  # already on the phone: its row still resolves the owner's decisions
         self._ledger.mark_published(
             key,
             json.dumps(list(item.version)),
@@ -366,7 +588,10 @@ class GatewayPublisher:
         if folder in _SKIPPED_FOLDERS or item.kind not in ("image", "video"):
             return self._skip(key, item, "skipped")
         if item.role == OUTPUT_ROLE_RETAINED_SOURCE:
-            return self._skip(key, item, "retained")
+            return self._skip(key, item, RETAINED)
+        excluded = self._sources.exclusion(item)
+        if excluded:
+            return self._skip(key, item, excluded)
         if item.mime not in CONTENT_TYPES:
             return self._skip(key, item, "unsupported")
         size = item.version[2]
@@ -377,23 +602,40 @@ class GatewayPublisher:
         version = json.dumps(list(item.version))
         known = self._ledger.published(key)
         digest = str(known["sha256"]) if known is not None and known["version"] == version else ""
+        if digest:
+            digest = self._ledger.file_digest(key, digest)
         if not digest:
             with open_scoped(self.root, path) as stream:
                 digest = checked_digest(stream, size_limit=limit)
         thumb = self._library.grid_preview(item, cancel=cancel)
         if thumb is None or not thumb.ready or thumb.mime not in CONTENT_TYPES:
             return "pending"
-        bodies: dict[str, _Body] = {
-            "thumb_320": _Body(
-                MediaVariant(hashlib.sha256(thumb.data).hexdigest(), len(thumb.data), thumb.mime),
-                data=thumb.data,
-            ),
-            "original": _Body(
-                MediaVariant(digest, size, item.mime, item.width, item.height), path=path
-            ),
-        }
-        with self._extra_bodies(item, path, cancel, allow_transcode) as extra:
-            bodies.update(extra)
+        # An image already sent as it is stays that item: a second copy of it would be a second item.
+        as_before = (
+            item.kind == "image"
+            and known is not None
+            and known["state"] == "published"
+            and known["version"] == version
+            and known["sha256"] == digest
+        )
+        with (
+            self._original(item, path, digest, size, cancel, as_before) as original,
+            self._extra_bodies(item, path, cancel, allow_transcode) as extra,
+        ):
+            if original is None:
+                return "pending"  # a video that cannot be stripped never leaves the PC
+            file_digest = digest
+            digest = original.variant.sha256
+            bodies: dict[str, _Body] = {
+                "thumb_320": _Body(
+                    MediaVariant(
+                        hashlib.sha256(thumb.data).hexdigest(), len(thumb.data), thumb.mime
+                    ),
+                    data=thumb.data,
+                ),
+                "original": original,
+                **extra,
+            }
             created = datetime.fromtimestamp(item.effective_time / 1_000_000, UTC)
             manifest = item_manifest(
                 item=ItemRef(key, digest),
@@ -417,10 +659,73 @@ class GatewayPublisher:
                 state, _missing = client.post_manifest(manifest)
             if state not in ("ready", "purged"):
                 return "pending"
+        if digest != file_digest:
+            self._ledger.set_public_digest(key, digest, file_digest)
         self._ledger.mark_published(
             key, version, item.path, digest, item.kind, "published", utc_text(self._now())
         )
+        if item.kind == "image":
+            self._ledger.set_rendition(key)
         return "published"
+
+    @contextmanager
+    def _original(
+        self,
+        item: LibraryItem,
+        path: Path,
+        digest: str,
+        size: int,
+        cancel: Event,
+        as_before: bool,
+    ) -> Iterator[_Body | None]:
+        """What is sent as the original, without PC paths in its metadata (``None`` when that cannot be assured, so it
+        is not sent at all): an image keeps its other metadata, a video loses all of it. The item is known to the
+        gateway by the bytes sent."""
+
+        unchanged = _Body(MediaVariant(digest, size, item.mime, item.width, item.height), path=path)
+        if item.kind != "video":
+            if as_before:
+                yield unchanged
+                return
+            with open_scoped(self.root, path) as stream:
+                data = stream.read(IMAGE_LIMIT + 1)
+            try:
+                clean = scrub_image(data)
+            except Unclean:
+                log.warning(
+                    "Review gateway: an image was not sent; its metadata could not be cleaned"
+                )
+                yield None
+                return
+            if clean is data:
+                yield unchanged
+                return
+            yield _Body(
+                MediaVariant(
+                    hashlib.sha256(clean).hexdigest(),
+                    len(clean),
+                    item.mime,
+                    item.width,
+                    item.height,
+                ),
+                data=clean,
+            )
+            return
+        with tempfile.TemporaryDirectory(prefix="stablenew-gateway-") as scratch:
+            target = Path(scratch) / f"original{path.suffix.lower()}"
+            with open_scoped(self.root, path) as source:
+                made = self._strip(source, target, cancel.is_set)
+            if not made or cancel.is_set():
+                if not cancel.is_set():
+                    log.warning(
+                        "Review gateway: a video was not sent; its metadata could not be removed"
+                    )
+                yield None
+                return
+            with target.open("rb") as stream:
+                sent = checked_digest(stream, size_limit=VIDEO_LIMIT)
+            length = target.stat().st_size
+            yield _Body(MediaVariant(sent, length, item.mime, item.width, item.height), path=target)
 
     @contextmanager
     def _extra_bodies(

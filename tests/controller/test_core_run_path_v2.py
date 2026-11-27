@@ -6,7 +6,6 @@ Validates that preview/queue/history use NJR-based DTOs only (pack-only NJR path
 from __future__ import annotations
 
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -177,7 +176,7 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
                     return
                 self.current_job = job
                 started.set()
-                if release.wait(timeout=2.0):
+                if release.wait(timeout=30.0):
                     queue.mark_completed(
                         job.job_id,
                         result={"job_id": job.job_id, "status": "completed"},
@@ -205,11 +204,12 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
     service.auto_run_enabled = True
 
     try:
-        start = time.monotonic()
         service.submit_njrs([njr])
-        assert time.monotonic() - start < 0.2
+        # The job cannot finish until ``stop`` releases it: a submission that waited for the run would find
+        # the worker gone here, however fast or slow the machine is.
+        assert runner.is_running()
 
-        assert started.wait(timeout=1.0)
+        assert started.wait(timeout=10.0)
         assert queue.get_job(njr.job_id).status is JobStatus.RUNNING
     finally:
         assert service.stop()

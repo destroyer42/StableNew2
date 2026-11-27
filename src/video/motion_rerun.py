@@ -37,6 +37,7 @@ from src.video.motion_intent import (
     split_composed_prompt,
 )
 from src.video.motion_presets import (
+    CONTROL_FIELD_PREFIX,
     DURATION_ENGINE_MAX,
     DURATION_WHOLE_MOVEMENT,
     INTENT_FOLLOW_DRIVER,
@@ -620,6 +621,26 @@ def rerun_submission_form(
             motion_phrase=phrase,
             duration=duration,
             basis=dict.fromkeys(("workflow_id", "frame_count", "motion_phrase"), "Your choice."),
+        )
+    elif task == TASK_FOLLOW_CLIP:
+        # V1-3: a driven clip records its preset as provenance; the phrase stays in the engine's Motion Prompt.
+        preset = preset_by_id(preset_id)
+        frames = tweaked.frame_count
+        duration = None if policy is None or frames is None else choice_for_frames(frames, policy)
+        values = dict(tweaked.operator_controls)
+        modified = preset is not None and preset_is_modified(
+            preset,
+            INTENT_FOLLOW_DRIVER,
+            {"operator_controls": [{"name": name} for name in values]},
+            {f"{CONTROL_FIELD_PREFIX}{name}": value for name, value in values.items()},
+        )
+        form[MOTION_INTENT_FIELD] = motion_intent_record(
+            intent=task,
+            preset=preset,
+            preset_modified=modified,
+            motion_phrase="",
+            duration=duration,
+            basis=dict.fromkeys(("workflow_id", "frame_count"), "Your choice."),
         )
     if driver is not None and driver.action == DRIVER_REUSE and driver.prepared is not None:
         from src.video.video_workflow_njr_builder import PREPARED_MOTION_SOURCE_FIELD

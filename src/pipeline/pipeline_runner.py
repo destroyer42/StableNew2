@@ -1505,6 +1505,7 @@ class PipelineRunner:
                 packs=packs_list,
                 stage_outputs=stage_outputs,
                 base_dir=route_root,
+                job_id=njr.job_id,
             )
         except Exception as exc:  # noqa: BLE001 - the run result is already final; report, do not fail the job
             logger.warning(

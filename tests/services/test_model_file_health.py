@@ -8,7 +8,12 @@ from typing import Any
 
 from src.assets.component_evidence import ComponentEvidence
 from src.assets.picker_compatibility import PickerEvidence
-from src.services.model_file_health import LOADER_FOLDERS, find_missing_model_files
+from src.services.model_file_health import (
+    LOADER_FOLDERS,
+    collect_model_file_health,
+    find_missing_model_files,
+)
+from src.video.workflow_asset_integrity import model_folders
 from src.video.workflow_contracts import WorkflowDependencySpec
 
 
@@ -80,6 +85,36 @@ def test_video_workflow_files_are_resolved_by_their_loader_folder(tmp_path) -> N
     assert entry.kind == "video" and entry.model == "Wan clip 1.0.0"
     assert len(entry.problems) == 1 and "speed.safetensors" in entry.problems[0]
     assert any("odd.bin" in note for note in report.unchecked)
+
+
+def test_the_latent_upscaler_is_looked_for_in_the_managed_comfy_source_folder(
+    tmp_path, monkeypatch
+) -> None:
+    """VID-CAND-LTX25: no model-path file maps ``latent_upscale_models``; the file sits in the Comfy install itself."""
+
+    source = tmp_path / "ComfyUI"
+    _touch(source / "models" / "latent_upscale_models" / "x2.safetensors")
+    monkeypatch.setattr(
+        "src.image_backends.comfy_image_readiness.comfy_model_folders",
+        lambda extra_kinds=(): model_folders((), str(source), extra_kinds=extra_kinds),
+    )
+    spec = _spec(
+        ("x2.safetensors", "LatentUpscaleModelLoader.model_name"),
+        ("absent.safetensors", "LatentUpscaleModelLoader.model_name"),
+    )
+    spec.workflow_id, spec.workflow_version = "wan_clip", "1.0.0"
+    monkeypatch.setattr(
+        "src.video.workflow_registry.build_default_workflow_registry",
+        lambda: SimpleNamespace(list_offerable_specs=lambda backend: [spec]),
+    )
+
+    report = collect_model_file_health([], None)
+
+    (entry,) = report.entries
+    assert entry.problems == (
+        "absent.safetensors is missing from ComfyUI's latent_upscale_models folders",
+    )
+    assert not any("unknown model folder" in note for note in report.unchecked)
 
 
 def test_unknown_folders_are_reported_as_unchecked_never_as_missing_or_fine() -> None:
