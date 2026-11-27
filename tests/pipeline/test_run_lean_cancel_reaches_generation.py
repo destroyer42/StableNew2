@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from unittest.mock import Mock
 
 import pytest
@@ -79,26 +78,22 @@ def test_a_cancel_during_preparation_dispatches_nothing(monkeypatch) -> None:
     assert dispatched == []
 
 
-def test_the_interrupt_is_repeated_while_the_cancelled_request_is_still_running(
-    monkeypatch,
-) -> None:
-    """The first interrupt can land before WebUI has the request, which then clears it and generates in full."""
+def test_a_cancel_during_the_readiness_checks_sends_no_request(monkeypatch) -> None:
+    """WebUI clears an interrupt that lands before it has the request, so the request must not be sent."""
 
     token = CancelToken()
-    client_box: dict[str, Mock] = {}
-
-    def generate(stage, payload):
-        token.cancel()
-        deadline = time.monotonic() + 5.0
-        while client_box["client"].interrupt.call_count < 2 and time.monotonic() < deadline:
-            time.sleep(0.01)
-        return {"images": []}
-
-    pipeline, client_box["client"] = _pipeline(monkeypatch, generate)
+    client = Mock()
+    client.get_progress.return_value = None
+    pipeline = Pipeline(client, Mock())
+    monkeypatch.setattr(pipeline, "_ensure_webui_true_ready", token.cancel)
+    monkeypatch.setattr(pipeline, "_check_webui_health_before_stage", lambda _stage: None)
+    monkeypatch.setattr(
+        "src.pipeline.executor._validate_webui_payload", lambda _stage, payload: payload
+    )
 
     with pytest.raises(CancellationError):
         pipeline._generate_images_with_progress(
-            "txt2img", {}, poll_interval=0.01, cancel_token=token
+            "txt2img", {"prompt": "p"}, poll_interval=0.01, cancel_token=token
         )
 
-    assert client_box["client"].interrupt.call_count >= 2
+    client.generate_images.assert_not_called()

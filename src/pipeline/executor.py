@@ -173,8 +173,6 @@ _MAX_STAGE_STEPS = 150
 # model loading to complete (~12-20s on observed hardware) before declaring failure.
 POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC = 30.0
 POST_RECOVERY_GRACE_WINDOW_SEC = 120.0
-#: How often a requested cancel repeats the WebUI interrupt while the cancelled request is still running.
-CANCEL_INTERRUPT_REPEAT_SEC = 1.0
 
 # Per-stage sampling/no-progress hard-stall overrides. ADetailer extension work
 # after nominal sampling completion is bounded by the client's transport timeout.
@@ -337,6 +335,7 @@ class Pipeline:
         # Per-request signal shared only by the blocking generation call and its
         # progress poller. It is not a queue or process-lifecycle authority.
         self._active_managed_stall_escalation: threading.Event | None = None
+        self._dispatch_cancel_token: Any | None = None
         self._image_performance = ImagePerformanceTrace()
         self._run_started_at_monotonic: float | None = None
         self._run_model_switch_count: int = 0
@@ -2398,6 +2397,9 @@ class Pipeline:
             payload.get("cfg_scale", 0.0),
         )
 
+        # Last point before the POST: a cancel during the readiness and health checks would otherwise have its
+        # interrupt cleared by WebUI and the whole generation run.
+        self._ensure_not_cancelled(self._dispatch_cancel_token, f"{stage} request")
         with self._image_performance.backend_request():
             outcome = self.client.generate_images(stage=stage, payload=payload)
         if not outcome.ok or outcome.result is None:
@@ -2637,7 +2639,6 @@ class Pipeline:
             )
             self._emit_status_update(status_data)
 
-        cancel_interrupt_time = float("-inf")
         poll_failure_logged = False
 
         while not stop_event.is_set():
@@ -2648,10 +2649,7 @@ class Pipeline:
                     and cancel_token.is_cancelled()
                 )
                 if cancel_requested:
-                    # WebUI clears an interrupt that arrives before it has taken the request, so repeat it while
-                    # this stage's request is still open (the poll stops as soon as the request returns).
-                    if time.monotonic() - cancel_interrupt_time >= CANCEL_INTERRUPT_REPEAT_SEC:
-                        cancel_interrupt_time = time.monotonic()
+                    if not interrupt_sent:
                         self.client.interrupt()
                         interrupt_sent = True
                     stop_event.wait(poll_interval)
@@ -2978,6 +2976,7 @@ class Pipeline:
 
             # Make the actual generation request (blocking)
             self._active_managed_stall_escalation = managed_stall_escalation_event
+            self._dispatch_cancel_token = cancel_token
             try:
                 response = self._generate_images(stage, payload)
                 logger.info(
@@ -3052,6 +3051,7 @@ class Pipeline:
                 poll_executor.shutdown(wait=True, cancel_futures=True)
             if self._active_managed_stall_escalation is managed_stall_escalation_event:
                 self._active_managed_stall_escalation = None
+            self._dispatch_cancel_token = None
 
     def _apply_aesthetic_to_payload(
         self, payload: dict[str, Any], full_config: dict[str, Any]

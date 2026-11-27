@@ -72,13 +72,16 @@ restarted, and dispatch waited for the new WebUI to be ready. Older cases have n
 restart. **Owner decision still open:** closing the app cancels the running job for good; it could instead stay
 queued, or the close could wait for it.
 
-**A Cancel in the app did not stop the job.** Three defects, each with a test that failed before the fix:
+**A Cancel in the app did not stop the job.** Two defects, each with a test that failed before the fix:
 
 1. `ReplayEngine` handed the runner its own token (`None`) instead of the job's, so on the queue path the pipeline
    never heard the Cancel.
 2. No check between stage preparation and the generation request, so a cancel during preparation still dispatched.
-3. The interrupt was sent once; if it landed before WebUI had the request it did nothing. It now repeats every second
-   while the cancelled request is open.
+   WebUI clears an interrupt that arrives before it has the request, so the whole generation then ran. A check now
+   sits before the stage dispatches and again immediately before the HTTP request.
+
+The interrupt itself is unchanged (once per cancel, as existing tests require). Residual: a cancel in the instant
+between that last check and WebUI starting the job is still lost; the job generates and its output is discarded.
 
 Behaviour change: a cancelled job now stops (image and video), and its unfinished output is not saved. Before, it was
 marked cancelled but kept generating while the next job waited. A cancel during a model load still waits for the load.
