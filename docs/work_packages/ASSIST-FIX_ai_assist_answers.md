@@ -170,6 +170,21 @@ offer.
   difference is that the uncensored build did not refuse when a refusal branch was offered), suggestion quality, or
   picture handling by either model.
 
+## Uncensored model added to the picker (owner, 2026-11-27: "Add the uncensored model")
+
+`huihui_ai/qwen3.5-abliterated:4B` (digest `9acbd90c2645…`) is now an approvable remote model, labelled "Qwen3.5-4B uncensored", and is
+recorded in `config/ai_worker_manifest.json`. The default model is unchanged. It is not sent pictures.
+
+It appears in the picker only after the operator approves it, **after the running app has this code**: an older build
+treats a settings file naming an unknown model as damaged.
+
+```powershell
+python -m tools.ai_assist_admin approve-remote-preview --endpoint http://127.0.0.1:11435 --model huihui_ai/qwen3.5-abliterated:4B --digest 9acbd90c2645120ea1e4a5fe7ec9c4fe000e547ccebc8a24f950315d582003e6 --version 0.40.16 --accept-ssh-transfer
+```
+
+Also chosen by the owner, not yet built: a "Try with the uncensored model" button after a refusal, which resends that
+one request on an explicit press.
+
 ## Live replay plan (as run, without `--motion-image`)
 
 - **What it does:** 104 cases in the logged kind mix (70 slot variety, 18 plan, 6 target fit, 6 rewrite, 4 slot

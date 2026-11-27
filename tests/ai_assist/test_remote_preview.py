@@ -28,6 +28,8 @@ from src.ai_assist.remote_preview import (
     ENDPOINT,
     RUNTIME_VERSION,
     SETTINGS_NAME,
+    UNCENSORED_MODEL,
+    VISION_MODELS,
     RemoteApproval,
     disable_remote_preview,
     enable_remote_preview,
@@ -841,3 +843,13 @@ def test_cancel_before_connect_and_reject_non_capability_paths(monkeypatch):
     with pytest.raises(TransportFailure, match="cancelled"):
         loopback_request("/api/version", None, token, 1.0, 64)
     socket_factory.assert_not_called()
+
+
+def test_the_uncensored_model_can_be_approved_without_replacing_the_default(tmp_path):
+    other = RemoteApproval(ENDPOINT, UNCENSORED_MODEL, "c" * 64, RUNTIME_VERSION)
+    write_remote_approval(tmp_path, APPROVAL)
+    write_remote_approval(tmp_path, other)
+    assert read_remote_settings(tmp_path).approval == APPROVAL
+    select_remote_model(tmp_path, other)
+    assert read_remote_settings(tmp_path).approval == other
+    assert UNCENSORED_MODEL not in VISION_MODELS
