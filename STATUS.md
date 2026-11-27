@@ -80,7 +80,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
 - External A1111/Comfy processes are never adopted, restarted or killed; ambiguous dispatched generation POSTs are never
   replayed. Cancel and Return requeues a job only on positive dispatch evidence; otherwise it is cancelled and flagged
   action-required (`docs/Subsystems/Runtime/QUEUE_AND_RUNTIME.md`).
-- AI Assist (Preview, advisory; `docs/Subsystems/AiAssist/AI_ASSIST.md`): typed, judged suggestions applied only on an explicit press from one tabbed AI Assist window (Prompt, Matrix slots, Plan, Check) with Undo last: values for existing slots, new slots, a selected phrase turned into a slot, and deterministic matrix checks; nothing saved or queued. Requests offer no refusal branch, a malformed remote answer is retried once, and the prompt-only video panel can suggest a motion phrase (ASSIST-FIX; one live replay: 0.0% refused, 1.9% malformed against a 1% target). Model quality is unverified.
+- AI Assist (Preview, advisory; `docs/Subsystems/AiAssist/AI_ASSIST.md`): typed, judged suggestions applied only on an explicit press from one tabbed AI Assist window (Prompt, Matrix slots, Plan, Check) with Undo last: values for existing slots, new slots, a selected phrase turned into a slot, and deterministic matrix checks; nothing saved or queued. Requests offer no refusal branch, a malformed remote answer is retried once, and the prompt-only video panel can suggest a motion phrase (ASSIST-FIX; replay with the current model: 0.0% refused, 1 malformed in 208; an uncensored build was measured and not adopted). Model quality is unverified.
 
 ## Active and next
 
