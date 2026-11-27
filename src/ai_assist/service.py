@@ -483,7 +483,12 @@ class AiAssistService:
             while True:
                 attempts += 1
                 result = self.remote.run(
-                    identity, request, token, self._limits, self._sampling, retry=attempts > 1
+                    identity,
+                    request,
+                    token,
+                    self._limits,
+                    self._sampling,
+                    retry_reason=first_reason,
                 )
                 # Local fallback is for a connection that failed before anything was generated (D25).
                 if result.reason == "remote_disconnected" and attempts == 1:

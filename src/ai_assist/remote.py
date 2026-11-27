@@ -291,7 +291,7 @@ class RemoteAssist:
         limits: RunLimits,
         sampling: Sampling,
         *,
-        retry: bool = False,
+        retry_reason: str = "",
     ) -> RuntimeResult:
         started = time.monotonic()
         if request.image_jpeg and identity.model not in VISION_MODELS:
@@ -306,7 +306,7 @@ class RemoteAssist:
             body = json.dumps(
                 {
                     "model": identity.model_reference,
-                    "prompt": render_prompt(request, retry=retry),
+                    "prompt": render_prompt(request, retry_reason=retry_reason),
                     **pictures,
                     "format": schema,
                     "stream": False,
