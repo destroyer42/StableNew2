@@ -297,3 +297,37 @@ def test_a_sequence_ledger_is_found_in_new_and_old_folders(tmp_path, folder):
     ledger.write_text(json.dumps({"job_id": job}), encoding="utf-8")
 
     assert locate_ledger(job, [tmp_path]) == str(ledger.resolve())
+
+
+def test_a_clip_from_a_prepared_copy_is_named_after_the_chosen_picture(tmp_path):
+    """Preparation (and a sequence's later segments) feed the backend a picture with no record."""
+
+    source = picture(tmp_path / "source.png", pack="000-Style")
+    prepared = tmp_path / "prepared.png"
+    Image.new("RGB", (16, 16)).save(prepared)
+    njr = make_pipeline_njr(
+        job_id="969e487e785a5a1184df7002e52114e5",
+        input_image_paths=[str(prepared)],
+        config={
+            "video_workflow": {
+                "workflow_id": "wan22_i2v_a14b_4step_v1",
+                "source_preparation": {"original_source_path": str(source)},
+            }
+        },
+        stage_chain=[make_stage_config("video_workflow")],
+    )
+    runner = PipelineRunner(
+        api_client=MagicMock(), structured_logger=MagicMock(), runs_base_dir=str(tmp_path)
+    )
+    runner._job_output_names = names = JobOutputNames.for_job(njr, WHEN)
+
+    stem = runner._video_output_stem(
+        njr,
+        "video_workflow",
+        {"workflow_id": "wan22_i2v_a14b_4step_v1"},
+        str(prepared),
+        run_dir=tmp_path,
+    )
+
+    assert names.folder_label(njr) == "000-Style_photoMomentum_969e487e"
+    assert stem == "20261127-1648_clip-A14B_from-photoMomentum_000-Style_p01_969e487e"

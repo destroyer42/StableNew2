@@ -197,6 +197,18 @@ def pack_block(pack: str, prompt_number: int | None, variant: int | None) -> dic
     return block
 
 
+def original_source(config: Any, fallback: Any = None) -> Any:
+    """A video job's input as the operator chose it. Source preparation hands the backend a resized copy that carries
+    no StableNew record, so who made the picture is read from the original (``source_preparation`` in the job's frozen
+    stage config)."""
+
+    for section in config.values() if isinstance(config, Mapping) else ():
+        prepared = section.get("source_preparation") if isinstance(section, Mapping) else None
+        if isinstance(prepared, Mapping) and prepared.get("original_source_path"):
+            return prepared["original_source_path"]
+    return fallback
+
+
 def recorded_naming(payload: Any) -> RecordedNaming:
     """Stages, model, job and pack of an embedded StableNew image payload (empty for any other mapping)."""
 
@@ -359,6 +371,11 @@ def _enabled_stage_types(njr: Any) -> list[str]:
     ]
 
 
+def _job_source(njr: Any) -> Any:
+    inputs = getattr(njr, "input_image_paths", None) or ()
+    return original_source(getattr(njr, "config", None), inputs[0] if inputs else None)
+
+
 def _job_checkpoint(njr: Any) -> str:
     config = getattr(njr, "config", None)
     section = config.get("txt2img") if isinstance(config, Mapping) else None
@@ -386,8 +403,7 @@ class JobOutputNames:
 
     @classmethod
     def for_job(cls, njr: Any, started: datetime) -> JobOutputNames:
-        inputs = getattr(njr, "input_image_paths", None) or ()
-        given = read_image_naming(inputs[0] if inputs else None)
+        given = read_image_naming(_job_source(njr))
         stages = _enabled_stage_types(njr)
         pack = str(getattr(njr, "prompt_pack_name", "") or "")
         generates = any(stage in _GENERATIVE for stage in stages)
@@ -414,8 +430,7 @@ class JobOutputNames:
 
         stages = set(_enabled_stage_types(njr))
         if stages & _VIDEO_STAGES:
-            inputs = getattr(njr, "input_image_paths", None) or ()
-            given = read_image_naming(inputs[0] if inputs else None)
+            given = read_image_naming(_job_source(njr))
             config = (getattr(njr, "config", None) or {}).get("video_workflow")
             workflow = config.get("workflow_id") if isinstance(config, Mapping) else None
             model = model_short_name(given.model) or workflow_short_name(
@@ -490,6 +505,7 @@ __all__ = [
     "STEM_LIMIT",
     "model_names",
     "model_short_name",
+    "original_source",
     "pack_block",
     "read_image_naming",
     "recorded_naming",

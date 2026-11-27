@@ -22,6 +22,7 @@ from typing import Any
 from src.pipeline.output_naming import (
     RecordedNaming,
     model_short_name,
+    original_source,
     recorded_naming,
     stage_ids,
     stage_text,
@@ -185,9 +186,12 @@ def _job_model(job: Mapping[str, Any]) -> str:
 
 
 def _input_path(job: Mapping[str, Any], manifest: Mapping[str, Any]) -> Path | None:
-    paths = _mapping(job.get("workload")).get("input_image_paths")
+    workload = _mapping(job.get("workload"))
+    paths = workload.get("input_image_paths")
     first = paths[0] if isinstance(paths, (list, tuple)) and paths else None
-    text = str(manifest.get("source_image_path") or first or "")
+    text = str(
+        original_source(workload.get("config")) or manifest.get("source_image_path") or first or ""
+    )
     return Path(text) if text else None
 
 

@@ -44,7 +44,7 @@ from src.pipeline.image_performance import (
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.njr_core_v26 import thaw_json
 from src.pipeline.no_output_reason import fallback_reason
-from src.pipeline.output_naming import JobOutputNames
+from src.pipeline.output_naming import JobOutputNames, original_source
 from src.pipeline.result_contract_v26 import (
     build_diagnostics_descriptor,
     build_replay_descriptor,
@@ -640,7 +640,8 @@ class PipelineRunner:
             suffix += f"_i{position + 1:02d}"
         return names.clip_stem(
             workflow_id=config_dict.get("workflow_id") or stage_name,
-            source_path=input_path,
+            # The picture the operator chose: not the prepared copy, nor a later segment's carried-over frame.
+            source_path=original_source(njr.config, input_path),
             storyboard=bool(isinstance(plan, Mapping) and plan.get("storyboard")),
             run_dir=run_dir,
             suffix=suffix,

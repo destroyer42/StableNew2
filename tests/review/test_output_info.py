@@ -229,3 +229,39 @@ def test_a_missing_repository_still_reads_the_file(world):
     info = OutputDescriber().describe(world.original, kind="image")
     assert (info["stage_path"], info["model"]) == ("txt2img", "photoMomentum")
     assert "pack" not in info
+
+
+def test_a_clip_made_from_a_prepared_copy_is_described_by_the_original(world):
+    """Source preparation gives the backend a resized copy with no record: the job names the original."""
+
+    prepared = world.root / "prepared_video_sources" / "copy.png"
+    prepared.parent.mkdir()
+    Image.new("RGB", (8, 8)).save(prepared)
+    world.repository.add(
+        make_pipeline_njr(
+            job_id="job-prepared",
+            input_image_paths=[str(prepared)],
+            config={
+                "video_workflow": {
+                    "source_preparation": {"original_source_path": str(world.original)}
+                }
+            },
+            stage_chain=[make_stage_config("video_workflow")],
+        )
+    )
+    video = world.root / "Reprocess" / "prepared" / "clip.mp4"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"not read")
+    manifest(
+        video,
+        {
+            "workflow_id": "wan22_i2v_a14b_4step_v1",
+            "source_image_path": str(prepared),
+            "artifact": {"job_id": "job-prepared"},
+        },
+    )
+
+    info = describe(world, video, kind="video")
+
+    assert info["stage_path"] == "clip (A14B) from photoMomentum"
+    assert (info["pack"], info["prompt_number"]) == ("000-Style", 1)
