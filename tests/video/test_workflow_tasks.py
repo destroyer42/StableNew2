@@ -13,6 +13,7 @@ from src.video import workflow_tasks
 from src.video.workflow_tasks import (
     TASK_ANIMATE,
     TASK_BATCH,
+    TASK_BETWEEN,
     TASK_FOLLOW_CLIP,
     TASK_SEQUENCE,
     TASKS,
@@ -49,10 +50,11 @@ def _rec(
     }
 
 
-def test_four_tasks_in_display_order():
+def test_tasks_in_display_order():
     assert [task.task_id for task in TASKS] == [
         TASK_ANIMATE,
         TASK_FOLLOW_CLIP,
+        TASK_BETWEEN,
         TASK_SEQUENCE,
         TASK_BATCH,
     ]

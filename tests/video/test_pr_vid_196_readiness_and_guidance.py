@@ -610,6 +610,8 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
         "wan22_i2v_a14b_4step_v1@1.3.0": "1a21bfa93c2d6b51d45df50f363fe3d540f47cbbc3d891532f1704d2a8847982",
         # VID-FRAME: full-picture sizes on the 1.0.0 graph, pinned from its first registration.
         "wan22_i2v_a14b_4step_full_picture_v1@1.0.0": "2ffecce2d669e273c6867d8d10b5b1d336d761ebd7b3a629c7d81a7a3ff3da35",
+        # V1 end frame: the start-and-end-image workflow, pinned from its first registration.
+        "wan22_i2v_a14b_flf_v1@1.0.0": "e8b526579e251eea38921ac86ae8e5fd7d66d4aca32da48a21dd10328bfc502e",
         # VID-A14B-SVI-375: the three experimental SVI 2.0 versions.
         "wan22_i2v_a14b_svi@1.0.0": "13d874535e83ae50d154ced688aedb17e4c2aa679edcc74bc7c8040e393b9ba8",
         "wan22_i2v_a14b_svi@1.1.0": "be48344756f8ccdc264553c7aabce75e45d74745c4251f42e2cba1ab88c8f770",
