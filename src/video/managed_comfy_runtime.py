@@ -361,11 +361,11 @@ def verify_a14b_launch_args(argv: Sequence[str], profile: str) -> None:
     """Reject a launch that selects the other profile or can disable dynamic VRAM."""
 
     if profile not in {"baseline", "ck"} or (CK_ATTENTION_FLAG in argv) != (profile == "ck"):
-        raise ValueError(f"ComfyUI launch flags do not match A14B attention profile '{profile}'.")
+        raise ValueError(f"ComfyUI launch flags do not match attention profile '{profile}'.")
     conflicts = sorted(_DYNAMIC_VRAM_CONFLICTS.intersection(argv))
     if conflicts:
         raise ValueError(
-            f"A14B attention profile '{profile}' requires dynamic VRAM. "
+            f"Attention profile '{profile}' requires dynamic VRAM. "
             f"Remove conflicting launch flags {' '.join(conflicts)}."
         )
 

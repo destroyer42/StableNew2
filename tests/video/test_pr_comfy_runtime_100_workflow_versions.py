@@ -56,6 +56,7 @@ EXPECTED_GOVERNANCE = {
         for workflow_id in (WAN_ANIMATE2_PROMPT_ID, WAN_ANIMATE2_DRIVE_ID)
         for version in ("1.0.0", "1.1.0", "1.2.0")
     },
+    (WAN_ANIMATE2_DRIVE_ID, "1.3.0"): "experimental",  # PR-VID-ANIMATE-CK-WARM
 }
 # What the 1.2.0 requalification may change beyond version identity and provenance.
 GOVERNANCE_FIELDS = {"governance_state", "governance_notes", "display_name", "description"}
@@ -147,9 +148,10 @@ def test_historical_provenance_is_not_rewritten_to_the_new_runtime() -> None:
 def test_new_versions_are_registered_beside_the_old_ones(workflow_id: str) -> None:
     registry = build_default_workflow_registry()
 
-    expected_versions = ["1.0.0", "1.1.0", "1.2.0"] + (
-        ["1.3.0", "1.4.0"] if workflow_id == WAN_ID else []
-    )
+    expected_versions = ["1.0.0", "1.1.0", "1.2.0"] + {
+        WAN_ID: ["1.3.0", "1.4.0"],
+        WAN_ANIMATE2_DRIVE_ID: ["1.3.0"],  # PR-VID-ANIMATE-CK-WARM
+    }.get(workflow_id, [])
     assert registry.list_versions(workflow_id) == expected_versions
     assert WAN22_RUNTIME_VERSION == WAN_ANIMATE2_RUNTIME_VERSION == "1.2.0"
     newest = _spec(workflow_id, "1.2.0")

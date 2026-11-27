@@ -40,6 +40,7 @@ from src.video.video_workflow_njr_builder import (
 from src.video.workflow_catalog_wan_animate2 import (
     WAN_ANIMATE2_DRIVE_ID,
     WAN_ANIMATE2_RUNTIME_VERSION,
+    WAN_ANIMATE2_SPEED_VERSION,
 )
 from tests.helpers.make_video_313 import TI2V_ID, make_app, make_image
 from tests.helpers.motion_library_353 import (
@@ -479,7 +480,7 @@ def test_the_controller_imports_inspects_and_hands_off_a_real_clip(isolated_user
     inspection = controller.inspect_motion_asset(asset.asset_id)
     assert len(inspection.frames) == 3 and inspection.facts is not None
     plan = controller.plan_motion_library_handoff(
-        asset.asset_id, WAN_ANIMATE2_DRIVE_ID, WAN_ANIMATE2_RUNTIME_VERSION
+        asset.asset_id, WAN_ANIMATE2_DRIVE_ID, WAN_ANIMATE2_SPEED_VERSION
     )
     assert plan.ok and plan.form_fields[FIELD_DRIVING_VIDEO] == str(clip.resolve())
     assert not controller.plan_motion_library_handoff(asset.asset_id, TI2V_ID).ok
