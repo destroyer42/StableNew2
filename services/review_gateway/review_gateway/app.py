@@ -24,6 +24,8 @@ class Gateway:
             MediaStore(settings.media_dir),
             self.contract,
             clock,
+            undecided_days=settings.undecided_days,
+            cache_warn_bytes=settings.cache_warn_gib * 1024**3,
         )
 
     def phone_app(self) -> Starlette:

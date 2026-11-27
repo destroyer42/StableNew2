@@ -261,3 +261,15 @@ button {
 .updates li { border-top: 1px solid var(--line); padding: 0.5rem 0; }
 .updates p { margin: 0.15rem 0; overflow-wrap: anywhere; }
 .section-title { font-size: 1rem; margin: 1rem 0 0.25rem; }
+
+/* PHONE-FAST: the last decision can be taken back for a few seconds */
+#undo {
+  position: fixed;
+  right: 0.75rem;
+  bottom: calc(12.5rem + env(safe-area-inset-bottom));
+  z-index: 6;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+#undo[hidden] { display: none; }

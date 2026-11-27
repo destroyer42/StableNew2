@@ -67,6 +67,8 @@ const DETAILS = {
 };
 const ACTION_POLL_MS = 1000;
 const PREFETCH = 4;
+// PHONE-FAST: the last decision stays on the phone this long, so it can be undone.
+const UNDO_MS = 8000;
 const ACTION_WAIT_MS = 10 * 60 * 1000;
 let scopes = null; // the session's grants, read once
 const REFRESH_MS = 20000;
@@ -110,6 +112,7 @@ const mediaUrl = (item, variant) =>
 const groupNames = new Map();
 
 function runName(runId) {
+  if (runId === "all") return "To review";
   if (runId.startsWith("batch:")) return groupNames.get(runId) || "Batch";
   const match = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}_(.*)$/.exec(runId);
   if (!match) return runId;
@@ -206,7 +209,7 @@ function idempotencyKey() {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function queueDecision(item, verdict, favorite, tags) {
+function queueDecision(item, verdict, favorite, tags, heldUntil = 0) {
   const entry = {
     library_id: item.library_id,
     sha256: item.sha256,
@@ -214,6 +217,7 @@ function queueDecision(item, verdict, favorite, tags) {
     favorite,
     tags,
     idempotency_key: idempotencyKey(),
+    ...(heldUntil ? { held_until: heldUntil } : {}),
   };
   changeList(REJECTED_KEY, (list) => list.filter((e) => key(e) !== key(item)));
   changeList(QUEUE_KEY, (list) => [...list, entry]);
@@ -221,6 +225,106 @@ function queueDecision(item, verdict, favorite, tags) {
   item.state = "unsent";
   item.reason_code = null;
   flush();
+  return entry.idempotency_key;
+}
+
+// --- undo (PHONE-FAST) --------------------------------------------------------------------------------------------
+// The gateway has no "undecide", so the last decision (one item, or a compare's pair) is held on the phone for a few
+// seconds. The next decision, leaving the page or the time running out sends it.
+
+let undoable = null; // { keys, before, at, timer }
+
+function decideUndoably(choices) {
+  releaseHeld();
+  const until = Date.now() + UNDO_MS;
+  const keys = [];
+  const before = [];
+  for (const [item, verdict, favorite, tags] of choices) {
+    const copies = [item, ...findItem(key(item))];
+    before.push(...copies.map((copy) => [copy, copy.decision, copy.state, copy.reason_code]));
+    keys.push(queueDecision(item, verdict, favorite, tags, until));
+    for (const copy of copies) Object.assign(copy, { decision: item.decision, state: item.state, reason_code: null });
+  }
+  const at = triage ? { runId: triage.runId, libraryId: triage.list[triage.index].library_id } : null;
+  undoable = { keys, before, at, timer: setTimeout(releaseHeld, UNDO_MS) };
+  showUndo(true);
+}
+
+function releaseHeld() {
+  if (undoable) clearTimeout(undoable.timer);
+  undoable = null;
+  showUndo(false);
+  changeList(QUEUE_KEY, (list) => list.map(({ held_until, ...entry }) => entry));
+  flush();
+}
+
+function undo() {
+  if (!undoable) return;
+  const { keys, before, at, timer } = undoable;
+  clearTimeout(timer);
+  undoable = null;
+  showUndo(false);
+  changeList(QUEUE_KEY, (list) => list.filter((entry) => !keys.includes(entry.idempotency_key)));
+  for (const [copy, decision, state, reason] of before) {
+    Object.assign(copy, { decision, state, reason_code: reason });
+  }
+  toast("Undone");
+  flush();
+  const index = triage && at ? triage.list.findIndex((item) => item.library_id === at.libraryId) : -1;
+  if (index >= 0 && triage.runId === at.runId) {
+    triage.index = index;
+    renderItem();
+  } else if (at) {
+    location.hash = `#/triage/${encodeURIComponent(at.runId)}/${at.libraryId}`;
+  }
+}
+
+function showUndo(visible) {
+  let button = document.getElementById("undo");
+  if (!button) {
+    if (!visible) return;
+    button = el("button", { type: "button", id: "undo", text: "Undo", onclick: undo });
+    document.body.append(button);
+  }
+  button.hidden = !visible;
+}
+
+// "Keep the rest" and "Delete this run": one ordinary decision per item, never for one already sent for rework.
+function decideAll(runId, items, verdict) {
+  releaseHeld();
+  for (const item of items) {
+    const tags = item.decision ? item.decision.tags : [];
+    queueDecision(item, verdict, false, verdict === "keep" ? tags : tags.filter((tag) => tag !== "needs_fix"));
+  }
+  toast(`${items.length} ${verdict === "keep" ? "kept" : "deleted"}`);
+  renderGrid(runId);
+}
+
+const isKept = (item) => Boolean(item.decision) && item.decision.verdict === "keep" && item.state !== "refused";
+const isDeleted = (item) => Boolean(item.decision) && item.decision.verdict === "delete" && item.state !== "refused";
+const deletable = (item) => !isKept(item) && !isDeleted(item) && item.state !== "rework";
+
+function confirmDeleteRun(runId, items) {
+  const kept = items.filter(isKept).length;
+  const reworked = items.filter((item) => item.state === "rework").length;
+  const stay = [kept ? `${kept} kept` : "", reworked ? `${reworked} in rework` : ""].filter(Boolean).join(" and ");
+  const targets = items.filter(deletable);
+  sheet(
+    el("h2", { text: `Delete ${targets.length}?` }),
+    el("p", { text: `The files go to the PC's archive.${stay ? ` ${stay} stay.` : ""}` }),
+    el("div", { class: "sheet-actions" }, [
+      el("button", { type: "button", text: "Cancel", onclick: closeSheet }),
+      el("button", {
+        type: "button",
+        class: "primary",
+        text: `Delete ${targets.length}`,
+        onclick: () => {
+          closeSheet();
+          decideAll(runId, targets, "delete");
+        },
+      }),
+    ]),
+  );
 }
 
 function findItem(wanted) {
@@ -231,7 +335,7 @@ function findItem(wanted) {
 }
 
 async function send(entry) {
-  const { reason, ...body } = entry;
+  const { reason, held_until, ...body } = entry;
   const { state } = await api("/api/decisions", body);
   if (!ANSWERS.has(state)) throw new Error("unreadable reply"); // keep it and try again
   return state;
@@ -244,6 +348,11 @@ async function flush() {
   try {
     let entry;
     while ((entry = readList(QUEUE_KEY)[0])) {
+      const wait = (entry.held_until || 0) - Date.now();
+      if (wait > 0) {
+        retryTimer = setTimeout(flush, wait); // still undoable; what follows it waits too, to keep the order
+        return;
+      }
       let state;
       let reason = null;
       try {
@@ -436,14 +545,19 @@ const needsReview = (item) => ["undecided", "refused", "rejected"].includes(item
 async function showInbox(serial) {
   const { runs } = await api("/api/runs");
   await loadScopes();
+  const status = await api("/api/status").catch(() => null); // extra: the inbox shows without it
   if (serial !== renderSerial) return;
+  const waiting = runs.reduce((sum, run) => sum + run.undecided + run.refused, 0);
   const content = runs.length
     ? runs.map(runCard)
     : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
   const update = canUpdate()
     ? el("button", { type: "button", class: "pc-link", text: "Update the PC…", onclick: () => (location.hash = "#/update") })
     : null;
-  show("Review", false, ...[update, ...content].filter(Boolean));
+  const stream = waiting
+    ? el("button", { type: "button", class: "primary", text: `Review all (${waiting})`, onclick: () => (location.hash = "#/triage/all") })
+    : null;
+  show("Review", false, ...[...statusLines(status), stream, update, ...content].filter(Boolean));
 }
 
 const STATE_BADGES = { unsent: "…", pending: "⏳", applied: "✓", refused: "!", rejected: "!", rework: "↻" };
@@ -502,6 +616,17 @@ function renderGrid(runId) {
           })
         : null,
     ]),
+    items.some(needsReview) || items.some(deletable)
+      ? el("div", { class: "tools bulk" }, [
+          todo.length
+            ? el("button", { type: "button", text: `Keep the rest (${todo.length})`, onclick: () => decideAll(runId, todo, "keep") })
+            : null,
+          el("span", { class: "grow" }),
+          items.some(deletable)
+            ? el("button", { type: "button", text: "Delete this run…", onclick: () => confirmDeleteRun(runId, items) })
+            : null,
+        ])
+      : null,
     items.length
       ? el("div", { class: "grid" }, shown.map((item) => tile(runId, item)))
       : el("p", { class: "muted", text: "Nothing here any more." }),
@@ -832,23 +957,21 @@ function pick(winner, loser) {
     toast("Still loading");
     return;
   }
-  for (const [side, verdict] of [
-    [winner, "keep"],
-    [loser, "delete"],
-  ]) {
-    const before = side.decision;
-    const tags = before ? before.tags : [];
-    queueDecision(
-      side,
-      verdict,
-      verdict === "keep" && Boolean(before && before.favorite),
-      verdict === "keep" ? tags : tags.filter((tag) => tag !== "needs_fix"),
-    );
-    for (const copy of findItem(key(side))) {
-      copy.decision = side.decision;
-      copy.state = side.state;
-    }
-  }
+  decideUndoably(
+    [
+      [winner, "keep"],
+      [loser, "delete"],
+    ].map(([side, verdict]) => {
+      const before = side.decision;
+      const tags = before ? before.tags : [];
+      return [
+        side,
+        verdict,
+        verdict === "keep" && Boolean(before && before.favorite),
+        verdict === "keep" ? tags : tags.filter((tag) => tag !== "needs_fix"),
+      ];
+    }),
+  );
   if (navigator.vibrate) navigator.vibrate(15);
   toast("Picked; the other goes to the archive");
   advance();
@@ -1214,6 +1337,32 @@ function queueText(queue) {
   return `Queue: ${state || queue.state}${waiting}`;
 }
 
+// PHONE-FAST: every phone sees whether the PC is there, its queue, and a cache that has grown large.
+function statusLines(status) {
+  if (!status) return [];
+  const lines = [];
+  const pc = status.pc;
+  if (pc) {
+    const age = Date.parse(status.now) - Date.parse(pc.received_at);
+    const seen = age > STATUS_STALE_MS ? `PC last seen ${ago(age)} ago. ` : "";
+    lines.push(el("p", { class: "muted", text: `${seen}${queueText(pc)}` }));
+  }
+  if (status.cache.over) {
+    const gb = (bytes) => `${Math.round(bytes / 1024 ** 3)} GB`;
+    lines.push(
+      el("p", { class: "error", text: `The phone cache holds ${gb(status.cache.bytes)} (warning level ${gb(status.cache.warn_bytes)}).` }),
+    );
+  }
+  return lines;
+}
+
+function ago(milliseconds) {
+  const minutes = Math.round(milliseconds / 60000);
+  if (minutes < 120) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} days`;
+}
+
 function receiptText(update, reasonCode) {
   if (update && update.status === "applied") {
     const health =
@@ -1361,7 +1510,7 @@ function decide(verdict, favorite) {
   }
   const item = triage.list[triage.index];
   const tags = [...triage.tags].filter((tag) => !(verdict === "delete" && tag === "needs_fix"));
-  queueDecision(item, verdict, favorite, tags);
+  decideUndoably([[item, verdict, favorite, tags]]);
   if (navigator.vibrate) navigator.vibrate(15);
   toast(favorite ? "★ Favorite" : verdict === "keep" ? "Kept" : "Deleted");
   advance();
@@ -1373,8 +1522,8 @@ function advance() {
     renderItem();
     triage.lockedUntil = Date.now() + 250; // a double tap must not decide the next item unseen
   } else {
-    toast("End of this run");
-    location.hash = `#/run/${encodeURIComponent(triage.runId)}`;
+    toast(triage.runId === "all" ? "Nothing more to review" : "End of this run");
+    location.hash = triage.runId === "all" ? "" : `#/run/${encodeURIComponent(triage.runId)}`;
   }
 }
 
@@ -1439,7 +1588,7 @@ async function refresh() {
 
 back.addEventListener("click", () => {
   const [, page, run] = location.hash.split("/");
-  location.hash = page === "triage" && run ? `#/run/${run}` : "";
+  location.hash = page === "triage" && run && run !== "all" ? `#/run/${run}` : "";
 });
 window.addEventListener("hashchange", route);
 window.addEventListener("online", () => flush());
@@ -1449,6 +1598,8 @@ window.addEventListener("storage", () => {
 });
 document.getElementById("rejected").addEventListener("click", () => (location.hash = "#/rejected"));
 document.addEventListener("visibilitychange", refresh);
+document.addEventListener("visibilitychange", () => document.hidden && releaseHeld());
+window.addEventListener("pagehide", releaseHeld);
 setInterval(refresh, REFRESH_MS);
 
 showBadges();

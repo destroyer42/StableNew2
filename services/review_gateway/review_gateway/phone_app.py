@@ -165,6 +165,10 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
             }
         )
 
+    async def status(request: Request) -> Response:
+        await session(request)
+        return JSONResponse(await run_in_threadpool(store.phone_status))
+
     async def decisions(request: Request) -> Response:
         device = await session(request)
         body = await read_json(request)
@@ -280,6 +284,7 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
             Route("/api/session", whoami, methods=["GET"]),
             Route("/api/runs", runs, methods=["GET"]),
             Route("/api/runs/{run_id}", run, methods=["GET"]),
+            Route("/api/status", status, methods=["GET"]),
             Route("/api/decisions", decisions, methods=["POST"]),
             Route("/api/actions", actions, methods=["POST"]),
             Route("/api/actions", item_actions, methods=["GET"]),

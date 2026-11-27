@@ -64,6 +64,10 @@ class Settings:
     #: Empty until the owner enters the Immich address; keepers wait in the queue meanwhile.
     immich_url: str = ""
     immich_key_file: Path | None = None
+    #: PHONE-FAST. Cached media of an item nobody has decided is removed after this many days (0: never).
+    undecided_days: int = 30
+    #: PHONE-FAST. The phone and the log warn when the media cache is larger than this (0: never). Nothing is refused.
+    cache_warn_gib: int = 20
     #: DEPLOY-2. The console's remote-deploy switch (root-owned; "enabled" or anything else for off).
     deploy_switch_file: Path = Path("/etc/review-gateway/remote-deploy")
     #: The root deployer's state: ``inbox/`` (the only place this service writes) and its ``last.json``.
@@ -125,6 +129,10 @@ def load_settings(path: Path) -> Settings:
         settings = Settings(**raw)
     except TypeError as error:
         raise ConfigError(f"missing setting in {path}: {error}") from error
+    for name in ("undecided_days", "cache_warn_gib"):
+        value = getattr(settings, name)
+        if type(value) is not int or not 0 <= value <= 100_000:
+            raise ConfigError(f"{name} must be a whole number from 0 to 100000")
     if settings.immich_url != "":
         try:
             check_url(str(settings.immich_url))

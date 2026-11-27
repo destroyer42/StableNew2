@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import sqlite3
 import uuid
@@ -26,6 +27,7 @@ from .errors import GatewayError
 from .media import MediaStore, MediaWriter
 
 Clock = Callable[[], datetime]
+_LOG = logging.getLogger("review_gateway")
 
 OFFER_LIFETIME = timedelta(minutes=5)
 DEFAULT_ATTEMPTS = 5
@@ -36,6 +38,8 @@ STALE_FILE_S = 24 * 3600
 _SEEN_RESOLUTION = timedelta(hours=1)
 #: The phone inbox's group key for a named batch (N5); every other group is an output run folder name.
 BATCH_GROUP = "batch:"
+#: PHONE-FAST: not a group but every item still to be reviewed, across all groups (no run folder name looks like it).
+STREAM = "all"
 #: RG-140 slices 1 and 2. The schema reserves the others (N8's clip actions); the PC refuses anything it does not
 #: implement, so an older PC answers a slice-2 request with ``invalid_record``.
 PHONE_ACTIONS = frozenset(
@@ -156,8 +160,17 @@ def normalize_code(code: str) -> str:
 
 class Store:
     def __init__(
-        self, database: Path, media: MediaStore, contract: Contract, clock: Clock = utc_now
+        self,
+        database: Path,
+        media: MediaStore,
+        contract: Contract,
+        clock: Clock = utc_now,
+        *,
+        undecided_days: int = 30,
+        cache_warn_bytes: int = 20 * 1024**3,
     ) -> None:
+        self.undecided_days = undecided_days
+        self.cache_warn_bytes = cache_warn_bytes
         self.database = Path(database)
         self.database.parent.mkdir(parents=True, exist_ok=True)
         self.media = media
@@ -410,7 +423,9 @@ class Store:
 
     def run_items(self, run_id: str) -> list[dict[str, Any]]:
         batch_id = run_id.removeprefix(BATCH_GROUP)
-        if batch_id != run_id:
+        if run_id == STREAM:
+            where, value = "? = ''", ""
+        elif batch_id != run_id:
             where, value = "item.batch_id = ?", batch_id.lower()
         else:
             where, value = "item.run_id = ? AND item.batch_id IS NULL", run_id
@@ -455,7 +470,28 @@ class Store:
                     else None,
                 }
             )
+        if run_id == STREAM:
+            return _stream(items, rows)
         return items
+
+    def phone_status(self) -> dict[str, Any]:
+        """What every review phone shows: the PC's last reported queue and how large the cache is."""
+
+        with self.connection() as db:
+            status = db.execute(
+                "SELECT payload, received_at FROM pc_status WHERE id = 1"
+            ).fetchone()
+            size = _cached_bytes(db)
+        queue = json.loads(status["payload"])["queue"] if status else None
+        return {
+            "now": stamp(self.clock()),
+            "pc": {**queue, "received_at": status["received_at"]} if queue else None,
+            "cache": {
+                "bytes": size,
+                "warn_bytes": self.cache_warn_bytes,
+                "over": bool(self.cache_warn_bytes) and size > self.cache_warn_bytes,
+            },
+        }
 
     def _available(self, variants: list[sqlite3.Row]) -> dict[tuple[str, str], list[str]]:
         available: dict[tuple[str, str], list[str]] = {}
@@ -1047,13 +1083,71 @@ class Store:
                 window = DISCARD_UNDO if discarded else KEEP_AFTER_ANSWER
                 if now - _instant(row["answered_at"]) >= window:
                     expired.append((row["library_id"], row["sha256"]))
+            expired += self._stale_undecided(db, now)
             db.executemany(
                 "UPDATE item SET purged_at = ? WHERE library_id = ? AND sha256 = ?",
                 [(stamp(now), *key) for key in expired],
             )
+            size = _cached_bytes(db)
             # If this stops before the commit, the same items are simply purged again next time.
             removed = self._release(db, expired)
+        if self.cache_warn_bytes and size > self.cache_warn_bytes:
+            _LOG.warning(
+                "the media cache holds %d MB, over its %d MB warning level",
+                size // 1_000_000,
+                self.cache_warn_bytes // 1_000_000,
+            )
         return {"items_purged": len(expired), "files_removed": removed}
+
+    def _stale_undecided(self, db: sqlite3.Connection, now: datetime) -> list[tuple[str, str]]:
+        """Items nobody has decided, older than ``undecided_days``, with no request waiting for the PC (PHONE-FAST).
+
+        Any action request restarts the clock, so a rework's original outlives the wait for its result.
+        """
+
+        if not self.undecided_days:
+            return []
+        before = stamp(now - timedelta(days=self.undecided_days))
+        return [
+            (row["library_id"], row["sha256"])
+            for row in db.execute(
+                "SELECT library_id, sha256 FROM item WHERE purged_at IS NULL"
+                " AND latest_record_id IS NULL AND ready_at < ? AND NOT EXISTS ("
+                "   SELECT 1 FROM outbox WHERE outbox.library_id = item.library_id"
+                "   AND outbox.sha256 = item.sha256 AND (outbox.status = 'pending'"
+                "   OR COALESCE(outbox.answered_at, outbox.created_at) >= ?))",
+                (before, before),
+            )
+        ]
+
+
+def _stream(items: list[dict[str, Any]], rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    """The items still to review, the group with the newest activity first, oldest first within a group."""
+
+    groups = {(row["library_id"], row["sha256"]): row["batch_id"] or row["run_id"] for row in rows}
+    latest: dict[str, str] = {}
+    for row in rows:
+        group = groups[(row["library_id"], row["sha256"])]
+        latest[group] = max(latest.get(group, ""), row["created_at"])
+    todo = [item for item in items if item["state"] in ("undecided", "refused")]
+    todo.sort(key=lambda item: (item["created_at"], item["library_id"]))
+    todo.sort(
+        key=lambda item: (
+            latest[groups[(item["library_id"], item["sha256"])]],
+            groups[(item["library_id"], item["sha256"])],
+        ),
+        reverse=True,
+    )
+    return todo
+
+
+def _cached_bytes(db: sqlite3.Connection) -> int:
+    """The size of the media the items still use, from their manifests (shared files counted once)."""
+
+    return db.execute(
+        "SELECT COALESCE(SUM(bytes), 0) FROM (SELECT MAX(item_media.bytes) AS bytes FROM item_media"
+        " JOIN item USING (library_id, sha256) WHERE item.purged_at IS NULL GROUP BY digest)"
+    ).fetchone()[0]
 
 
 def _migrate(db: sqlite3.Connection) -> None:
