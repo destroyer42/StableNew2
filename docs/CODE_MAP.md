@@ -66,6 +66,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
 - `review_gateway_actions.py`: Phone actions from the review gateway (RG-140 slices 1 and 2): prepare a summary, then admit what it showed
 - `review_gateway_apply.py`: Validate and apply review gateway outbox records on the PC (RG-120)
+- `review_gateway_catalog.py`: RG-160: what the phone may choose while this PC is away, as names only
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
 - `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)

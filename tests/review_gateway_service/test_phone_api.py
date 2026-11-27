@@ -342,7 +342,15 @@ def test_a_cross_site_form_post_cannot_reach_the_api(rig, path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["/", "/static/app.js", "/static/queued.js", "/static/app.css", "/api/session", "/nowhere", "/sync/v1/health"],
+    [
+        "/",
+        "/static/app.js",
+        "/static/queued.js",
+        "/static/app.css",
+        "/api/session",
+        "/nowhere",
+        "/sync/v1/health",
+    ],
 )
 def test_every_phone_response_carries_the_security_headers(rig, path) -> None:
     headers = rig.phone.get(path).headers
@@ -435,8 +443,7 @@ def test_the_page_has_no_inline_script_or_style_and_loads_only_bundled_files(rig
 
 def test_the_script_renders_metadata_only_as_text_and_calls_no_other_host() -> None:
     script = "".join(
-        (STATIC / name).read_text(encoding="utf-8")
-        for name in ("app.js", "rating.js", "queued.js")
+        (STATIC / name).read_text(encoding="utf-8") for name in ("app.js", "rating.js", "queued.js")
     )
 
     for forbidden in (

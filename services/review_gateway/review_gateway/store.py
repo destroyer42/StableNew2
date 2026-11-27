@@ -499,7 +499,7 @@ class Store:
             waiting = deferred.waiting_actions(db)
             originals = {
                 (row["library_id"], row["sha256"]): self._original(
-                    db, row["parent_library_id"], row["parent_sha256"], reworked
+                    db, row["parent_library_id"], row["parent_sha256"], reworked, waiting
                 )
                 for row in rows
                 if row["parent_library_id"]
@@ -572,6 +572,7 @@ class Store:
         library_id: str,
         sha256: str,
         reworked: set[tuple[str, str]],
+        waiting: dict[tuple[str, str], list[str]],
     ) -> dict[str, Any] | None:
         """A result's original while it is still on the gateway and not deleted."""
 
@@ -596,6 +597,9 @@ class Store:
             "variants": sorted(self._available(variants).get(key, [])),
             "state": state,
             "decision": decision,
+            "waiting": waiting.get(
+                key, []
+            ),  # RG-160: "Keep rework" deletes it, so the phone warns first
         }
 
     def media_file(self, library_id: str, sha256: str, variant: str) -> tuple[Path, str]:

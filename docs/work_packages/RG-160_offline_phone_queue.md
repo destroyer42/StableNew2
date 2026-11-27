@@ -1,7 +1,8 @@
 # RG-160 — Phone actions queued while the PC is away
 
-Status: **phase 1, design only (2026-11-27). No code. Questions answered
-("Decisions on the open questions" below). Phase 2 waits for PHONE-FAST to merge and for the orchestrator's go.**
+Status: **phase 2 built (2026-11-27), tested hermetically only: not deployed, not tried on the live phone or with a
+real backend.** The owner's and orchestrator's answers are under "Decisions on the open questions"; current
+behavior is in section 10 of `REVIEW_GATEWAY.md`.
 Builds on [RG-100](RG-100_phone_review_gateway.md) (invariants and controls), [RG-140](RG-140_phone_actions.md) (phone
 actions) and [`REVIEW_GATEWAY.md`](../Subsystems/ReviewGateway/REVIEW_GATEWAY.md). Payloads:
 [`stablenew.review-gateway-sync.v1`](../schemas/stablenew.review-gateway-sync.v1.json).

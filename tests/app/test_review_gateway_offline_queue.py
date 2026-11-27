@@ -351,7 +351,9 @@ def test_a_large_catalog_stays_under_the_transport_limit(parts) -> None:
     names = tuple(f"model-{n:04d}-" + "x" * 140 + ".safetensors" for n in range(300))
     source.models = names
     source.warnings = {
-        name: PolicyWarning("image_model_unqualified", name, f"{n} " + "t" * 400, "w" * 900, "f" * 900, "g")
+        name: PolicyWarning(
+            "image_model_unqualified", name, f"{n} " + "t" * 400, "w" * 900, "f" * 900, "g"
+        )
         for n, name in enumerate(names)
     }
 

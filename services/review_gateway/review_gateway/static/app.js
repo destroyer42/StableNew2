@@ -398,7 +398,9 @@ async function flush() {
           showPairing();
           return;
         }
-        if (!(error instanceof ApiError) || error.status >= 500 || error.status === 429) {
+        // RG-160: "too many waiting" lasts until the PC answers them, so it is set aside rather than holding up the list.
+        const busy = error.status === 429 && error.code !== "too_many_pending";
+        if (!(error instanceof ApiError) || error.status >= 500 || busy) {
           retryTimer = setTimeout(flush, retryDelay);
           retryDelay = Math.min(retryDelay * 2, 30000);
           return;

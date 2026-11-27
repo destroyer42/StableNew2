@@ -495,7 +495,10 @@ class ReviewGatewaySync:
             return
         timeless = {k: v for k, v in payload.items() if k not in ("published_at", "models_as_of")}
         comparable = json.dumps(timeless, sort_keys=True)
-        if comparable == self._catalog_sent and now - self._catalog_sent_at < CATALOG_RESEND_SECONDS:
+        if (
+            comparable == self._catalog_sent
+            and now - self._catalog_sent_at < CATALOG_RESEND_SECONDS
+        ):
             return
         if client.send_choice_catalog(payload):
             self._catalog_sent, self._catalog_sent_at = comparable, now

@@ -53,7 +53,9 @@ class Pc:
         self.forge_up = False
         self.compiler = FakeCompiler()
         self.compiler.warnings = ()
-        self.compiler.ready = lambda action: self.forge_up or not action.startswith(("fix_", "another"))
+        self.compiler.ready = lambda action: self.forge_up or not action.startswith(
+            ("fix_", "another")
+        )
         self.now = datetime.now(UTC)
         real_submit = self.jobs.submit_njrs
 
@@ -93,7 +95,9 @@ class Pc:
         )
         catalog = ChoiceCatalog(
             self.ledger,
-            models=lambda: ("juggernautXL.safetensors", "ponyXL.safetensors") if self.forge_up else (),
+            models=lambda: ("juggernautXL.safetensors", "ponyXL.safetensors")
+            if self.forge_up
+            else (),
             warning_of=lambda _name: None,
             video=lambda: "Wan2.2 I2V",
         )
@@ -161,7 +165,9 @@ def request(rig, item, action, **params) -> str:
 
 
 def shown(rig) -> dict[str, dict]:
-    return {entry["record_id"]: entry for entry in rig.phone.get("/api/requests").json()["requests"]}
+    return {
+        entry["record_id"]: entry for entry in rig.phone.get("/api/requests").json()["requests"]
+    }
 
 
 def test_requests_made_while_the_pc_is_away_run_when_it_returns(world) -> None:
@@ -174,7 +180,10 @@ def test_requests_made_while_the_pc_is_away_run_when_it_returns(world) -> None:
     status = rig.phone.get("/api/status").json()
     assert status["pc_seen_at"] < status["now"]
     models = rig.phone.get("/api/catalog").json()["catalog"]["models"]
-    assert [model["label"] for model in models] == ["juggernautXL.safetensors", "ponyXL.safetensors"]
+    assert [model["label"] for model in models] == [
+        "juggernautXL.safetensors",
+        "ponyXL.safetensors",
+    ]
 
     fix = request(rig, item, "fix_face")
     dropped = request(rig, item, "more_like_this", count=2)

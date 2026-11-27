@@ -62,7 +62,9 @@ def catalog(**changes) -> dict:
         "schema_version": SCHEMA_VERSION,
         "type": "choice_catalog",
         "published_at": "2026-11-25T12:00:00Z",
-        "models": [{"id": "0123456789abcdef", "label": "juggernautXL.safetensors", "warnings": [0]}],
+        "models": [
+            {"id": "0123456789abcdef", "label": "juggernautXL.safetensors", "warnings": [0]}
+        ],
         "warnings": [{"code": "image_model_unqualified", "title": "Not qualified.", "why": "w"}],
         "ratios": [{"id": "1x1", "label": "Square 1:1"}],
         "video": {"available": True, "label": "Wan2.2 I2V"},
@@ -152,7 +154,11 @@ def test_a_catalog_over_the_transport_limit_is_refused(world) -> None:
 
 def test_the_status_says_when_the_pc_last_asked_for_requests(world, clock) -> None:
     before = world.phone.get("/api/status").json()
-    assert (before["pc_seen_at"], before["image_backend_ready"], before["waiting"]) == (None, None, 0)
+    assert (before["pc_seen_at"], before["image_backend_ready"], before["waiting"]) == (
+        None,
+        None,
+        0,
+    )
 
     world.outbox()
     seen = world.phone.get("/api/status").json()
@@ -447,3 +453,17 @@ def test_a_database_from_before_rg160_gains_the_cancel_column(world) -> None:
 
     record_id = queued(world)
     assert cancel(world, record_id).json()["state"] == "cancelled"
+
+
+def test_the_compare_view_says_what_is_waiting_for_the_original(world) -> None:
+    # "Keep rework" deletes the original, so the phone must be able to warn about its waiting request.
+    queued(world, "make_video")
+    queued(world)
+    manifest, blobs = world.manifest("result", run_id="20261125_120000_Reprocess")
+    manifest["parent"] = world.item
+    for digest in world.sync.post("/sync/v1/items", json=manifest).json()["missing"]:
+        assert world.sync.put(f"/sync/v1/media/{digest}", content=blobs[digest]).is_success
+
+    result = listed(world)[manifest["item"]["library_id"]]
+
+    assert result["compare"]["waiting"] == ["make_video", "fix_face"]

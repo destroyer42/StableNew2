@@ -43,9 +43,7 @@ def _stamped(value: str) -> datetime:
 
 
 def _note(db: sqlite3.Connection, name: str) -> sqlite3.Row | None:
-    return db.execute(
-        "SELECT payload, received_at FROM pc_note WHERE name = ?", (name,)
-    ).fetchone()
+    return db.execute("SELECT payload, received_at FROM pc_note WHERE name = ?", (name,)).fetchone()
 
 
 def pc_seen(db: sqlite3.Connection, now: datetime, text: str) -> None:

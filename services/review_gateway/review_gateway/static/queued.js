@@ -122,11 +122,22 @@ const Queued = (() => {
     return age > STATUS_STALE_MS ? el("p", { class: "muted", text: `PC last seen ${since(age)} ago.` }) : null;
   }
 
+  // Every copy of an item in these lists, including the one a rework result is compared with: "Keep rework" deletes
+  // that copy, so it must know what waits for it.
+  const copiesOf = (items, entry) =>
+    items.flatMap((item) => [item, item.compare]).filter((copy) => copy && key(copy) === key(entry));
+
+  const onScreen = () => [...runItems.values(), triage ? triage.list : []].flat();
+
+  function noteWaiting(copy, action) {
+    copy.waiting = [...(copy.waiting || []).filter((other) => other !== action), action];
+  }
+
   // Requests still on this phone, shown on the items they are about.
   function overlay(items) {
     for (const entry of unsent()) {
+      for (const copy of copiesOf(items, entry)) noteWaiting(copy, entry.action);
       for (const item of items.filter((i) => key(i) === key(entry))) {
-        item.waiting = [...(item.waiting || []).filter((action) => action !== entry.action), entry.action];
         if (REWORK.has(entry.action) && needsReview(item)) item.state = "rework";
       }
     }
@@ -155,19 +166,17 @@ const Queued = (() => {
       params: paramsFor(action, extra),
       idempotency_key: idempotencyKey(),
     };
-    const wasToReview = needsReview(item);
     changeList(QUEUE_KEY, (list) => [...list, entry]);
-    for (const copy of [item, ...findItem(key(item))]) {
-      copy.waiting = [...(copy.waiting || []).filter((other) => other !== action), action];
-    }
-    const current = triage && key(triage.list[triage.index]) === key(item);
+    for (const copy of [item, ...copiesOf(onScreen(), item)]) noteWaiting(copy, action);
     if (REWORK.has(action)) markRework(item, true);
     flush();
     badge();
-    closeSheet();
     toast("Saved; the PC runs it when it can");
-    if (current && wasToReview && item.state === "rework") advance();
-    else updateTriageStatus();
+    if (REWORK.has(action)) closeAfterRework(item); // review moves on, as it does for a rework queued online
+    else {
+      closeSheet();
+      updateTriageStatus();
+    }
     redraw();
   }
 
@@ -179,8 +188,10 @@ const Queued = (() => {
   // The gateway answered (or refused) a saved request.
   async function sent(entry, state) {
     if (state === "rejected") {
-      for (const copy of findItem(key(entry))) {
+      for (const copy of copiesOf(onScreen(), entry)) {
         copy.waiting = (copy.waiting || []).filter((action) => action !== entry.action);
+      }
+      for (const copy of findItem(key(entry))) {
         if (REWORK.has(entry.action)) markRework(copy, false);
       }
     }
@@ -317,6 +328,10 @@ const Queued = (() => {
     }
     if (step !== "confirm") return sheetFor(item, action, extra);
     if (state === "cancelled") return add(item, action, extra);
+    if (state === "refused") {
+      markRework(item, false);
+      return say("The PC has already refused this request. Ask again to see why.");
+    }
     say("The PC already has this request. Its result appears when it runs.");
   }
 
