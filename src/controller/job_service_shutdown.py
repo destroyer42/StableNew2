@@ -63,7 +63,11 @@ def start_job_watchdog(service: JobService, job: Job, watchdog: JobWatchdog) -> 
 
 
 def cancel_current_job(service: JobService, *, return_to_queue: bool) -> Any:
-    """Signal a fenced runner before persistence or child cleanup can delay its token."""
+    """Signal a fenced runner before persistence or child cleanup can delay its token.
+
+    While the application is closing, the running job is re-queued for the next start rather than cancelled. This
+    commits without waiting for the backend; the runner's own settlement makes the same idempotent transition.
+    """
     def signal_runner() -> None:
         try:
             service.runner.cancel_current(return_to_queue=return_to_queue)
@@ -76,7 +80,10 @@ def cancel_current_job(service: JobService, *, return_to_queue: bool) -> Any:
     running = service._find_running_job()  # noqa: SLF001
     if running is None:
         running = getattr(service.runner, "current_job", None)
-    if running and not return_to_queue:
+    if running and shutting_down:
+        if service.job_queue.requeue_for_app_close(running.job_id) is not None:
+            service.cleanup_external_processes(running.job_id, reason="app_close")
+    elif running and not return_to_queue:
         service.cancel_job(running.job_id, reason="cancel_requested")
     if not shutting_down:
         signal_runner()

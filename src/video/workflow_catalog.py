@@ -11,6 +11,7 @@ from src.video.workflow_catalog_fun_control import (
     build_fun_control_trial_spec,
 )
 from src.video.workflow_catalog_hunyuan15 import build_hunyuan15_specs
+from src.video.workflow_catalog_ltx25 import build_ltx25_specs
 from src.video.workflow_catalog_wan_a14b import build_wan_a14b_specs
 from src.video.workflow_catalog_wan_a14b_svi import build_wan_a14b_svi_specs
 from src.video.workflow_catalog_wan_animate2 import build_wan_animate2_specs
@@ -40,6 +41,7 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         *build_wan_a14b_specs(),
         *build_wan_a14b_svi_specs(),
         *build_hunyuan15_specs(),
+        *build_ltx25_specs(),
     )
 
 

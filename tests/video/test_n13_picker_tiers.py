@@ -21,6 +21,8 @@ ARMS = {
     "wan22_i2v_a14b_svi",
     "hunyuan_video15_i2v_480p_8step_v1",
     "hunyuan_video15_i2v_480p_12step_v1",
+    "ltx25_distilled_i2v_v1",
+    "ltx25_distilled_i2v_audio_v1",
 }
 ALWAYS = {
     "wan22_i2v_a14b_4step_v1",

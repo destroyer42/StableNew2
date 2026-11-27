@@ -180,7 +180,7 @@ def test_the_goal_may_span_lines_like_the_plan_goal() -> None:
 
 
 def test_the_schema_is_closed_bounded_and_requires_every_payload_field() -> None:
-    ok, refused = build_json_schema(REQUEST)["oneOf"]
+    ok = build_json_schema(REQUEST)
     assert ok["required"] == ["schema", "status", "kind", "slots"]
     assert list(ok["properties"]) == ["schema", "status", "kind", "slots", "changes"]
     slots = ok["properties"]["slots"]
@@ -193,7 +193,6 @@ def test_the_schema_is_closed_bounded_and_requires_every_payload_field() -> None
     assert (values["minItems"], values["maxItems"]) == (1, REQUEST.variety_per_slot)
     assert values["items"] == {"type": "string", "maxLength": MAX_VARIETY_VALUE_CHARS}
     assert item["properties"]["rationale"]["maxLength"] == MAX_VARIETY_RATIONALE_CHARS
-    assert refused["required"] == ["schema", "status", "refusal_reason"]
 
 
 # -- validator -----------------------------------------------------------------------------------------------------------

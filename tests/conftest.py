@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import checkout_write_guard, hidden_test_windows
+from tests.helpers import checkout_write_guard, hidden_test_windows, host_isolation
 
 
 # --- Quiet local runs (PR-DEVEX-QUIET-LOCAL-TESTS) ----------------------------------------
@@ -41,12 +41,23 @@ _QUIET_RUN = _load_quiet_run()
 # docstring for the opt-outs (STABLENEW_TESTS_VISIBLE=1, the physical desktop lane).
 hidden_test_windows.install()
 
+# --- A run's verdict does not depend on this machine's runtimes (CI-LEAN) -------------------------------------------
+# A live Forge/ComfyUI/Ollama is refused like an absent one. ``STABLENEW_TESTS_CI_PARITY=1`` (the PR gate's
+# ``--parity``) also hides FFmpeg, RIFE and ``nvidia-smi``, which the hosted runner does not have.
+host_isolation.install_network_guard()
+
+
+# Hidden for the whole session, before collection: module-level ``skipif`` checks must see what the runner would see.
+_HIDDEN_TOOLS = pytest.MonkeyPatch()
+
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config):
     if _QUIET_RUN is not None:
         _QUIET_RUN.relaunch_pytest_session()
     checkout_write_guard.install(Path(__file__).resolve().parents[1])
+    if host_isolation.ci_parity():
+        host_isolation.hide_host_tools(_HIDDEN_TOOLS.setattr, _HIDDEN_TOOLS.delenv)
 
 
 # --- Tests never write into the checkout's runtime folders ----------------------------------------
@@ -118,6 +129,7 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 def pytest_unconfigure(config):
+    _HIDDEN_TOOLS.undo()
     gc.collect = _REAL_GC_COLLECT
     if _GC_WAS_ENABLED:
         gc.enable()
@@ -202,6 +214,21 @@ def _isolate_process_global_runtime_state():
     finally:
         sys.excepthook = original_sys_hook
         threading.excepthook = original_thread_hook
+
+
+@pytest.fixture(autouse=True)
+def _retire_the_shared_persistence_worker():
+    """The persistence worker is one per process and remembers every failed write.
+
+    Left in place, one test's fake data makes a later application shutdown report "not drained" and leave the job
+    repository open. Drain and drop it while this test's temporary directory still exists.
+    """
+
+    yield
+    module = sys.modules.get("src.services.persistence_worker")
+    if module is not None and module._global_worker is not None:
+        module.shutdown_persistence_worker(timeout=5.0)
+        module._global_worker = None  # also when it did not stop in time
 
 
 @pytest.fixture(autouse=True)
@@ -324,6 +351,8 @@ def _managed_runtime_logs_never_touch_the_operators_log_directory(
         # The readiness probes report the registered launcher's command as active; one test's launcher is not another's.
         monkeypatch.setattr(comfy_process_manager, "_LAST_LAUNCH_CONFIG", None)
         monkeypatch.setattr(comfy_process_manager, "_GLOBAL_COMFY_PROCESS_MANAGER", None)
+        # A constructed WebUI manager registers itself; the executor asks it which launch profiles exist.
+        monkeypatch.setattr(webui_process_manager, "_GLOBAL_WEBUI_PROCESS_MANAGER", None)
     except Exception:  # pragma: no cover - isolation must never break collection
         pass
 

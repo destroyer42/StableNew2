@@ -283,7 +283,9 @@ def test_full_fake_journey_including_review_and_ratings(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("CI", "").lower() == "true",
+    # ``run_pr_gate.py --parity`` skips what the hosted runner skips.
+    os.environ.get("CI", "").lower() == "true"
+    or os.environ.get("STABLENEW_TESTS_CI_PARITY") == "1",
     reason=(
         "layout phase measures real widget geometry (artifact list < 60% of the workspace), "
         "which depends on the display's size and fonts; semantic GUI operator journeys are "

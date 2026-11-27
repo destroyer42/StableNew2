@@ -1,7 +1,9 @@
-"""The N1 warnings for a Comfy video workflow: experimental, and a cropped source (``policy_warnings.py``).
+"""The N1 warnings for a Comfy video workflow: experimental, licence and a cropped source (``policy_warnings.py``).
 
 Experimental means *not production-promoted*, not *refused*: the Queue summary shows this warning and selecting
-Queue records the job's own opt-in (``AGENTS.md`` section 2, ``VIDEO_PIPELINE.md`` section 10 invariant 4).
+Queue records the job's own opt-in (``AGENTS.md`` section 2, ``VIDEO_PIPELINE.md`` section 10 invariant 4).  A
+catalog entry may also declare ``backend_defaults["licence_warning"]`` (``title``, ``why``, ``fix``) when its model's
+licence restricts what may be generated; it is shown and recorded the same way and never blocks.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from PIL import Image
 from src.pipeline.policy_warnings import (
     CODE_VIDEO_END_FRAME_CROPPED,
     CODE_VIDEO_EXPERIMENTAL,
+    CODE_VIDEO_LICENCE_RESTRICTION,
     CODE_VIDEO_SOURCE_CROPPED,
     PolicyWarning,
 )
@@ -54,11 +57,38 @@ def experimental_workflow_warning(spec: Any, *, alternative: str = "") -> Policy
     )
 
 
+def licence_workflow_warning(spec: Any) -> PolicyWarning | None:
+    """The warning ``spec``'s catalog entry declares about its model's licence, else ``None``."""
+
+    declared = (getattr(spec, "backend_defaults", None) or {}).get("licence_warning")
+    if not isinstance(declared, Mapping):
+        return None
+    return PolicyWarning(
+        code=CODE_VIDEO_LICENCE_RESTRICTION,
+        subject=workflow_subject(spec),
+        title=str(declared.get("title") or ""),
+        why=str(declared.get("why") or ""),
+        fix=str(declared.get("fix") or ""),
+        source_gate="workflow_catalog.licence",
+    )
+
+
+def accepted_workflow_warnings(spec: Any, *, opted_in: bool) -> tuple[PolicyWarning, ...]:
+    """What a queued job records as accepted: the licence warning, and the experimental one it opted into."""
+
+    if spec is None:
+        return ()
+    warnings = (
+        experimental_workflow_warning(spec) if opted_in else None,
+        licence_workflow_warning(spec),
+    )
+    return tuple(warning for warning in warnings if warning is not None)
+
+
 def workflow_warning_records(spec: Any) -> list[dict[str, str]]:
     """The Queue summary's warnings for ``spec`` as plain data (rendered by Tk now, by the phone gateway later)."""
 
-    warning = experimental_workflow_warning(spec)
-    return [] if warning is None else [warning.as_dict()]
+    return [warning.as_dict() for warning in accepted_workflow_warnings(spec, opted_in=True)]
 
 
 def _crop_warning(policy: Any, subject: str, width: int, height: int) -> PolicyWarning | None:
@@ -160,10 +190,12 @@ def source_crop_warning_for_path(policy: Any, subject: str, path: str) -> Policy
 
 __all__ = [
     "DEFAULT_WHY",
+    "accepted_workflow_warnings",
     "end_frame_crop_warning",
     "end_frame_crop_warning_for_paths",
     "image_size",
     "experimental_workflow_warning",
+    "licence_workflow_warning",
     "source_crop_warning",
     "source_crop_warning_for_path",
     "workflow_subject",

@@ -128,6 +128,55 @@ def test_workers_requires_full_and_must_be_positive(capsys) -> None:
     assert "--workers" in capsys.readouterr().err
 
 
+# --- --parity: the affected census files, run as the hosted runner would -------------------------------------
+
+
+def _record_environments(monkeypatch) -> list[tuple[str, dict[str, str] | None]]:
+    observed: list[tuple[str, dict[str, str] | None]] = []
+
+    def fake_run(command, **kwargs):
+        observed.append((_command_name(tuple(command)), kwargs.get("env")))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(run_pr_gate.subprocess, "run", fake_run)
+    monkeypatch.setattr(run_pr_gate, "missing_required_tools", lambda: [])
+    return observed
+
+
+def test_parity_adds_the_affected_tests_and_hides_host_tools_in_every_step(monkeypatch) -> None:
+    observed = _record_environments(monkeypatch)
+
+    assert run_pr_gate.main(["--parity", "--base", "HEAD~1"]) == 0
+
+    names = [name for name, _ in observed]
+    assert names[:-1] == [_command_name(command) for _, command in run_pr_gate.GATE_STEPS]
+    assert names[-1] == "affected_tests.py"
+    assert all(env and env["STABLENEW_TESTS_CI_PARITY"] == "1" for _, env in observed)
+
+
+def test_parity_with_full_applies_to_the_census_instead_of_a_selection(monkeypatch) -> None:
+    observed = _record_environments(monkeypatch)
+
+    assert run_pr_gate.main(["--full", "--parity"]) == 0
+
+    names = [name for name, _ in observed]
+    assert "affected_tests.py" not in names and names[-1] == "run_sharded_census.py"
+    assert observed[-1][1]["STABLENEW_TESTS_CI_PARITY"] == "1"
+
+
+def test_the_default_run_leaves_the_environment_alone(monkeypatch) -> None:
+    observed = _record_environments(monkeypatch)
+
+    assert run_pr_gate.main([]) == 0
+    assert all(env is None for _, env in observed)
+
+
+def test_base_requires_parity(capsys) -> None:
+    with pytest.raises(SystemExit):
+        run_pr_gate.main(["--base", "HEAD~1"])
+    assert "--base" in capsys.readouterr().err
+
+
 # --- Shared pytest-gate output contract: quiet on success, diagnostic on failure -------------
 
 
@@ -138,7 +187,21 @@ def _write_test_file(tmp_path, name: str, body: str) -> str:
 
 
 @pytest.fixture
-def unchanged_repository(monkeypatch):
+def private_rootdir(monkeypatch, tmp_path):
+    """Make the temporary directory the nested run's repository.
+
+    A target outside ``rootdir`` makes pytest list every ancestor folder while collecting, ``%TEMP%`` included, and
+    another session deleting a folder there mid-listing failed the collection ("ERROR collecting test session").
+    """
+
+    config = tmp_path / "pyproject.toml"
+    config.write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+    monkeypatch.setattr(run_collection_gate, "ROOT", tmp_path)
+    monkeypatch.setattr(run_collection_gate, "PYTEST_CONFIG", config)
+
+
+@pytest.fixture
+def unchanged_repository(monkeypatch, private_rootdir):
     """Skip hashing the real repository; the gate sees an identical snapshot twice."""
 
     snapshot = run_collection_gate.RepositorySnapshot(files=(), guarded=())
@@ -197,7 +260,7 @@ def test_pytest_gate_propagates_non_failure_pytest_exit_codes(
 
 @pytest.mark.parametrize("pytest_passes", [True, False])
 def test_pytest_gate_still_fails_and_reports_repository_pollution(
-    tmp_path, monkeypatch, capsys, pytest_passes
+    tmp_path, monkeypatch, capsys, private_rootdir, pytest_passes
 ) -> None:
     body = "def test_ok():\n    pass\n" if pytest_passes else "def test_ok():\n    assert False\n"
     target = _write_test_file(tmp_path, "test_pollution.py", body)

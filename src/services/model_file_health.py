@@ -26,8 +26,10 @@ LOADER_FOLDERS = {
     "VAELoader": "vae",
     "LoraLoaderModelOnly": "loras",
     "CLIPVisionLoader": "clip_vision",
+    "LatentUpscaleModelLoader": "latent_upscale_models",
 }
-_EXTRA_FOLDER_KINDS = ("loras", "clip_vision")
+# Beside the roots the model-path files name, this includes the managed ComfyUI's own ``models/<kind>``.
+_EXTRA_FOLDER_KINDS = ("loras", "clip_vision", "latent_upscale_models")
 
 
 @dataclass(frozen=True)

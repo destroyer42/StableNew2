@@ -23,7 +23,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
 - `main` is protected: a PR is required, force pushes and deletion are blocked, the owner may bypass. Required checks:
   `required`, `full-suite` (the sharded census) and `windows`. Docs-only changes take a cheap path.
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below), the controller Tk import
-  boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
+  boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--parity` adds the tests the change affects, as the hosted runner sees them; `--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
 - Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`; `python tools/ci/ci_truth.py --ratchets` prints the current figures): whole-`src` strict mypy, unformatted files, blind/silent excepts in `src` (BLE001, S110, S112), thread and layering rules (daemon threads, raw threads, utils importing upward, controller importing the GUI), plain truncating file writes outside `atomic_io` (allowlist in `tools/ci/run_architecture_ratchets.py`), and the four controller line ceilings. Figures are not repeated here, so parallel ratchet-lowering PRs don't conflict; a figure stated here must still match the baseline.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
@@ -78,9 +78,9 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
   GPU device-loss dispatch quarantine (`docs/Subsystems/Runtime/PR-QUEUE-GPU-180_GPU_Loss_Dispatch_Containment.md`), shutdown
   admission fence, managed-Forge identity attestation, anonymous per-owner job objects, crash-safe state writes.
 - External A1111/Comfy processes are never adopted, restarted or killed; ambiguous dispatched generation POSTs are never
-  replayed. Cancel and Return requeues a job only on positive dispatch evidence; otherwise it is cancelled and flagged
+  replayed, except that a normal app close re-queues the running job for the next start (owner decision 2026-11-27). Cancel and Return requeues a job only on positive dispatch evidence; otherwise it is cancelled and flagged
   action-required (`docs/Subsystems/Runtime/QUEUE_AND_RUNTIME.md`).
-- AI Assist (Preview, advisory; `docs/Subsystems/AiAssist/AI_ASSIST.md`): typed, judged suggestions applied only on an explicit press from one tabbed AI Assist window (Prompt, Matrix slots, Plan, Check) with Undo last: values for existing slots, new slots, a selected phrase turned into a slot, and deterministic matrix checks; nothing saved or queued. Model quality is unverified.
+- AI Assist (Preview, advisory; `docs/Subsystems/AiAssist/AI_ASSIST.md`): typed, judged suggestions applied only on an explicit press from one tabbed AI Assist window (Prompt, Matrix slots, Plan, Check) with Undo last: values for existing slots, new slots, a selected phrase turned into a slot, and deterministic matrix checks; nothing saved or queued. Requests offer no refusal branch, a malformed remote answer is retried once, and the prompt-only video panel can suggest a motion phrase (ASSIST-FIX; one live replay: 0.0% refused, 1.9% malformed against a 1% target). Model quality is unverified.
 
 ## Active and next
 

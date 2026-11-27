@@ -30,6 +30,8 @@ KNOWN_SURFACES = frozenset({SURFACE_DESKTOP, SURFACE_PHONE})
 
 #: An experimental Comfy video workflow (not production-promoted). Its acceptance is the job's opt-in.
 CODE_VIDEO_EXPERIMENTAL = "video_experimental_workflow"
+#: A video workflow whose model licence restricts what may be generated with it (declared by its catalog entry).
+CODE_VIDEO_LICENCE_RESTRICTION = "video_licence_restriction"
 #: VID-FRAME: the video workflow's closest size cuts away more of the source picture than the workflow allows.
 CODE_VIDEO_SOURCE_CROPPED = "video_source_cropped"
 #: V1 end frame: the end image is cut to the start image's size and loses more than the workflow allows.
@@ -198,6 +200,7 @@ __all__ = [
     "CODE_IMAGE_MODEL_FAMILY_UNVERIFIED",
     "CODE_IMAGE_MODEL_UNQUALIFIED",
     "CODE_VIDEO_EXPERIMENTAL",
+    "CODE_VIDEO_LICENCE_RESTRICTION",
     "CODE_VIDEO_SOURCE_CROPPED",
     "CONTRACT",
     "KNOWN_SURFACES",

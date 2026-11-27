@@ -127,7 +127,7 @@ def test_ci_is_python_312_only_with_no_version_matrix() -> None:
     workflow = _read(".github/workflows/ci.yml")
 
     # The only matrix is the census shard index (PR-DEVEX-CENSUS-140); there is never an interpreter matrix.
-    assert workflow.count("matrix:") == 1 and "shard: [0, 1, 2]" in workflow
+    assert workflow.count("matrix:") == 1 and "shard: [0, 1, 2, 3, 4]" in workflow
     assert "python-version: [" not in workflow
     assert "3.11" not in workflow
     assert "3.12" not in workflow and "3.13" not in workflow
@@ -137,9 +137,9 @@ def test_ci_is_python_312_only_with_no_version_matrix() -> None:
 def test_census_shard_count_is_consistent_between_the_matrix_and_every_command() -> None:
     section = _ci_section("  full-suite-shard:")
 
-    assert "shard: [0, 1, 2]" in section
-    assert "--shards 3" in section
-    assert "--shards 3" in _ci_section("  full-suite:")
+    assert "shard: [0, 1, 2, 3, 4]" in section
+    assert "--shards 5" in section
+    assert "--shards 5" in _ci_section("  full-suite:")
     assert "census_shards.py run-shard" in section and "census_shards.py verify" in _ci_section("  full-suite:")
 
 

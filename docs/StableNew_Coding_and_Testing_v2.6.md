@@ -147,8 +147,8 @@ execution is explicitly authorized.
   failure; whether it is a required check is a branch-protection decision. It does not replace
   opt-in GPU/Forge/SVD hardware qualification.
   The full census executes in deterministic file-level shards (PR-DEVEX-CENSUS-140):
-  three independent `full-suite-shard` jobs (own runner, Python process, Xvfb and
-  JUnit) partition the active test files by `sha256(repo-relative path) % 3`, and the
+  five independent `full-suite-shard` jobs (own runner, Python process, Xvfb and
+  JUnit) partition the active test files by recorded duration, and the
   aggregate `full-suite` job fails closed unless every active file is assigned to
   exactly one shard, every shard artifact is present and every shard passed. Census elapsed
   time means the slowest shard's wall, not the sum of worker times. For a complete local census

@@ -71,6 +71,8 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
         on_preset=tab._on_preset_chosen,
         on_reset_preset=tab._on_reset_preset,
         on_duration=tab._on_duration_entered,
+        on_suggest=lambda: tab.motion_ai_host.suggest(),
+        on_undo_suggestion=lambda: tab.motion_ai_host.undo(),
     )
     tab.motion_intent_panel.grid(row=3, column=0, columnspan=4, sticky="ew")
     # Advanced (today's More settings): the section keeps its ``advanced_section`` name; it opens by itself for a

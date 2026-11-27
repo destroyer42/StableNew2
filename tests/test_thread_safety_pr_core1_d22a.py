@@ -186,7 +186,6 @@ class TestThreadTracking:
             completion_times.append(time.time())
 
         # Spawn multiple threads with different durations
-        start = time.time()
         _spawn_tracked_thread(slow_worker, args=(0.1,), name="Fast1")
         _spawn_tracked_thread(slow_worker, args=(0.2,), name="Medium")
         _spawn_tracked_thread(slow_worker, args=(0.1,), name="Fast2")
@@ -194,11 +193,8 @@ class TestThreadTracking:
         # Join all threads
         _join_tracked_threads(timeout=1.0)
 
-        # Verify all threads completed
+        # The join waited: every worker, the slowest included, had finished when it returned.
         assert len(completion_times) == 3
-        # Verify join waited for completion (elapsed time > longest worker)
-        elapsed = time.time() - start
-        assert elapsed >= 0.2  # Longest worker duration
 
 
 class TestQueueClearThreadSafety:
@@ -217,10 +213,11 @@ class TestQueueClearThreadSafety:
 
         clear_started = threading.Event()
         clear_completed = threading.Event()
+        release_clear = threading.Event()
 
         def mock_clear():
             clear_started.set()
-            time.sleep(0.5)  # Simulate slow file I/O
+            release_clear.wait(30.0)  # Simulate slow file I/O that outlasts the caller
             clear_completed.set()
             return 5
 
@@ -251,19 +248,18 @@ class TestQueueClearThreadSafety:
             controller._spawn_tracked_thread(_clear_async, name="QueueClear")
             return 0
 
-        start = time.time()
         result = on_queue_clear_v2()
-        elapsed = time.time() - start
 
-        # Verify method returned immediately (< 100ms)
-        assert elapsed < 0.1
+        # Returned while the clear was still held: the caller did not wait for it
+        assert not clear_completed.is_set()
         # Verify return value is 0 (immediate return, not actual count)
         assert result == 0
         # Verify background thread was started
         assert len(controller._tracked_threads) == 1
 
         # Wait for background operation to complete
-        clear_completed.wait(timeout=2.0)
+        release_clear.set()
+        clear_completed.wait(timeout=10.0)
         assert clear_completed.is_set()
 
         # Cleanup

@@ -29,6 +29,8 @@ DESKTOP_LANE_ENV = "STABLENEW_DESKTOP_LANE"
 # Far left of any monitor layout, but not Windows' -32000 "minimised" sentinel.
 OFF_SCREEN_X = -20000
 OFF_SCREEN_Y = -20000
+WINDOW_SIZE_CAP = (8000, 8000)
+HIT_TEST_ALPHA = 0.01
 _MARKER = "_stablenew_hidden_test_window"
 
 
@@ -77,16 +79,40 @@ def is_installed() -> bool:
     return all(getattr(cls.__init__, _MARKER, False) for cls in (tk.Tk, tk.Toplevel))
 
 
+def uncap_window_size(root: tk.Misc) -> None:
+    """Let a test window be any size, whatever this machine's screen is.
+
+    Windows caps a window at the screen size until ``wm maxsize`` says otherwise, so a test laid out for 1342 pixels got
+    1028 on a 1024-wide display. The hosted runner's X server applies no such cap.
+    """
+
+    root.wm_maxsize(*WINDOW_SIZE_CAP)  # type: ignore[attr-defined]
+
+
+def keep_hit_testable(window: tk.Misc) -> None:
+    """For a test that asks which widget is under a point (``winfo_containing``, pointer events).
+
+    Windows hit testing passes straight through a fully transparent window, so such a test finds nothing there. One
+    percent opacity is still practically invisible, and the private desktop of a quiet run shows nothing anyway.
+    """
+
+    if windows_stay_hidden():
+        window.wm_attributes("-alpha", HIT_TEST_ALPHA)  # type: ignore[attr-defined]
+
+
 def show_test_root(root: tk.Misc, width: int, height: int, *, timeout_s: float = 10.0) -> None:
     """Map ``root`` at ``width`` x ``height`` and return only once it is mapped at that size.
 
     ``deiconify`` maps a toplevel later, and its real size arrives as window-system events. Until both have been
     processed the root is 1x1, so widgets packed into it get no room and stay unmapped. A fixed settle after it then
     passes or fails with machine load. Waiting here makes "the root is shown at this size" a precondition of the test.
+    Windows caps a window at the screen size unless ``wm maxsize`` says otherwise, so the cap is raised first: a test
+    laid out for 1342 pixels gets them on a 1024-wide display, as it does on the hosted runner's X server.
     The root goes off screen while windows are hidden, and to ``+0+0`` when the operator opted to watch.
     """
 
     x, y = (OFF_SCREEN_X, OFF_SCREEN_Y) if windows_stay_hidden() else (0, 0)
+    uncap_window_size(root)
     root.wm_geometry(f"{width}x{height}+{x}+{y}")  # type: ignore[attr-defined]
     root.wm_deiconify()  # type: ignore[attr-defined]
     deadline = time.monotonic() + timeout_s

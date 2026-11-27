@@ -24,6 +24,10 @@ PRESET_HELP = (
     "A starting point for the movement: it sets the duration and the motion words. Presets are untested "
     "wording; values beyond the engine's defaults were observed once, not qualified."
 )
+SUGGEST_HELP = (
+    "Ask AI Assist for a motion phrase from the source image and prompt. A reduced copy of the image and the prompt "
+    "are sent to your AI worker over its SSH tunnel. Undo restores the previous text."
+)
 DURATION_HELP = (
     "How long the clip runs. Pick one or type seconds; it is rounded to the nearest length the engine can make, "
     "and the frame count shown is exactly what is queued."
@@ -40,6 +44,8 @@ class MotionIntentPanel(ttk.Frame):
         on_preset: Callable[[str], None],
         on_reset_preset: Callable[[], None],
         on_duration: Callable[[str], None],
+        on_suggest: Callable[[], None],
+        on_undo_suggestion: Callable[[], None],
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style="Panel.TFrame", **kwargs)
@@ -57,7 +63,19 @@ class MotionIntentPanel(ttk.Frame):
         self.phrase_label = ttk.Label(self, text="Motion", style="Dark.TLabel")
         self.phrase_label.grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
         self.phrase_entry = ttk.Entry(self, textvariable=self.phrase_var, style="Dark.TEntry")
-        self.phrase_entry.grid(row=0, column=1, columnspan=3, sticky="ew", pady=(0, 4))
+        self.phrase_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=(0, 4))
+        self.suggest_row = ttk.Frame(self, style="Panel.TFrame")
+        self.suggest_row.grid(row=0, column=3, sticky="e", padx=(8, 0), pady=(0, 4))
+        self.suggest_button = ttk.Button(
+            self.suggest_row, text="Suggest", style="Dark.TButton", command=on_suggest
+        )
+        self.suggest_button.grid(row=0, column=0)
+        attach_tooltip(self.suggest_button, SUGGEST_HELP)
+        self.undo_button = ttk.Button(
+            self.suggest_row, text="Undo", style="Dark.TButton", command=on_undo_suggestion
+        )
+        self.undo_button.grid(row=0, column=1, padx=(4, 0))
+        self.undo_button.grid_remove()
         attach_tooltip(self.phrase_entry, PHRASE_HELP)
         attach_tooltip(self.phrase_label, PHRASE_HELP)
         self.composed_label = ttk.Label(
@@ -151,7 +169,7 @@ class MotionIntentPanel(ttk.Frame):
         "Sends:" line shows with the presets, or alone (``sends``)."""
 
         rows: Sequence[tuple[bool, Sequence[tk.Widget]]] = (
-            (phrase, (self.phrase_label, self.phrase_entry)),
+            (phrase, (self.phrase_label, self.phrase_entry, self.suggest_row)),
             (preset or sends, (self.composed_label,)),
             (preset, (self.preset_label, self.preset_row)),
         )
@@ -161,6 +179,15 @@ class MotionIntentPanel(ttk.Frame):
                     widget.grid()
                 else:
                     widget.grid_remove()
+
+    def set_suggest_busy(self, busy: bool) -> None:
+        self.suggest_button.state(["disabled"] if busy else ["!disabled"])
+
+    def show_undo(self, shown: bool) -> None:
+        if shown:
+            self.undo_button.grid()
+        else:
+            self.undo_button.grid_remove()
 
     def show_duration(self, shown: bool) -> None:
         for widget in (self.duration_label, self.duration_row):

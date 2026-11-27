@@ -110,3 +110,11 @@ def test_show_test_root_returns_with_the_root_mapped_at_its_size(root: tk.Tk) ->
     assert label.winfo_ismapped()
     expected = f"+{OFF_SCREEN_X}+{OFF_SCREEN_Y}" if windows_stay_hidden() else "+0+0"
     assert root.wm_geometry().endswith(expected)
+
+
+def test_show_test_root_is_not_capped_by_the_screen(root: tk.Tk) -> None:
+    width, height = root.winfo_screenwidth() + 300, root.winfo_screenheight() + 200
+
+    show_test_root(root, width, height)
+
+    assert (root.winfo_width(), root.winfo_height()) == (width, height)

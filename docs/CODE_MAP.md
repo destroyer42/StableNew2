@@ -24,6 +24,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `events.py`: Content-free event record (owner decision D7: no training-data capture)
 - `framing.py`: The fixed instruction frame and the JSON Schema for one request
 - `host.py`: Read-only host seams: memory and generation activity
+- `image.py`: The one way a picture is prepared for a request: reduced, re-encoded and stripped of every metadata field
 - `manifests.py`: Pinned runtime manifest, provenance-gated model registry, local import and integrity verification
 - `observe.py`: Consume only the read capability minted by run_bounded for this request (F2)
 - `paths.py`: Where the offline AI runtime, weights and records live
@@ -68,6 +69,8 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
 - `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)
+- `review_gateway_scrub.py`: Take PC paths out of the metadata of an image that is about to be published (PHONE-FAST, RG-100 invariant 3)
+- `review_gateway_sources.py`: Which Output Library items are a job's authoritative outputs, for phone publishing (PHONE-FAST)
 - `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
 - `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
@@ -336,6 +339,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `history_compare_service.py`: Read-only "Compare with Parent" (PR-HISTORY-610B): resolve and assess ONE direct parent/child pair
 - `history_iterate_service.py`: Glue for "Iterate from History" (PR-HISTORY-610A): re-reads the canonical record, then hands off - never queu…
+- `keep_rates_loader.py`: LEARN-JOIN: compose the three read-only sources of the keep-rates report
 - `learning_controller.py`: Coordinate Learning experiment design, plan construction, execution, review, and ratings
 - `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
@@ -450,6 +454,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `experiment_design_panel.py`: Present Learning study selection, experiment inputs, and Preview controls
 - `generate_tab_frame_v2.py`: N6 Generate workspace: the Packs x Models batch builder, the Queue and Recent outputs on one page
 - `grid_design_frame.py`: Edit the two axes of a Learning grid and show proposed cell and image counts
+- `keep_rates_window.py`: LEARN-JOIN: one read-only window showing keep and favourite rates by recipe
 - `learning_analytics_panel.py`: Analytics display panel for learning system
 - `learning_baseline_editor.py`: Editor for Learning's own experiment baseline (the fixed settings every variant shares)
 - `learning_grid_view.py`: Render frozen Learning grid cells as scrollable result tiles with contact-sheet export
@@ -503,6 +508,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
 - `video_workflow_layout_v2.py`: Layout scaffolding for the Video Workflow tab (VID-UX-384)
 - `video_workflow_media_pane_v2.py`: Right-pane media and status column of the Video Workflow tab (VID-UX-384)
+- `video_workflow_motion_ai_host.py`: Suggest a motion phrase for the Video Workflow tab through AI Assist, and undo it (ASSIST-FIX)
 - `video_workflow_motion_intent_v2.py`: Motion preset, motion phrase and duration rows of the Video Workflow tab (V1-1)
 - `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
@@ -649,6 +655,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `baseline_exclusions.py`: Settings a controlled Learning study refuses, detected in and cleared from the Learning baseline draft only
 - `compatibility_probe.py`: Compatibility probe design (MEC-901): "does this checkpoint run here, and what kind of model is it?"
 - `controlled_study_display.py`: Presentation dispatch for the controlled single-position studies (Prompt Slot, LoRA Composition, Embedding)
+- `decision_rates.py`: LEARN-JOIN: what the owner keeps
 - `design_estimate.py`: How much work a design would create, before any Preview is built
 - `discovered_grouping.py`: Grouping engine for discovered-review candidate selection
 - `discovered_review_models.py`: Discovered-review group and item models
@@ -1123,6 +1130,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_catalog.py`: Assemble the versioned Comfy catalog with governance, dependencies, and runtime policies
 - `workflow_catalog_fun_control.py`: Pinned stock-node Fun Control graph; no installation or physical qualification
 - `workflow_catalog_hunyuan15.py`: HunyuanVideo 1.5 480p image-to-video, step-distilled FP8: an EXPERIMENTAL eval candidate (VID-CAND-382)
+- `workflow_catalog_ltx25.py`: LTX-2.5 22B distilled image-to-video: an EXPERIMENTAL eval candidate (VID-CAND-LTX25)
 - `workflow_catalog_wan_a14b.py`: Wan2.2 I2V-A14B lightx2v 4-step workflow spec (VID-CLIP-370; approved by VID-CLIP-372)
 - `workflow_catalog_wan_a14b_svi.py`: Experimental Wan2.2 I2V-A14B + SVI 2.0 workflow for multi-segment sequences (VID-A14B-SVI-375)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
@@ -1140,7 +1148,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_registry.py`: Resolve exact workflow versions and list offerable entries under the catalog's governance rules
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
 - `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
-- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow: experimental, and a cropped source (``policy_warnings.py``)
+- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow: experimental, licence and a cropped source (``policy_warnings.py`…
 
 ## src/video/motion/
 

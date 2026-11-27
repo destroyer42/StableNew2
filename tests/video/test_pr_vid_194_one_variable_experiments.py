@@ -28,6 +28,8 @@ from src.video.workflow_catalog_wan_animate2 import (
     WAN_ANIMATE2_PROMPT_ID,
 )
 
+_REPO = Path(__file__).resolve().parents[2]  # source reads do not depend on the working directory
+
 TI2V_ID = "wan22_ti2v_5b_i2v_v1"
 APPEARANCE = "Character appearance description: a woman in a navy top. Background: pale studio."
 MOTION = "A person steps left, then raises an arm."
@@ -542,19 +544,23 @@ def test_gui_experiment_code_builds_no_payload_and_branches_on_no_workflow():
         text = Path(relative).read_text(encoding="utf-8").lower()
         for token in forbidden:
             assert token not in text, f"{relative} must not contain {token!r}"
-    tab = Path("src/gui/views/video_workflow_tab_frame_v2.py").read_text(encoding="utf-8").lower()
+    tab = (
+        Path(_REPO, "src/gui/views/video_workflow_tab_frame_v2.py")
+        .read_text(encoding="utf-8")
+        .lower()
+    )
     for token in ("submit_njrs", "jobrepository", "pipelinerunner", "positive_pose", "prompt_id"):
         assert token not in tab
 
 
 def test_experiment_service_names_no_workflow_or_model():
-    text = Path("src/video/video_workflow_experiment.py").read_text(encoding="utf-8").lower()
+    text = Path(_REPO, "src/video/video_workflow_experiment.py").read_text(encoding="utf-8").lower()
     for token in ("wan_animate", "animate2", "wan22", "comfy", "pose_strength", "pose_prompt"):
         assert token not in text
 
 
 def test_controller_stays_small_and_owns_no_njr_construction():
-    text = Path("src/controller/video_workflow_controller.py").read_text(encoding="utf-8")
+    text = Path(_REPO, "src/controller/video_workflow_controller.py").read_text(encoding="utf-8")
     assert len(text.splitlines()) < 260
     assert "ReprocessJobBuilder" not in text and "build_reprocess_job" not in text
 

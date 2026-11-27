@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -62,6 +62,7 @@ from src.review.review_evidence import (
     REVIEW_TAGS,
     build_disposition_with_prior_settings,
     image_source_job,
+    stamp_review_batch,
 )
 
 if TYPE_CHECKING:
@@ -110,6 +111,7 @@ class RecordApplier:
         active_inputs: Callable[[], Collection[str]] | None,
         actions: GatewayActions | None = None,
         admin: AdminRequests | None = None,
+        batch_of_job: Callable[[str], Mapping[str, Any] | None] | None = None,
     ) -> None:
         self._ledger = ledger
         self._root = output_root
@@ -117,6 +119,7 @@ class RecordApplier:
         self._active_inputs = active_inputs
         self._actions = actions
         self.admin = admin
+        self._batch_of_job = batch_of_job
 
     def handle(self, raw: Any) -> Applied | None:
         """The outcome for one raw outbox record; ``None`` when it has no acknowledgeable record id.
@@ -166,13 +169,20 @@ class RecordApplier:
         if scope not in device.scopes:
             raise _Refused(NOT_GRANTED)
 
-    def _resolve(self, record: OutboxRecord) -> tuple[Path, str]:
+    def _resolve(self, record: OutboxRecord) -> tuple[OutboxRecord, Path, str]:
+        """The file a record is about. The record returned names the PC file's own digest (a video is sent without its
+        metadata, so the phone knows it by other bytes)."""
+
         published = self._ledger.published(record.target.library_id)
         if published is None or published["state"] != "published":
             raise _Refused(UNKNOWN_ITEM)
         if published["sha256"] != record.target.sha256:
             raise _Refused(DIGEST_MISMATCH)
-        return self._root / str(published["rel_path"]), str(published["rel_path"])
+        target = record.target
+        file_sha = self._ledger.file_digest(target.library_id, target.sha256)
+        if file_sha != target.sha256:
+            record = replace(record, target=replace(target, sha256=file_sha))
+        return record, self._root / str(published["rel_path"]), str(published["rel_path"])
 
     def _current_digest(self, path: Path) -> str | None:
         """SHA-256 of the file now at ``path`` (``None`` when absent); refuses links and paths outside the root."""
@@ -204,7 +214,7 @@ class RecordApplier:
             raise _Refused(FAVORITE_WITH_DELETE)
         if decision.verdict == "delete" and "needs_fix" in decision.tags:
             raise _Refused(INVALID_RECORD)
-        path, rel_path = self._resolve(record)
+        record, path, rel_path = self._resolve(record)
         if decision.verdict == "keep":
             return self._keep(record, path)
         return self._discard(record, path, rel_path)
@@ -223,7 +233,7 @@ class RecordApplier:
         self._authorize(record, "queue")
         if self._actions is None:
             raise _Refused(NOT_GRANTED)
-        path, _rel_path = self._resolve(record)
+        record, path, _rel_path = self._resolve(record)
         current = self._current_digest(path)
         if current is None:
             raise _Refused(UNKNOWN_ITEM)
@@ -290,6 +300,7 @@ class RecordApplier:
             artifact_sha256=record.target.sha256,
             source_job_id=image_source_job(path) if image else "",
         )
+        stamp_review_batch(evidence, self._batch_of_job)
         if disposition == "retain" and decision.favorite:
             evidence.metadata[REVIEW_FAVORITE] = True
         if decision.tags:

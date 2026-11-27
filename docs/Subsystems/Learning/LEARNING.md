@@ -139,7 +139,7 @@ scroll owner so the result is visible without displacing the initial laptop layo
 
 ### 3.4 Discovered Outputs
 
-`LearningController.trigger_background_scan` runs `OutputScanner.scan_incremental` over the output root in a thread spawned through `get_thread_registry().spawn`, groups artifacts (`GroupingEngine`), and writes groups with `apply_scan` into `DiscoveredReviewStore`. Artifacts that carry a `learning_context.experiment_id` are skipped (they have their own Experiment Review). The scan also skips Photo Optimize's workspace and Review's archive (`<output root>/_archive`, where Review's Discard moves images; `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.7.1), so an archived image is not rediscovered. The completion callback is marshalled to the Tk thread through `app_controller._run_in_gui_thread` (audit B6 is fixed here [V]). Items are rated in the table (`save_discovered_item_rating`); groups can be closed, ignored, reopened, pruned or reset.
+The scan is on demand only: nothing starts it at launch, on a timer, on job completion or when a view opens. Discovered Outputs (Advanced) has Rescan and Rebuild; Staged Curation has a Rescan for the same store. `LearningController.trigger_background_scan` runs `OutputScanner.scan_incremental` over the output root in a thread spawned through `get_thread_registry().spawn`, groups artifacts (`GroupingEngine`), and writes groups with `apply_scan` into `DiscoveredReviewStore`. Artifacts that carry a `learning_context.experiment_id` are skipped (they have their own Experiment Review). The scan also skips Photo Optimize's workspace and Review's archive (`<output root>/_archive`, where Review's Discard moves images; `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.7.1), so an archived image is not rediscovered. The completion callback is marshalled to the Tk thread through `app_controller._run_in_gui_thread` (audit B6 is fixed here [V]). Items are rated in the table (`save_discovered_item_rating`); groups can be closed, ignored, reopened, pruned or reset.
 
 ### 3.5 Staged Curation
 
@@ -686,7 +686,7 @@ The rules for this hiding:
 - A hidden study that is currently selected stays shown.
 - Every study stays in the catalog, and saved experiments of every type still open, run and rate.
 - **Advanced** shows the chooser and the views as before.
-- The automatic discovered-output scan is unchanged.
+- The discovered-output scan never runs by itself: only Rescan or Rebuild starts it (section 3.4; owner decision 2026-11-27, "Stop scan, keep groups").
 
 The list is `SIMPLE_HIDDEN_STUDY_SLUGS` in `src/gui/view_contracts/workspace_mode_contract.py`.
 
@@ -738,6 +738,20 @@ The observed lookup (`src/history/observed_execution.py`) never reads on the cal
 per-checkpoint cache and schedules one background read on the repository's read-only connection (newest jobs first, at most
 20,000 rows and 200 matching jobs, refreshed after five minutes). Until that read finishes it answers 0, so the first Preview
 of a model can show a warning that a later Preview no longer shows.
+
+### 3.20 What you keep: decision rates (LEARN-JOIN)
+
+**What You Keep** on the Learning header (Simple and Advanced) opens a read-only window of keep and favourite rates with
+reason-tag counts: by model; per model by prompt slot value, LoRA and strength, embedding and strength, sampler, steps,
+CFG and PromptPack; and by named batch. `src/learning/decision_rates.py` takes each image's current Keep or Delete
+(last disposition row for its bytes, desktop or phone; Re-work and Undo do not count), joins it by `source_job_id` to the
+job's NJR (`JobRepository.read_snapshots_for_jobs`, `mode=ro`, primary-key chunks) and aggregates. Videos are not
+included. The window also says how many decisions did not join and how many published images are undecided.
+
+A difference is shown only when a Newcombe 95% interval against the rest of the group, Bonferroni-corrected for the
+options compared, excludes zero with at least 30 images on each side; otherwise it reads "not enough yet". The report is
+observational (invariant 5): it feeds no recommendation, proposal, publication, Apply or setting, writes nothing and is
+not stored. A new Keep or Delete row for a named batch's job also carries `review_batch` (`batch_id`, `name`).
 
 ## 4. Data and persistence
 

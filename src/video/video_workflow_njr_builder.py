@@ -72,8 +72,8 @@ from src.video.workflow_source_preparation import (
     prepare_declared_workflow_source,
 )
 from src.video.workflow_warnings import (
+    accepted_workflow_warnings,
     end_frame_crop_warning,
-    experimental_workflow_warning,
     source_crop_warning,
 )
 
@@ -905,10 +905,11 @@ class VideoWorkflowNjrBuilder:
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
         # N1: the operator's Queue on a summary that showed these warnings accepts them.
-        accepted = []
-        warning = experimental_workflow_warning(spec)
-        if warning is not None and extra_metadata["video_workflow"]["experimental_opt_in"] is True:
-            accepted.append(warning)
+        accepted = list(
+            accepted_workflow_warnings(
+                spec, opted_in=extra_metadata["video_workflow"]["experimental_opt_in"] is True
+            )
+        )
         size = (source_preparation or {}).get("source_dimensions")
         if size:
             crop = source_crop_warning(spec, size["width"], size["height"])
