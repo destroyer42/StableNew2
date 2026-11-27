@@ -18,6 +18,7 @@ from src.ai_assist.contracts import (
     OutcomeCode,
     SuggestionKind,
 )
+from src.ai_assist.service import Submission
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.ai_preview_dialog import AiPreviewDialog
 from src.gui.ai_suggestion_dialog import AiSuggestionDialog
@@ -177,6 +178,12 @@ class PromptAiSuggestions:
         self._check_findings: tuple[Finding, ...] = ()
         self.outcome: AssistOutcome | None = None
         self._active_id: str | None = None
+        # Retry with the uncensored model: how to repeat the last action, the exact request it sent, the model offered
+        # after a refusal, and (only while a retry press is being handled) the model to send to. Memory only.
+        self._last_action: Callable[[], None] | None = None
+        self._last_request: AssistRequest | None = None
+        self._retry_model: Any = None
+        self._one_off: Any = None
         self._closed = False
         self._accepted = False
         self._review_cancelled = False
@@ -369,6 +376,7 @@ class PromptAiSuggestions:
             on_request=self.request,
             on_accept=self.accept,
             on_cancel=self.cancel,
+            on_retry=self.retry_uncensored,
             on_close=self.close,
             explanations={kind: self._problem(kind) for kind in KIND_LABELS},
             trust_label=self._trust_label(),
@@ -407,6 +415,46 @@ class PromptAiSuggestions:
         except Exception:  # noqa: BLE001 - fixed copy only
             return ""
 
+    # -- retry with the uncensored model: one explicit press after a refusal, never automatic --------------------------
+
+    def _send(self, request: AssistRequest, submit: Callable[..., Any], *args: Any) -> Any:
+        """The one place a request leaves this window. A retry goes only if it is exactly the refused request."""
+
+        one_off, refused = self._one_off, self._last_request
+        if one_off is None:
+            self._last_request = request
+            return submit(request, *args)
+        if refused is None or replace(request, request_id=refused.request_id) != refused:
+            return Submission(
+                False,
+                AssistOutcome(
+                    OutcomeCode.UNAVAILABLE,
+                    request.request_id,
+                    "retry_source_changed",
+                    details={"provider": "remote"},
+                ),
+            )
+        return submit(request, *args, one_off=one_off)
+
+    def _offer_retry(self, outcome: AssistOutcome) -> None:
+        offer = getattr(self.owner, "refusal_retry_model", None)
+        self._retry_model = offer(outcome) if callable(offer) else None
+        if self.dialog is not None:
+            self.dialog.offer_retry(self._retry_model is not None)
+
+    def retry_uncensored(self) -> None:
+        model, action = self._retry_model, self._last_action
+        if model is None or action is None or self._active_id is not None:
+            return
+        self._retry_model = None
+        if self.dialog is not None:
+            self.dialog.offer_retry(False)
+        self._one_off = model
+        try:
+            action()
+        finally:
+            self._one_off = None
+
     def request(self, kind: SuggestionKind) -> None:
         if self.dialog is None or self._active_id is not None:
             return
@@ -432,7 +480,8 @@ class PromptAiSuggestions:
         self._active_id = snapshot.request.request_id
         self.dialog.running(kind)
         self.refresh()
-        result = self.owner.submit(snapshot.request, self._completed)
+        self._last_action = lambda: self.request(kind)
+        result = self._send(snapshot.request, self.owner.submit, self._completed)
         if not result.accepted:
             self._completed(
                 result.outcome
@@ -501,7 +550,8 @@ class PromptAiSuggestions:
             suggestion = checked_suggestion(outcome, request)
             return None if suggestion is None else judge_plan(suggestion, plan.facts)
 
-        result = self.owner.submit_plan(request, judge, self._plan_completed)
+        self._last_action = lambda: self.advise(goal)
+        result = self._send(request, self.owner.submit_plan, judge, self._plan_completed)
         if not result.accepted:
             self._plan_completed(
                 result.outcome or AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id),
@@ -528,6 +578,7 @@ class PromptAiSuggestions:
         ):
             return
         self._active_id = None
+        self._offer_retry(outcome)
         trust = result_provider_label(outcome) or self._trust_label()
         # What was sent with the request, shown above every result (AI-211).
         sent = planning_for_text(request)
@@ -752,7 +803,8 @@ class PromptAiSuggestions:
         self._active_id = request.request_id
         dialog.running_variety()
         self.refresh()
-        result = self.owner.submit(request, self._variety_completed)
+        self._last_action = lambda: self.suggest_variety(goal, selected, count, focus)
+        result = self._send(request, self.owner.submit, self._variety_completed)
         if not result.accepted:
             self._variety_completed(
                 result.outcome or AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id)
@@ -790,6 +842,7 @@ class PromptAiSuggestions:
         ):
             return
         self._active_id = None
+        self._offer_retry(outcome)
         trust = result_provider_label(outcome) or self._trust_label()
         if trust:
             dialog.set_trust_label(trust)
@@ -1026,7 +1079,8 @@ class PromptAiSuggestions:
         self._active_id = request.request_id
         dialog.running_proposal()
         self.refresh()
-        result = self.owner.submit(request, self._proposal_completed)
+        self._last_action = lambda: self.suggest_slot(goal)
+        result = self._send(request, self.owner.submit, self._proposal_completed)
         if not result.accepted:
             self._proposal_completed(
                 result.outcome or AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id)
@@ -1063,6 +1117,7 @@ class PromptAiSuggestions:
         ):
             return
         self._active_id = None
+        self._offer_retry(outcome)
         trust = result_provider_label(outcome) or self._trust_label()
         if trust:
             dialog.set_trust_label(trust)
@@ -1320,7 +1375,8 @@ class PromptAiSuggestions:
         self._active_id = request.request_id
         dialog.running_phrase()
         self.refresh()
-        result = self.owner.submit(request, self._phrase_completed)
+        self._last_action = lambda: self.suggest_phrase(goal)
+        result = self._send(request, self.owner.submit, self._phrase_completed)
         if not result.accepted:
             self._phrase_completed(
                 result.outcome or AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id)
@@ -1358,6 +1414,7 @@ class PromptAiSuggestions:
         ):
             return
         self._active_id = None
+        self._offer_retry(outcome)
         trust = result_provider_label(outcome) or self._trust_label()
         if trust:
             dialog.set_trust_label(trust)
@@ -1519,6 +1576,7 @@ class PromptAiSuggestions:
         ):
             return
         self._active_id = None
+        self._offer_retry(outcome)
         if self._review_cancelled:
             self.outcome = None
             dialog.show_review(
@@ -1903,6 +1961,7 @@ class PromptAiSuggestions:
         self._plan = self._plan_request = None
         self._drop_variety()
         self._active_id = None
+        self._last_action = self._last_request = self._retry_model = None
 
     def destroy(self) -> None:
         if self.preview_dialog is not None and self.preview_dialog.winfo_exists():

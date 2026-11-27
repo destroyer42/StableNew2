@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from src.pipeline.video import resolve_ffmpeg_executable
+from src.video.driver_intent import driver_cover_size
 from src.video.driving_video_inspection import (
     MAX_PREVIEW_DECODE_PIXELS,
     STATUS_FAILED,
@@ -79,6 +80,10 @@ MAX_FRAME_PIXELS = MAX_PREVIEW_DECODE_PIXELS
 FUN_CONTROL_WORKFLOW_ID = "wan22_fun_control_5b_canny_i2v_v1"
 FUN_CONTROL_MAX_SOURCE_EDGE = 832
 FUN_CONTROL_RESIZE_FILTER = "bilinear"
+#: V1-3 (D8): a driver scaled to cover the working frame uses the node's own "area" filter.
+COVER_RESIZE_FILTER = "area"
+#: ComfyUI refused a 107,409,268 byte driver upload (HTTP 413, limit 104,857,600); 1 MiB is left for the request.
+MAX_UPLOADABLE_BYTES = 103_809_024
 STALE_TEMP_SECONDS = 24 * 3600
 
 STATUS_PREPARED = "prepared"
@@ -130,6 +135,9 @@ class MotionSourceRequest:
     end: float | None = None
     unit: str = "seconds"
     fps_conversion: str = FPS_CONVERSION_NONE
+    #: The display frame (width, height) the driver only needs to cover; ``None`` keeps the clip's own size.
+    #: A larger clip is scaled down to cover it (same aspect, never cropped) and must stay uploadable.
+    cover: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,6 +245,7 @@ def build_window_md5_command(
     last: int,
     pixel_format: str,
     resize: tuple[int, int] | None = None,
+    resize_filter: str = FUN_CONTROL_RESIZE_FILTER,
 ) -> list[str]:
     """Fingerprint every source frame in ``[first, last]`` (decode order, stored orientation)."""
 
@@ -244,7 +253,7 @@ def build_window_md5_command(
         *_input_args(ffmpeg, video),
         "-vf",
         f"select='between(n,{first},{last})'"
-        + (f",scale={resize[0]}:{resize[1]}:flags={FUN_CONTROL_RESIZE_FILTER}" if resize else ""),
+        + (f",scale={resize[0]}:{resize[1]}:flags={resize_filter}" if resize else ""),
         "-fps_mode",
         "passthrough",
         "-pix_fmt",
@@ -279,6 +288,7 @@ def build_encode_command(
     resize: tuple[int, int] | None = None,
     *,
     compact_timestamps: bool = False,
+    resize_filter: str = FUN_CONTROL_RESIZE_FILTER,
 ) -> list[str]:
     """Write exactly the plan's frames, losslessly, with no metadata and a hard size cap."""
 
@@ -290,7 +300,7 @@ def build_encode_command(
         "-1",
         "-vf",
         ffmpeg_filter_chain(plan, compact_timestamps=compact_timestamps)
-        + (f",scale={resize[0]}:{resize[1]}:flags={FUN_CONTROL_RESIZE_FILTER}" if resize else ""),
+        + (f",scale={resize[0]}:{resize[1]}:flags={resize_filter}" if resize else ""),
         "-frames:v",
         str(plan.output_frames),
         "-fps_mode",
@@ -506,6 +516,7 @@ def prepare_motion_source(
     plan: FramePlan | None = None
     facts: DrivingVideoFacts | None = None
     resize: tuple[int, int] | None = None
+    resize_filter, resize_policy = FUN_CONTROL_RESIZE_FILTER, "fun-control-canny-max-832"
 
     def finish(status: str, message: str = "", code: str = "", **extra: Any) -> PreparationOutcome:
         return PreparationOutcome(
@@ -562,6 +573,14 @@ def prepare_motion_source(
             resize = fun_control_resize(
                 facts.coded_width, facts.coded_height, request.contract.workflow_id
             )
+            if (
+                request.cover is not None
+                and request.contract.workflow_id != FUN_CONTROL_WORKFLOW_ID
+            ):
+                resize = driver_cover_size(
+                    facts.coded_width, facts.coded_height, facts.rotation_quadrants, request.cover
+                )
+                resize_filter, resize_policy = COVER_RESIZE_FILTER, "driver-cover"
         except ValueError as exc:
             raise _Stop(STATUS_FAILED_PREPARATION, "unsafe_geometry", str(exc)) from exc
         pixel_format = target_pixel_format(facts.pixel_format)
@@ -597,7 +616,13 @@ def prepare_motion_source(
         window = parse_framemd5(
             run.run(
                 build_window_md5_command(
-                    executable, clip, settings.start_frame, last_needed, pixel_format, resize
+                    executable,
+                    clip,
+                    settings.start_frame,
+                    last_needed,
+                    pixel_format,
+                    resize,
+                    resize_filter,
                 ),
                 max_stdout=MAX_MD5_STDOUT_BYTES,
                 what="while reading the window",
@@ -625,6 +650,7 @@ def prepare_motion_source(
                 temporary,
                 resize,
                 compact_timestamps=compact_timestamps,
+                resize_filter=resize_filter,
             ),
             max_stdout=MAX_VERSION_STDOUT_BYTES,
             what="while writing the prepared clip",
@@ -640,6 +666,13 @@ def prepare_motion_source(
                 "output_too_large",
                 f"The lossless prepared clip would exceed {MAX_PREPARED_BYTES // (1024 * 1024)} MB "
                 "(the clip's resolution is too high for exact preparation). Choose a lower-resolution clip.",
+            )
+        if request.cover is not None and size > MAX_UPLOADABLE_BYTES:
+            raise _Stop(
+                STATUS_FAILED_PREPARATION,
+                "output_too_large_to_upload",
+                f"The prepared driver is {size // (1024 * 1024)} MB, more than ComfyUI accepts "
+                f"({MAX_UPLOADABLE_BYTES // (1024 * 1024)} MB). Choose a shorter duration or a smaller clip.",
             )
 
         # 3. The file must hold precisely what the plan selected.
@@ -734,16 +767,20 @@ def prepare_motion_source(
             frame_digest=hashlib.sha256("\n".join(expected).encode("ascii")).hexdigest(),
             version=_ffmpeg_version(run, executable),
             resize=resize,
+            resize_filter=resize_filter,
+            resize_policy=resize_policy,
         )
+        scaled = ""
+        if resize:
+            change = f"{facts.coded_width}x{facts.coded_height} to {resize[0]}x{resize[1]}"
+            scaled = (
+                f" Scaled {change} to cover the working frame; original unchanged."
+                if resize_policy == "driver-cover"
+                else f" Fun Control safety resize: {change} before Canny; original unchanged."
+            )
         return finish(
             STATUS_PREPARED,
-            f"Prepared {plan.output_frames} frames ({derived_sha[:12]})."
-            + (
-                f" Fun Control safety resize: {facts.coded_width}x{facts.coded_height}"
-                f" to {resize[0]}x{resize[1]} before Canny; original unchanged."
-                if resize
-                else ""
-            ),
+            f"Prepared {plan.output_frames} frames ({derived_sha[:12]})." + scaled,
             record=record,
             preview=preview,
             preview_captions=captions,
@@ -781,6 +818,8 @@ def _build_record(
     frame_digest: str,
     version: str,
     resize: tuple[int, int] | None,
+    resize_filter: str,
+    resize_policy: str,
 ) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
@@ -828,8 +867,8 @@ def _build_record(
             "resize": {
                 "width": resize[0],
                 "height": resize[1],
-                "filter": FUN_CONTROL_RESIZE_FILTER,
-                "policy": "fun-control-canny-max-832",
+                "filter": resize_filter,
+                "policy": resize_policy,
             }
             if resize
             else None,
@@ -962,11 +1001,13 @@ def prepare_for_form(
 ) -> PreparationOutcome:
     """Prepare the clip the form names for the form's registered workflow and length.
 
-    ``request`` carries the operator's ``start``, ``end``, ``unit`` and ``fps_conversion``.  A
+    ``request`` carries the operator's ``start``, ``end``, ``unit`` and ``fps_conversion``, and the optional
+    ``cover`` frame (width, height) a large driver is scaled down to (V1-3).  A
     workflow that cannot honestly offer preparation returns a failed outcome, not an exception."""
 
     try:
         contract = motion_source_contract(spec, form.get("frame_count"))
+        cover = request.get("cover")
         window = MotionSourceRequest(
             clip_path=str(form.get("pose_video_path") or ""),
             contract=contract,
@@ -974,8 +1015,9 @@ def prepare_for_form(
             end=None if request.get("end") in (None, "") else float(request["end"]),
             unit=str(request.get("unit") or "seconds"),
             fps_conversion=str(request.get("fps_conversion") or FPS_CONVERSION_NONE),
+            cover=None if not cover else (int(cover[0]), int(cover[1])),
         )
-    except ValueError as exc:
+    except (ValueError, TypeError, IndexError) as exc:
         return PreparationOutcome(
             status=STATUS_FAILED_PREPARATION, message=str(exc), code="unavailable"
         )
@@ -984,10 +1026,12 @@ def prepare_for_form(
 
 __all__ = [
     "DEADLINE_SECONDS",
+    "COVER_RESIZE_FILTER",
     "FUN_CONTROL_MAX_SOURCE_EDGE",
     "FUN_CONTROL_WORKFLOW_ID",
     "fun_control_resize",
     "MAX_PREPARED_BYTES",
+    "MAX_UPLOADABLE_BYTES",
     "PREPARED_DIRNAME",
     "STATUS_CANCELLED",
     "STATUS_FAILED_PREPARATION",

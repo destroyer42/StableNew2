@@ -502,6 +502,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_alignment_host.py`: Owns the one Align Motion session, workspace window and status row of the Video Workflow tab (PR-VID-MOTION-4…
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
+- `video_workflow_driver_host_v2.py`: The driver clip of the "Follow a driving video" task (V1-3): read it, fit the length, prepare it
 - `video_workflow_evaluate_view_v2.py`: Evaluate view container for the Video Workflow tab (VID-UX-384)
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
 - `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
@@ -1031,6 +1032,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: Model continuity packs, their anchors and references, and the links stored with video jobs
 - `depth_map_resolver.py`: Validate supplied depth maps or materialize estimated depth images for conditioned video workflows
+- `driver_intent.py`: Follow a driving video (V1-3): what a driver clip and a requested duration resolve to
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `frame_retention.py`: Remove a clip's retained PNG frames a day after the clip exists (VID-FRAME, owner decision 2026-11-27)

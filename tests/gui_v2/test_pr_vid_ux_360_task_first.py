@@ -177,9 +177,8 @@ def test_follow_clip_selects_a_driving_engine_and_shows_its_inputs(env):
     assert env.tab.pose_video_frame.winfo_manager()
     # N1: an experimental engine chosen by the task warns beside Queue; Queue on that warning is the opt-in.
     assert "experimental" in env.tab.queue_block_reason_var.get().lower()
-    assert (
-        env.tab.advanced_section.is_expanded()
-    )  # the picker, where the engine can be changed, is in view
+    # V1-3: the engine is chosen for the operator; the picker stays under Advanced (the summary line names it).
+    assert not env.tab.advanced_section.is_expanded()
     assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is True
     env.tab.select_task("animate")
     assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is False
@@ -414,6 +413,8 @@ def test_readiness_details_are_not_inside_the_driving_clip_inputs(env):
     assert not panel.winfo_manager()  # nothing to say in this task: no panel, only the chip
     assert tab.readiness_chip.winfo_manager()
     assert tab.select_task("follow_clip")
+    assert panel._relevant is False  # V1-3: behind the header chip for this task
+    env.tab.readiness_chip.invoke()
     assert panel._relevant is True  # whether it maps also needs readiness content
 
     assert tab.pose_video_frame.winfo_manager() == "grid"

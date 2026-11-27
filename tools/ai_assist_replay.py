@@ -12,7 +12,8 @@ logged outcome class and reports both ends (the model then behaves, or repeats i
 
 ``live`` rebuilds cases in memory from PromptPacks in the logged kind mix and sends each one twice to the approved
 remote worker: once with the previous contract (refusal branch, no retry) and once with the current one. It uses the
-worker's GPU and sends pack text to it, so it needs the owner's approval. It never prints, stores or logs prompt or
+worker's GPU and sends pack text to it, so it needs the owner's approval. ``--model`` measures another model already
+installed on the worker without approving it for the application. It never prints, stores or logs prompt or
 answer text, and it works from a temporary AI root, so the owner's event log and settings are only read.
 """
 
@@ -408,7 +409,7 @@ def previous_prompt(prompt: str) -> str:
     """The frame as sent before ASSIST-FIX (``ai_assist.frame/1``): same text plus the offered refusal."""
 
     head, marker, data = prompt.partition(framing.BEGIN_MARKER)
-    lines = head.replace("(ai_assist.frame/2)", "(ai_assist.frame/1)").split("\n")
+    lines = head.replace(f"({framing.FRAME_VERSION})", "(ai_assist.frame/1)").split("\n")
     for index, line in enumerate(lines):
         if line.startswith('Set status to "ok" and'):
             lines[index] = (
@@ -455,6 +456,40 @@ def previous_transport(request: AssistRequest, transport: Transport) -> Transpor
             payload["format"] = previous_schema(request, payload["format"])
             body = json.dumps(payload, ensure_ascii=True).encode("ascii")
         return transport(path, body, token, timeout, limit)
+
+    return send
+
+
+def candidate_reference(name: str, transport: Transport) -> str:
+    """The digest reference of an installed model that is not an approved one, read from the worker's catalog."""
+
+    status, raw = transport("/api/tags", None, AiCancelToken(), 5.0, 128 * 1024)
+    models = json.loads(raw).get("models", []) if status == 200 else []
+    for model in models:
+        if str(model.get("name", "")).casefold() == name.casefold():
+            digest = str(model.get("digest", "")).removeprefix("sha256:")
+            return f"sha256-{digest}:local"
+    raise SystemExit(f"The worker has no model named {name}.")
+
+
+def candidate_transport(approved: str, candidate: str, transport: Transport) -> Transport:
+    """Generate with ``candidate`` instead of the approved model, for measurement only. The product's approved list and
+    identity checks are untouched: only this tool's generation request and its echo are renamed."""
+
+    def send(
+        path: str, body: bytes | None, token: AiCancelToken, timeout: float, limit: int
+    ) -> tuple[int, bytes]:
+        if path != "/api/generate" or body is None:
+            return transport(path, body, token, timeout, limit)
+        payload = {**json.loads(body), "model": candidate}
+        status, raw = transport(
+            path, json.dumps(payload, ensure_ascii=True).encode("ascii"), token, timeout, limit
+        )
+        if status == 200:
+            answer = json.loads(raw)
+            if answer.get("model") == candidate:  # anything else stays an identity mismatch
+                raw = json.dumps({**answer, "model": approved}).encode()
+        return status, raw
 
     return send
 
@@ -549,6 +584,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="also ask for motion phrases from this picture (repeatable; the picture is sent to the worker)",
     )
     live.add_argument("--seed", type=int, default=1)
+    live.add_argument(
+        "--model", help="measure this installed model instead of the approved one (no motion cases)"
+    )
     live.add_argument("--limit", type=int, help="at most this many cases of each kind")
     live.add_argument("--out", type=Path, help="also write the counts to this JSON file")
     live.add_argument("--owner-approved", action="store_true", help="send the cases to the worker")
@@ -574,8 +612,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     if identity is None:
         print("No approved remote model is selected.", file=sys.stderr)
         return 2
-    report = run_live(cases, identity, progress=lambda text: print(text, file=sys.stderr))
-    report["model"] = identity.model
+    transport, measured = loopback_request, identity.model
+    if args.model:
+        if args.motion_image:
+            parser.error("--model cannot be combined with --motion-image")
+        reference = candidate_reference(args.model, loopback_request)
+        transport = candidate_transport(identity.model_reference, reference, loopback_request)
+        measured = args.model
+    report = run_live(
+        cases,
+        identity,
+        transport=transport,
+        progress=lambda text: print(text, file=sys.stderr),
+    )
+    report["model"] = measured
     report["seed"] = args.seed
     text = json.dumps(report, indent=2)
     print(text)

@@ -206,7 +206,23 @@ def test_default_task_shows_source_queue_prompt_and_settings_at_1280x680(env):
         ("animate", False, ("crop is tight",), "ready", False, True),  # a warning earns the panel
         ("animate", False, (), "error", False, True),  # a problem too
         ("animate", True, (), "ready", False, True),  # the engine takes a driving video
-        ("follow_clip", False, (), "ready", False, True),  # the driving-clip task
+        (
+            "follow_clip",
+            False,
+            (),
+            "ready",
+            False,
+            False,
+        ),  # V1-3: behind the chip for the driving-clip task
+        (
+            "follow_clip",
+            True,
+            ("crop is tight",),
+            "ready",
+            False,
+            False,
+        ),  # advisories show on the chip
+        ("follow_clip", True, (), "error", False, True),  # a source that cannot be read still shows
         ("animate", False, (), "ready", True, True),  # the operator opened it from the chip
     ],
 )

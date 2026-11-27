@@ -52,13 +52,34 @@ PROPOSAL_RESERVED_MARKERS = (*VARIETY_RESERVED_MARKERS, _EXISTING_SLOT_MARKER, _
 _PHRASE_MARKER = "PHRASE:"
 #: Every marker the phrase-to-slot data block uses (AI-230g). Authored text containing any of them is refused.
 PHRASE_RESERVED_MARKERS = (*PROPOSAL_RESERVED_MARKERS, _PHRASE_MARKER)
-FRAME_VERSION = "ai_assist.frame/2"
+FRAME_VERSION = "ai_assist.frame/3"
 #: Added for the single retry after a malformed answer (ASSIST-FIX). Same request, tighter wording.
 RETRY_INSTRUCTION = (
     "Your previous answer to this request was not one complete valid object of the required form. Answer again with one "
     "compact JSON object only: no text before or after it, no code fence, no extra fields, every required field present, "
     "identifiers copied exactly, and rationales of a few words."
 )
+_COPY_IDENTIFIER = "An identifier was not in the allowed list: copy it exactly as listed."
+_SHORTER = "The answer was cut off or incomplete: make it much shorter."
+#: What was wrong, for the retry. Fixed sentences chosen by the validator's reason code; nothing the model or the
+#: author wrote is ever quoted. A code without a sentence gets the general instruction alone.
+RETRY_HINTS = {
+    "slot_repeated": (
+        "A slot name appeared in more than one entry: give exactly one entry per slot, with all of its values together."
+    ),
+    "protected_tokens_changed": (
+        "An <angle-bracket> token or [[double-bracket]] marker was added, removed or altered: copy each one exactly, as "
+        "often as it occurs in the authored prompts, and add none."
+    ),
+    "slot_not_in_closed_list": _COPY_IDENTIFIER,
+    "stage_not_in_closed_list": _COPY_IDENTIFIER,
+    "target_not_in_closed_list": _COPY_IDENTIFIER,
+    "workflow_not_in_closed_list": _COPY_IDENTIFIER,
+    "not_json": _SHORTER,
+    "remote_truncated": _SHORTER,
+    "too_many_values": "A list held more values than allowed: give fewer.",
+    "phrase_not_plain": "The phrase must be one line of plain words with no brackets.",
+}
 
 
 class FramingError(ValueError):
@@ -166,7 +187,8 @@ def _variety_instruction(request: AssistRequest) -> str:
     return (
         "Suggest additional values for the operator's selected matrix slots that serve the operator's goal. Use only "
         f"slot names that appear after {_SLOT_MARKER} in the data; never invent a slot and never answer for another slot. "
-        f"Prioritize those selected slots. For each slot, try to give {count} distinct new value(s) (at most {count}) "
+        "Prioritize those selected slots. Give exactly one entry per slot, with all of that slot's new values together "
+        f"in it. For each slot, try to give {count} distinct new value(s) (at most {count}) "
         f"that are not already listed after {_VALUE_MARKER}, each a short phrase of at most {MAX_VARIETY_VALUE_CHARS} "
         "characters with no commas, no square or angle brackets and no line breaks, plus a short rationale (at most "
         f"{MAX_VARIETY_RATIONALE_CHARS} characters). {VARIETY_FOCUS_RULES[request.variety_focus]} "
@@ -332,8 +354,9 @@ def _selected_model_lines(request: AssistRequest) -> list[str]:
     ]
 
 
-def render_prompt(request: AssistRequest, *, retry: bool = False) -> str:
-    """The complete model input. Deterministic for a given request; ``retry`` adds the tighter instruction."""
+def render_prompt(request: AssistRequest, *, retry_reason: str = "") -> str:
+    """The complete model input. Deterministic for a given request. ``retry_reason`` is the reason code of a rejected
+    first answer: it adds the tighter instruction and, for a known code, what was wrong."""
 
     _check_text("positive_text", request.positive_text)
     _check_text("negative_text", request.negative_text)
@@ -365,8 +388,10 @@ def render_prompt(request: AssistRequest, *, retry: bool = False) -> str:
         'Set status to "ok" and use the schema id and kind given above. '
         + _SUCCESS_PAYLOAD[request.kind]
     )
-    if retry:
+    if retry_reason:
         lines.append(RETRY_INSTRUCTION)
+        if retry_reason in RETRY_HINTS:
+            lines.append(RETRY_HINTS[retry_reason])
     lines += ["", *_authored_block(request)]
     return "\n".join(lines)
 
@@ -535,6 +560,7 @@ __all__ = [
     "END_MARKER",
     "FRAME_VERSION",
     "PLAN_SELECTED_MODEL_RULE",
+    "RETRY_HINTS",
     "RETRY_INSTRUCTION",
     "PHRASE_EXAMPLE",
     "PHRASE_RESERVED_MARKERS",
