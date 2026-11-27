@@ -1,29 +1,38 @@
-"""Quick test to verify the Add to Queue fix works without GUI freeze."""
+"""Add to Queue must hand submission to a background thread, so the GUI thread never waits for it."""
 
-import time
+import threading
 
 from src.controller.app_controller import AppController
 
 
+class _BlockedSubmission:
+    """A pipeline controller whose submission does not finish until the test lets it."""
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.finished = threading.Event()
+        self.thread_name = ""
+
+    def enqueue_draft_jobs(self, *, run_config=None) -> int:
+        self.thread_name = threading.current_thread().name
+        self.entered.set()
+        self.release.wait(30.0)
+        self.finished.set()
+        return 0
+
+
 def test_on_add_to_queue_runs_async():
-    """Verify that on_add_to_queue returns immediately and runs in background."""
+    """on_add_to_queue returns while the submission is still blocked, on another thread."""
     controller = AppController(main_window=None, threaded=False)
+    submission = _BlockedSubmission()
+    controller.pipeline_controller = submission
+    try:
+        controller.on_add_to_queue()
 
-    # Record when we call the method
-    start_time = time.time()
-    controller.on_add_to_queue()
-    elapsed = time.time() - start_time
-
-    # Should return immediately (< 0.1 seconds), not block for submission
-    assert elapsed < 0.1, f"on_add_to_queue blocked for {elapsed:.3f}s - should return immediately!"
-
-    # Wait a bit for background thread to potentially complete
-    time.sleep(0.5)
-
-    print(f"[OK] on_add_to_queue returned in {elapsed * 1000:.1f}ms (non-blocking)")
-    print("[OK] Background thread dispatched successfully")
-
-
-if __name__ == "__main__":
-    test_on_add_to_queue_runs_async()
-    print("\n[OK] All tests passed - GUI freeze fix verified!")
+        assert not submission.finished.is_set(), "on_add_to_queue waited for the submission"
+        assert submission.entered.wait(10.0), "the submission never started"
+        assert submission.thread_name != threading.current_thread().name
+    finally:
+        submission.release.set()
+    assert submission.finished.wait(10.0)

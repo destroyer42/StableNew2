@@ -3,6 +3,12 @@
     python tools/ci/run_pr_gate.py                  # the hosted ``required`` job
     python tools/ci/run_pr_gate.py --full           # also the hosted ``full-suite`` census, run locally
     python tools/ci/run_pr_gate.py --full --workers 3
+    python tools/ci/run_pr_gate.py --parity         # plus the census files this change is likely to break
+
+``--parity`` is the quick check before pushing executable changes. Every step runs with the hosted runner's missing
+tools (FFmpeg, RIFE, ``nvidia-smi``) hidden from tests, and ``tools/ci/affected_tests.py`` then runs the test files
+affected by the change (``--base``, default ``origin/main``): usually a few minutes. With ``--full`` it also applies to
+the census.
 
 ``--full`` appends ``tools/ci/run_sharded_census.py``: the same weighted shard partition and completeness verdict as
 the hosted census, one isolated checkout per worker (a Windows/Tk suite shares ports, files and process-global state,
@@ -17,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -25,6 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import affected_tests  # noqa: E402
 import quiet_run  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +63,7 @@ GATE_STEPS = (
 
 DEFAULT_CENSUS_WORKERS = 2
 FULL_CENSUS_LABEL = "full census (hosted full-suite equivalent)"
+PARITY_LABEL = "CI parity (tests affected by this change)"
 TOOLING_BLOCKER_EXIT_CODE = 2
 REQUIRED_TOOL_MODULES = ("mypy", "pytest")
 
@@ -98,6 +107,12 @@ def census_step(workers: int) -> tuple[str, tuple[str, ...]]:
     return FULL_CENSUS_LABEL, command
 
 
+def parity_step(base: str) -> tuple[str, tuple[str, ...]]:
+    """The census files this change is likely to break, as the hosted runner would run them."""
+
+    return PARITY_LABEL, (sys.executable, str(ROOT / "tools/ci/affected_tests.py"), "--base", base)
+
+
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -113,7 +128,19 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         default=None,
         help=f"census worker processes with --full (default {DEFAULT_CENSUS_WORKERS})",
     )
+    parser.add_argument(
+        "--parity",
+        action="store_true",
+        help="hide the tools the hosted runner lacks, and run the tests affected by this change",
+    )
+    parser.add_argument(
+        "--base",
+        default=None,
+        help=f"what --parity compares with (default {affected_tests.DEFAULT_BASE})",
+    )
     args = parser.parse_args(list(argv))
+    if args.base is not None and not args.parity:
+        parser.error("--base only applies with --parity")
     if args.workers is not None and not args.full:
         parser.error("--workers only applies with --full")
     if args.workers is not None and args.workers < 1:
@@ -124,8 +151,13 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv or ())
     steps = GATE_STEPS
+    environment = None
+    if args.parity:
+        environment = {**os.environ, affected_tests.CI_PARITY_ENV: "1"}
+        if not args.full:  # the census already runs every file
+            steps = (*steps, parity_step(args.base or affected_tests.DEFAULT_BASE))
     if args.full:
-        steps = (*GATE_STEPS, census_step(args.workers or DEFAULT_CENSUS_WORKERS))
+        steps = (*steps, census_step(args.workers or DEFAULT_CENSUS_WORKERS))
     if not preflight_tools():
         return TOOLING_BLOCKER_EXIT_CODE
     for label, command in steps:
@@ -134,6 +166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             completed = subprocess.run(
                 quiet_run.wrap(command),
                 cwd=ROOT,
+                env=environment,
                 check=False,
             )
         except OSError as exc:

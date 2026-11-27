@@ -568,10 +568,11 @@ CHILD = textwrap.dedent(
     prompt = open(argv[argv.index("-f") + 1], encoding="utf-8").read()
     images = [argv[i + 1] for i, token in enumerate(argv) if token == "--image"]
     work = os.path.dirname(argv[argv.index("-f") + 1])
-    with open(record, "w", encoding="utf-8") as handle:
+    with open(record + ".tmp", "w", encoding="utf-8") as handle:
         json.dump({"argv": argv, "env": dict(os.environ), "cwd": os.getcwd(), "work": work,
                    "images_exist": [os.path.isfile(p) for p in images], "work_files": sorted(os.listdir(work)),
                    "prompt": prompt}, handle)
+    os.replace(record + ".tmp", record)
     if mode == "@sleep":
         time.sleep(120)
     if mode.startswith("@exit:"):
