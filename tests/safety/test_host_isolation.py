@@ -11,6 +11,11 @@ from pathlib import Path
 import pytest
 
 from src.api.healthcheck import probe_webui_endpoint
+from src.api.webui_process_manager import (
+    WebUIProcessConfig,
+    WebUIProcessManager,
+    get_global_webui_process_manager,
+)
 from src.pipeline.video import resolve_ffmpeg_executable
 from src.video.comfy_healthcheck import probe_comfy_endpoint
 from src.video.rife_runtime import find_rife_executable
@@ -69,6 +74,19 @@ def test_other_ports_and_hosts_are_left_alone() -> None:
     assert not host_isolation.refuses(("127.0.0.1", 50123))
     assert not host_isolation.refuses(("192.0.2.1", 7871))
     assert not host_isolation.refuses(r"\\.\pipe\name")
+
+
+def test_a_webui_manager_a_test_leaves_registered() -> None:
+    """First half of a pair that relies on in-file order (shards keep whole files together)."""
+
+    manager = WebUIProcessManager(WebUIProcessConfig(command=["python", "-V"]))
+
+    assert get_global_webui_process_manager() is manager
+
+
+def test_does_not_reach_the_next_test() -> None:
+    # PR #474: a leftover ``standard``-only manager changed the admission tests' verdict once shards regrouped.
+    assert get_global_webui_process_manager() is None
 
 
 def test_parity_mode_hides_the_tools_the_hosted_runner_does_not_have(

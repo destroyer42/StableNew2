@@ -336,6 +336,8 @@ def _managed_runtime_logs_never_touch_the_operators_log_directory(
         # The readiness probes report the registered launcher's command as active; one test's launcher is not another's.
         monkeypatch.setattr(comfy_process_manager, "_LAST_LAUNCH_CONFIG", None)
         monkeypatch.setattr(comfy_process_manager, "_GLOBAL_COMFY_PROCESS_MANAGER", None)
+        # A constructed WebUI manager registers itself; the executor asks it which launch profiles exist.
+        monkeypatch.setattr(webui_process_manager, "_GLOBAL_WEBUI_PROCESS_MANAGER", None)
     except Exception:  # pragma: no cover - isolation must never break collection
         pass
 
