@@ -21,6 +21,7 @@ from src.video import workflow_source_preparation as preparation
 from src.video.workflow_catalog_wan_animate2 import (
     WAN_ANIMATE2_DRIVE_ID,
     WAN_ANIMATE2_RUNTIME_VERSION,
+    WAN_ANIMATE2_SPEED_VERSION,
 )
 from src.video.workflow_source_preparation import SourceTooLargeForPreview
 
@@ -164,7 +165,7 @@ def test_workflow_projection_gains_one_key_and_keeps_every_existing_one(tmp_path
             }
         )
     # the offered version per workflow is still the newest registered one
-    assert records[WAN_ANIMATE2_DRIVE_ID]["workflow_version"] == WAN_ANIMATE2_RUNTIME_VERSION
+    assert records[WAN_ANIMATE2_DRIVE_ID]["workflow_version"] == WAN_ANIMATE2_SPEED_VERSION
 
 
 def test_experiment_gate_and_single_admission_are_unchanged(tmp_path):

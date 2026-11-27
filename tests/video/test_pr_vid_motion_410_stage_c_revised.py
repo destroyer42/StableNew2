@@ -129,7 +129,9 @@ def test_the_workflow_identity_is_the_verified_offerable_animate_2_version() -> 
     spec = CATALOG.get(form["workflow_id"], form["workflow_version"])
     assert spec.governance_state == "experimental" and form["experimental_opt_in"] is True
     assert "pose_video" in spec.declared_input_names
-    assert CATALOG.inherited_version(form["workflow_id"]) == "1.2.0"
+    # PR-VID-ANIMATE-CK-WARM: 1.3.0 is now the newest offerable version; the campaign deliberately keeps pinning 1.2.0, the
+    # no-CK baseline that every recorded pilot, stage and alignment result was produced on.
+    assert CATALOG.inherited_version(form["workflow_id"]) == "1.3.0"
 
 
 def test_the_two_subject_suites_differ_only_by_the_subject_and_share_both_drivers() -> None:

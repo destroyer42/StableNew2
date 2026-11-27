@@ -1127,6 +1127,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_controls.py`: Neutral, spec-declared operator controls for workflow-owned generation inputs (PR-VID-192)
 - `workflow_frame_count.py`: Neutral, spec-declared generation-length contract (PR-VID-190)
 - `workflow_input_integrity.py`: Exact prepared-motion admission/dispatch policy, opt-in by workflow declaration
+- `workflow_launch_attention.py`: One resolver for the Comfy Kitchen attention launch profile a workflow declares
 - `workflow_motion_guidance.py`: Display-only, evidence-grounded motion guidance for a Video Workflow (PR-VID-196)
 - `workflow_picker.py`: Operator-facing workflow choices for the Video Workflow tab (PR-VID-UX-313)
 - `workflow_preflight.py`: Read-only readiness gates for a Comfy video workflow, answered before the job is queued (PR-VID-UX-311)
