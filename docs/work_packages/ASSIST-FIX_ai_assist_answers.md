@@ -182,8 +182,8 @@ treats a settings file naming an unknown model as damaged.
 python -m tools.ai_assist_admin approve-remote-preview --endpoint http://127.0.0.1:11435 --model huihui_ai/qwen3.5-abliterated:4B --digest 9acbd90c2645120ea1e4a5fe7ec9c4fe000e547ccebc8a24f950315d582003e6 --version 0.40.16 --accept-ssh-transfer
 ```
 
-Also chosen by the owner, not yet built: a "Try with the uncensored model" button after a refusal, which resends that
-one request on an explicit press.
+Also chosen by the owner and built: **Try with the uncensored model**, shown after a refusal. One press resends
+exactly that request; the selection, the default and motion Suggest are unchanged. Not yet tried in the live app.
 
 ## Live replay plan (as run, without `--motion-image`)
 

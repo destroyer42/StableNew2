@@ -159,12 +159,16 @@ class RemoteAssist:
         """The GUI may deliver a worker result after an administrative approval change."""
         if not outcome.ok or outcome.details.get("provider") != "remote":
             return outcome
-        identity = self.settings().approval
-        if (
-            identity is not None
-            and outcome.details.get("model_sha256") == identity.digest
+        settings = self.settings()
+        if outcome.details.get("one_off"):
+            allowed = settings.approvals if settings.preferred else ()
+        else:
+            allowed = (settings.approval,) if settings.approval is not None else ()
+        if any(
+            outcome.details.get("model_sha256") == identity.digest
             and outcome.details.get("model_name") == identity.model
             and outcome.details.get("runtime_build_id") == f"ollama-{identity.version}"
+            for identity in allowed
         ):
             return outcome
         return replace(
@@ -214,7 +218,15 @@ class RemoteAssist:
                     pass
             self._stop.wait(RECOVERY_INTERVAL)
 
-    def _probe(self, identity: RemoteApproval, token: AiCancelToken) -> None:
+    def permits(self, identity: RemoteApproval, one_off: bool = False) -> bool:
+        """Whether ``identity`` may still be used: the selected approval, or for a one-off any current approval."""
+
+        settings = self.settings()
+        if one_off:
+            return settings.preferred and identity in settings.approvals
+        return settings.approval == identity
+
+    def _probe(self, identity: RemoteApproval, token: AiCancelToken, one_off: bool = False) -> None:
         with self._lock:
             self._probe_number += 1
             number = self._probe_number
@@ -234,7 +246,7 @@ class RemoteAssist:
             ]
             if matches != [identity.digest] and matches != [f"sha256:{identity.digest}"]:
                 raise TransportFailure("identity_mismatch")
-            self._require_approval(identity, token)
+            self._require_approval(identity, token, one_off)
         except TransportFailure as exc:
             reason = str(exc)
             if reason == "cancelled":
@@ -245,15 +257,18 @@ class RemoteAssist:
                 state = RemoteState.UNAVAILABLE
             else:
                 state = RemoteState.ERROR
-            if not token.cancelled:
+            if not token.cancelled and not one_off:
                 self._publish_health(number, identity, state)
             raise
         except Exception:  # noqa: BLE001 - unexpected probe failures must stay content-free
             logger.warning("Remote AI readiness probe failed unexpectedly")
-            self._publish_health(number, identity, RemoteState.ERROR)
+            if not one_off:
+                self._publish_health(number, identity, RemoteState.ERROR)
             raise TransportFailure("health_probe_failed") from None
         else:
-            self._publish_health(number, identity, RemoteState.READY)
+            # A one-off model's health says nothing about the selected one.
+            if not one_off:
+                self._publish_health(number, identity, RemoteState.READY)
 
     def _publish_health(self, number: int, identity: RemoteApproval, state: RemoteState) -> None:
         with self._lock:
@@ -277,10 +292,12 @@ class RemoteAssist:
             raise TransportFailure("health_http_error")
         return _read_object(raw)
 
-    def _require_approval(self, identity: RemoteApproval, token: AiCancelToken) -> None:
+    def _require_approval(
+        self, identity: RemoteApproval, token: AiCancelToken, one_off: bool = False
+    ) -> None:
         if token.cancelled or self._stop.is_set():
             raise TransportFailure("cancelled")
-        if self.settings().approval != identity:
+        if not self.permits(identity, one_off):
             raise TransportFailure("identity_mismatch")
 
     def run(
@@ -292,6 +309,7 @@ class RemoteAssist:
         sampling: Sampling,
         *,
         retry_reason: str = "",
+        one_off: bool = False,
     ) -> RuntimeResult:
         started = time.monotonic()
         if request.image_jpeg and identity.model not in VISION_MODELS:
@@ -330,10 +348,10 @@ class RemoteAssist:
             return RuntimeResult(OutcomeCode.INVALID_REQUEST, "remote_request_too_large")
 
         try:
-            self._require_approval(identity, token)
+            self._require_approval(identity, token, one_off)
             # The short-lived readiness cache is for display and monitoring. Revalidate identity before sending data.
-            self._probe(identity, token)
-            self._require_approval(identity, token)
+            self._probe(identity, token, one_off)
+            self._require_approval(identity, token, one_off)
             self.set_active(RemoteState.RUNNING)
             status, raw = self._transport(
                 "/api/generate",
@@ -342,7 +360,7 @@ class RemoteAssist:
                 limits.timeout_seconds,
                 min(limits.max_stdout_bytes, MAX_OUTPUT_BYTES),
             )
-            self._require_approval(identity, token)
+            self._require_approval(identity, token, one_off)
             if status in (401, 403, 404) or 300 <= status < 400:
                 raise TransportFailure("identity_mismatch")
             if status != 200:
@@ -369,7 +387,7 @@ class RemoteAssist:
             return RuntimeResult(OutcomeCode.MALFORMED, "remote_invalid_response")
         except TransportFailure as exc:
             reason = str(exc)
-            if reason in {"disconnected", "response_lost", "identity_mismatch"}:
+            if not one_off and reason in {"disconnected", "response_lost", "identity_mismatch"}:
                 with self._lock:
                     self._probe_number += 1
                     self._health = _Health(
