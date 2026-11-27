@@ -334,9 +334,7 @@ class VideoWorkflowNjrBuilder:
             if "seed" in spec.declared_input_names:
                 parse_seed_input(form_data.get("seed"))
                 if requires_exact_motion(spec) and parse_seed_input(form_data.get("seed")) is None:
-                    raise ValueError(
-                        "Choose a concrete seed before Preview for this controlled-motion workflow."
-                    )
+                    raise ValueError("Choose a concrete seed before Preview for this controlled-motion workflow.")
             if frame_count_policy(spec) is not None:
                 parse_frame_count(spec, form_data.get("frame_count"))
             resolve_operator_controls(spec, form_data)
@@ -416,9 +414,8 @@ class VideoWorkflowNjrBuilder:
         if blocked:
             raise ValueError(blocked)
         prepared = form_data.get(PREPARED_MOTION_SOURCE_FIELD)
-        verify_exact_motion(
-            spec, prepared, frame_count=form_data.get("frame_count"), original_path=driving_text
-        )
+        verify_exact_motion(spec, prepared, frame_count=form_data.get("frame_count"),
+                            original_path=driving_text)
         if prepared:
             # An optional, explicit preparation: every byte is re-verified now, and the derived
             # clip (what actually runs) is frozen together with the record of where it came from.
@@ -461,9 +458,7 @@ class VideoWorkflowNjrBuilder:
         if "end_anchor" in declared_inputs and end_anchor_text:
             add("end anchor", end_anchor_text)
         if "mid_anchors" in declared_inputs:
-            for position, candidate in enumerate(
-                mid_anchor_list(form_data.get("mid_anchor_paths"))
-            ):
+            for position, candidate in enumerate(mid_anchor_list(form_data.get("mid_anchor_paths"))):
                 add(f"mid anchor {position + 1}", candidate)
         if any(name in declared_inputs for name in ("depth_map", "controlnet_model")):
             depth_input = _normalize_depth_input(form_data)
@@ -539,7 +534,9 @@ class VideoWorkflowNjrBuilder:
         declares a preparation policy the frame is recorded as is (it must already be the target
         size) instead of being cover-cropped and re-saved."""
 
-        self._require_valid(source_image_path, form_data, prompt_per_segment=prompt_per_segment)
+        self._require_valid(
+            source_image_path, form_data, prompt_per_segment=prompt_per_segment
+        )
         spec = self.spec_for(form_data)
         declared_inputs = set(spec.declared_input_names)
         if shared is None:
@@ -724,8 +721,7 @@ class VideoWorkflowNjrBuilder:
         if requires_exact_motion(spec):
             self.verify_unchanged(frozen)
             workflow_config["reference_identity"] = {
-                "original_path": frozen.source_image_path,
-                "original_sha256": frozen.source_sha256,
+                "original_path": frozen.source_image_path, "original_sha256": frozen.source_sha256,
                 "prepared_path": frozen.prepared_source_path,
                 "prepared_sha256": frozen.prepared_source_sha256,
             }
