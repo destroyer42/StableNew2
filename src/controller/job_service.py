@@ -107,10 +107,7 @@ def _terminate_single_process(proc: psutil.Process, *, timeout: float) -> None:
             proc.kill()
             proc.wait(timeout=max(0.1, timeout / 2))
         except Exception:
-            logger.warning(
-                "Could not kill external process %s", getattr(proc, "pid", None),
-                exc_info=True,
-            )
+            logger.warning("Could not kill external process %s", getattr(proc, "pid", None), exc_info=True)
     except (psutil.NoSuchProcess, psutil.ZombieProcess):  # type: ignore[attr-defined]
         return
     except Exception as exc:
@@ -205,10 +202,7 @@ class JobService:
                     if previous.is_running():
                         previous.stop()
                 except Exception:
-                    logger.warning(
-                        "Previous queue runner did not stop cleanly",
-                        exc_info=True,
-                    )
+                    logger.warning("Previous queue runner did not stop cleanly", exc_info=True)
             self._runner = value
             self._worker_started = False
         job_service_outage.bind_webui_outage_containment(self, coordinator=self.webui_outage)
@@ -370,10 +364,7 @@ class JobService:
         try:
             self.run_next_now()
         except Exception:
-            logger.warning(
-                "Immediate dispatch failed for job %s; the queue worker is started instead", job.job_id,
-                exc_info=True,
-            )
+            logger.warning("Immediate dispatch failed for job %s; the queue worker is started instead", job.job_id, exc_info=True)
         if not self.runner.is_running():
             self.runner.start()
 

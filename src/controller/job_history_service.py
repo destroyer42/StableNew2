@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -20,8 +19,6 @@ from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.utils.image_metadata import build_payload_from_manifest, extract_embedded_metadata
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
-
-logger = logging.getLogger(__name__)
 
 
 class JobHistoryService:
@@ -40,10 +37,7 @@ class JobHistoryService:
         try:
             self._history.register_callback(self._on_history_update)
         except Exception:
-            logger.warning(
-                "History updates could not be subscribed",
-                exc_info=True,
-            )
+            pass
 
     def register_callback(self, callback: Callable[[JobHistoryEntry], None]) -> None:
         self._callbacks.append(callback)
@@ -53,10 +47,6 @@ class JobHistoryService:
             try:
                 callback(entry)
             except Exception:
-                logger.warning(
-                    "History callback raised for job %s", getattr(entry, "job_id", None),
-                    exc_info=True,
-                )
                 continue
 
     def record(self, job: Job, *, result: dict | None = None) -> None:

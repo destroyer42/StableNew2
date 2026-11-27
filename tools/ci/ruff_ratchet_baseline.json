@@ -432,7 +432,9 @@
         "BLE001": 5
       },
       "src/controller/job_history_service.py": {
-        "BLE001": 5
+        "BLE001": 5,
+        "S110": 1,
+        "S112": 1
       },
       "src/controller/job_lifecycle_logger.py": {
         "BLE001": 1,
