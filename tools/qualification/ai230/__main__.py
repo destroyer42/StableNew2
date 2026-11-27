@@ -25,8 +25,7 @@ from urllib.parse import urlparse
 
 from src.ai_assist.argv import RunLimits, Sampling
 from src.ai_assist.contracts import AssistRequest
-from src.ai_assist.framing import build_json_schema
-from src.ai_assist.remote import _ollama_prompt
+from src.ai_assist.framing import build_json_schema, render_prompt
 from tools.qualification.ai230.slot_cases import CASES, run_cases, summarize
 
 TIMEOUT_SECONDS = 300
@@ -63,7 +62,7 @@ def ollama_generate(base_url: str, model: str) -> Callable[[AssistRequest], str]
         body = json.dumps(
             {
                 "model": model,
-                "prompt": _ollama_prompt(request),
+                "prompt": render_prompt(request),
                 "format": build_json_schema(request),
                 "stream": False,
                 "think": False,

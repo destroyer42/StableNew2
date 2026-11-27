@@ -61,6 +61,7 @@ from src.gui.views.video_workflow_media_pane_v2 import (
     readiness_chip_text,
     readiness_is_relevant,
 )
+from src.gui.views.video_workflow_motion_ai_host import MotionAiHost
 from src.gui.views.video_workflow_motion_intent_v2 import MotionIntentPanel
 from src.gui.views.video_workflow_motion_library_panel_v2 import WorkflowMotionLibraryPanel
 from src.gui.views.video_workflow_motion_prep_panel_v2 import WorkflowMotionPreparationPanel
@@ -150,6 +151,7 @@ from src.video.workflow_tasks import (
     smoothing_warning,
     suggest_settings,
 )
+from src.video.workflow_warnings import source_crop_warning_for_path
 
 _IMAGE_FILETYPES = [
     ("PNG files", "*.png"),
@@ -416,6 +418,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.output_route_var,
         ):
             variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
+        self.source_image_var.trace_add("write", lambda *_args: self._refresh_queue_gate())
         self.frame_count_var.trace_add("write", lambda *_args: self._refresh_frame_count_advisory())
         self.frame_count_var.trace_add("write", lambda *_args: self._sync_duration())
         self.motion_intent_panel.phrase_var.trace_add(
@@ -991,13 +994,23 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         Queue on this header records the job's opt-in; the full why-and-fix text is the same data the phone shows."""
 
         meta = self._workflow_map.get(self.workflow_var.get(), {})
+        # VID-FRAME: a source this workflow would crop is warned about, approved or not.
+        crop = source_crop_warning_for_path(
+            (meta.get("motion_readiness") or {}).get("source_preparation"),
+            f"{meta.get('workflow_id')}@{meta.get('workflow_version')}",
+            self.source_image_var.get().strip(),
+        )
         if not meta.get("experimental"):
-            return "", ""
+            if crop is None:
+                return "", ""
+            return f"Warning: {crop.title} Queue runs it anyway (hover for why).", crop.text()
         warnings = [PolicyWarning.from_dict(item) for item in meta.get("policy_warnings") or ()]
         title = " ".join(warning.title for warning in warnings) or (
             f"{meta.get('display_name') or 'This workflow'} is experimental."
         )
         full = " ".join(warning.text() for warning in warnings) or title
+        if crop is not None:
+            title, full = f"{title} {crop.title}", f"{full} {crop.text()}"
         return (
             f"Warning: {title} Queue runs it anyway and records your opt-in (hover for why).",
             full,
@@ -1916,6 +1929,24 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             duration=duration,
             basis=basis,
         )
+
+    @property
+    def motion_ai_host(self) -> MotionAiHost:
+        host = getattr(self, "_motion_ai_host", None)
+        if host is None:
+            panel = self.motion_intent_panel
+            host = self._motion_ai_host = MotionAiHost(
+                self,
+                ai=lambda: getattr(self.app_controller, "ai_assist", None),
+                source=self.source_image_var.get,
+                prompt=lambda: self.prompt_text.get("1.0", "end"),
+                phrase_var=panel.phrase_var,
+                pins=self._pins,
+                on_status=self.status_var.set,
+                on_busy=panel.set_suggest_busy,
+                on_undo_available=panel.show_undo,
+            )
+        return host
 
     # ------------------------------------------------------------------ re-run with tweaks (V1-2)
 

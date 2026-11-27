@@ -31,6 +31,12 @@ by either version because no node input honors it.
 requalified on the repo-owned managed ComfyUI v0.38.0 runtime (Python 3.13, Torch 2.14.0+cu130); only
 its qualification provenance differs.  ``1.0.0`` and ``1.1.0`` stay registered, byte-identical, and
 keep their v0.37.0 provenance, so earlier jobs replay against the exact graph they froze.
+
+``1.3.0`` (PR-VID-ANIMATE-CK-WARM, driving-video workflow only) is again the identical ``1.2.0`` graph, controls and
+model hashes.  It declares two operator-level launch settings measured in the 2026-11-25 benchmark: the StableNew-owned
+ComfyUI is launched with Comfy Kitchen attention (``--use-ck-attention``, verified at startup exactly like the A14B CK
+profile) and is kept warm for an idle grace between jobs.  It is the newest revision, so the picker offers it by default;
+``1.2.0`` stays registered, byte-identical, as the no-CK baseline and for replay.
 """
 
 from __future__ import annotations
@@ -135,6 +141,24 @@ WAN_ANIMATE2_RUNTIME_PROVENANCE: dict[str, Any] = {
     ),
     "comfyui_version": "0.38.0",
     "comfyui_revision": "6b747c0428c343e1417219641db93a4fb7cb69ae",
+}
+# PR-VID-ANIMATE-CK-WARM: the identical 1.2.0 graph, launched with Comfy Kitchen attention and kept warm between jobs.
+WAN_ANIMATE2_SPEED_VERSION = "1.3.0"
+WAN_ANIMATE2_KEEP_WARM_SECONDS = 120
+WAN_ANIMATE2_CK_ATTENTION_PROFILE = "ck"
+WAN_ANIMATE2_SPEED_PROVENANCE: dict[str, Any] = {
+    "qualification": (
+        "PR-VID-184R/PR-VID-184S graph; PR-VID-192 control bindings; PR-COMFY-RUNTIME-100 managed ComfyUI v0.38.0 "
+        "runtime (Python 3.13, Torch 2.14.0+cu130); PR-VID-ANIMATE-CK-WARM launch profile (experimental, not QUALIFIED "
+        "by the ledger)"
+    ),
+    "comfyui_version": "0.38.0",
+    "comfyui_revision": "6b747c0428c343e1417219641db93a4fb7cb69ae",
+    "speed_evidence": (
+        "2026-11-25 operator benchmark, 81 frames, three aligned cases on a warm runtime: CK median 326.3 s against "
+        "405.8 s without CK (-19.6%); both profiles deterministic; CK output close but not identical (PSNR 32.7-41.5 dB, "
+        "SSIM 0.976-0.991); the owner reviewed three blind side-by-side clips and saw no artifacts or differences"
+    ),
 }
 _V037_PROVENANCE: dict[str, Any] = {
     "comfyui_version": "0.37.0",
@@ -420,13 +444,17 @@ def _build(
     driving_video: bool,
     controlled: bool = False,
     runtime_qualified: bool = False,
+    speed_profile: bool = False,
 ) -> WorkflowSpec:
+    runtime_qualified = runtime_qualified or speed_profile  # 1.3.0 is the 1.2.0 graph with a launch profile
     controlled = controlled or runtime_qualified  # 1.2.0 is the 1.1.0 graph, requalified
     stock_nodes = WAN_ANIMATE2_BASE_NODES + (WAN_ANIMATE2_DRIVE_NODES if driving_video else ())
     capability_tags = (WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,) + (
         (WORKFLOW_CAP_POSE_VIDEO,) if driving_video else ()
     )
-    if runtime_qualified:
+    if speed_profile:
+        version = WAN_ANIMATE2_SPEED_VERSION
+    elif runtime_qualified:
         version = WAN_ANIMATE2_RUNTIME_VERSION
     else:
         version = WAN_ANIMATE2_CONTROLS_VERSION if controlled else WAN_ANIMATE2_BASELINE_VERSION
@@ -506,6 +534,13 @@ def _build(
             "EXPERIMENTAL: runs only with an explicit per-job opt-in, only on a StableNew-managed "
             "ComfyUI launched with --disable-pinned-memory; the owned runtime is released after "
             "every job (PR-VID-190)."
+            + (
+                " This revision also launches that ComfyUI with Comfy Kitchen attention (--use-ck-attention, verified at "
+                f"startup with dynamic VRAM) and keeps it warm for {WAN_ANIMATE2_KEEP_WARM_SECONDS} s of idle between jobs; "
+                "version 1.2.0 is the same graph without CK attention."
+                if speed_profile
+                else ""
+            )
         ),
         backend_defaults={
             "workflow_family": "wan_animate2",
@@ -517,6 +552,11 @@ def _build(
             "frame_count_policy": dict(WAN_ANIMATE2_FRAME_COUNT_POLICY),
             "runtime_policy": {
                 "release_owned_runtime_after_job": True,
+                **(
+                    {"keep_warm_between_jobs_seconds": WAN_ANIMATE2_KEEP_WARM_SECONDS}
+                    if speed_profile
+                    else {}
+                ),
                 "required_launch_flags": list(WAN_ANIMATE2_REQUIRED_LAUNCH_FLAGS),
             },
             "provenance": {
@@ -530,6 +570,7 @@ def _build(
                 **_V037_PROVENANCE,
                 "files": {name: digest for _id, name, _hint, digest in WAN_ANIMATE2_MODEL_FILES},
                 **(WAN_ANIMATE2_RUNTIME_PROVENANCE if runtime_qualified else {}),
+                **(WAN_ANIMATE2_SPEED_PROVENANCE if speed_profile else {}),
             },
             # PR-VID-184S pinned-OFF evidence: ~11.8 GB peak whole-GPU VRAM from a ~1.1 GB
             # baseline and a ~12-14 GB host-memory rise; the same floors as the TI2V workflow.
@@ -554,6 +595,17 @@ def _build(
                     "shift": 5,
                     "geometry": "source-aware: portrait 480x832; landscape 832x480",
                     "workflow_identity": "Wan-Animate-2 distilled int8, PR-VID-184R/S graph",
+                    **(
+                        {
+                            "attention": (
+                                "Comfy Kitchen attention via the managed ComfyUI launch; output is close to, but not "
+                                "identical to, version 1.2.0"
+                            ),
+                            "runtime": f"kept warm {WAN_ANIMATE2_KEEP_WARM_SECONDS} s between jobs",
+                        }
+                        if speed_profile
+                        else {}
+                    ),
                     **(
                         {"negative_prompt_effect": "none at cfg 1.0 (kept as qualified)"}
                         if controlled
@@ -597,19 +649,37 @@ def build_wan_animate2_specs() -> tuple[WorkflowSpec, ...]:
         _build(workflow_id=WAN_ANIMATE2_DRIVE_ID, driving_video=True, controlled=True),
         _build(workflow_id=WAN_ANIMATE2_PROMPT_ID, driving_video=False, runtime_qualified=True),
         _build(workflow_id=WAN_ANIMATE2_DRIVE_ID, driving_video=True, runtime_qualified=True),
+        _build(workflow_id=WAN_ANIMATE2_DRIVE_ID, driving_video=True, speed_profile=True),
     )
+
+
+def animate2_launch_attention(spec: WorkflowSpec) -> str | None:
+    """``"ck"`` for the 1.3.0 driving-video workflow, resolved from its immutable identity; ``None`` otherwise,
+    so every earlier version (including jobs frozen at 1.2.0) keeps its launch exactly as it was."""
+
+    if (
+        getattr(spec, "workflow_id", None) == WAN_ANIMATE2_DRIVE_ID
+        and getattr(spec, "workflow_version", None) == WAN_ANIMATE2_SPEED_VERSION
+    ):
+        return WAN_ANIMATE2_CK_ATTENTION_PROFILE
+    return None
 
 
 __all__ = [
     "WAN_ANIMATE2_BASELINE_VERSION",
+    "WAN_ANIMATE2_CK_ATTENTION_PROFILE",
     "WAN_ANIMATE2_CONTROLS_VERSION",
     "WAN_ANIMATE2_DEFAULT_NEGATIVE",
     "WAN_ANIMATE2_DRIVE_ID",
     "WAN_ANIMATE2_FRAME_COUNT_POLICY",
+    "WAN_ANIMATE2_KEEP_WARM_SECONDS",
     "WAN_ANIMATE2_MODEL_FILES",
     "WAN_ANIMATE2_PROMPT_ID",
     "WAN_ANIMATE2_QUALIFIED_GRAPH_SHA256",
     "WAN_ANIMATE2_RUNTIME_PROVENANCE",
     "WAN_ANIMATE2_RUNTIME_VERSION",
+    "WAN_ANIMATE2_SPEED_PROVENANCE",
+    "WAN_ANIMATE2_SPEED_VERSION",
+    "animate2_launch_attention",
     "build_wan_animate2_specs",
 ]

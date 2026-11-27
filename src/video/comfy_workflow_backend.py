@@ -76,7 +76,6 @@ from src.video.video_interpolation import (
     normalize_interpolation_request,
 )
 from src.video.workflow_asset_integrity import configured_asset_issues
-from src.video.workflow_catalog_wan_a14b import a14b_launch_attention
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import (
     frame_count_policy,
@@ -84,6 +83,7 @@ from src.video.workflow_frame_count import (
     parse_frame_count,
 )
 from src.video.workflow_input_integrity import verify_exact_dispatch_inputs
+from src.video.workflow_launch_attention import launch_attention
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_readiness import required_launch_flags as _required_launch_flags
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
@@ -701,7 +701,7 @@ class ComfyWorkflowVideoBackend:
         if not transition.ready:
             raise RuntimeTransitionError(transition)
 
-        attention_profile = a14b_launch_attention(spec)
+        attention_profile = launch_attention(spec)
         runtime_base_url = self._ensure_runtime_ready(
             _required_launch_flags(spec),
             attention_profile=attention_profile,
@@ -712,7 +712,7 @@ class ComfyWorkflowVideoBackend:
         if attention_profile is not None:
             attention_manager = self._resolve_process_manager()
             if attention_manager is None:
-                raise ComfyStartupError("A14B attention requires a StableNew-owned ComfyUI.")
+                raise ComfyStartupError("A Comfy Kitchen attention profile requires a StableNew-owned ComfyUI.")
             runtime_base_url = attention_manager.verified_a14b_endpoint(runtime_base_url)
             client = self._client or ComfyApiClient(base_url=runtime_base_url, direct=True)
         else:
@@ -791,7 +791,7 @@ class ComfyWorkflowVideoBackend:
         _raise_if_cancelled(request.cancel_token, "before the workflow was queued")
         if attention_manager is not None:
             if attention_evidence is None or self._owned_running_pid() != attention_evidence["pid"]:
-                raise ComfyStartupError("The verified A14B ComfyUI process changed before dispatch.")
+                raise ComfyStartupError("The verified attention-profile ComfyUI process changed before dispatch.")
             attention_manager.verified_a14b_endpoint(runtime_base_url)
         # Not retried: a DispatchOutcomeUnknown here means Comfy may already be running this prompt.
         try:
@@ -1183,7 +1183,7 @@ class ComfyWorkflowVideoBackend:
         if not required and not getattr(config, "autostart_enabled", False):
             return
         running = getattr(manager, "running_command", ()) or ()
-        profile = a14b_launch_attention(spec)
+        profile = launch_attention(spec)
         if running:
             if profile is not None:
                 try:
