@@ -14,6 +14,7 @@ from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
 from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_text_widget
+from src.gui.tooltip import attach_tooltip
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
@@ -55,6 +56,19 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
         adv, text="Why these settings?", style="Dark.TButton", command=tab._toggle_reasons
     )
     tab.why_button.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+    # N13: unrated speed arms and superseded arms are listed only when this is on.
+    tab.show_experimental_check = ttk.Checkbutton(
+        adv,
+        text="Show experimental",
+        variable=tab.show_experimental_var,
+        style="Dark.TCheckbutton",
+    )
+    tab.show_experimental_check.grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
+    attach_tooltip(
+        tab.show_experimental_check,
+        "Also list unrated speed arms and superseded engine arms (A14B CK attention and SVI, "
+        "HunyuanVideo 1.5). They stay experimental: Queue warns and records your opt-in.",
+    )
     reasons_label = ttk.Label(
         adv, textvariable=tab.suggestion_reasons_var, style="Muted.TLabel", justify="left"
     )

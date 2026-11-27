@@ -86,7 +86,7 @@
     "src/gui/views/stage_cards_panel_v2.py": 1,
     "src/gui/views/svd_tab_frame_v2.py": 1,
     "src/gui/views/video_workflow_experiment_panel_v2.py": 1,
-    "src/gui/views/video_workflow_tab_frame_v2.py": 12,
+    "src/gui/views/video_workflow_tab_frame_v2.py": 9,
     "src/gui/widgets/action_explainer_panel_v2.py": 5,
     "src/gui/widgets/config_sweep_widget_v2.py": 4,
     "src/gui/widgets/embedding_picker_panel.py": 16,

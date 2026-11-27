@@ -19,12 +19,21 @@ from tkinter import ttk
 from typing import Any, cast
 
 from src.gui import theme_v2 as theme
+from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.task_navigation_contract import (
     TASK_GROUPS,
     NavDestination,
     default_tab_for_group,
     get_destination,
     get_group,
+    visible_tab_ids,
+)
+from src.gui.view_contracts.workspace_mode_contract import (
+    SWITCH_LABEL,
+    SWITCH_TOOLTIP,
+    WORKSPACE_ADVANCED,
+    WORKSPACE_SIMPLE,
+    normalize_workspace_mode,
 )
 
 GROUP_STYLE = "TaskNavGroup.Toolbutton"
@@ -121,16 +130,21 @@ class TaskNavigationBar(ttk.Frame):
         *,
         on_select: Callable[[str], object],
         is_available: Callable[[str], bool],
+        mode: str = WORKSPACE_ADVANCED,
+        on_mode_change: Callable[[str], object] | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(master, **kwargs)  # type: ignore[arg-type]
         self._on_select = on_select
         self._is_available = is_available
+        self._on_mode_change = on_mode_change
+        self._mode = normalize_workspace_mode(mode)
         self._active_group_id = TASK_GROUPS[0].group_id
         self._selected_tab_id = ""
         self._last_tab_in_group: dict[str, str] = {}
         self._group_var = tk.StringVar(master=self, value=self._active_group_id)
         self._destination_var = tk.StringVar(master=self, value="")
+        self.advanced_var = tk.BooleanVar(master=self, value=self._mode == WORKSPACE_ADVANCED)
         self._group_buttons: dict[str, ttk.Radiobutton] = {}
         self._destination_buttons: dict[str, ttk.Radiobutton] = {}
 
@@ -140,6 +154,16 @@ class TaskNavigationBar(ttk.Frame):
         self._show_group_destinations(self._active_group_id)
 
     def _build(self) -> None:
+        # N6: the Simple / Advanced switch sits at the right end of the bar.
+        self.advanced_check = ttk.Checkbutton(
+            self,
+            text=SWITCH_LABEL,
+            variable=self.advanced_var,
+            command=self._on_advanced_toggled,
+            style="Dark.TCheckbutton",
+        )
+        self.advanced_check.pack(side=tk.RIGHT, padx=(0, 12), pady=4)
+        attach_tooltip(self.advanced_check, SWITCH_TOOLTIP)
         groups = ttk.Frame(self)
         groups.pack(side=tk.LEFT, padx=(8, 0), pady=4)
         for group in TASK_GROUPS:
@@ -198,8 +222,20 @@ class TaskNavigationBar(ttk.Frame):
 
     # -- choices made by the operator -------------------------------------------------------------------------------
 
+    def _on_advanced_toggled(self) -> None:
+        mode = WORKSPACE_ADVANCED if self.advanced_var.get() else WORKSPACE_SIMPLE
+        if self._on_mode_change is not None:
+            self._on_mode_change(mode)  # the shell persists it and calls set_mode back
+        else:
+            self.set_mode(mode)
+
     def _on_group_chosen(self, group_id: str) -> None:
-        available = {tab_id for tab_id in self._destination_buttons if self._is_available(tab_id)}
+        shown = self._shown_tab_ids()
+        available = {
+            tab_id
+            for tab_id in self._destination_buttons
+            if self._is_available(tab_id) and tab_id in shown
+        }
         remembered = self._last_tab_in_group.get(group_id)
         target = (
             remembered if remembered in available else default_tab_for_group(group_id, available)
@@ -225,8 +261,44 @@ class TaskNavigationBar(ttk.Frame):
         self._last_tab_in_group[destination.group_id] = tab_id
         self._active_group_id = destination.group_id
         self._group_var.set(destination.group_id)
+        self._show_groups()  # a tab the mode hides is shown while it is open (a handoff, Ctrl+Tab)
         self._show_group_destinations(destination.group_id)
         self._destination_var.set(tab_id)
+
+    # -- workspace mode (N6) ----------------------------------------------------------------------------------------
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    def set_mode(self, mode: str) -> None:
+        """Show the destinations of ``mode``; never selects a tab (the shell decides where to go)."""
+
+        self._mode = normalize_workspace_mode(mode)
+        self.advanced_var.set(self._mode == WORKSPACE_ADVANCED)
+        self._show_groups()
+        self._show_group_destinations(self._active_group_id)
+
+    def _shown_tab_ids(self) -> set[str]:
+        shown = set(visible_tab_ids(self._mode))
+        if self._selected_tab_id:
+            shown.add(self._selected_tab_id)
+        return shown
+
+    def _show_groups(self) -> None:
+        shown = self._shown_tab_ids()
+        buttons = [self._group_buttons[group.group_id] for group in TASK_GROUPS]
+        visible = [
+            self._group_buttons[group.group_id]
+            for group in TASK_GROUPS
+            if shown.intersection(group.tab_ids)
+        ]
+        if [button for button in buttons if button.winfo_manager()] == visible:
+            return
+        for button in buttons:
+            button.pack_forget()
+        for button in visible:
+            button.pack(side=tk.LEFT, padx=(0, 2))
 
     def refresh_availability(self) -> None:
         """Disable destinations whose tab is not in the notebook (it failed to build or to be added)."""
@@ -237,16 +309,24 @@ class TaskNavigationBar(ttk.Frame):
         for group in TASK_GROUPS:
             usable = any(self._is_available(tab_id) for tab_id in group.tab_ids)
             self._group_buttons[group.group_id].state(["!disabled" if usable else "disabled"])
+        self._show_groups()
 
     def _show_group_destinations(self, group_id: str) -> None:
         group = get_group(group_id)
-        group_tab_ids = set(group.tab_ids) if group is not None else set()
+        shown = self._shown_tab_ids()
+        group_tab_ids = [tab_id for tab_id in (group.tab_ids if group else ()) if tab_id in shown]
         for tab_id, button in self._destination_buttons.items():
-            if tab_id in group_tab_ids:
-                if not button.winfo_manager():
-                    button.pack(side=tk.LEFT, padx=(0, 2))
-            elif button.winfo_manager():
+            if tab_id not in group_tab_ids and button.winfo_manager():
                 button.pack_forget()
+        # Repack in navigation order so a destination revealed later never lands at the end.
+        packed = [
+            tab_id for tab_id in group_tab_ids if self._destination_buttons[tab_id].winfo_manager()
+        ]
+        if packed != group_tab_ids:
+            for tab_id in packed:
+                self._destination_buttons[tab_id].pack_forget()
+            for tab_id in group_tab_ids:
+                self._destination_buttons[tab_id].pack(side=tk.LEFT, padx=(0, 2))
 
     def _sync_group_variable(self) -> None:
         self._group_var.set(self._active_group_id)
