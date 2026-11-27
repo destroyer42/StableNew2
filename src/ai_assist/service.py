@@ -388,6 +388,9 @@ class AiAssistService:
         def refuse(code: OutcomeCode, reason: str) -> AssistOutcome:
             return AssistOutcome(code=code, request_id=request.request_id, reason=reason)
 
+        if request.image_jpeg:
+            # The local runtime has no vision path (invariant 10); a picture only ever goes to the remote worker.
+            return refuse(OutcomeCode.UNAVAILABLE, "image_needs_remote")
         if not self._swept:
             # Once per service, before the first request: remove scratch directories (which hold prompt text) that a
             # hard kill or a locked file left behind. Age-gated, so another live request is never touched.
@@ -476,14 +479,32 @@ class AiAssistService:
             "fallback": False,
         }
         try:
-            result = self.remote.run(identity, request, token, self._limits, self._sampling)
-            if result.reason == "remote_disconnected":
-                return self._fallback_local(request, token, settings)
-            code, reason = result.code, result.reason
-            suggestion = None
-            if code is None:
-                validated = validate_output(result.stdout, request)
-                code, reason, suggestion = validated.code, validated.reason, validated.suggestion
+            attempts, elapsed_ms, first_reason = 0, 0, ""
+            while True:
+                attempts += 1
+                result = self.remote.run(
+                    identity, request, token, self._limits, self._sampling, retry=attempts > 1
+                )
+                # Local fallback is for a connection that failed before anything was generated (D25).
+                if result.reason == "remote_disconnected" and attempts == 1:
+                    return self._fallback_local(request, token, settings)
+                elapsed_ms += result.elapsed_ms
+                code, reason = result.code, result.reason
+                suggestion = None
+                if code is None:
+                    validated = validate_output(result.stdout, request)
+                    code, reason = validated.code, validated.reason
+                    suggestion = validated.suggestion
+                # One retry, only for a received answer that failed validation (ASSIST-FIX). A refusal is surfaced,
+                # never retried (D5); a transport failure is never replayed (D25).
+                if code is OutcomeCode.MALFORMED and result.stdout and attempts == 1:
+                    if not token.cancelled:
+                        first_reason = reason
+                        continue
+                break
+            details["attempts"] = attempts
+            if first_reason:
+                details["first_reason"] = first_reason
             with self._lock:
                 if token.cancelled:
                     code, reason, suggestion = OutcomeCode.CANCELLED, "request_cancelled", None
@@ -497,8 +518,7 @@ class AiAssistService:
             # malformed answer now keeps its bounded raw output in memory only (never recorded; see RuntimeDetail).
             detail = (
                 remote_output_detail(result.stdout, reason)
-                if result.code is None
-                and code in (OutcomeCode.REFUSED_BY_MODEL, OutcomeCode.MALFORMED)
+                if result.stdout and code in (OutcomeCode.REFUSED_BY_MODEL, OutcomeCode.MALFORMED)
                 else None
             )
             outcome = AssistOutcome(
@@ -506,12 +526,12 @@ class AiAssistService:
                 request.request_id,
                 reason,
                 suggestion=suggestion,
-                elapsed_ms=result.elapsed_ms,
+                elapsed_ms=elapsed_ms,
                 details=details,
                 runtime_detail=detail,
             )
             return self._record(
-                request, outcome, None, len(result.stdout) if result.code is None else None
+                request, outcome, None, len(result.stdout) if result.stdout else None
             )
         except Exception:  # noqa: BLE001 - transport or validation exceptions could contain request text
             logger.warning("Remote AI Assist request failed unexpectedly")
@@ -678,6 +698,8 @@ class AiAssistService:
             ("priority_verified", "priority_verified"),
             ("child_observed", "child_observed"),
             ("exit_code", "exit_code"),
+            ("attempts", "attempts"),
+            ("first_reason", "first_reason"),
         ):
             if key in outcome.details:
                 record[field] = outcome.details[key]

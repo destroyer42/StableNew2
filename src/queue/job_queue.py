@@ -26,7 +26,10 @@ from src.queue.dispatch_evidence import (
     refusal_envelope,
     withhold_requeue_after_progress,
 )
-from src.queue.job_history_store import RETURN_REFUSED_CONTROL_ACTION
+from src.queue.job_history_store import (
+    APP_CLOSE_REQUEUE_CONTROL_ACTION,
+    RETURN_REFUSED_CONTROL_ACTION,
+)
 from src.queue.job_model import Job, JobStatus, StageCheckpoint
 from src.queue.job_repository import InvalidLifecycleTransition, JobRepository, JobStatusChanged
 from src.utils.contention_lock import ContentionLock
@@ -514,6 +517,44 @@ class JobQueue:
                 self._commit_return(job, "outage_requeue_undispatched", counter=counter)
             except JobStatusChanged:
                 return None  # the job moved on while the outage coordinator decided
+        self._notify_status(job, JobStatus.QUEUED)
+        self._notify_state_listeners()
+        return job
+
+    def requeue_for_app_close(self, job_id: str) -> Job | None:
+        """Put a RUNNING job the application close interrupted back at the front of the queue.
+
+        Owner decision 2026-11-27 ("Re-queue on restart"), for a normal close only: the same identity and NJR go back
+        to QUEUED in one transaction and run again on the next start. Its unfinished result and stage checkpoints are
+        dropped, so the job runs whole. Idempotent: ``None`` (nothing changed) once the job is no longer RUNNING, so
+        an operator Cancel that committed first stays final.
+        """
+
+        with self._repository.defer_emissions(), self._transition_lock:
+            with self._lock:
+                job = self._running_locked(job_id)
+                if job is None:
+                    return None
+                front = min((counter for _p, counter, _j in self._queue), default=self._counter) - 1
+                candidate = self._candidate(
+                    job, progress=0.0, eta_seconds=None, error_message=None, error_envelope=None, result=None
+                )
+            candidate.execution_metadata.last_control_action = APP_CLOSE_REQUEUE_CONTROL_ACTION
+            candidate.execution_metadata.return_to_queue_count += 1
+            candidate.execution_metadata.stage_checkpoints = []
+            try:
+                self._commit_transition(
+                    job,
+                    candidate,
+                    JobStatus.QUEUED,
+                    counter=front,
+                    adopt_checkpoints=True,
+                    expected_status=JobStatus.RUNNING,
+                    to_queue_front=True,
+                )
+            except JobStatusChanged:
+                return None
+        logger.info("QUEUE_JOB_REQUEUED_ON_CLOSE | %s was interrupted and will run again on the next start", job_id)
         self._notify_status(job, JobStatus.QUEUED)
         self._notify_state_listeners()
         return job
