@@ -38,6 +38,11 @@ PR 1 holds (a) to (d); PR 2 holds (e) and (f).
 - While a job runs, an image with no StableNew metadata waits (its job may not have written its manifest yet).
 - Items already published are withdrawn once (below).
 
+**No PC paths in videos.** Added 2026-11-27 (found by RG-170): published video bodies, original and mobile copy,
+carry no container metadata. Published images lose only the path-bearing fields of their metadata; prompt and
+settings text stay (owner-facing in Immich). The PC's files are unchanged and decisions on a stripped copy apply to
+them.
+
 **One-time withdrawal.** The gateway cannot tell a frame from any other image, so the PC classifies the items in its
 publish ledger with the same source filter and asks the gateway (`item_withdraw` feature) to stop showing the frames
 and un-smoothed clips. A withdrawal is not a decision: nothing enters the outbox or goes to Immich, no PC file is

@@ -53,6 +53,13 @@ def _codec_store(path: Path) -> GatewaySettingsStore:
     return GatewaySettingsStore(path, protect=xor, unprotect=xor)
 
 
+def copy_strip(source, target: Path, _cancelled) -> bool:
+    """Stands in for FFmpeg: these tests' videos are not real clips (stripping has its own tests)."""
+
+    target.write_bytes(source.read())
+    return True
+
+
 class Env:
     def __init__(self, tmp_path: Path, *, busy=lambda: False, monotonic=time.monotonic) -> None:
         self.root = (tmp_path / "output").resolve()
@@ -67,7 +74,9 @@ class Env:
         self.ledger = SyncLedger(self.ledger_path)
         self.gateway = FakeGateway()
         self.library = OutputLibrary(self.root, "review-gateway", lambda: None)
-        self.publisher = GatewayPublisher(self.library, self.ledger, transcode=None)
+        self.publisher = GatewayPublisher(
+            self.library, self.ledger, transcode=None, strip=copy_strip
+        )
         self.applier = RecordApplier(self.ledger, self.root, self.records, active_inputs=set)
         self.sync = ReviewGatewaySync(
             settings_store=_codec_store(tmp_path / "state" / "settings.bin"),

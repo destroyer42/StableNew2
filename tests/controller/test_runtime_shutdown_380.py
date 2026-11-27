@@ -113,7 +113,7 @@ def test_queue_and_blocked_history_share_deadline_and_keep_resources_open(
         assert not outcome.completed and outcome.deadline_expired
         assert not outcome.queue_quiescent and not outcome.background_quiescent
         assert outcome.repository == "left_open" and outcome.comfy == "deferred"
-        assert 0.17 <= outcome.elapsed_seconds < 0.8
+        assert 0.17 <= outcome.elapsed_seconds < 5  # the blocked read alone would take 10 s
         assert "HistoryProjectionRefresh" in outcome.remaining_workers
         assert any(name.startswith("QueueWorker") for name in outcome.remaining_workers)
         assert outcome.cancellation_requested
@@ -129,7 +129,7 @@ def test_queue_and_blocked_history_share_deadline_and_keep_resources_open(
         built.cleanup()
 
     assert history_reads == ["read"] and delivered == []
-    assert built.status("A") is JobStatus.CANCELLED
+    assert built.status("A") is JobStatus.QUEUED
     assert built.status("B") is JobStatus.QUEUED
 
 

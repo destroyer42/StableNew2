@@ -92,8 +92,8 @@ Rules:
     `action_summary`, `job_ids` and `detail` (section 7).
 13. `features` in the health reply lists the optional parts of v1 this gateway accepts. The PC sends an optional part
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
-    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`,
-    the withdrawals route (section 3.0).
+    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch`
+    (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`, the withdrawals route (section 3.0).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -107,7 +107,8 @@ Rules:
   device row, so revocation applies to the next request. Every data and media route needs an enrolled device with the
   `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
 - JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata
-  is put on screen with `textContent` only. Originals are `private, no-store`; derivatives `private, max-age=3600`.
+  is put on screen with `textContent` only. Originals are `private, no-store`; thumbnails and image renditions `private, max-age=604800, immutable`; other
+  derivatives `private, max-age=3600`.
 - Inbox grouped by named batch, else by run folder, with counts (section 3.1); a group's grid; triage with Keep,
   Favorite, Delete buttons and swipes (right, up, left) and the six reason tags. A refused item counts as "to review"
   again.
@@ -118,8 +119,29 @@ Rules:
 - The decision buttons and swipes stay off until the item has loaded. If it cannot load, the owner may retry or choose
   to decide without seeing it.
 
+- The phone prefetches the next 4 image renditions while triaging.
+
 ### 3.0 What the PC publishes (PHONE-FAST)
 
+- **Only authoritative outputs** (`src/app/review_gateway_sources.py`). An image under `movie_clips`, an image a video
+  manifest lists as a frame, and a retained un-smoothed clip are never published. While a job runs, an image that may
+  be one of its frames waits.
+- **Nothing blocks the rest.** A row whose file is gone is recorded as `missing` and looked at again after a day; a row
+  that fails for another reason is set aside for a while, longer each time (up to 10 minutes). A published item's
+  ledger row is never overwritten.
+- **Window.** The last 3 days, or back to when the publisher last caught up if that is older; never before the first
+  window.
+- **Rate.** Up to 8 items per cycle while idle; one item per 30 s while a job runs, with nothing transcoded. When a job
+  completes, its new outputs publish at once even if the next job is already running.
+- **Phone rendition.** Every image is sent with a WebP (JPEG where WebP is unavailable) of at most 1080 px on its long
+  side, never enlarged. Images published before this get one a few at a time while the PC is idle.
+- **No PC paths** (invariant 3). A video's original is sent as a bit-exact copy of its picture and sound without any
+  container, stream or chapter metadata (no re-encode), and the mobile copy is made the same way. An image's original
+  keeps its pixels and its prompt and settings text; fields of its embedded metadata that are only a path are removed,
+  and a path inside longer text keeps its file name (`src/app/review_gateway_scrub.py`). The PC's files are never
+  touched. A changed item is known to the gateway and Immich by the SHA-256 of the bytes sent; the PC maps a decision
+  back to its file (`public_digest`). Media that cannot be cleaned is not sent. Items sent before this are not sent
+  again, so they keep their metadata.
 - **One-time withdrawal.** Frames and un-smoothed clips published before the rule above are withdrawn once: the PC
   classifies its publish ledger and posts `item_withdrawal` to a gateway listing `item_withdraw`. The gateway purges
   those items without recording a decision or touching Immich, and leaves any item with a decision or a request the
@@ -164,13 +186,27 @@ A packs × models batch (N5) writes many run folders, but the owner queued it as
   alone and tap or swipe to flip, then **Keep original** or **Keep rework**. The pick is two ordinary decisions: keep
   one, delete (archive) the other. The kept one keeps its Favorite mark and tags.
 
+### 3.3 Triage and status (PHONE-FAST)
+
+- **One stream.** "Review all" goes through everything still to review, across runs and batches: the group with the
+  newest activity first, oldest first within it (`GET /api/runs/all`).
+- **Undo.** The last decision (or a compare's pair) is held on the phone for 8 seconds and can be undone. The next
+  decision, hiding or closing the page, or the time running out sends it. The gateway has no "undecide".
+- **Run grid.** "Keep the rest" keeps what is left to review. "Delete this run" asks first, then deletes everything not
+  kept; items sent for rework stay.
+- **Status.** `GET /api/status` gives every review phone the PC's last reported queue (state and number queued, with
+  when it arrived) and the cache size. A PC reports it only where live update is available. This is the one status
+  route.
+
 ## 4. Retention (D4)
 
 Hourly, and by `review-gateway-admin purge`. An item is purged only when it has no unanswered record and its latest
 record was answered: 48 hours after an applied discard, 14 days after anything else (including a refusal). A kept
-item is purged only after Immich has it: nothing is purged while an upload is owed or failing. Undecided items are never
-purged, so the cache grows until they are decided (and until Immich is configured and reachable). An unanswered
-action request also keeps the item's media. Purging removes cached media only (shared files stay
+item is purged only after Immich has it: nothing is purged while an upload is owed or failing. An item nobody has decided is purged 30 days after
+it arrived (`undecided_days`, 0 for never), counted again from any later action request, and never while a request
+waits for the PC; the PC's file is not touched. A kept item waits for Immich to be configured and reachable. An
+unanswered action request also keeps the item's media. A cache over `cache_warn_gib` (20 by default, 0 for never) is
+reported to the phone and the log; nothing is refused or removed for it. Purging removes cached media only (shared files stay
 while another item needs them); the item row and records remain, so republishing does not bring it back. Abandoned
 partial uploads and unreferenced files older than a day are swept.
 

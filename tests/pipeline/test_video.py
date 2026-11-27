@@ -231,8 +231,8 @@ def _resolve_ffprobe() -> str | None:
 @pytest.mark.parametrize("frame_count", [1, 3, 14])
 def test_export_video_mp4_decodes_exact_input_frame_count(tmp_path: Path, frame_count: int):
     ffprobe = _resolve_ffprobe()
-    if ffprobe is None:
-        pytest.skip("ffprobe is not available")
+    if ffprobe is None or video.resolve_ffmpeg_executable() is None:
+        pytest.skip("FFmpeg/ffprobe is not available")
 
     frames = [
         Image.new("RGB", (64, 64), (index * 37 % 256, 50, 120)) for index in range(frame_count)

@@ -11,7 +11,7 @@ from src.app.review_gateway_actions import REWORK_ACTIONS
 from src.app.review_gateway_client import GatewayClient
 from tests.app import test_review_gateway_actions as actions_tests
 from tests.app.test_review_gateway_backlog import indexed
-from tests.app.test_review_gateway_sync import Env
+from tests.app.test_review_gateway_sync import RUN, Env
 from tests.helpers.review_gateway_fakes import SECRET
 
 ORIGINAL = ("lib-original", "ab" * 32)
@@ -87,3 +87,18 @@ def test_admitting_a_rework_records_which_jobs_rework_the_item(tmp_path, action,
         assert found == ([original] if recorded else [None] * len(found))
     finally:
         environment.close()
+
+
+def test_the_parent_is_named_as_the_gateway_knows_it(env):
+    """An original whose metadata held PC paths was sent as other bytes than the PC's file (the ledger maps them)."""
+
+    original_id, file_sha = ORIGINAL
+    public = "cd" * 32
+    env.ledger.mark_published(
+        original_id, "v1", f"{RUN}/gone.png", public, "image", "published", "2026-11-27T00:00:00Z"
+    )
+    env.ledger.set_public_digest(original_id, public, file_sha)
+    env.ledger.remember_rework(["job-rework"], original_id, file_sha)
+    result_id, manifest = publish(env, ["item_parent"])["small.png"]
+    assert manifest["parent"] == {"library_id": original_id, "sha256": public}
+    assert env.ledger.rework_original_of(result_id) == ORIGINAL

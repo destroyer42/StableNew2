@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -47,6 +48,7 @@ from src.app.review_gateway_protocol import (
     item_manifest,
     utc_text,
 )
+from src.app.review_gateway_scrub import Unclean, scrub_image
 from src.app.review_gateway_sources import RETAINED, SourceFilter, may_be_unrecorded_frame
 from src.app.review_gateway_store import SyncLedger
 from src.app.site_media_files import SiteOutputError, checked_digest, open_scoped
@@ -147,6 +149,53 @@ def encode_preview_1080(stream: BinaryIO, mime: str) -> tuple[bytes, str, int, i
     return None
 
 
+#: Drop every container, stream and chapter tag (PHONE-FAST): StableNew videos carry the workflow description and PC
+#: paths there. Bit-exact, so the same file always gives the same bytes.
+_NO_METADATA = ("-map_metadata", "-1", "-map_chapters", "-1", "-fflags", "+bitexact")
+
+
+def ffmpeg_strip_metadata(source: BinaryIO, target: Path, cancelled: Callable[[], bool]) -> bool:
+    """A copy of the video's picture and sound, not re-encoded, without any metadata; ``False`` when FFmpeg is absent
+    or fails. The PC's own file is only read."""
+
+    from src.pipeline.video import resolve_ffmpeg_executable
+    from src.utils.managed_process import run_bounded
+
+    tool = resolve_ffmpeg_executable()
+    if tool is None:
+        return False
+    faststart = ["-movflags", "+faststart"] if target.suffix in (".mp4", ".mov") else []
+    source.seek(0)
+    outcome = run_bounded(
+        [
+            str(tool),
+            *site_library_video.INPUT_OPTIONS,
+            "-nostdin",
+            "-i",
+            "fd:",
+            "-map",
+            "0:V",
+            "-map",
+            "0:a?",
+            "-c",
+            "copy",
+            *_NO_METADATA,
+            *faststart,
+            "-y",
+            str(target),
+        ],
+        timeout_seconds=600,
+        max_stdout_bytes=64 * 1024,
+        max_stderr_bytes=4096,
+        stdin_file=source,
+        below_normal=True,
+        cancel=cancelled,
+        memory_limit_mb=1024,
+        allow_unenforced_memory_limit=True,
+    )
+    return outcome.returncode == 0 and target.is_file() and target.stat().st_size > 0
+
+
 def ffmpeg_mobile_transcode(source: BinaryIO, target: Path, cancelled: Callable[[], bool]) -> bool:
     """H.264/AAC MP4 at most 1280 px, low priority and bounded; ``False`` when FFmpeg is absent or fails.
 
@@ -192,6 +241,7 @@ def ffmpeg_mobile_transcode(source: BinaryIO, target: Path, cancelled: Callable[
             "aac",
             "-b:a",
             "96k",
+            *_NO_METADATA,
             "-movflags",
             "+faststart",
             "-y",
@@ -240,13 +290,13 @@ def job_batch_reader(
 
     def read(path: Path) -> Mapping[str, Any] | None:
         from src.review.review_evidence import image_source_job
+        from src.review.review_lineage import batch_of_job_reader
 
         if path.suffix.lower() not in _IMAGE_SUFFIXES:
             return None
         try:
             job_id = (job_id_of or image_source_job)(path)
-            entry = repository.get_job(job_id) if job_id else None
-            batch = identity(getattr(entry, "snapshot", None) or {})
+            batch = batch_of_job_reader(repository, identity)(job_id) if job_id else None
         except Exception:  # noqa: BLE001 - grouping is display only; it must never hold publishing back
             log.debug("Review gateway publish could not read an item's batch")
             return None
@@ -273,6 +323,7 @@ class GatewayPublisher:
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         batch_of: BatchOf | None = None,
         monotonic: Callable[[], float] = time.monotonic,
+        strip: Transcode = ffmpeg_strip_metadata,
     ) -> None:
         self._library = library
         self._ledger = ledger
@@ -281,6 +332,7 @@ class GatewayPublisher:
         self._batch_of = batch_of
         self._sources = SourceFilter(library.root)
         self._monotonic = monotonic
+        self._strip = strip
         #: key -> (index version, failures, not before): rows set aside so they never keep older rows waiting.
         self._deferred: dict[str, tuple[str, int, float]] = {}
 
@@ -296,7 +348,8 @@ class GatewayPublisher:
             return None
 
     def _parent(self, key: str, item: LibraryItem, path: Path) -> tuple[str, str] | None:
-        """The original a phone rework made this image from, recorded in the ledger as its lineage."""
+        """The original a phone rework made this image from, recorded in the ledger as its lineage; named as the
+        gateway knows it, which is by the bytes that were sent."""
 
         if item.kind != "image" or not self._ledger.has_rework():
             return None
@@ -304,6 +357,10 @@ class GatewayPublisher:
         if original is None or original[0] == key:
             return None
         self._ledger.remember_result(key, *original)
+        library_id, file_sha = original
+        sent = self._ledger.published(library_id)
+        if sent is not None and self._ledger.file_digest(library_id, sent["sha256"]) == file_sha:
+            return library_id, str(sent["sha256"])
         return original
 
     @property
@@ -389,7 +446,7 @@ class GatewayPublisher:
             self._note_caught_up(since)
         return found
 
-    def _retry(self, known: Mapping[str, Any]) -> bool:
+    def _retry(self, known: sqlite3.Row) -> bool:
         if known["state"] != MISSING:
             return False
         age = self._now() - datetime.fromisoformat(str(known["at"]).replace("Z", "+00:00"))
@@ -573,23 +630,40 @@ class GatewayPublisher:
         version = json.dumps(list(item.version))
         known = self._ledger.published(key)
         digest = str(known["sha256"]) if known is not None and known["version"] == version else ""
+        if digest:
+            digest = self._ledger.file_digest(key, digest)
         if not digest:
             with open_scoped(self.root, path) as stream:
                 digest = checked_digest(stream, size_limit=limit)
         thumb = self._library.grid_preview(item, cancel=cancel)
         if thumb is None or not thumb.ready or thumb.mime not in CONTENT_TYPES:
             return "pending"
-        bodies: dict[str, _Body] = {
-            "thumb_320": _Body(
-                MediaVariant(hashlib.sha256(thumb.data).hexdigest(), len(thumb.data), thumb.mime),
-                data=thumb.data,
-            ),
-            "original": _Body(
-                MediaVariant(digest, size, item.mime, item.width, item.height), path=path
-            ),
-        }
-        with self._extra_bodies(item, path, cancel, allow_transcode) as extra:
-            bodies.update(extra)
+        # An image already sent as it is stays that item: a second copy of it would be a second item.
+        as_before = (
+            item.kind == "image"
+            and known is not None
+            and known["state"] == "published"
+            and known["version"] == version
+            and known["sha256"] == digest
+        )
+        with (
+            self._original(item, path, digest, size, cancel, as_before) as original,
+            self._extra_bodies(item, path, cancel, allow_transcode) as extra,
+        ):
+            if original is None:
+                return "pending"  # a video that cannot be stripped never leaves the PC
+            file_digest = digest
+            digest = original.variant.sha256
+            bodies: dict[str, _Body] = {
+                "thumb_320": _Body(
+                    MediaVariant(
+                        hashlib.sha256(thumb.data).hexdigest(), len(thumb.data), thumb.mime
+                    ),
+                    data=thumb.data,
+                ),
+                "original": original,
+                **extra,
+            }
             created = datetime.fromtimestamp(item.effective_time / 1_000_000, UTC)
             parent = self._parent(key, item, path)
             manifest = item_manifest(
@@ -616,12 +690,73 @@ class GatewayPublisher:
                 state, _missing = client.post_manifest(manifest)
             if state not in ("ready", "purged"):
                 return "pending"
+        if digest != file_digest:
+            self._ledger.set_public_digest(key, digest, file_digest)
         self._ledger.mark_published(
             key, version, item.path, digest, item.kind, "published", utc_text(self._now())
         )
         if item.kind == "image":
             self._ledger.set_rendition(key)
         return "published"
+
+    @contextmanager
+    def _original(
+        self,
+        item: LibraryItem,
+        path: Path,
+        digest: str,
+        size: int,
+        cancel: Event,
+        as_before: bool,
+    ) -> Iterator[_Body | None]:
+        """What is sent as the original, without PC paths in its metadata (``None`` when that cannot be assured, so it
+        is not sent at all): an image keeps its other metadata, a video loses all of it. The item is known to the
+        gateway by the bytes sent."""
+
+        unchanged = _Body(MediaVariant(digest, size, item.mime, item.width, item.height), path=path)
+        if item.kind != "video":
+            if as_before:
+                yield unchanged
+                return
+            with open_scoped(self.root, path) as stream:
+                data = stream.read(IMAGE_LIMIT + 1)
+            try:
+                clean = scrub_image(data)
+            except Unclean:
+                log.warning(
+                    "Review gateway: an image was not sent; its metadata could not be cleaned"
+                )
+                yield None
+                return
+            if clean is data:
+                yield unchanged
+                return
+            yield _Body(
+                MediaVariant(
+                    hashlib.sha256(clean).hexdigest(),
+                    len(clean),
+                    item.mime,
+                    item.width,
+                    item.height,
+                ),
+                data=clean,
+            )
+            return
+        with tempfile.TemporaryDirectory(prefix="stablenew-gateway-") as scratch:
+            target = Path(scratch) / f"original{path.suffix.lower()}"
+            with open_scoped(self.root, path) as source:
+                made = self._strip(source, target, cancel.is_set)
+            if not made or cancel.is_set():
+                if not cancel.is_set():
+                    log.warning(
+                        "Review gateway: a video was not sent; its metadata could not be removed"
+                    )
+                yield None
+                return
+            with target.open("rb") as stream:
+                sent = checked_digest(stream, size_limit=VIDEO_LIMIT)
+            length = target.stat().st_size
+            yield _Body(MediaVariant(sent, length, item.mime, item.width, item.height), path=target)
 
     @contextmanager
     def _extra_bodies(

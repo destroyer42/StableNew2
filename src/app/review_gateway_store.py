@@ -42,6 +42,28 @@ def _local_state_dir() -> Path:
     return local / "StableNew" / "review-gateway"
 
 
+def read_published_image_digests(path: Path | None = None) -> set[str] | None:
+    """SHA-256 of every image published to the phone, read-only (LEARN-JOIN); ``None`` when there is no ledger.
+
+    Nothing is created: unlike ``SyncLedger`` this opens an existing ledger with ``mode=ro`` or not at all.
+    """
+
+    try:
+        ledger = path if path is not None else _local_state_dir() / "ledger.sqlite3"
+        if not ledger.is_file():
+            return None
+        connection = sqlite3.connect(f"file:{ledger.resolve().as_posix()}?mode=ro", uri=True)
+        try:
+            rows = connection.execute(
+                "SELECT sha256 FROM published WHERE state = 'published' AND kind = 'image'"
+            ).fetchall()
+        finally:
+            connection.close()
+    except (OSError, sqlite3.Error):
+        return None
+    return {str(row[0]).lower() for row in rows}
+
+
 def parse_address(text: str) -> tuple[str, int]:
     """``host`` or ``host:port`` (an IPv6 literal in brackets), optionally written as the ``https://host:port`` sync
     URL the gateway installer prints (one trailing ``/`` allowed). No other scheme, no path, user or query."""
@@ -182,6 +204,10 @@ CREATE TABLE IF NOT EXISTS renditions (library_id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS rework_jobs (job_id TEXT PRIMARY KEY, library_id TEXT NOT NULL, sha256 TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS rework_result (
     library_id TEXT PRIMARY KEY, original_id TEXT NOT NULL, original_sha256 TEXT NOT NULL
+);
+-- PHONE-FAST: media is sent without PC paths in its metadata, so the gateway may know it by other bytes than the file.
+CREATE TABLE IF NOT EXISTS public_digest (
+    library_id TEXT PRIMARY KEY, public_sha256 TEXT NOT NULL, file_sha256 TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS records (
     record_id TEXT PRIMARY KEY, idempotency_key TEXT, outcome TEXT NOT NULL, reason TEXT NOT NULL,
@@ -352,6 +378,22 @@ class SyncLedger:
                 " kind=excluded.kind, state=excluded.state, at=excluded.at",
                 (library_id, version, rel_path, sha256, kind, state, at),
             )
+
+    def set_public_digest(self, library_id: str, public_sha256: str, file_sha256: str) -> None:
+        with self._transaction() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO public_digest VALUES (?, ?, ?)",
+                (library_id, public_sha256, file_sha256),
+            )
+
+    def file_digest(self, library_id: str, public_sha256: str) -> str:
+        """The SHA-256 of the PC's file for an item the gateway knows by ``public_sha256``."""
+
+        rows = self._read(
+            "SELECT file_sha256 FROM public_digest WHERE library_id = ? AND public_sha256 = ?",
+            (library_id, public_sha256),
+        )
+        return str(rows[0][0]) if rows else public_sha256
 
     def published_many(self, library_ids: Sequence[str]) -> dict[str, sqlite3.Row]:
         """The publish rows of up to a page of items, in one read."""
