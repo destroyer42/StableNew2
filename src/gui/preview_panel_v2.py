@@ -753,9 +753,9 @@ class PreviewPanelV2(ttk.Frame):
         if self._manage_app_state_subscriptions:
             self._on_preview_jobs_changed()
         try:
-            # Always subscribed: a refusal must show even when the Pipeline shell owns the preview refresh.
-            for key in ("queue_refusal", "preview_jobs"):
-                self.app_state.subscribe(key, self._show_queue_refusal)
+            # Always subscribed: a refusal must show even when the Pipeline shell owns the preview refresh (that
+            # shell owns the hot ``preview_jobs`` key; its refresh re-reads the refusal through the action states).
+            self.app_state.subscribe("queue_refusal", self._show_queue_refusal)
         except (AttributeError, TypeError):
             return
         self._show_queue_refusal()
@@ -1197,6 +1197,7 @@ class PreviewPanelV2(ttk.Frame):
             detail = str(error).replace("\n", " ")[:240] if error else "No current compiled jobs."
             reason = f"Preview unavailable: {detail} Correct settings and rebuild Preview, or Clear Draft."
         self.preview_error_label.configure(text=reason)
+        self._show_queue_refusal()  # a changed Preview may have dropped the old refusal
         if packs:
             self.pack_draft_notice.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
         else:

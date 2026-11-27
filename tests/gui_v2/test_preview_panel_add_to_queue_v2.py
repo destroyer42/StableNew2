@@ -95,3 +95,16 @@ def test_preview_panel_shows_a_queue_refusal_until_it_is_cleared(tk_root: tk.Tk)
     app_state.set_queue_refusal(None)
     tk_root.update_idletasks()
     assert not panel.queue_refusal_label.grid_info()
+
+
+@pytest.mark.gui
+def test_preview_panel_drops_the_refusal_when_a_new_preview_is_refreshed(tk_root: tk.Tk) -> None:
+    app_state = AppStateV2()
+    panel = PreviewPanelV2(tk_root, app_state=app_state, manage_app_state_subscriptions=False)
+    app_state.set_queue_refusal("Nothing was queued. old")
+    tk_root.update_idletasks()
+
+    app_state.invalidate_preview()
+    panel.update_from_app_state(app_state)
+
+    assert not panel.queue_refusal_label.grid_info()
