@@ -120,7 +120,9 @@ class SourceFilter:
             return True
         jobs = self._recorded((self._root / relative).parent / "manifests")[2]
         recorded = jobs.get(parts[-1].casefold())
-        return bool(recorded) and not recorded.isdisjoint(self._eval_job_ids())
+        if not recorded:
+            return False
+        return not recorded.isdisjoint(self._eval_job_ids())
 
     def exclusion(self, item: LibraryItem) -> str:
         """``EVAL``, ``FRAME``, ``RETAINED`` or ``""`` (publish it)."""
