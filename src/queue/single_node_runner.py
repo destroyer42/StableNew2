@@ -353,7 +353,14 @@ class SingleNodeJobRunner:
 
         A return happens only on positive evidence that nothing was dispatched; otherwise the queue cancels the job
         and records the operator-action-required envelope (see ``JobQueue.cancel_running_job``).
+
+        While the application is closing, the pending Cancel is the close itself: the job is re-queued instead. An
+        operator Cancel was committed before that, so its job is no longer RUNNING and stays cancelled.
         """
+        if self._shutting_down:
+            settled = self.job_queue.requeue_for_app_close(job.job_id) or self.job_queue.get_job(job.job_id) or job
+            self._notify(settled, settled.status)
+            return settled
         evidence = (
             self._return_evidence(job, result=result, exc=exc) if self._cancel_return_to_queue else None
         )

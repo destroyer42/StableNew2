@@ -137,8 +137,8 @@ def test_a_claim_that_already_passed_the_dispatch_policy_cannot_start_a_job_afte
     assert stack.calls == ["A"]
 
 
-def test_the_active_job_is_cancelled_with_existing_semantics_and_the_next_job_never_starts(stack: Stack) -> None:
-    """Shutdown cancels the RUNNING job (existing path); the cancellation unwind must not hand off to B."""
+def test_the_active_job_is_re_queued_and_the_next_job_never_starts(stack: Stack) -> None:
+    """Shutdown interrupts the RUNNING job and re-queues it; the unwind must not hand off to B."""
 
     service, runner = stack.service, stack.runner
     service.auto_run_enabled = True
@@ -146,8 +146,8 @@ def test_the_active_job_is_cancelled_with_existing_semantics_and_the_next_job_ne
     assert stack.started["A"].wait(DEADLINE)
 
     _begin_shutdown(service)
-    service.cancel_current()  # what application shutdown does to the active job (unchanged behavior)
-    _wait_until(lambda: stack.status("A") is JobStatus.CANCELLED)
+    service.cancel_current()  # what application shutdown does to the active job
+    _wait_until(lambda: stack.status("A") is JobStatus.QUEUED)
     _wait_until(lambda: stack.started["B"].is_set() or not runner.is_running())
 
     assert stack.started["B"].is_set() is False, "the cancellation unwind claimed the next job"
@@ -263,7 +263,7 @@ def test_fenced_pending_jobs_stay_queued_and_resume_under_the_existing_startup_p
 
     _begin_shutdown(service)
     service.cancel_current()
-    _wait_until(lambda: built.status("A") is JobStatus.CANCELLED)
+    _wait_until(lambda: built.status("A") is JobStatus.QUEUED)
     # Application shutdown spends real time between cancelling the active job and stopping the queue (runtime
     # teardown); model that window deterministically: the cancelled worker has fully unwound before stop().
     _wait_until(lambda: built.started["B"].is_set() or not built.runner.is_running())
@@ -279,9 +279,9 @@ def test_fenced_pending_jobs_stay_queued_and_resume_under_the_existing_startup_p
     runner = SingleNodeJobRunner(queue, lambda job: ran.append(job.job_id) or {"success": True, "variants": []}, poll_interval=0.005)
     restarted = JobService(queue, runner=runner, require_normalized_records=True)
     try:
-        assert [job.job_id for job in queue.list_jobs(JobStatus.QUEUED)] == ["B", "C"]
+        assert [job.job_id for job in queue.list_jobs(JobStatus.QUEUED)] == ["A", "B", "C"]
         restarted.set_auto_run_enabled(True, start_if_ready=True)
-        _wait_until(lambda: ran == ["B", "C"])
+        _wait_until(lambda: ran == ["A", "B", "C"])
         _wait_until(lambda: repository.get_job_model("C").status is JobStatus.COMPLETED)
     finally:
         runner.stop()

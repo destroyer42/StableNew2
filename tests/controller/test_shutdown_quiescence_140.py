@@ -188,7 +188,7 @@ def test_shutdown_never_starts_the_queued_job_and_closes_the_repository_only_aft
 
     assert harness.started["B"].is_set() is False, "B acquired RUNNING after shutdown began"
     assert [harness.status(j) for j in ("B", "C")] == [JobStatus.QUEUED, JobStatus.QUEUED]
-    assert harness.status("A") is JobStatus.CANCELLED  # the active job follows the existing cancellation semantics
+    assert harness.status("A") is JobStatus.QUEUED  # the active job is re-queued for the next start
     assert harness.repository.close_calls == 1
     assert harness.repository.worker_alive_at_close is False, "the repository was closed under a live queue worker"
     assert thread_errors == [], thread_errors
@@ -225,7 +225,7 @@ def test_a_worker_that_cannot_quiesce_keeps_the_repository_open_and_is_reported(
 
         built.release["A"].set()  # the stuck backend finally returns: the worker must unwind with the repository open
         _wait_until(lambda: _quiescent(built.runner))
-        assert built.status("A") in {JobStatus.CANCELLED, JobStatus.COMPLETED}
+        assert built.status("A") is JobStatus.QUEUED  # re-queued at close; the late result is discarded
         assert built.status("B") is JobStatus.QUEUED
         assert thread_errors == [], thread_errors
     finally:
