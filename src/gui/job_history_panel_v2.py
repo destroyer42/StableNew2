@@ -26,6 +26,7 @@ from src.gui.controllers.history_compare_service import (
 from src.gui.controllers.history_iterate_service import HistoryIterateRefused, HistoryIterateService
 from src.gui.controllers.video_workspace_handoff import (
     route_job_to_storyboard,
+    route_job_to_video_rerun,
     route_video_to_motion_harvest,
 )
 from src.gui.history_compare_dialog import HistoryCompareDialog
@@ -86,6 +87,7 @@ class HistoryActionState:
     compare: bool = False
     harvest: bool = False
     storyboard: bool = False
+    rerun: bool = False
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -188,6 +190,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         action_bar.add(self.storyboard_btn)
+        self.rerun_btn = ttk.Button(
+            action_bar,
+            text="Re-run with tweaks...",
+            command=self._on_rerun_with_tweaks,
+            state=tk.DISABLED,
+        )
+        action_bar.add(self.rerun_btn)
         self.explain_btn = ttk.Button(
             action_bar,
             text="Explain Job",
@@ -361,6 +370,9 @@ class JobHistoryPanelV2(ttk.Frame):
         self._history_menu.add_command(label="Harvest Motion...", command=self._on_harvest_motion)
         self._history_menu.add_command(
             label="Continue in Storyboard", command=self._on_continue_in_storyboard
+        )
+        self._history_menu.add_command(
+            label="Re-run with tweaks...", command=self._on_rerun_with_tweaks
         )
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self._history_menu.add_command(
@@ -797,6 +809,28 @@ class JobHistoryPanelV2(ttk.Frame):
             return
         self.replay_status_var.set("")
 
+    def _on_rerun_with_tweaks(self) -> None:
+        """Open the selected finished clip in the Video Workflow tab to change and queue again (V1-2; intent only)."""
+
+        entry = self._selected_entry()
+        if not entry:
+            return
+        if not self._history_action_state(entry).rerun:
+            self.replay_status_var.set("Re-run with tweaks needs a completed video job.")
+            return
+        main_window = getattr(self.controller, "main_window", None)
+        if main_window is None:
+            self.replay_status_var.set(
+                "Re-run with tweaks is not available: the main window is missing."
+            )
+            return
+        try:
+            route_job_to_video_rerun(main_window=main_window, job_id=entry.job_id)
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.replay_status_var.set(f"Re-run with tweaks failed: {exc}")
+            return
+        self.replay_status_var.set("")
+
     def _on_send_to_movie_clips(self) -> None:
         entry = self._selected_entry()
         if entry and self._history_action_state(entry).movie_clips:
@@ -839,6 +873,10 @@ class JobHistoryPanelV2(ttk.Frame):
         self.storyboard_btn.configure(state=tk.NORMAL if actions.storyboard else tk.DISABLED)
         self._history_menu.entryconfigure(
             "Continue in Storyboard", state=tk.NORMAL if actions.storyboard else tk.DISABLED
+        )
+        self.rerun_btn.configure(state=tk.NORMAL if actions.rerun else tk.DISABLED)
+        self._history_menu.entryconfigure(
+            "Re-run with tweaks...", state=tk.NORMAL if actions.rerun else tk.DISABLED
         )
         self._history_menu.entryconfigure(
             "Harvest Motion...", state=tk.NORMAL if actions.harvest else tk.DISABLED
@@ -1153,6 +1191,7 @@ class JobHistoryPanelV2(ttk.Frame):
             compare=self._compare_offered(entry),
             harvest=self._recorded_video_path(entry) is not None,
             storyboard=self._recorded_video_path(entry) is not None,
+            rerun=self._recorded_video_path(entry) is not None,
         )
 
     def _iterate_offered(self, entry: JobHistoryEntry) -> bool:

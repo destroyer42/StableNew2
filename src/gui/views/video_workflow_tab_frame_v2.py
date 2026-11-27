@@ -68,6 +68,7 @@ from src.gui.views.video_workflow_rate_review_v2 import (
     OPEN_OPERATOR_SITE_EVENT,
     RateReviewSection,
 )
+from src.gui.views.video_workflow_rerun_host import RerunHost
 from src.gui.views.video_workflow_runtime_strip_v2 import WorkflowRuntimeReadinessStrip
 from src.gui.views.video_workflow_sections_v2 import (
     build_details_section,
@@ -117,6 +118,14 @@ from src.video.motion_presets import (
     preset_by_id,
     preset_by_label,
     preset_is_modified,
+)
+from src.video.motion_rerun import (
+    DRIVER_REPREPARE,
+    DRIVER_REUSE,
+    RERUN_LINEAGE_FIELD,
+    RerunOpening,
+    rerun_edits,
+    rerun_lineage,
 )
 from src.video.recent_video_outputs import RecentVideoOutput
 from src.video.workflow_frame_count import frame_count_advisory
@@ -229,6 +238,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._preset_id = NO_PRESET_ID
         self._suggestion_basis: dict[str, str] = {}
         self._requested_seconds: tuple[float, int] | None = None
+        # V1-2: the finished job a Re-run with tweaks opened (its lineage applies while the source is unchanged).
+        self._rerun: RerunOpening | None = None
         # VID-UX-384: which half of the tab is showing (a GUI preference, saved with the form, never
         # submitted), the one Show media preference shared by every media render in the tab, and whether
         # the operator opened the motion-readiness details from the header chip.
@@ -690,6 +701,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 "on_library_changed": self._refresh_motion_library,
                 "harvest_motion": self._harvest_recent_output,
                 "continue_in_storyboard": self._continue_output_in_storyboard,
+                "rerun_with_tweaks": lambda output: self.open_rerun(output.job_id),
             },
         )
         self.show_media_check = self._media_pane.check
@@ -1168,6 +1180,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state["motion_phrase"] = phrase
             state["motion_preset"] = self._preset_id
         if for_submission:
+            state.update(self._rerun_submission_fields(state))
             # N1: Queue on a header that shows the experimental warning is the job's opt-in; it is only ever part of
             # a submission, never saved state.
             state["experimental_opt_in"] = bool(workflow_meta.get("experimental"))
@@ -1888,6 +1901,92 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             duration=duration,
             basis=basis,
         )
+
+    # ------------------------------------------------------------------ re-run with tweaks (V1-2)
+
+    @property
+    def rerun_host(self) -> RerunHost:
+        host = getattr(self, "_rerun_host", None)
+        if host is None:
+            host = self._rerun_host = RerunHost(
+                self,
+                repository=lambda: getattr(
+                    getattr(self.app_controller, "job_service", None), "history_store", None
+                ),
+                on_opened=self.apply_rerun,
+                on_refused=self._fail,
+                on_status=self.status_var.set,
+            )
+        return host
+
+    def open_rerun(self, job_id: str) -> None:
+        """Re-run with tweaks: read the finished job on a worker, then fill the form from it (nothing is queued)."""
+
+        self.rerun_host.open(job_id)
+
+    def apply_rerun(self, opening: RerunOpening) -> None:
+        """Fill the form from a finished job (every value pinned, a new random seed); Queue builds a new NJR with
+        lineage to it through the normal builder."""
+
+        if not self._leave_batch_mode():
+            return
+        self.select_view(VIEW_CREATE)
+        self.submission_notice.clear()
+        self.restore_video_workflow_state(dict(opening.form))
+        self._rerun = opening
+        message = (
+            f"Re-run with tweaks of job {opening.snapshot.job_id}: change what you like, then Queue "
+            "(a new random seed is used)."
+        )
+        binding, driver = opening.snapshot.driver, opening.driver
+        if binding is not None and driver is not None:
+            settings = binding.settings
+            requested = settings.get("requested") if isinstance(settings, Mapping) else None
+            start = (requested or {}).get("start") if isinstance(requested, Mapping) else None
+            end = (requested or {}).get("end") if isinstance(requested, Mapping) else None
+            self.motion_prep_panel.set_window(
+                start=float(start) if isinstance(start, int | float) else 0.0,
+                end=float(end) if isinstance(end, int | float) else None,
+                convert=settings.get("fps_conversion") == "workflow_rate",
+            )
+            if driver.action == DRIVER_REPREPARE:
+                self.motion_prep_panel.prepare()
+                message += f" {driver.reason}"
+            elif driver.prepared is not None and not binding.aligned:
+                self.motion_prep_panel.adopt_record(driver.prepared, driver.reason)
+            elif driver.prepared is not None:
+                message += " The aligned driving clip is reused while the length stays the same."
+        self.status_var.set(message)
+
+    def _rerun_submission_fields(self, state: Mapping[str, Any]) -> dict[str, Any]:
+        """The lineage (and an aligned clip the re-run reuses) while the form still starts from that job's source."""
+
+        opening = self._rerun
+        if opening is None or self.source_image_var.get().strip() != str(
+            opening.form.get("source_image_path") or ""
+        ):
+            return {}
+        fields: dict[str, Any] = {}
+        binding, driver = opening.snapshot.driver, opening.driver
+        if (
+            binding is not None
+            and binding.aligned
+            and driver is not None
+            and driver.action == DRIVER_REUSE
+            and driver.prepared is not None
+            and ALIGN_PREPARED_FIELD not in state
+            and state.get("pose_video_path") == binding.path
+        ):
+            if state.get("frame_count") == opening.snapshot.frame_count:
+                fields[ALIGN_PREPARED_FIELD] = dict(driver.prepared)
+            else:
+                fields[ALIGN_BLOCKED_FIELD] = (
+                    f"The aligned driving clip was made for {opening.snapshot.frame_count} frames. "
+                    "Apply Align Motion again for the new length, or keep the original length."
+                )
+        edits = rerun_edits(opening.snapshot, self.get_video_workflow_state())
+        fields[RERUN_LINEAGE_FIELD] = rerun_lineage(opening.snapshot, edits)
+        return fields
 
     def _toggle_settings(self) -> None:
         self.advanced_section.toggle()
