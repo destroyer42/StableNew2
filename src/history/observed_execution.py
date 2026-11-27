@@ -43,6 +43,8 @@ from src.utils.checkpoint_identity import checkpoint_key, checkpoint_stem
 MAX_ROWS_EXAMINED = 20_000
 MAX_MATCHED_JOBS = 200
 WINDOW = 2_000
+#: Smaller pages for the all-checkpoint count: every snapshot in a page is held in memory at once.
+COUNT_WINDOW = 500
 #: Seconds a cached answer stays fresh (a job that completes meanwhile is counted on the next read).
 TTL_SECONDS = 300.0
 
@@ -165,6 +167,41 @@ def needle_for(model_name: str) -> str:
     """
 
     return json.dumps(checkpoint_stem(model_name), ensure_ascii=True)[1:-1]
+
+
+def read_run_counts(
+    reader: PageReader,
+    *,
+    max_rows: int = MAX_ROWS_EXAMINED,
+    window: int = COUNT_WINDOW,
+    cancelled: Callable[[], bool] = lambda: False,
+) -> dict[str, int]:
+    """Completed txt2img jobs per checkpoint key among the newest ``max_rows`` jobs, in one pass (display only).
+
+    One read for a whole model list, never one per model. Blocking: call it on a worker.
+    """
+
+    counts: dict[str, int] = {}
+    examined = 0
+    cursor: int | None = None
+    while examined < max_rows:
+        if cancelled():
+            break
+        snapshots, cursor, exhausted = reader("", cursor, window)
+        examined += window
+        for text in snapshots:
+            try:
+                snapshot = json.loads(text)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(snapshot, Mapping):
+                continue
+            for run in runs_in_snapshot(snapshot):
+                if run.operation == OP_TXT2IMG:
+                    counts[run.model_key] = counts.get(run.model_key, 0) + 1
+        if exhausted:
+            break
+    return counts
 
 
 @dataclass
@@ -340,6 +377,32 @@ def install_for_repository(repository: Any) -> ObservedExecutionIndex | None:
     return index
 
 
+_COUNTS: tuple[float, ObservedExecutionIndex, dict[str, int]] | None = None
+
+
+def installed_run_counts(
+    *, cancelled: Callable[[], bool] = lambda: False
+) -> dict[str, int] | None:
+    """``read_run_counts`` over the application repository, cached for ``TTL_SECONDS`` (``None``: no repository).
+
+    Blocking: call it on a worker.
+    """
+
+    global _COUNTS
+    with _INDEX_LOCK:
+        index, cached = _INDEX, _COUNTS
+    if index is None:
+        return None
+    if cached is not None and cached[1] is index and index.clock() - cached[0] <= index.ttl:
+        return cached[2]
+    counts = read_run_counts(index.reader, cancelled=cancelled)
+    if cancelled():
+        raise InterruptedError("Run count cancelled")
+    with _INDEX_LOCK:
+        _COUNTS = (index.clock(), index, counts)
+    return counts
+
+
 def observed_runs_lookup() -> Callable[[str, str, str], int] | None:
     """The installed index's ``runs`` (``None`` when no repository is installed: no observed evidence)."""
 
@@ -355,9 +418,11 @@ __all__ = [
     "ObservedRun",
     "install_for_repository",
     "install_observed_index",
+    "installed_run_counts",
     "needle_for",
     "observed_runs_lookup",
     "read_observed_runs",
+    "read_run_counts",
     "repository_reader",
     "runs_in_snapshot",
 ]

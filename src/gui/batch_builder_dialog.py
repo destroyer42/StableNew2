@@ -17,6 +17,7 @@ from src.controller.app_controller_services.pack_model_batch_service import (
     BatchRequest,
     default_batch_name,
 )
+from src.gui.batch_model_picker import LoadModelStatus, ModelListPicker, model_status_loader
 
 #: ``(request, on_result, on_error)``: plan off the Tk thread.
 PlanBatch = Callable[[BatchRequest, Callable[[BatchPlan], None], Callable[[Exception], None]], None]
@@ -37,6 +38,7 @@ class BatchBuilderDialog(tk.Toplevel):
         selected_model: str = "",
         adetailer: bool = False,
         upscale: bool = False,
+        load_model_status: LoadModelStatus | None = None,
     ) -> None:
         super().__init__(parent)
         self.title("Packs x Models batch")
@@ -59,15 +61,13 @@ class BatchBuilderDialog(tk.Toplevel):
         ttk.Label(frame, text="PromptPacks").grid(row=0, column=0, sticky="w")
         ttk.Label(frame, text="Models").grid(row=0, column=1, sticky="w", padx=(8, 0))
         self.pack_list = self._listbox(frame, self._packs, row=1, column=0)
-        self.model_list = self._listbox(
-            frame, [display for display, _ in self._models], row=1, column=1
-        )
+        self.model_picker = ModelListPicker(frame, self._models, load_status=load_model_status)
+        self.model_picker.grid(row=1, column=1, sticky="nsew", padx=(8, 0))
+        self.model_list = self.model_picker.listbox
         for index, name in enumerate(self._packs):
             if name in selected_packs:
                 self.pack_list.selection_set(index)
-        for index, (display, internal) in enumerate(self._models):
-            if selected_model and selected_model in (display, internal):
-                self.model_list.selection_set(index)
+        self.model_picker.select([selected_model])
 
         options = ttk.Frame(frame)
         options.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
@@ -143,7 +143,7 @@ class BatchBuilderDialog(tk.Toplevel):
         return [self._packs[index] for index in self.pack_list.curselection()]  # type: ignore[no-untyped-call]
 
     def selected_models(self) -> list[str]:
-        return [self._models[index][1] for index in self.model_list.curselection()]  # type: ignore[no-untyped-call]
+        return self.model_picker.selected()
 
     def request(self) -> BatchRequest:
         packs, models = self.selected_packs(), self.selected_models()
@@ -283,6 +283,7 @@ def open_batch_builder(sidebar: Any) -> BatchBuilderDialog | None:
         queue_batch=lambda plan, ok, err: service.submit_batch_async(
             controller, plan, on_result=ok, on_error=err
         ),
+        load_model_status=model_status_loader(controller),
     )
 
 

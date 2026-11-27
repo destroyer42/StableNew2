@@ -77,6 +77,13 @@ The Pipeline sidebar keeps these things apart, and `view_contracts/config_source
 
 The Pipeline preview thumbnail shows a saved image of the previewed job (the last of the previewed jobs) or says why there is none: no job, no image saved yet, or hidden by the content-visibility setting. Ticking "Show media" never generates an image.
 
+**Queue refusals and the batch model list (DESK-QUICK).** A refused Add to Queue, Run or Replay publishes
+`AppStateV2.queue_refusal` (through `run_submission_service.report_queue_refusal`); the Preview panel shows it under
+Add to Queue until the next submission or a changed Preview. The Packs x Models model list is
+`src/gui/batch_model_picker.py` (`ModelListPicker`): search keeps selected rows visible, and each row's status (completed
+txt2img jobs here, N1 warning, missing files from the Tk-free `src/services/model_file_health.py`) is read on a tracked
+worker and polled from Tk. Status informs only; it never disables a model.
+
 ### Controller presentation-state seam (GUI-SEAM-700)
 
 `AppStateV2` carries the toolkit-neutral, ephemeral projection controllers need for Pipeline stage enablement
