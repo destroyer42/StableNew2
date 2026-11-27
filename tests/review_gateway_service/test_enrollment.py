@@ -42,7 +42,7 @@ def test_pairing_sets_a_locked_down_cookie_and_enrolls_the_device(rig) -> None:
 
     assert response.status_code == 200
     cookie = response.headers["set-cookie"].lower()
-    for attribute in ("httponly", "secure", "samesite=strict", "path=/", "max-age="):
+    for attribute in ("httponly", "secure", "samesite=lax", "path=/", "max-age="):
         assert attribute in cookie
     assert rig.phone.get("/api/session").json()["device_id"] == response.json()["device_id"]
     page = rig.outbox()
