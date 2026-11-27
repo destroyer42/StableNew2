@@ -9,6 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from src.services.queue_idle_report import QueueIdleReporter
 from src.utils.logger import LogContext, log_with_ctx
 from src.utils.stack_sites import describe_stack
 
@@ -98,6 +99,7 @@ class SystemWatchdogV2:
         self._last_trigger_ts: dict[str, float] = defaultdict(lambda: _NEVER_TRIGGERED)
         self._in_flight: dict[str, bool] = defaultdict(lambda: False)
         self._runner_stall_episode_active = False
+        self._queue_idle = QueueIdleReporter()
         self._observed_runner_job_id: str | None = None
         self._last_runtime_progress_signature: tuple[object, ...] | None = None
         self._last_runtime_progress_ts: float | None = None
@@ -165,6 +167,11 @@ class SystemWatchdogV2:
 
     def _check(self) -> None:
         now = time.monotonic()
+        self._queue_idle.observe(
+            now,
+            getattr(self.app, "job_service", None),
+            getattr(getattr(self.app, "pipeline_controller", None), "_job_controller", None),
+        )
         heartbeat_ts = getattr(self.app, "last_ui_heartbeat_ts", None)
         if heartbeat_ts:
             ui_age = now - float(heartbeat_ts)
