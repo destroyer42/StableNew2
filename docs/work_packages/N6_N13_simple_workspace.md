@@ -64,8 +64,8 @@ These counts come from read-only `grep` over `StableNew-main/data/learning`. Not
   - Compatibility Probe: 3;
   - one with no study type;
   - **Prompt Slot, Embedding, Two-Axis Grid and Prompt x Model Matrix: 0 each.**
-- **Discovered inbox:** 834 groups, almost all created by the automatic output scan. 831 are waiting for review,
-  2 are in review and 1 is closed.
+- **Discovered inbox:** 834 groups, almost all created by the output scan. 831 are waiting for review,
+  2 are in review and 1 is closed. (Corrected 2026-11-27: the scan is not automatic. See owner question 5.)
 - **Wan-Animate-2 prompt mode:** 31 of 31 runs failed (the owner's figure, relayed by the orchestrator; not
   re-counted, because the job database belongs to the live app).
 
@@ -215,8 +215,9 @@ governance and the specs are unchanged.
 3. **SVD.** Is a link from Video Workflow to the native SVD tab wanted, or is Advanced enough?
 4. **Prompt mode.** V1 section 5.10 put Animate-2 prompt mode behind Show experimental. This package retires it from
    the picker entirely, as N13 asked. Should it come back behind Show experimental instead?
-5. **Discovered inbox.** It is hidden in Simple, but the automatic output scan still runs. Should the scan stop, or
-   should the 831 waiting groups be closed? That is a data decision, not made here.
+5. **Discovered inbox.** Answered 2026-11-27: "Stop scan, keep groups". The groups are kept. This package wrongly
+   said an automatic scan still ran: only the Rescan and Rebuild buttons call it, so no code had to change. The
+   scan-created groups in the owner's workspace date from two runs (102 on 2026-10-27, 689 on 2026-11-08).
 
 ## Documentation impact
 

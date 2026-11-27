@@ -226,13 +226,13 @@ def job_batch_reader(
 
     def read(path: Path) -> Mapping[str, Any] | None:
         from src.review.review_evidence import image_source_job
+        from src.review.review_lineage import batch_of_job_reader
 
         if path.suffix.lower() not in _IMAGE_SUFFIXES:
             return None
         try:
             job_id = (job_id_of or image_source_job)(path)
-            entry = repository.get_job(job_id) if job_id else None
-            batch = identity(getattr(entry, "snapshot", None) or {})
+            batch = batch_of_job_reader(repository, identity)(job_id) if job_id else None
         except Exception:  # noqa: BLE001 - grouping is display only; it must never hold publishing back
             log.debug("Review gateway publish could not read an item's batch")
             return None
