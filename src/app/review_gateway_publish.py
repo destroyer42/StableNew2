@@ -40,6 +40,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from src.app import site_library_video
 from src.app.review_gateway_client import GatewayClient, GatewayConflict, GatewayRejected
+from src.app.review_gateway_origin import InputOf
 from src.app.review_gateway_protocol import (
     CONTENT_TYPES,
     RUN_ID,
@@ -51,6 +52,7 @@ from src.app.review_gateway_protocol import (
 from src.app.review_gateway_scrub import Unclean, scrub_image
 from src.app.review_gateway_sources import RETAINED, SourceFilter, may_be_unrecorded_frame
 from src.app.review_gateway_store import SyncLedger
+from src.app.site_library_reconcile import key_for
 from src.app.site_media_files import SiteOutputError, checked_digest, open_scoped
 from src.app.site_output_library import LibraryItem, OutputLibrary
 from src.app.site_video_playback import VIDEO_LIMIT
@@ -372,6 +374,7 @@ class GatewayPublisher:
         transcode: Transcode | None = ffmpeg_mobile_transcode,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         batch_of: BatchOf | None = None,
+        input_of: InputOf | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         strip: Transcode = ffmpeg_strip_metadata,
         info_of: InfoOf | None = None,
@@ -382,6 +385,7 @@ class GatewayPublisher:
         self._now = now
         self._batch_of = batch_of
         self._info_of = info_of
+        self._input_of = input_of
         self._sources = SourceFilter(library.root)
         self._monotonic = monotonic
         self._strip = strip
@@ -427,6 +431,45 @@ class GatewayPublisher:
         if sent is not None and self._ledger.file_digest(library_id, sent["sha256"]) == file_sha:
             return library_id, str(sent["sha256"])
         return original
+
+    def _made_from(self, key: str, input_path: str) -> tuple[str, str] | None:
+        """The Output Library item an input image is, matched by the SHA-256 of its bytes: ``(library_id, sha256 as
+        the gateway knows it)``. A file that is gone is matched by where it was."""
+
+        if not input_path:
+            return None
+        source = Path(os.path.abspath(input_path))
+        try:
+            rel = source.relative_to(self.root).as_posix()
+        except ValueError:
+            rel = ""
+        known = None
+        try:
+            if source.is_file():
+                with source.open("rb") as stream:
+                    digest = checked_digest(stream, size_limit=IMAGE_LIMIT)
+                known = self._ledger.sent_image(digest)
+                # In the library but not sent (yet): the gateway shows it once it has it.
+                if known is None and rel and self._library.store.get(key_for(rel)) is not None:
+                    known = key_for(rel), digest
+            elif rel and (row := self._ledger.published(key_for(rel))) is not None:
+                known = key_for(rel), str(row["sha256"])
+        except (OSError, SiteOutputError):
+            log.debug("Review gateway publish could not match an input image")
+        return known if known is not None and known[0] != key else None
+
+    def _input(
+        self, client: GatewayClient, key: str, item: LibraryItem, path: Path
+    ) -> tuple[ItemRef | None, bool]:
+        """``(the item an image was made from, whether it had an input that cannot be found)``."""
+
+        if self._input_of is None or item.kind != "image" or "item_input" not in client.features:
+            return None, False
+        input_path = self._input_of(path)
+        if input_path is None:
+            return None, False
+        found = self._made_from(key, input_path)
+        return (ItemRef(*found), False) if found else (None, True)
 
     @property
     def root(self) -> Path:
@@ -642,7 +685,50 @@ class GatewayPublisher:
                 result.skipped += 1
         if newer_than is None and not hold_unlabelled_video and len(rows) < limit:
             self._add_renditions(client, limit - len(rows), cancel, result)
+            self._add_inputs(client, limit - len(rows), cancel, result)
         return result
+
+    def _add_inputs(
+        self, client: GatewayClient, limit: int, cancel: Event, result: PublishResult
+    ) -> None:
+        """Images published before inputs were linked: those made from one are sent again, a few at a time when
+        idle, so the gateway can show them side by side."""
+
+        if self._input_of is None or "item_input" not in client.features:
+            return
+        for key in self._ledger.without_input_check(limit):
+            if cancel.is_set():
+                return
+            item = self._unchanged_item(key)
+            if item is None or self._input_of(self.root / item.path) is None:
+                self._ledger.set_input_checked(key)
+                continue
+            try:
+                state = self._publish_one(client, key, item, cancel, lambda: False)
+            except (GatewayConflict, GatewayRejected, SiteOutputError, OSError):
+                self._ledger.set_input_checked(key)  # it stays as published, shown alone
+                continue
+            if state == "published":
+                result.published += 1
+
+    def _unchanged_item(self, key: str) -> LibraryItem | None:
+        """The library item behind a published row, while it is still the file that was sent and may be sent."""
+
+        with self._library.store.connection() as db:
+            row = db.execute(
+                "SELECT body, version FROM media WHERE key = ? AND enriched = 1", (key,)
+            ).fetchone()
+        known = self._ledger.published(key)
+        item = LibraryItem.from_row(row) if row is not None else None
+        if (
+            item is None
+            or known is None
+            or known["version"] != row["version"]
+            or not os.path.lexists(self.root / item.path)
+            or self._sources.exclusion(item)
+        ):
+            return None
+        return item
 
     def _add_renditions(
         self, client: GatewayClient, limit: int, cancel: Event, result: PublishResult
@@ -655,19 +741,8 @@ class GatewayPublisher:
         for key in self._ledger.without_rendition(limit):
             if cancel.is_set():
                 return
-            with self._library.store.connection() as db:
-                row = db.execute(
-                    "SELECT body, version FROM media WHERE key = ? AND enriched = 1", (key,)
-                ).fetchone()
-            known = self._ledger.published(key)
-            item = LibraryItem.from_row(row) if row is not None else None
-            if (
-                item is None
-                or known is None
-                or known["version"] != row["version"]
-                or not os.path.lexists(self.root / item.path)
-                or self._sources.exclusion(item)
-            ):
+            item = self._unchanged_item(key)
+            if item is None:
                 self._ledger.set_rendition(key)
                 continue
             try:
@@ -758,6 +833,10 @@ class GatewayPublisher:
             }
             created = datetime.fromtimestamp(item.effective_time / 1_000_000, UTC)
             parent = self._parent(key, item, path)
+            # A phone rework already names its original; anything else may name the input it was made from.
+            made_from, missing_input = (
+                (None, False) if parent else self._input(client, key, item, path)
+            )
             manifest = item_manifest(
                 item=ItemRef(key, digest),
                 kind=item.kind,
@@ -770,6 +849,8 @@ class GatewayPublisher:
                 # Only for a gateway that takes it: an older one's schema refuses the field.
                 parent=ItemRef(*parent) if parent and "item_parent" in client.features else None,
                 source=source_of(item.path, item.kind) if "item_source" in client.features else "",
+                made_from=made_from,
+                made_from_missing=missing_input,
                 info=self._info(client, path, item),
             )
             # The file must still be the bytes the manifest names when the gateway records it.
@@ -791,6 +872,8 @@ class GatewayPublisher:
         )
         if item.kind == "image":
             self._ledger.set_rendition(key)
+            if "item_input" in client.features:
+                self._ledger.set_input_checked(key)
         return "published"
 
     @contextmanager
