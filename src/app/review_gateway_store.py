@@ -17,7 +17,7 @@ import json
 import os
 import re
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -344,6 +344,29 @@ class SyncLedger:
                 " version=excluded.version, rel_path=excluded.rel_path, sha256=excluded.sha256,"
                 " kind=excluded.kind, state=excluded.state, at=excluded.at",
                 (library_id, version, rel_path, sha256, kind, state, at),
+            )
+
+    def published_many(self, library_ids: Sequence[str]) -> dict[str, sqlite3.Row]:
+        """The publish rows of up to a page of items, in one read."""
+
+        if not library_ids:
+            return {}
+        marks = ",".join("?" * len(library_ids))
+        rows = self._read(
+            f"SELECT * FROM published WHERE library_id IN ({marks})", tuple(library_ids)
+        )
+        return {str(row["library_id"]): row for row in rows}
+
+    def mark_missing(self, rows: Sequence[tuple[str, str, str, str]], at: str) -> None:
+        """``(library_id, version, rel_path, kind)`` of rows whose file is gone, in one transaction."""
+
+        with self._transaction() as db:
+            db.executemany(
+                "INSERT INTO published (library_id, version, rel_path, sha256, kind, state, at)"
+                " VALUES (?, ?, ?, '', ?, 'missing', ?) ON CONFLICT (library_id) DO UPDATE SET"
+                " version = excluded.version, state = excluded.state, at = excluded.at"
+                " WHERE published.state <> 'published'",
+                [(key, version, path, kind, at) for key, version, path, kind in rows],
             )
 
     def publish_counts(self) -> dict[str, int]:

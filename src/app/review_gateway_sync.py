@@ -63,6 +63,10 @@ STATUS_HEARTBEAT_SECONDS = 60.0
 #: After a gateway that does not offer the ``pc_status`` route yet, ask again this much later.
 STATUS_UNSUPPORTED_SECONDS = 600.0
 IDLE_PUBLISH_BATCH = 8
+#: After a job completes, its outputs are looked for this long (the index needs a moment to see them).
+FRESH_SECONDS = 30.0
+#: How old an output may be and still count as the completed job's.
+FRESH_OUTPUT_S = 15 * 60
 MAX_PAGES_PER_CYCLE = 10
 PAGE_SIZE = 100
 
@@ -132,6 +136,7 @@ class ReviewGatewaySync:
         self._settings: GatewaySettings | None = None
         self._settings_loaded = False
         self._last_busy_publish = -BUSY_PUBLISH_SECONDS
+        self._fresh_until: float | None = None
         self._backoff = 0.0
         self._status_source: Callable[[], dict[str, Any] | None] | None = None
         self._last_status: dict[str, Any] | None = None
@@ -165,6 +170,16 @@ class ReviewGatewaySync:
     @property
     def stopping(self) -> bool:
         return self._stop.is_set()
+
+    def notify_job_completed(self) -> None:
+        """Publish the finished job's outputs at once, even if the next job is already running. Any thread."""
+
+        self._fresh_until = self._monotonic() + FRESH_SECONDS
+        self._wake.set()
+
+    def fresh_outputs_wanted(self) -> bool:
+        until = self._fresh_until
+        return until is not None and self._monotonic() < until
 
     def sync_now(self) -> None:
         self._backoff = 0.0
@@ -469,18 +484,26 @@ class ReviewGatewaySync:
             if self._publisher is None:
                 return
         busy = self._busy()
+        if busy and self.fresh_outputs_wanted():
+            since = int((utc_now().timestamp() - FRESH_OUTPUT_S) * 1_000_000)
+            self._publish_batch(client, busy, IDLE_PUBLISH_BATCH, newer_than=since)
         now = self._monotonic()
         if busy and now - self._last_busy_publish < BUSY_PUBLISH_SECONDS:
             return
         if busy:
             self._last_busy_publish = now
+        self._publish_batch(client, busy, 1 if busy else IDLE_PUBLISH_BATCH)
+
+    def _publish_batch(self, client: GatewayClient, busy: bool, limit: int, **newer: int) -> None:
+        assert self._publisher is not None
         try:
             result = self._publisher.publish(
                 client,
-                limit=1 if busy else IDLE_PUBLISH_BATCH,
+                limit=limit,
                 cancel=self._stop,
                 allow_transcode=lambda: not self._busy(),
                 hold_unlabelled_video=busy,
+                **newer,
             )
         except (SiteOutputError, OSError):
             log.info("Review gateway publishing deferred: the Output index is unavailable")

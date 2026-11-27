@@ -26,10 +26,11 @@ import logging
 import os
 import re
 import tempfile
+import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
 from typing import Any, BinaryIO
@@ -61,8 +62,17 @@ PREVIEW_EDGE = 1080
 #: A clip at or under this size, already MP4/WebM, is played on the phone from its original (no transcode).
 MOBILE_DIRECT_LIMIT = 64 * 1024 * 1024
 MOBILE_EDGE = 1280
-#: Only items this recent (relative to when the gateway was first configured) are published.
+#: The rolling backfill window; it reaches further back only to where the publisher last caught up.
 BACKFILL_DAYS = 3
+#: Overlap kept behind the last catch-up, for rows the index adds late.
+CAUGHT_UP_MARGIN_DAYS = 1
+#: A row whose file was gone is looked at again after this long.
+MISSING_RETRY_S = 86400
+#: Longest a row that keeps failing is set aside.
+MAX_DEFER_S = 600.0
+#: Bound on file checks in one look for candidates, so a long run of gone files cannot hold the worker.
+MAX_FILE_CHECKS = 2000
+MISSING = "missing"
 _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
@@ -248,6 +258,7 @@ class GatewayPublisher:
         transcode: Transcode | None = ffmpeg_mobile_transcode,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         batch_of: BatchOf | None = None,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._library = library
         self._ledger = ledger
@@ -255,6 +266,9 @@ class GatewayPublisher:
         self._now = now
         self._batch_of = batch_of
         self._sources = SourceFilter(library.root)
+        self._monotonic = monotonic
+        #: key -> (index version, failures, not before): rows set aside so they never keep older rows waiting.
+        self._deferred: dict[str, tuple[str, int, float]] = {}
 
     def _batch(self, client: GatewayClient, path: Path) -> Mapping[str, Any] | None:
         """The item's batch, only for a gateway that groups by it (an older one's schema refuses the field)."""
@@ -272,7 +286,7 @@ class GatewayPublisher:
         return self._library.root
 
     def publish_since(self) -> int:
-        """Microseconds since the epoch; fixed the first time the worker publishes."""
+        """The oldest moment ever published, in microseconds; fixed the first time the worker publishes."""
 
         stored = self._ledger.get_meta("publish_since")
         if stored.isdigit():
@@ -281,14 +295,35 @@ class GatewayPublisher:
         self._ledger.set_meta({"publish_since": str(since)})
         return since
 
-    def candidates(self, limit: int) -> list[tuple[str, LibraryItem]]:
-        """Up to ``limit`` unpublished (or changed) index rows, newest first."""
+    def _microseconds(self, **ago: float) -> int:
+        return int((self._now() - timedelta(**ago)).timestamp() * 1_000_000)
+
+    def window_start(self) -> int:
+        """Where a look begins: the rolling window, or earlier while a backlog since the last catch-up remains."""
+
+        floor = self.publish_since()
+        stored = self._ledger.get_meta("publish_caught_up_at")
+        if not stored.isdigit():
+            return floor
+        caught_up = int(stored) - CAUGHT_UP_MARGIN_DAYS * 86400 * 1_000_000
+        return max(floor, min(self._microseconds(days=BACKFILL_DAYS), caught_up))
+
+    def candidates(
+        self, limit: int, *, newer_than: int | None = None
+    ) -> list[tuple[str, LibraryItem]]:
+        """Up to ``limit`` unpublished (or changed) index rows, newest first.
+
+        Rows set aside after a failure are passed over, and rows whose file is gone are recorded as ``missing``, so
+        neither keeps the rows behind them waiting. ``newer_than`` (microseconds) looks only at fresh rows.
+        """
 
         self._library.start()
-        since = self.publish_since()
+        since = self.window_start() if newer_than is None else newer_than
+        now = self._monotonic()
         found: list[tuple[str, LibraryItem]] = []
-        offset = 0
-        while len(found) < limit:
+        offset = checks = 0
+        waiting = False
+        while len(found) < limit and checks < MAX_FILE_CHECKS:
             with self._library.store.connection() as db:
                 rows = list(
                     db.execute(
@@ -300,15 +335,58 @@ class GatewayPublisher:
             if not rows:
                 break
             offset += len(rows)
+            known_rows = self._ledger.published_many([str(row["key"]) for row in rows])
+            gone: list[tuple[str, str, str, str]] = []
             for row in rows:
-                known = self._ledger.published(row["key"])
-                if known is not None and known["version"] == row["version"]:
+                key, version = str(row["key"]), str(row["version"])
+                known = known_rows.get(key)
+                if known is not None and known["version"] == version and not self._retry(known):
+                    continue
+                deferred = self._deferred.get(key)
+                if deferred is not None and deferred[0] == version and now < deferred[2]:
+                    # A row that has only just started failing still counts as work to do.
+                    waiting = waiting or deferred[1] < 5
                     continue
                 item = LibraryItem.from_row(row)
-                found.append((str(row["key"]), item))
-                if len(found) >= limit:
+                checks += 1
+                if os.path.lexists(self.root / item.path) or not self.root.is_dir():
+                    found.append((key, item))
+                elif known is not None and known["state"] == "published":
+                    # A published row stays as it is: phone decisions are resolved through it.
+                    self.defer(key, version, MAX_DEFER_S)
+                else:
+                    gone.append((key, version, item.path, item.kind))
+                if len(found) >= limit or checks >= MAX_FILE_CHECKS:
                     break
+            if gone:
+                self._ledger.mark_missing(gone, utc_text(self._now()))
+        if newer_than is None and not found and not waiting and checks < MAX_FILE_CHECKS:
+            self._note_caught_up(since)
         return found
+
+    def _retry(self, known: Mapping[str, Any]) -> bool:
+        if known["state"] != MISSING:
+            return False
+        age = self._now() - datetime.fromisoformat(str(known["at"]).replace("Z", "+00:00"))
+        return age >= timedelta(seconds=MISSING_RETRY_S)
+
+    def _note_caught_up(self, since: int) -> None:
+        with self._library.store.connection() as db:
+            unread = db.execute(
+                "SELECT 1 FROM media WHERE enriched = 0 AND kind = 'image' AND timestamp >= ? LIMIT 1",
+                (since,),
+            ).fetchone()
+        if unread is None:
+            self._ledger.set_meta({"publish_caught_up_at": str(self._microseconds())})
+
+    def defer(self, key: str, version: str, seconds: float | None = None) -> None:
+        """Pass this row over for a while: ``seconds``, or longer each time it fails again."""
+
+        previous = self._deferred.get(key)
+        failures = previous[1] + 1 if previous is not None and previous[0] == version else 1
+        if seconds is None:
+            seconds = min(MAX_DEFER_S, 2.0 ** min(failures - 1, 10))
+        self._deferred[key] = (version, failures, self._monotonic() + seconds)
 
     def publish(
         self,
@@ -318,33 +396,45 @@ class GatewayPublisher:
         cancel: Event,
         allow_transcode: Callable[[], bool] = lambda: True,
         hold_unlabelled_video: bool = False,
+        newer_than: int | None = None,
     ) -> PublishResult:
         """``hold_unlabelled_video`` (a job is running) leaves a video without StableNew metadata, and an image that
         could be its frame, pending."""
 
         result = PublishResult()
-        for key, item in self.candidates(limit):
+        rows = (
+            self.candidates(limit)
+            if newer_than is None
+            else self.candidates(limit, newer_than=newer_than)
+        )
+        for key, item in rows:
             if cancel.is_set():
                 break
+            version = json.dumps(list(item.version))
             if hold_unlabelled_video and (
                 (item.kind == "video" and item.provenance == "unknown")
                 or may_be_unrecorded_frame(item)
             ):
                 result.pending += 1
+                self.defer(key, version, 10.0)
                 continue
             try:
                 state = self._publish_one(client, key, item, cancel, allow_transcode)
             except (GatewayConflict, GatewayRejected):
                 result.pending += 1
+                self.defer(key, version)
                 continue
             except (SiteOutputError, OSError):
                 log.debug("Review gateway publish deferred an item that changed or is unreadable")
                 result.pending += 1
+                self.defer(key, version)
                 continue
             if state == "published":
                 result.published += 1
             elif state == "pending":
                 result.pending += 1
+                if not cancel.is_set():
+                    self.defer(key, version)
             else:
                 result.skipped += 1
         return result
