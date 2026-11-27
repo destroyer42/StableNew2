@@ -855,7 +855,10 @@ class SingleNodeJobRunner:
             try:
                 self._on_status_change(job, status)
             except Exception:
-                pass
+                logger.warning(
+                    "Job status handler raised for job %s (%s)", job.job_id, status.value,
+                    exc_info=True,
+                )
 
     @property
     def current_job(self) -> Job | None:

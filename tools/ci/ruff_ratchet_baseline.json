@@ -405,8 +405,8 @@
         "BLE001": 18
       },
       "src/controller/app_controller.py": {
-        "BLE001": 81,
-        "S110": 32,
+        "BLE001": 79,
+        "S110": 31,
         "S112": 3
       },
       "src/controller/app_controller_services/application_runtime_coordinator.py": {
@@ -425,8 +425,7 @@
         "BLE001": 1
       },
       "src/controller/job_execution_controller.py": {
-        "BLE001": 5,
-        "S110": 2
+        "BLE001": 5
       },
       "src/controller/job_history_service.py": {
         "BLE001": 5,
@@ -438,8 +437,7 @@
         "S110": 1
       },
       "src/controller/job_service.py": {
-        "BLE001": 12,
-        "S110": 3
+        "BLE001": 12
       },
       "src/controller/pipeline_controller.py": {
         "BLE001": 40,
@@ -786,12 +784,7 @@
         "BLE001": 1
       },
       "src/pipeline/executor.py": {
-        "BLE001": 52,
-        "S110": 11
-      },
-      "src/pipeline/job_models_v2.py": {
-        "BLE001": 1,
-        "S110": 1
+        "BLE001": 52
       },
       "src/pipeline/last_run_store_v2_5.py": {
         "BLE001": 2
@@ -800,15 +793,13 @@
         "BLE001": 2
       },
       "src/pipeline/pipeline_runner.py": {
-        "BLE001": 16,
-        "S110": 3
+        "BLE001": 16
       },
       "src/pipeline/prompt_pack_job_builder.py": {
         "BLE001": 5
       },
       "src/pipeline/replay_engine.py": {
-        "BLE001": 1,
-        "S110": 1
+        "BLE001": 1
       },
       "src/pipeline/video.py": {
         "BLE001": 3
@@ -817,12 +808,10 @@
         "BLE001": 2
       },
       "src/queue/job_queue.py": {
-        "BLE001": 2,
-        "S112": 2
+        "BLE001": 2
       },
       "src/queue/single_node_runner.py": {
-        "BLE001": 1,
-        "S110": 1
+        "BLE001": 1
       },
       "src/refinement/detectors/opencv_face_detector.py": {
         "BLE001": 1
@@ -950,12 +939,10 @@
         "BLE001": 4
       },
       "src/video/comfy_process_manager.py": {
-        "BLE001": 2,
-        "S110": 1
+        "BLE001": 2
       },
       "src/video/comfy_workflow_backend.py": {
-        "BLE001": 2,
-        "S110": 1
+        "BLE001": 2
       },
       "src/video/container_metadata.py": {
         "BLE001": 4

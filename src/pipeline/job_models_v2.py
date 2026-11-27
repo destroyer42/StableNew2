@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ from src.pipeline.resolution_layer import (
 if TYPE_CHECKING:
     from src.queue.job_model import Job
 
+logger = logging.getLogger(__name__)
+
 _STAGE_DISPLAY_MAP: dict[str, str] = {
     "txt2img": "txt2img",
     "img2img": "img2img",
@@ -55,8 +58,12 @@ def _coerce_iso_timestamp(value: float | str | datetime | None) -> str:
     if isinstance(value, (int, float)):
         try:
             return datetime.fromtimestamp(value).isoformat()
-        except Exception:
-            pass
+        except (OverflowError, OSError, ValueError):
+            logger.warning(
+                "Timestamp %r could not be converted; the current time is used",
+                value,
+                exc_info=True,
+            )
     if isinstance(value, str) and value:
         return value
     return datetime.utcnow().isoformat()

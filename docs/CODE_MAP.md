@@ -216,6 +216,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `pack_model_batch_recipes.py`: N5 owner decision 3: in a packs x models batch, a model with a saved recipe uses its own settings
 - `pack_model_batch_service.py`: N5: packs x models batch builder - plan, count, estimate and queue one named batch on the existing path
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
+- `queue_projection.py`: Build the queue projection, converting each job's immutable NJR into its summary only once (RUN-LEAN)
 - `run_submission_service.py`: Bridge GUI run requests and witnessed previews to the queue submission worker
 - `runtime_projection_coordinator.py`: Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink
 - `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
@@ -929,6 +930,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `duration_stats_service.py`: Duration statistics service for queue ETA estimation
 - `operator_readiness_service.py`: Read-only operator readiness projection built from existing authorities
 - `persistence_worker.py`: PR-HB-004: Async Persistence Worker
+- `queue_idle_report.py`: Log why nothing is running while jobs are queued (RUN-LEAN)
 - `runtime_transition_service.py`: PR-RUNTIME-100: coordinate release of conflicting StableNew-owned GPU runtimes
 - `runtime_warm_hold.py`: One idle warm hold of a StableNew-owned runtime between consecutive jobs (VID-WARM-373)
 - `ui_state_store.py`: UI state persistence for StableNew v2.6

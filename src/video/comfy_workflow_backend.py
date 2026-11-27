@@ -1501,7 +1501,10 @@ class ComfyWorkflowVideoBackend:
         if not callable(emit) or not job_id:
             return None
 
+        report_failure_logged = False
+
         def _report(elapsed_s: float) -> None:
+            nonlocal report_failure_logged
             # Best-effort observability: a failed status emit must never abort the generation wait.
             try:
                 emit(
@@ -1512,7 +1515,12 @@ class ComfyWorkflowVideoBackend:
                     }
                 )
             except Exception:
-                pass
+                if not report_failure_logged:
+                    report_failure_logged = True
+                    logger.warning(
+                        "Liveness status could not be reported for job %s", job_id,
+                        exc_info=True,
+                    )
 
         return _report
 

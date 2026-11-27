@@ -94,6 +94,7 @@ from src.controller.app_controller_services.pack_settings_apply_service import (
     apply_settings_to_packs,
     bind_preview_invalidation,
 )
+from src.controller.app_controller_services.queue_projection import QueueSummaryProjector
 from src.controller.app_controller_services.run_submission_service import (
     PreviewWitness,
     QueueRunSubmissionService,
@@ -134,7 +135,7 @@ from src.pipeline.config_contract_v26 import (
     validate_svd_native_execution_config,
     validate_train_lora_execution_config,
 )
-from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
+from src.pipeline.job_models_v2 import UnifiedJobSummary
 from src.pipeline.last_run_store_v2_5 import (
     LastRunStoreV2_5,
     update_current_config_from_last_run,
@@ -2558,44 +2559,17 @@ class AppController:
     def _build_queue_projection(self) -> tuple[list[str], list[UnifiedJobSummary]]:
         started_at = time.monotonic()
         jobs = self._list_service_jobs()
-        # Convert Job objects to UnifiedJobSummary via their NJRs
-        queue_jobs: list[UnifiedJobSummary] = []
-        summaries: list[str] = []
-        fallback_count = 0
-        for job in jobs:
-            njr = getattr(job, "_normalized_record", None)
-            if njr:
-                try:
-                    summary = UnifiedJobSummary.from_normalized_record(njr)
-                    status_value = getattr(job, "status", None)
-                    status_text = (
-                        status_value.value if hasattr(status_value, "value") else str(status_value or "")
-                    ).strip()
-                    if status_text:
-                        summary = replace(summary, status=status_text.upper())
-                    queue_jobs.append(summary)
-                    summaries.append(summary.positive_prompt_preview or job.job_id)
-                except Exception as exc:
-                    logger.warning(f"Failed to convert job {job.job_id} to UnifiedJobSummary: {exc}")
-                    summaries.append(job.job_id)
-                    fallback_count += 1
-            else:
-                logger.debug(f"Job {job.job_id} missing NJR, using fallback queue summary")
-                summaries.append(job.job_id)
-                fallback_count += 1
-                try:
-                    status_value = str(getattr(job, "status", "queued")).lower()
-                    status = JobStatusV2(status_value) if status_value in JobStatusV2._value2member_map_ else JobStatusV2.QUEUED
-                    queue_jobs.append(UnifiedJobSummary.from_job(job, status))
-                except Exception:
-                    pass
+        projector = self.__dict__.get("_queue_projector")
+        if projector is None:
+            projector = self._queue_projector = QueueSummaryProjector()
+        result = projector.project(jobs)
         self._record_queue_projection_timing(
             elapsed_ms=(time.monotonic() - started_at) * 1000.0,
             job_count=len(jobs),
-            summary_count=len(queue_jobs),
-            fallback_count=fallback_count,
+            summary_count=len(result.summaries),
+            fallback_count=result.fallback_count,
         )
-        return summaries, queue_jobs
+        return result.items, result.summaries
 
     def _load_history_entries(self, limit: int | None = None) -> list[Any]:
         if not self.job_service:
