@@ -108,7 +108,7 @@ Rules:
 
 ## 3. Phone behavior
 
-- Enrollment sets `rg_session` (`HttpOnly; Secure; SameSite=Strict`); only its SHA-256 is stored. Every request reads the
+- Enrollment sets `rg_session` (`HttpOnly; Secure; SameSite=Lax`, so links from other apps arrive paired; JSON APIs still require the custom header); only its SHA-256 is stored. Every request reads the
   device row, so revocation applies to the next request. Every data and media route needs an enrolled device with the
   `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
 - JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata

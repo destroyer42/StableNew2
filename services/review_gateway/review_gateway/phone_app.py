@@ -146,7 +146,10 @@ def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlet
             path="/",
             secure=True,
             httponly=True,
-            samesite="strict",
+            # Lax, not Strict: opening the page from a link in another app (a notification, a chat) must
+            # arrive paired. Forged requests stay blocked: every JSON API requires REQUIRED_HEADER, which a
+            # cross-site form or link cannot send, and Lax never sends the cookie on cross-site POSTs.
+            samesite="lax",
         )
         return response
 
