@@ -124,8 +124,11 @@ def hide_host_tools(setattr_: Callable[..., None], delenv: Callable[..., None]) 
 
     real_which = shutil.which
 
-    def which(command: str, *args: Any, **kwargs: Any) -> str | None:
-        return None if _is_hidden_tool(command) else real_which(command, *args, **kwargs)
+    def which(cmd: str, mode: int = os.F_OK | os.X_OK, path: str | None = None) -> str | None:
+        # A caller that names where to look (a test's own shim folder) is not asking about this machine.
+        if path is None and _is_hidden_tool(cmd):
+            return None
+        return real_which(cmd, mode=mode, path=path)
 
     setattr_(shutil, "which", which)
     for variable in ("STABLENEW_FFMPEG_PATH", "STABLENEW_RIFE_EXE"):

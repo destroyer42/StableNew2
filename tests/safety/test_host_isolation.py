@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import os
 import shutil
 import socket
 from pathlib import Path
@@ -82,6 +83,10 @@ def test_parity_mode_hides_the_tools_the_hosted_runner_does_not_have(
     for tool in ("ffmpeg", "ffprobe", "rife-ncnn-vulkan", "nvidia-smi", "nvidia-smi.exe"):
         assert shutil.which(tool) is None, tool
     assert shutil.which("git") is not None
+    shim = tmp_path / ("nvidia-smi.cmd" if os.name == "nt" else "nvidia-smi")
+    shim.write_text("exit 0\n", encoding="utf-8")
+    shim.chmod(0o755)
+    assert shutil.which("nvidia-smi", path=str(tmp_path)) is not None  # a named folder is searched
 
     # A test that names its own stand-in still gets it.
     monkeypatch.setenv("STABLENEW_FFMPEG_PATH", str(configured))
