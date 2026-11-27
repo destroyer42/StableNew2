@@ -231,6 +231,7 @@ def build_review_gateway_sync(
     from src.app.review_gateway_apply import RecordApplier
     from src.app.review_gateway_origin import job_input_reader
     from src.app.review_gateway_publish import GatewayPublisher, job_batch_reader
+    from src.app.review_gateway_ratings import RatingTaskSync
     from src.app.review_gateway_store import GatewaySettingsStore, SyncLedger
     from src.app.review_gateway_sync import ReviewGatewaySync as Sync
     from src.app.site_media_files import SiteOutputError
@@ -300,6 +301,8 @@ def build_review_gateway_sync(
         **extra,
     )
     owner.append(sync)
+    # RG-170: sittings registered beside the ledger are published to the phone; submitted ratings come back.
+    sync.attach_rating_tasks(RatingTaskSync(ledger.path.parent / "rating_tasks", ledger))
     # PHONE-FAST: a finished job's outputs reach the phone without waiting for the busy-queue rate.
     jobs = getattr(app, "job_service", None)
     register = getattr(jobs, "register_completion_handler", None)

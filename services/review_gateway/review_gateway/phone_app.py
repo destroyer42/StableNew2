@@ -21,6 +21,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .errors import GatewayError
 from .media import is_digest
+from .rating_routes import phone_rating_routes
+from .rating_store import RatingStore
 from .store import SOURCES, Clock, Device, Store
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
@@ -50,6 +52,8 @@ _PAGES = {
     "/": ("index.html", "text/html"),
     "/static/app.js": ("app.js", "text/javascript"),
     "/static/app.css": ("app.css", "text/css"),
+    "/static/rating.js": ("rating.js", "text/javascript"),
+    "/static/rating.css": ("rating.css", "text/css"),
     "/static/icon.svg": ("icon.svg", "image/svg+xml"),
 }
 _VARIANTS = {
@@ -99,7 +103,7 @@ class _Guard:
         await self.app(scope, receive, guarded)
 
 
-def build_phone_app(store: Store, clock: Clock) -> Starlette:
+def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlette:
     failures: deque = deque()
 
     async def session(request: Request, *, review: bool = True) -> Device:
@@ -308,6 +312,7 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
             Route("/api/admin/updates", update_requests, methods=["POST"]),
             Route("/api/admin/updates/{record_id}", update_request, methods=["GET"]),
             Route("/media/{library_id}/{sha256}/{variant}", media, methods=["GET"]),
+            *phone_rating_routes(ratings, session),
         ],
         middleware=[Middleware(_Guard)],
         exception_handlers=EXCEPTION_HANDLERS,

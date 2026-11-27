@@ -667,7 +667,9 @@ async function showHome(serial) {
         ...sections.map((entry) => sectionRow(entry, countNew)),
       ]
     : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
-  show("Review", false, ...[...statusLines(status), reviewAllButton(waiting, "all"), ...content, update].filter(Boolean));
+  // RG-170: ratings sit above the folders. Eval clips are rated there and are never a folder here.
+  const rate = Rating.entry(() => rate.remove());
+  show("Review", false, ...[...statusLines(status), rate, reviewAllButton(waiting, "all"), ...content, update].filter(Boolean));
 }
 
 async function showSection(name, serial) {
@@ -1840,6 +1842,7 @@ async function route() {
     else if (page === "run" && run) await showRun(decodeURIComponent(run), serial);
     else if (page === "rejected") showRejected();
     else if (page === "update") await showUpdate(serial);
+    else if (page === "rate") await Rating.route(run, libraryId, serial);
     else if (page === "section" && SECTIONS[run]) await showSection(run, serial);
     else await showHome(serial);
     const isList = !page || page === "run" || page === "section";
@@ -1895,7 +1898,7 @@ async function refresh() {
 
 back.addEventListener("click", () => {
   const [, page, run] = location.hash.split("/");
-  location.hash = (page === "triage" || page === "run") && run ? leaving(decodeURIComponent(run), page === "triage") : "#/";
+  location.hash = (page === "triage" || page === "run") && run ? leaving(decodeURIComponent(run), page === "triage") : page === "rate" && run ? "#/rate" : "#/";
 });
 window.addEventListener("hashchange", route);
 window.addEventListener("online", () => flush());

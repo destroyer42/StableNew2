@@ -80,6 +80,10 @@ MISSING = "missing"
 #: The one-time withdrawal of frames published earlier: ledger rows per request, and requests per pass.
 WITHDRAW_PAGE = 500
 WITHDRAW_PAGES = 10
+#: Ledger keys of that sweep. They are renamed when the source filter excludes more (RG-170: eval outputs), so a PC
+#: that already swept looks through its ledger once again.
+_SWEEP_DONE = "sources_withdrawn_v2"
+_SWEEP_CURSOR = "sources_withdraw_cursor_v2"
 _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
@@ -538,22 +542,23 @@ class GatewayPublisher:
         self._deferred[key] = (version, failures, self._monotonic() + seconds)
 
     def withdraw_unpublishable(self, client: GatewayClient, cancel: Event) -> None:
-        """Once per ledger: ask the gateway to stop showing frames and un-smoothed clips published earlier.
+        """Once per ledger: ask the gateway to stop showing eval outputs, frames and un-smoothed clips published
+        earlier.
 
         Kept in steps, so a stop or an unreachable gateway resumes where it was.
         """
 
         if "item_withdraw" not in client.features or not self.root.is_dir():
             return
-        if self._ledger.get_meta("sources_withdrawn") == "done":
+        if self._ledger.get_meta(_SWEEP_DONE) == "done":
             return
-        cursor = int(self._ledger.get_meta("sources_withdraw_cursor") or 0)
+        cursor = int(self._ledger.get_meta(_SWEEP_CURSOR) or 0)
         for _ in range(WITHDRAW_PAGES):
             if cancel.is_set():
                 return
             rows = self._ledger.published_after(cursor, WITHDRAW_PAGE)
             if not rows:
-                self._ledger.set_meta({"sources_withdrawn": "done"})
+                self._ledger.set_meta({_SWEEP_DONE: "done"})
                 return
             unwanted = [
                 str(row["library_id"])
@@ -561,10 +566,10 @@ class GatewayPublisher:
                 if self._sources.exclusion_of(str(row["rel_path"]), str(row["kind"]))
             ]
             if unwanted and not client.withdraw_items(unwanted):
-                log.info("Review gateway did not accept the withdrawal of earlier frames")
+                log.info("Review gateway did not accept the withdrawal of earlier items")
                 return
             cursor = int(rows[-1]["rowid"])
-            self._ledger.set_meta({"sources_withdraw_cursor": str(cursor)})
+            self._ledger.set_meta({_SWEEP_CURSOR: str(cursor)})
 
     def label_published(self, client: GatewayClient, cancel: Event) -> None:
         """Once per ledger: tell the gateway the sections of items published before it kept them. Resumes like
