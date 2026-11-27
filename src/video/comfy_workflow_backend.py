@@ -1333,6 +1333,10 @@ class ComfyWorkflowVideoBackend:
             str(request.input_image_path): (stage_config.get("reference_identity") or {}).get("prepared_sha256"),
             str(stage_config.get("pose_video_path")): stage_config.get("pose_video_sha256"),
         } if spec.backend_defaults.get("motion_source_policy") else None
+        end_sha = str(stage_config.get("end_anchor_sha256") or "")
+        if end_sha and request.end_anchor_path:
+            # V1 end frame: a changed prepared end image is refused at upload, like the driving clip.
+            input_hashes = {**(input_hashes or {}), str(request.end_anchor_path): end_sha}
         ref_pad = _sequence_ref_pad_hash(spec, stage_config)
         if ref_pad is not None:
             input_hashes = {**(input_hashes or {}), ref_pad[0]: ref_pad[1]}

@@ -71,7 +71,11 @@ from src.video.workflow_source_preparation import (
     passthrough_declared_workflow_source,
     prepare_declared_workflow_source,
 )
-from src.video.workflow_warnings import experimental_workflow_warning, source_crop_warning
+from src.video.workflow_warnings import (
+    end_frame_crop_warning,
+    experimental_workflow_warning,
+    source_crop_warning,
+)
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 # Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
@@ -252,6 +256,8 @@ class FrozenVideoInputs:
     shared_files: tuple[tuple[str, str, str], ...] = ()
     motion_source_preparation: Mapping[str, Any] | None = None
     library_asset: Mapping[str, Any] | None = None
+    #: V1 end frame: the end image prepared to this source's target size (original and prepared path and hash).
+    end_frame: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -578,6 +584,7 @@ class VideoWorkflowNjrBuilder:
                 prepared_dimensions=(source_preparation or {}).get("prepared_dimensions") or {},
                 hash_file=lambda _path: source_sha256,
             )
+        end_frame = self._prepare_end_frame(spec, form_data, source_preparation)
         return FrozenVideoInputs(
             source_image_path=str(Path(source_image_path).expanduser()),
             source_sha256=source_sha256,
@@ -589,7 +596,38 @@ class VideoWorkflowNjrBuilder:
             shared_files=shared.files,
             motion_source_preparation=shared.motion_source_preparation,
             library_asset=shared.library_asset,
+            end_frame=end_frame,
         )
+
+    def _prepare_end_frame(
+        self, spec: Any, form_data: Mapping[str, Any], source_preparation: Mapping[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """V1 end frame: a spec that declares it gets the end image prepared to the start image's target size, with
+        the same transform as the start image, so the graph's own resize is the identity for both."""
+
+        defaults = getattr(spec, "backend_defaults", None) or {}
+        end_text = str(form_data.get("end_anchor_path") or "").strip()
+        if defaults.get("end_frame_preparation") != "match_source" or not end_text or not source_preparation:
+            return None
+        target = dict(source_preparation["target_dimensions"])
+        policy = {
+            "resize_policy": defaults["source_preparation"]["resize_policy"],
+            "portrait_target": target,
+            "landscape_target": target,
+            "square_orientation": "portrait",
+        }
+        original = Path(end_text).expanduser()
+        prepared = prepare_declared_workflow_source(
+            source_path=original, output_root=self._output_dir(), policy=policy
+        )
+        return {
+            "original_path": str(original),
+            "original_sha256": sha256_file(original),
+            "prepared_path": prepared.prepared_image_path,
+            "prepared_sha256": sha256_file(prepared.prepared_image_path),
+            "source_dimensions": dict(prepared.source_dimensions),
+            "target_dimensions": target,
+        }
 
     @staticmethod
     def _verify_files(checks: list[tuple[str, str, str]]) -> None:
@@ -621,6 +659,11 @@ class VideoWorkflowNjrBuilder:
             ("source image", frozen.source_image_path, frozen.source_sha256),
             ("prepared source image", frozen.prepared_source_path, frozen.prepared_source_sha256),
         ]
+        if frozen.end_frame:
+            checks.extend(
+                (f"{side} end image", frozen.end_frame[f"{side}_path"], frozen.end_frame[f"{side}_sha256"])
+                for side in ("original", "prepared")
+            )
         if include_shared:
             checks.extend(
                 VideoWorkflowNjrBuilder._shared_checks(frozen.driving_video, frozen.shared_files)
@@ -697,6 +740,10 @@ class VideoWorkflowNjrBuilder:
         declared_inputs = set(spec.declared_input_names)
         if "end_anchor" in declared_inputs:
             workflow_config["end_anchor_path"] = end_anchor_path
+        if frozen.end_frame:
+            # The prepared end image is what runs; its hash is verified again at dispatch.
+            workflow_config["end_anchor_path"] = str(frozen.end_frame["prepared_path"])
+            workflow_config["end_anchor_sha256"] = str(frozen.end_frame["prepared_sha256"])
         if "mid_anchors" in declared_inputs:
             workflow_config["mid_anchor_paths"] = mid_anchor_paths
         if "motion_profile" in declared_inputs:
@@ -805,6 +852,8 @@ class VideoWorkflowNjrBuilder:
             )
             if round(cut, 4) > 0:
                 extra_metadata["video_workflow"]["source_crop_fraction"] = round(cut, 4)
+        if frozen.end_frame:
+            extra_metadata["video_workflow"]["end_frame"] = dict(frozen.end_frame)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
         if frozen_interpolation is not None:
@@ -865,6 +914,16 @@ class VideoWorkflowNjrBuilder:
             crop = source_crop_warning(spec, size["width"], size["height"])
             if crop is not None:
                 accepted.append(crop)
+        if frozen.end_frame:
+            end_size = frozen.end_frame["source_dimensions"]
+            end_crop = end_frame_crop_warning(
+                f"{spec.workflow_id}@{spec.workflow_version}",
+                end_size["width"],
+                end_size["height"],
+                frozen.end_frame["target_dimensions"],
+            )
+            if end_crop is not None:
+                accepted.append(end_crop)
         if accepted:
             surface = str(form_data.get(WARNING_SURFACE_FIELD) or SURFACE_DESKTOP)
             extra_metadata = merge_accepted_warnings(extra_metadata, accepted, surface=surface)

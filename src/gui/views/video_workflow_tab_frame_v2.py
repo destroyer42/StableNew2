@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
@@ -94,7 +95,11 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
 )
 from src.video.conditioning_inspection import build_inspection_context
-from src.video.driver_intent import DEFAULT_DRIVER_PROMPT, WHOLE_MOVEMENT_LABEL
+from src.video.driver_intent import (
+    DEFAULT_BETWEEN_PROMPT,
+    DEFAULT_DRIVER_PROMPT,
+    WHOLE_MOVEMENT_LABEL,
+)
 from src.video.motion_intent import (
     LONGEST_SUFFIX,
     MOTION_INTENT_FIELD,
@@ -149,6 +154,7 @@ from src.video.workflow_tasks import (
     NO_ENGINE_MESSAGE,
     TASK_ANIMATE,
     TASK_BATCH,
+    TASK_BETWEEN,
     TASK_FOLLOW_CLIP,
     TASK_SEQUENCE,
     TASKS,
@@ -159,7 +165,10 @@ from src.video.workflow_tasks import (
     smoothing_warning,
     suggest_settings,
 )
-from src.video.workflow_warnings import source_crop_warning_for_path
+from src.video.workflow_warnings import (
+    end_frame_crop_warning_for_paths,
+    source_crop_warning_for_path,
+)
 
 _IMAGE_FILETYPES = [
     ("PNG files", "*.png"),
@@ -229,6 +238,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     depth_browse_button: ttk.Button
     motion_intent_panel: MotionIntentPanel
     follow_clip_frame: ttk.Frame
+    end_image_frame: ttk.Frame
     pose_video_frame: ttk.Frame
     pose_video_entry: ttk.Entry
 
@@ -1025,6 +1035,23 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             f"{meta.get('workflow_id')}@{meta.get('workflow_version')}",
             self.source_image_var.get().strip(),
         )
+        if self._task == TASK_BETWEEN:
+            end_crop = end_frame_crop_warning_for_paths(
+                (meta.get("motion_readiness") or {}).get("source_preparation"),
+                f"{meta.get('workflow_id')}@{meta.get('workflow_version')}",
+                self.source_image_var.get().strip(),
+                self.end_anchor_var.get().strip(),
+            )
+            if end_crop is not None:
+                crop = (
+                    end_crop
+                    if crop is None
+                    else replace(
+                        crop,
+                        title=f"{crop.title} {end_crop.title}",
+                        why=f"{crop.why} {end_crop.why}",
+                    )
+                )
         if not meta.get("experimental"):
             if crop is None:
                 return "", ""
@@ -1055,7 +1082,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         keeps_choice = current.get("governance_state") == "approved" and not current.get(
             "experimental"
         )
-        if self._task in (TASK_FOLLOW_CLIP, TASK_SEQUENCE):
+        if self._task in (TASK_FOLLOW_CLIP, TASK_SEQUENCE, TASK_BETWEEN):
             self.select_task(TASK_ANIMATE)  # one image handed over: the plain image-to-video task
             current = self._workflow_map.get(self.workflow_var.get().strip(), {})
             keeps_choice = current.get("governance_state") == "approved" and not current.get(
@@ -1219,6 +1246,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state[MOTION_INTENT_FIELD] = self._motion_intent_record("")
             if not state["prompt"]:
                 state["prompt"] = DEFAULT_DRIVER_PROMPT  # shown under the prompt before Queue
+                state[MOTION_INTENT_FIELD]["basis"]["prompt"] = (
+                    "The prompt box was empty: the default was sent."
+                )
+        if for_submission and self._task == TASK_BETWEEN:
+            state[MOTION_INTENT_FIELD] = self._motion_intent_record("")
+            if not state["prompt"]:
+                state["prompt"] = DEFAULT_BETWEEN_PROMPT  # shown under the prompt before Queue
                 state[MOTION_INTENT_FIELD]["basis"]["prompt"] = (
                     "The prompt box was empty: the default was sent."
                 )
@@ -1392,7 +1426,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             # Camera, depth and ControlNet fields a workflow does not declare are not shown at all.
             self.conditioning_section.grid_remove()
-        if conditioning_on or enabled("end_anchor") or enabled("mid_anchors"):
+        if self._task != TASK_BETWEEN and (
+            conditioning_on or enabled("end_anchor") or enabled("mid_anchors")
+        ):
             self.keyframes_section.grid()
         else:
             self.keyframes_section.grid_remove()  # nothing in it applies to this engine
@@ -1403,7 +1439,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # Required inputs, and the picker where an experimental engine is authorised, must not hide behind a header.
         # V1-3: following a driver, Queue on the visible warning is the opt-in; the picker stays under Advanced.
         if required_control or (
-            workflow_meta.get("experimental") and self._task != TASK_FOLLOW_CLIP
+            workflow_meta.get("experimental") and self._task not in (TASK_FOLLOW_CLIP, TASK_BETWEEN)
         ):
             self.advanced_section.set_expanded(True)
             self._sync_settings_editor_label()
@@ -1735,8 +1771,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             self.sequence_panel.grid_remove()
         self.motion_intent_panel.show_mode(
-            phrase=task_id == TASK_ANIMATE, preset=task_id in (TASK_ANIMATE, TASK_FOLLOW_CLIP)
+            phrase=task_id == TASK_ANIMATE,
+            preset=task_id in (TASK_ANIMATE, TASK_FOLLOW_CLIP),
+            sends=task_id == TASK_BETWEEN,
         )
+        if task_id == TASK_BETWEEN:
+            self.end_image_frame.grid()
+            self.keyframes_section.grid_remove()
+        else:
+            self.end_image_frame.grid_remove()
         self._sync_length_row()
         self._sync_duration()
         self._sync_batch_strip()
@@ -2073,8 +2116,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         phrase = self.motion_intent_panel.phrase_var.get().strip()
         prompt = self.prompt_text.get("1.0", "end").strip()
-        if self._task == TASK_FOLLOW_CLIP:
-            self.motion_intent_panel.set_composed("" if prompt else DEFAULT_DRIVER_PROMPT)
+        default = {
+            TASK_FOLLOW_CLIP: DEFAULT_DRIVER_PROMPT,
+            TASK_BETWEEN: DEFAULT_BETWEEN_PROMPT,
+        }.get(self._task)
+        if default:
+            self.motion_intent_panel.set_composed("" if prompt else default)
             return
         shown = phrase and self._task == TASK_ANIMATE
         self.motion_intent_panel.set_composed(compose_prompt(prompt, phrase) if shown else "")

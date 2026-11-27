@@ -146,13 +146,14 @@ class MotionIntentPanel(ttk.Frame):
 
     # ------------------------------------------------------------------ what the tab shows
 
-    def show_mode(self, *, phrase: bool, preset: bool) -> None:
-        """The Motion row belongs to prompt-only motion; the Preset row and the "Sends:" line to it and to following
-        a driver."""
+    def show_mode(self, *, phrase: bool, preset: bool, sends: bool = False) -> None:
+        """The Motion row belongs to prompt-only motion; the Preset row to it and to following a driver.  The
+        "Sends:" line shows with the presets, or alone (``sends``)."""
 
         rows: Sequence[tuple[bool, Sequence[tk.Widget]]] = (
             (phrase, (self.phrase_label, self.phrase_entry)),
-            (preset, (self.composed_label, self.preset_label, self.preset_row)),
+            (preset or sends, (self.composed_label,)),
+            (preset, (self.preset_label, self.preset_row)),
         )
         for shown, widgets in rows:
             for widget in widgets:

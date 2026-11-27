@@ -65,6 +65,7 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
     reasons_label.grid_remove()
     tab.reasons_label = reasons_label
     _build_driver_row(tab, visible, row=2)
+    _build_end_image_row(tab, visible, row=4)
     tab.motion_intent_panel = MotionIntentPanel(
         visible,
         on_preset=tab._on_preset_chosen,
@@ -232,6 +233,23 @@ def _build_driver_row(tab: Any, parent: ttk.Frame, *, row: int) -> None:
     tab._attach_setting_help(
         "pose_video", VIDEO_WORKFLOW_SETTING_HELP["pose_video"], label, tab.pose_video_entry
     )
+
+
+def _build_end_image_row(tab: Any, parent: ttk.Frame, *, row: int) -> None:
+    """V1 end frame: the end image, for the "Start and end image" task only (the start image is the header's)."""
+
+    frame = ttk.Frame(parent, style="Panel.TFrame")
+    frame.grid(row=row, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+    frame.grid_remove()
+    tab.end_image_frame = frame
+    label = ttk.Label(frame, text="End image", style="Dark.TLabel")
+    label.pack(side="left", padx=(0, 6))
+    entry = ttk.Entry(frame, textvariable=tab.end_anchor_var, style="Dark.TEntry", width=34)
+    entry.pack(side="left", fill="x", expand=True)
+    ttk.Button(
+        frame, text="Browse...", style="Dark.TButton", command=tab._on_browse_end_anchor
+    ).pack(side="left", padx=(6, 0))
+    tab._attach_setting_help("end_anchor", VIDEO_WORKFLOW_SETTING_HELP["end_anchor"], label, entry)
 
 
 def build_keyframes_section(tab: Any, body: ttk.Frame) -> None:

@@ -13,6 +13,7 @@ from typing import Any
 from PIL import Image
 
 from src.pipeline.policy_warnings import (
+    CODE_VIDEO_END_FRAME_CROPPED,
     CODE_VIDEO_EXPERIMENTAL,
     CODE_VIDEO_SOURCE_CROPPED,
     PolicyWarning,
@@ -95,10 +96,35 @@ def source_crop_warning(spec: Any, width: int, height: int) -> PolicyWarning | N
     return _crop_warning(policy, workflow_subject(spec), width, height)
 
 
-def source_crop_warning_for_path(policy: Any, subject: str, path: str) -> PolicyWarning | None:
-    """The same warning for a file, read from its header only; ``None`` when it cannot be read."""
+def end_frame_crop_warning(
+    subject: str, end_width: int, end_height: int, target: Mapping[str, Any] | None
+) -> PolicyWarning | None:
+    """V1 end frame: the warning when cutting the end image to the start image's ``target`` size loses too much."""
 
-    if not isinstance(policy, Mapping) or not path or not Path(path).is_file():
+    workflow_id = subject.partition("@")[0]
+    if not target or workflow_id not in WAN_A14B_CROP_WARNED_IDS or min(end_width, end_height) <= 0:
+        return None
+    width, height = int(target["width"]), int(target["height"])
+    cut = discarded_fraction((end_width, end_height), (width, height))
+    if cut <= WAN_A14B_MAX_CROP_FRACTION:
+        return None
+    return PolicyWarning(
+        code=CODE_VIDEO_END_FRAME_CROPPED,
+        subject=subject,
+        title=f"{cut:.0%} of the end picture is cut away.",
+        why=(
+            f"The end image is {end_width}x{end_height}; it is cut to the clip's {width}x{height}, which the start "
+            "image set and which has a different shape."
+        ),
+        fix="Queue runs it with the crop. To keep the whole end picture, give it the same shape as the start image.",
+        source_gate="workflow_source_preparation",
+    )
+
+
+def image_size(path: str) -> tuple[int, int] | None:
+    """A source image's displayed size from its header, or ``None`` when it cannot be read."""
+
+    if not path or not Path(path).is_file():
         return None
     try:
         with Image.open(path) as image:
@@ -107,11 +133,36 @@ def source_crop_warning_for_path(policy: Any, subject: str, path: str) -> Policy
                 width, height = height, width
     except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
         return None
-    return _crop_warning(policy, subject, width, height)
+    return width, height
+
+
+def end_frame_crop_warning_for_paths(
+    policy: Any, subject: str, source_path: str, end_path: str
+) -> PolicyWarning | None:
+    """The same warning for two files, read from their headers only."""
+
+    source, end = image_size(source_path), image_size(end_path)
+    if not isinstance(policy, Mapping) or not policy or source is None or end is None:
+        return None
+    return end_frame_crop_warning(
+        subject, end[0], end[1], resolve_declared_target(policy, *source)[1]
+    )
+
+
+def source_crop_warning_for_path(policy: Any, subject: str, path: str) -> PolicyWarning | None:
+    """The same warning for a file, read from its header only; ``None`` when it cannot be read."""
+
+    size = image_size(path)
+    if not isinstance(policy, Mapping) or size is None:
+        return None
+    return _crop_warning(policy, subject, *size)
 
 
 __all__ = [
     "DEFAULT_WHY",
+    "end_frame_crop_warning",
+    "end_frame_crop_warning_for_paths",
+    "image_size",
     "experimental_workflow_warning",
     "source_crop_warning",
     "source_crop_warning_for_path",
