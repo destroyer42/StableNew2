@@ -164,22 +164,20 @@ class MotionIntentPanel(ttk.Frame):
 
     # ------------------------------------------------------------------ what the tab shows
 
-    def show_prompt_only(self, shown: bool) -> None:
-        """The Motion and Preset rows belong to the prompt-only task."""
+    def show_mode(self, *, phrase: bool, preset: bool) -> None:
+        """The Motion row belongs to prompt-only motion; the Preset row and the "Sends:" line to it and to following
+        a driver."""
 
-        widgets: Sequence[tk.Widget] = (
-            self.phrase_label,
-            self.phrase_entry,
-            self.suggest_row,
-            self.composed_label,
-            self.preset_label,
-            self.preset_row,
+        rows: Sequence[tuple[bool, Sequence[tk.Widget]]] = (
+            (phrase, (self.phrase_label, self.phrase_entry, self.suggest_row)),
+            (preset, (self.composed_label, self.preset_label, self.preset_row)),
         )
-        for widget in widgets:
-            if shown:
-                widget.grid()
-            else:
-                widget.grid_remove()
+        for shown, widgets in rows:
+            for widget in widgets:
+                if shown:
+                    widget.grid()
+                else:
+                    widget.grid_remove()
 
     def set_suggest_busy(self, busy: bool) -> None:
         self.suggest_button.state(["disabled"] if busy else ["!disabled"])

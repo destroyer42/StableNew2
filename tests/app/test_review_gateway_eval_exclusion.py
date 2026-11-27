@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from threading import Event
 
 import pytest
 
+from src.app.review_gateway_client import GatewayClient
 from src.app.review_gateway_sources import EVAL, SourceFilter
 from tests.app.test_review_gateway_sources import absolute, make_item, publish, write_manifest
 from tests.app.test_review_gateway_sync import Env
+from tests.helpers.review_gateway_fakes import SECRET
 
 RUN = "Reprocess/20261127_090000_clips"
 
@@ -105,3 +108,28 @@ def test_the_job_a_comfy_clips_manifest_records_inside_its_compiled_workflow_cou
     )
 
     assert SourceFilter(env.root).exclusion(item) == EVAL
+
+
+def test_eval_clips_published_earlier_are_withdrawn_even_after_the_frame_sweep_ran(env) -> None:
+    # The PHONE-FAST sweep may already have finished on this PC, before eval outputs were excluded.
+    env.gateway.features = ["item_withdraw"]
+    eval_run(env, "job-eval")
+    clip(env, "eval.mp4", "job-eval")
+    clip(env, "keeper.mp4", "job-ordinary")
+    for library_id, name in (("eval-clip", "eval.mp4"), ("keeper-clip", "keeper.mp4")):
+        env.ledger.mark_published(
+            library_id,
+            "v1",
+            f"{RUN}/{name}",
+            "a" * 64,
+            "video",
+            "published",
+            "2026-11-26T00:00:00Z",
+        )
+    env.ledger.set_meta({"sources_withdrawn": "done", "sources_withdraw_cursor": "999"})
+    client = GatewayClient(env.gateway, SECRET)
+    client.health()
+
+    env.publisher.withdraw_unpublishable(client, Event())
+
+    assert env.gateway.withdrawn == ["eval-clip"]

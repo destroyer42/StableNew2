@@ -401,6 +401,7 @@ def _tab(tk_root, tmp_path, workflow=WAN_ANIMATE2_DRIVE_ID):
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=app, app_state=SimpleNamespace())
     tab.workflow_var.set(workflow)
     tab._refresh_workspace_summary()
+    tab._readiness_opened = True  # V1-3: the driving-clip task shows the details when opened from the chip
     panel = tab.motion_readiness_panel
     runner = _ManualRunner()
     panel._runner = runner

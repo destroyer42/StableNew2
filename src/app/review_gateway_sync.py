@@ -51,7 +51,6 @@ from src.app.review_gateway_protocol import (
 )
 from src.app.review_gateway_publish import GatewayPublisher
 from src.app.review_gateway_store import Device, GatewaySettings, GatewaySettingsStore, SyncLedger
-from src.app.review_gateway_withdraw import EvalWithdrawal
 from src.app.site_media_files import SiteOutputError
 from src.utils.thread_registry import get_thread_registry
 
@@ -65,6 +64,10 @@ STATUS_HEARTBEAT_SECONDS = 60.0
 #: After a gateway that does not offer the ``pc_status`` route yet, ask again this much later.
 STATUS_UNSUPPORTED_SECONDS = 600.0
 IDLE_PUBLISH_BATCH = 8
+#: After a job completes, its outputs are looked for this long (the index needs a moment to see them).
+FRESH_SECONDS = 30.0
+#: How old an output may be and still count as the completed job's.
+FRESH_OUTPUT_S = 15 * 60
 MAX_PAGES_PER_CYCLE = 10
 PAGE_SIZE = 100
 #: After the PC answers a phone action, the phone is usually about to send the next step ("Queue" after the summary),
@@ -138,12 +141,12 @@ class ReviewGatewaySync:
         self._settings: GatewaySettings | None = None
         self._settings_loaded = False
         self._last_busy_publish = -BUSY_PUBLISH_SECONDS
+        self._fresh_until: float | None = None
         self._backoff = 0.0
         self._follow_until = -1.0
         self._last_full_cycle = -interval
         self._status_source: Callable[[], dict[str, Any] | None] | None = None
         self._ratings: Any = None
-        self._withdrawal = EvalWithdrawal(ledger, monotonic=monotonic)
         self._last_status: dict[str, Any] | None = None
         self._last_status_at = 0.0
         self._status_retry_at = 0.0
@@ -175,6 +178,16 @@ class ReviewGatewaySync:
     @property
     def stopping(self) -> bool:
         return self._stop.is_set()
+
+    def notify_job_completed(self) -> None:
+        """Publish the finished job's outputs at once, even if the next job is already running. Any thread."""
+
+        self._fresh_until = self._monotonic() + FRESH_SECONDS
+        self._wake.set()
+
+    def fresh_outputs_wanted(self) -> bool:
+        until = self._fresh_until
+        return until is not None and self._monotonic() < until
 
     def sync_now(self) -> None:
         self._backoff = 0.0
@@ -322,8 +335,6 @@ class ReviewGatewaySync:
             self._pull_immich(client)
             self._send_status(client)
             self._publish(client)
-            if self._publisher is not None:
-                self._withdrawal.step(client, self._publisher.root, self._stop)
             if self._ratings is not None:
                 self._ratings.step(client, busy=self._busy(), cancel=self._stop)
             self._last_full_cycle = now
@@ -509,19 +520,28 @@ class ReviewGatewaySync:
                 return
             if self._publisher is None:
                 return
+        self._publisher.withdraw_unpublishable(client, self._stop)
         busy = self._busy()
+        if busy and self.fresh_outputs_wanted():
+            since = int((utc_now().timestamp() - FRESH_OUTPUT_S) * 1_000_000)
+            self._publish_batch(client, busy, IDLE_PUBLISH_BATCH, newer_than=since)
         now = self._monotonic()
         if busy and now - self._last_busy_publish < BUSY_PUBLISH_SECONDS:
             return
         if busy:
             self._last_busy_publish = now
+        self._publish_batch(client, busy, 1 if busy else IDLE_PUBLISH_BATCH)
+
+    def _publish_batch(self, client: GatewayClient, busy: bool, limit: int, **newer: int) -> None:
+        assert self._publisher is not None
         try:
             result = self._publisher.publish(
                 client,
-                limit=1 if busy else IDLE_PUBLISH_BATCH,
+                limit=limit,
                 cancel=self._stop,
                 allow_transcode=lambda: not self._busy(),
                 hold_unlabelled_video=busy,
+                **newer,
             )
         except (SiteOutputError, OSError):
             log.info("Review gateway publishing deferred: the Output index is unavailable")

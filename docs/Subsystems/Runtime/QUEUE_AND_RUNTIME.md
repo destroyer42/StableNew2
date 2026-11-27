@@ -108,6 +108,12 @@ Jobs already durably QUEUED remain queued under the existing startup recovery ru
 process-local. The admission signal fences claims before waiting for any claim already inside
 the queue critical section.
 
+Once those users have stopped, the repository is always finalized: a failed or still-pending
+background file write, a failed queue-state save, or a runtime release that used up the budget
+does not keep it open (finalization is granted at least one second). The persistence worker is
+drained last. It reports "not drained" only while a write is pending; writes that failed earlier
+are logged with their job ids.
+
 The shutdown result records quiescence, repository closure, persistence drain, owned runtime release
 and surviving workers. A timeout produces bounded stack samples of the remaining workers. Normal
 GUI shutdown returns to the interpreter after Tk teardown. A surviving non-daemon worker can delay

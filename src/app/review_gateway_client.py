@@ -12,7 +12,7 @@ import hashlib
 import hmac
 import http.client
 import ssl
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, BinaryIO, Protocol
 from urllib.parse import urlencode
@@ -25,6 +25,7 @@ from src.app.review_gateway_protocol import (
     SHA256,
     ProtocolError,
     encode_json,
+    item_withdrawal,
     parse_json,
 )
 from src.app.review_gateway_store import GatewaySettings
@@ -47,7 +48,7 @@ ROUTES = {
     "rating_media": "/sync/v1/rating-media/{sha256}",
     "rating_submissions": "/sync/v1/rating-submissions",
     "rating_acknowledgements": "/sync/v1/rating-acknowledgements",
-    "item_withdrawals": "/sync/v1/item-withdrawals",
+    "withdrawals": "/sync/v1/withdrawals",
 }
 #: The gateway's refusal codes for a deploy request (DEPLOY-2) that the operator tool explains.
 DEPLOY_REFUSALS = frozenset({"remote_deploy_disabled", "deploy_pending"})
@@ -265,6 +266,15 @@ class GatewayClient:
             raise GatewayRejected("gateway_rejected_media")
         self._require(response, 200, 201)
 
+    def withdraw_items(self, library_ids: Sequence[str]) -> bool:
+        """PHONE-FAST: stop showing these items; ``False`` when the gateway did not accept the request."""
+
+        response = self._post("withdrawals", item_withdrawal(library_ids))
+        if response.status in (404, 422):
+            return False
+        self._require(response, 200, 201)
+        return True
+
     # -- pull ------------------------------------------------------------------------------------------------------
 
     def outbox(self, cursor: str | None, limit: int = 100) -> Any:
@@ -406,17 +416,3 @@ class GatewayClient:
         response = self._post("rating_acknowledgements", payload)
         if response.status != 404:
             self._require(response, 200, 201)
-
-    def withdraw_item(self, library_id: str, sha256: str) -> str:
-        """``withdrawn``, ``kept`` (something is still owed for it) or ``unknown``."""
-
-        item = {"library_id": library_id, "sha256": sha256}
-        response = self._post(
-            "item_withdrawals",
-            {"schema_version": SCHEMA_VERSION, "type": "item_withdrawal", "item": item},
-        )
-        reply = self._json(self._require(response, 200))
-        status = reply.get("status") if isinstance(reply, dict) else None
-        if status not in ("withdrawn", "kept", "unknown"):
-            raise GatewayError("invalid_gateway_response")
-        return str(status)

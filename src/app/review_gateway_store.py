@@ -17,7 +17,7 @@ import json
 import os
 import re
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -198,6 +198,12 @@ CREATE TABLE IF NOT EXISTS published (
     kind TEXT NOT NULL, state TEXT NOT NULL, at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS published_digest ON published (sha256);
+-- PHONE-FAST: images whose phone rendition has been sent (a table, so an older app's inserts still work).
+CREATE TABLE IF NOT EXISTS renditions (library_id TEXT PRIMARY KEY);
+-- PHONE-FAST: a video is sent without its metadata, so the gateway knows it by other bytes than the PC's file.
+CREATE TABLE IF NOT EXISTS public_digest (
+    library_id TEXT PRIMARY KEY, public_sha256 TEXT NOT NULL, file_sha256 TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS records (
     record_id TEXT PRIMARY KEY, idempotency_key TEXT, outcome TEXT NOT NULL, reason TEXT NOT NULL,
     receipt TEXT NOT NULL, ack_sent INTEGER NOT NULL, at TEXT NOT NULL
@@ -368,10 +374,67 @@ class SyncLedger:
                 (library_id, version, rel_path, sha256, kind, state, at),
             )
 
-    def published_items(self) -> list[sqlite3.Row]:
-        """Every item the gateway was sent and still holds, as far as this PC knows."""
+    def set_public_digest(self, library_id: str, public_sha256: str, file_sha256: str) -> None:
+        with self._transaction() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO public_digest VALUES (?, ?, ?)",
+                (library_id, public_sha256, file_sha256),
+            )
 
-        return self._read("SELECT * FROM published WHERE state = 'published' ORDER BY library_id")
+    def file_digest(self, library_id: str, public_sha256: str) -> str:
+        """The SHA-256 of the PC's file for an item the gateway knows by ``public_sha256``."""
+
+        rows = self._read(
+            "SELECT file_sha256 FROM public_digest WHERE library_id = ? AND public_sha256 = ?",
+            (library_id, public_sha256),
+        )
+        return str(rows[0][0]) if rows else public_sha256
+
+    def published_many(self, library_ids: Sequence[str]) -> dict[str, sqlite3.Row]:
+        """The publish rows of up to a page of items, in one read."""
+
+        if not library_ids:
+            return {}
+        marks = ",".join("?" * len(library_ids))
+        rows = self._read(
+            f"SELECT * FROM published WHERE library_id IN ({marks})", tuple(library_ids)
+        )
+        return {str(row["library_id"]): row for row in rows}
+
+    def mark_missing(self, rows: Sequence[tuple[str, str, str, str]], at: str) -> None:
+        """``(library_id, version, rel_path, kind)`` of rows whose file is gone, in one transaction."""
+
+        with self._transaction() as db:
+            db.executemany(
+                "INSERT INTO published (library_id, version, rel_path, sha256, kind, state, at)"
+                " VALUES (?, ?, ?, '', ?, 'missing', ?) ON CONFLICT (library_id) DO UPDATE SET"
+                " version = excluded.version, state = excluded.state, at = excluded.at"
+                " WHERE published.state <> 'published'",
+                [(key, version, path, kind, at) for key, version, path, kind in rows],
+            )
+
+    def published_after(self, rowid: int, limit: int) -> list[sqlite3.Row]:
+        """``(rowid, library_id, rel_path, kind)`` of sent items, oldest ledger row first."""
+
+        return self._read(
+            "SELECT rowid, library_id, rel_path, kind FROM published"
+            " WHERE rowid > ? AND state = 'published' ORDER BY rowid LIMIT ?",
+            (rowid, limit),
+        )
+
+    def set_rendition(self, library_id: str) -> None:
+        with self._transaction() as db:
+            db.execute("INSERT OR IGNORE INTO renditions VALUES (?)", (library_id,))
+
+    def without_rendition(self, limit: int) -> list[str]:
+        """Published images not yet sent with a phone rendition, newest first."""
+
+        rows = self._read(
+            "SELECT library_id FROM published WHERE state = 'published' AND kind = 'image'"
+            " AND library_id NOT IN (SELECT library_id FROM renditions) ORDER BY at DESC LIMIT ?",
+            (limit,),
+        )
+        return [str(row["library_id"]) for row in rows]
 
     def publish_counts(self) -> dict[str, int]:
         rows = self._read("SELECT state, count(*) AS n FROM published GROUP BY state")

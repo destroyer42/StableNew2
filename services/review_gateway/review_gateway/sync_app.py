@@ -22,14 +22,13 @@ from .rating_routes import sync_rating_routes
 from .rating_store import RatingStore
 from .store import Store
 from .web import EXCEPTION_HANDLERS, read_json, refusal
-from .withdrawal import withdraw
 
 PAGE_DEFAULT = 200
 PAGE_LIMIT = 500
 #: Optional parts of the v1 contract this gateway accepts, listed by health so a PC sends them only here (an older
 #: gateway's schema would refuse the whole payload). ``item_batch``: the manifest's ``batch`` (N5 inbox grouping).
-#: ``rating_tasks``: the RG-170 rating routes. ``item_withdrawal``: the PC may take an item out of the inbox.
-FEATURES = ("item_batch", "rating_tasks", "item_withdrawal")
+#: ``item_withdraw``: the withdrawals route (PHONE-FAST). ``rating_tasks``: the RG-170 rating routes.
+FEATURES = ("item_batch", "item_withdraw", "rating_tasks")
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
 
@@ -127,11 +126,6 @@ def build_sync_app(
             return Response(status_code=400)
         return JSONResponse({"status": "stored"}, status_code=201 if created else 200)
 
-    async def item_withdrawals(request: Request) -> Response:
-        item = (await payload(request, "item_withdrawal"))["item"]
-        status = await run_in_threadpool(withdraw, store, item["library_id"], item["sha256"])
-        return JSONResponse({"status": status})
-
     async def outbox(request: Request) -> Response:
         try:
             after = int(request.query_params.get("cursor", "0"))
@@ -158,6 +152,11 @@ def build_sync_app(
     async def pc_status(request: Request) -> Response:
         await run_in_threadpool(store.set_pc_status, await payload(request, "pc_status"))
         return JSONResponse({"status": "stored"})
+
+    async def withdrawals(request: Request) -> Response:
+        body = await payload(request, "item_withdrawal")
+        count = await run_in_threadpool(store.withdraw, body["library_ids"])
+        return JSONResponse({"withdrawn": count})
 
     async def immich_receipts(request: Request) -> Response:
         cursor = request.query_params.get("cursor", "")
@@ -194,7 +193,7 @@ def build_sync_app(
             Route("/sync/v1/deploy-status", deploy_status, methods=["GET"]),
             Route("/sync/v1/pc-status", pc_status, methods=["PUT"]),
             *sync_rating_routes(ratings),
-            Route("/sync/v1/item-withdrawals", item_withdrawals, methods=["POST"]),
+            Route("/sync/v1/withdrawals", withdrawals, methods=["POST"]),
         ],
         middleware=[Middleware(_SyncSecret, secret=secret)],
         exception_handlers=EXCEPTION_HANDLERS,

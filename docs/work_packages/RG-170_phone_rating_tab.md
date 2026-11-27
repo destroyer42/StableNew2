@@ -92,10 +92,10 @@ the desk is published as done.
 
 An eval output is anything under the `video_eval` run folders, or any output whose run manifest names a job that
 an eval's `run.json` lists (`src/app/review_gateway_sources.py`). Eval clips are ordinary jobs written into the normal
-output folders, so the job id is the only provenance they carry. The publisher skips them. For clips sent before
-this rule, the PC asks the gateway to withdraw each (`item_withdrawal`, `src/app/review_gateway_withdraw.py`): it
-leaves the inbox with no decision record and nothing changes in Immich; one with an unanswered decision or an owed
-upload stays until that is settled. Comparison clips that a session queued as ordinary jobs, with no eval run (for
+output folders, so the job id is the only provenance they carry. The publisher skips them. Clips sent before this
+rule are withdrawn by PHONE-FAST's one-time sweep (`item_withdraw`), which runs once more for this rule: they
+leave the inbox with no decision record and nothing changes in Immich. One the owner has already decided stays as
+decided. Comparison clips that a session queued as ordinary jobs, with no eval run (for
 example VID-FRAME's six app jobs), carry no eval provenance and are not recognised.
 
 ### Owner-visible decisions (accepted 2026-11-27; Q4 changed)

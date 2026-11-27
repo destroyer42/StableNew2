@@ -70,10 +70,10 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
 - `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)
 - `review_gateway_ratings.py`: PC side of RG-170: registered rating sets to the review gateway, submitted ratings back into the eval's files
+- `review_gateway_scrub.py`: Take PC paths out of the metadata of an image that is about to be published (PHONE-FAST, RG-100 invariant 3)
 - `review_gateway_sources.py`: Which Output Library items are a job's authoritative outputs, for phone publishing (PHONE-FAST)
 - `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
 - `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
-- `review_gateway_withdraw.py`: Take eval clips that were already published out of the phone's Review inbox (RG-170)
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
 - `site_desktop_approval.py`: Current-user persistence for the loopback browser's remembered approval
 - `site_library_index.py`: Rebuildable, root-local SQLite projection for Operator Site browsing
@@ -503,6 +503,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_alignment_host.py`: Owns the one Align Motion session, workspace window and status row of the Video Workflow tab (PR-VID-MOTION-4…
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
+- `video_workflow_driver_host_v2.py`: The driver clip of the "Follow a driving video" task (V1-3): read it, fit the length, prepare it
 - `video_workflow_evaluate_view_v2.py`: Evaluate view container for the Video Workflow tab (VID-UX-384)
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
 - `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
@@ -1032,6 +1033,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: Model continuity packs, their anchors and references, and the links stored with video jobs
 - `depth_map_resolver.py`: Validate supplied depth maps or materialize estimated depth images for conditioned video workflows
+- `driver_intent.py`: Follow a driving video (V1-3): what a driver clip and a requested duration resolve to
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `frame_retention.py`: Remove a clip's retained PNG frames a day after the clip exists (VID-FRAME, owner decision 2026-11-27)
@@ -1130,6 +1132,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_catalog.py`: Assemble the versioned Comfy catalog with governance, dependencies, and runtime policies
 - `workflow_catalog_fun_control.py`: Pinned stock-node Fun Control graph; no installation or physical qualification
 - `workflow_catalog_hunyuan15.py`: HunyuanVideo 1.5 480p image-to-video, step-distilled FP8: an EXPERIMENTAL eval candidate (VID-CAND-382)
+- `workflow_catalog_ltx25.py`: LTX-2.5 22B distilled image-to-video: an EXPERIMENTAL eval candidate (VID-CAND-LTX25)
 - `workflow_catalog_wan_a14b.py`: Wan2.2 I2V-A14B lightx2v 4-step workflow spec (VID-CLIP-370; approved by VID-CLIP-372)
 - `workflow_catalog_wan_a14b_svi.py`: Experimental Wan2.2 I2V-A14B + SVI 2.0 workflow for multi-segment sequences (VID-A14B-SVI-375)
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
@@ -1147,7 +1150,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_registry.py`: Resolve exact workflow versions and list offerable entries under the catalog's governance rules
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
 - `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
-- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow: experimental, and a cropped source (``policy_warnings.py``)
+- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow: experimental, licence and a cropped source (``policy_warnings.py`…
 
 ## src/video/motion/
 

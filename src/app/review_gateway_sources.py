@@ -127,18 +127,23 @@ class SourceFilter:
     def exclusion(self, item: LibraryItem) -> str:
         """``EVAL``, ``FRAME``, ``RETAINED`` or ``""`` (publish it)."""
 
-        parts = Path(item.path).parts
+        return self.exclusion_of(item.path, item.kind)
+
+    def exclusion_of(self, rel_path: str, kind: str) -> str:
+        """``exclusion`` for a path below the Output root; it still answers for a file that is gone."""
+
+        parts = Path(rel_path).parts
         if not parts or ".." in parts:
             return ""
-        if self.is_eval_output(item.path):
+        if self.is_eval_output(rel_path):
             return EVAL
-        if item.kind == "image" and parts[0].casefold() == OUTPUT_ROUTE_MOVIE_CLIPS.casefold():
+        if kind == "image" and parts[0].casefold() == OUTPUT_ROUTE_MOVIE_CLIPS.casefold():
             return FRAME
-        frames, retained, _jobs = self._recorded((self._root / item.path).parent / "manifests")
+        frames, retained, _jobs = self._recorded((self._root / rel_path).parent / "manifests")
         name = parts[-1].casefold()
-        if item.kind == "image" and name in frames:
+        if kind == "image" and name in frames:
             return FRAME
-        if item.kind == "video" and name in retained:
+        if kind == "video" and name in retained:
             return RETAINED
         return ""
 

@@ -38,6 +38,9 @@ class WorkflowControlsPanel(ttk.LabelFrame):
     ) -> None:
         super().__init__(master, text=title, padding=8)
         self._on_change = on_change
+        #: V1-3: told the name of a control the operator edited (never for a value written by ``set_values``).
+        self.on_edit: Callable[[str], None] | None = None
+        self._writing = 0
         self._controls: list[dict[str, Any]] = []
         self._vars: dict[str, tk.StringVar] = {}
         self._texts: dict[str, tk.Text] = {}
@@ -77,13 +80,13 @@ class WorkflowControlsPanel(ttk.LabelFrame):
             text_widget = tk.Text(self, height=3, wrap="word")
             style_text_widget(text_widget, elevated=True)
             text_widget.grid(row=row, column=1, columnspan=2, sticky="nsew", pady=(0, 6))
-            text_widget.bind("<KeyRelease>", lambda _e: self._changed(), add="+")
+            text_widget.bind("<KeyRelease>", lambda _e: self._changed(name), add="+")
             self._texts[name] = text_widget
             widget = text_widget
         else:
             label.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
             variable = tk.StringVar(value=_format_default(control["default"]))
-            variable.trace_add("write", lambda *_a: self._changed())
+            variable.trace_add("write", lambda *_a: self._changed(name))
             widget = ttk.Entry(self, textvariable=variable, style="Dark.TEntry", width=12)
             widget.grid(row=row, column=1, sticky="w", pady=(0, 6))
             self._vars[name] = variable
@@ -119,16 +122,20 @@ class WorkflowControlsPanel(ttk.LabelFrame):
 
         if not isinstance(values, Mapping):
             return
-        for control in self._controls:
-            name = control["name"]
-            if name not in values or values[name] is None:
-                continue
-            if control["kind"] == "text":
-                widget = self._texts[name]
-                widget.delete("1.0", "end")
-                widget.insert("1.0", str(values[name]))
-            else:
-                self._vars[name].set(str(values[name]))
+        self._writing += 1
+        try:
+            for control in self._controls:
+                name = control["name"]
+                if name not in values or values[name] is None:
+                    continue
+                if control["kind"] == "text":
+                    widget = self._texts[name]
+                    widget.delete("1.0", "end")
+                    widget.insert("1.0", str(values[name]))
+                else:
+                    self._vars[name].set(str(values[name]))
+        finally:
+            self._writing -= 1
 
     def summary_parts(self) -> list[str]:
         """Effective-settings fragments; a number that differs from its default is marked."""
@@ -150,7 +157,9 @@ class WorkflowControlsPanel(ttk.LabelFrame):
             parts.append(f"{name}={shown}{'' if is_default else ' [changed]'}")
         return parts
 
-    def _changed(self) -> None:
+    def _changed(self, name: str = "") -> None:
+        if name and not self._writing and self.on_edit is not None:
+            self.on_edit(name)
         if self._on_change is not None:
             self._on_change()
 

@@ -68,6 +68,12 @@ _PICKER_TIERS: Mapping[str, PickerTier] = {
     "hunyuan_video15_i2v_480p_12step_v1": PickerTier(
         TIER_EXPERIMENTAL_ONLY, "Unrated candidate arm (HunyuanVideo 1.5, 12 steps)."
     ),
+    "ltx25_distilled_i2v_v1": PickerTier(
+        TIER_EXPERIMENTAL_ONLY, "Unrated candidate (LTX-2.5 distilled, silent)."
+    ),
+    "ltx25_distilled_i2v_audio_v1": PickerTier(
+        TIER_EXPERIMENTAL_ONLY, "Unrated candidate (LTX-2.5 distilled, with audio)."
+    ),
 }
 
 

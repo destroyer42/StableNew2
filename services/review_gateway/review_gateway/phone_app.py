@@ -62,6 +62,11 @@ _VARIANTS = {
     "video": "mobile_video",
     "original": "original",
 }
+_CACHE = {
+    "original": "private, no-store",
+    "thumb_320": "private, max-age=604800, immutable",
+    "preview_1080": "private, max-age=604800, immutable",
+}
 _DECISION_FIELDS = {"library_id", "sha256", "verdict", "favorite", "tags", "idempotency_key"}
 _ACTION_FIELDS = {"library_id", "sha256", "action", "params", "idempotency_key"}
 _UPDATE_FIELDS = {"action", "expected_sha", "idempotency_key"}
@@ -267,8 +272,9 @@ def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlet
         path, content_type = await run_in_threadpool(
             store.media_file, params["library_id"], params["sha256"], variant
         )
-        # S6: originals are never cached; the small derivatives may stay on this phone for a while.
-        cache = "private, no-store" if variant == "original" else "private, max-age=3600"
+        # S6: originals are never cached; the small derivatives may stay on this phone for a while. A thumbnail or
+        # rendition is of the bytes the URL names, so the phone need not ask for it again (PHONE-FAST).
+        cache = _CACHE.get(variant, "private, max-age=3600")
         return FileResponse(path, media_type=content_type, headers={"Cache-Control": cache})
 
     return Starlette(

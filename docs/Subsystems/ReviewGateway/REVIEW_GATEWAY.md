@@ -60,10 +60,11 @@ section 9). Errors are `{"error": "<code>"}`.
 | `POST /sync/v1/acknowledgements` | `acknowledgement` | `{"status":"recorded"\|"already_acknowledged"}`; 404 `unknown_record` |
 | `POST /sync/v1/pairing-offers` | `pairing_offer` | `{"status":"accepted"}`; 409 `offer_conflict`; 422 `offer_expired` |
 | `POST /sync/v1/device-revocations` | `device_revocation` | `{"status":"revoked"\|"unknown_device"}` |
+| `POST /sync/v1/withdrawals` | `item_withdrawal` | `{"withdrawn": n}` (section 3.0) |
 | `GET /sync/v1/immich-receipts?cursor=` | - | `immich_receipt_page` (section 5); 400 `invalid_cursor` |
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
 
-The rating routes and `POST /sync/v1/item-withdrawals` are in section 9.
+The rating routes are in section 9.
 
 Rules:
 
@@ -94,7 +95,8 @@ Rules:
     `action_summary`, `job_ids` and `detail` (section 7).
 13. `features` in the health reply lists the optional parts of v1 this gateway accepts. The PC sends an optional part
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
-    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1).
+    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1);
+    `item_withdraw`, the withdrawals route (section 3.0).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -108,7 +110,8 @@ Rules:
   device row, so revocation applies to the next request. Every data and media route needs an enrolled device with the
   `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
 - JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata
-  is put on screen with `textContent` only. Originals are `private, no-store`; derivatives `private, max-age=3600`.
+  is put on screen with `textContent` only. Originals are `private, no-store`; thumbnails and image renditions `private, max-age=604800, immutable`; other
+  derivatives `private, max-age=3600`.
 - Inbox grouped by named batch, else by run folder, with counts (section 3.1); a group's grid; triage with Keep,
   Favorite, Delete buttons and swipes (right, up, left) and the six reason tags. A refused item counts as "to review"
   again.
@@ -118,6 +121,35 @@ Rules:
   with Try again and Dismiss; it is never dropped silently. The unsent list is shared safely between tabs.
 - The decision buttons and swipes stay off until the item has loaded. If it cannot load, the owner may retry or choose
   to decide without seeing it.
+
+- The phone prefetches the next 4 image renditions while triaging.
+
+### 3.0 What the PC publishes (PHONE-FAST)
+
+- **Only authoritative outputs** (`src/app/review_gateway_sources.py`). An image under `movie_clips`, an image a video
+  manifest lists as a frame, and a retained un-smoothed clip are never published. While a job runs, an image that may
+  be one of its frames waits.
+- **Nothing blocks the rest.** A row whose file is gone is recorded as `missing` and looked at again after a day; a row
+  that fails for another reason is set aside for a while, longer each time (up to 10 minutes). A published item's
+  ledger row is never overwritten.
+- **Window.** The last 3 days, or back to when the publisher last caught up if that is older; never before the first
+  window.
+- **Rate.** Up to 8 items per cycle while idle; one item per 30 s while a job runs, with nothing transcoded. When a job
+  completes, its new outputs publish at once even if the next job is already running.
+- **Phone rendition.** Every image is sent with a WebP (JPEG where WebP is unavailable) of at most 1080 px on its long
+  side, never enlarged. Images published before this get one a few at a time while the PC is idle.
+- **No PC paths** (invariant 3). A video's original is sent as a bit-exact copy of its picture and sound without any
+  container, stream or chapter metadata (no re-encode), and the mobile copy is made the same way. An image's original
+  keeps its pixels and its prompt and settings text; fields of its embedded metadata that are only a path are removed,
+  and a path inside longer text keeps its file name (`src/app/review_gateway_scrub.py`). The PC's files are never
+  touched. A changed item is known to the gateway and Immich by the SHA-256 of the bytes sent; the PC maps a decision
+  back to its file (`public_digest`). Media that cannot be cleaned is not sent. Items sent before this are not sent
+  again, so they keep their metadata.
+- **One-time withdrawal.** Frames, un-smoothed clips and eval outputs (section 9) published before the rules above
+  are withdrawn once: the PC
+  classifies its publish ledger and posts `item_withdrawal` to a gateway listing `item_withdraw`. The gateway purges
+  those items without recording a decision or touching Immich, and leaves any item with a decision or a request the
+  PC has not refused. No PC file changes.
 
 ### 3.1 Inbox grouped by batch
 
@@ -439,8 +471,6 @@ Rules:
    first, then update the PC.
 
 **Eval outputs are not review items.** The publisher skips anything under `video_eval` and any output whose run
-manifest names a job an eval's `run.json` lists. Clips published before that rule are withdrawn from the inbox with
-`POST /sync/v1/item-withdrawals` (health feature `item_withdrawal`; reply `withdrawn`, `kept` or `unknown`): no
-decision is recorded, Immich is untouched, and an item with an unanswered record or an owed upload is `kept` and asked
-again 10 minutes later.
+manifest names a job an eval's `run.json` lists. Clips published before that rule are withdrawn by the one-time
+withdrawal of section 3.0, which runs once more for this rule.
 
