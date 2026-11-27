@@ -13,6 +13,8 @@ WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED = "local_process_required"
 WORKFLOW_CAP_CONTROL_VIDEO = "control_video"
 WORKFLOW_CAP_POSE_VIDEO = "pose_video"
 WORKFLOW_CAP_CAMERA_INTENT = "camera_intent"
+#: V1 end frame: a start image and an end image only (no mid anchors, unlike ``multi_frame_anchor_video``).
+WORKFLOW_CAP_END_FRAME_VIDEO = "end_frame_video"
 WORKFLOW_GOVERNANCE_APPROVED = "approved"
 WORKFLOW_GOVERNANCE_EXPERIMENTAL = "experimental"
 WORKFLOW_GOVERNANCE_DISABLED = "disabled"
@@ -30,6 +32,7 @@ KNOWN_WORKFLOW_CAPABILITY_TAGS = {
     WORKFLOW_CAP_CONTROL_VIDEO,
     WORKFLOW_CAP_POSE_VIDEO,
     WORKFLOW_CAP_CAMERA_INTENT,
+    WORKFLOW_CAP_END_FRAME_VIDEO,
 }
 
 # Neutral video controls every workflow accepts implicitly, plus the controls a workflow must
@@ -40,6 +43,7 @@ _WORKFLOW_TAG_CONTROLS = {
     WORKFLOW_CAP_CONTROL_VIDEO: ("control_video",),
     WORKFLOW_CAP_POSE_VIDEO: ("pose_video",),
     WORKFLOW_CAP_CAMERA_INTENT: ("camera_intent",),
+    WORKFLOW_CAP_END_FRAME_VIDEO: ("end_anchor",),
 }
 
 
@@ -316,6 +320,7 @@ __all__ = [
     "WORKFLOW_GOVERNANCE_APPROVED",
     "WORKFLOW_GOVERNANCE_DISABLED",
     "WORKFLOW_GOVERNANCE_EXPERIMENTAL",
+    "WORKFLOW_CAP_END_FRAME_VIDEO",
     "WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED",
     "WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO",
     "WORKFLOW_CAP_SEGMENT_STITCHABLE",
