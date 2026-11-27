@@ -35,6 +35,16 @@ class TestPersistenceWorker:
         from src.services.persistence_worker import PersistenceTask, PersistenceWorker
 
         worker = PersistenceWorker()
+        gate = threading.Event()
+        written = threading.Event()
+        write_manifest = worker._write_manifest
+
+        def gated_write(data):
+            assert gate.wait(30.0)
+            write_manifest(data)
+            written.set()
+
+        worker._write_manifest = gated_write
         worker.start()
 
         try:
@@ -47,19 +57,14 @@ class TestPersistenceWorker:
                 data={"file_path": str(temp_path), "payload": {"test": "data"}},
             )
 
-            # Enqueue should return immediately
-            start_time = time.monotonic()
-            result = worker.enqueue(task)
-            duration = time.monotonic() - start_time
+            # The write is held, so a returning enqueue proves it did not wait for the write.
+            assert worker.enqueue(task) is True, "Enqueue should succeed"
+            assert not written.is_set()
 
-            assert result is True, "Enqueue should succeed"
-            assert duration < 0.01, f"Enqueue took {duration * 1000:.1f}ms (should be <10ms)"
-
-            # Wait for worker to process
-            time.sleep(0.2)
+            gate.set()
+            assert written.wait(30.0)
 
             # Verify file was written
-            assert temp_path.exists()
             content = json.loads(temp_path.read_text())
             assert content == {"test": "data"}
 
@@ -67,6 +72,7 @@ class TestPersistenceWorker:
             temp_path.unlink()
 
         finally:
+            gate.set()
             worker.stop()
 
     def test_write_happens_on_worker_thread(self):

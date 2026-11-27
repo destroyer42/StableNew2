@@ -29,6 +29,7 @@ from src.gui.view_contracts.photo_optimize_layout_contract import (
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
 from src.photo_optimize.store import PhotoOptimizeStore
 from src.photo_optimize.submission import prepare_photo_plan
+from tests.helpers.hidden_test_windows import uncap_window_size
 
 PX = 96 / 72
 # (tab viewport width, height, tk scaling). The viewport is the 1366x768 / 1920x1080 window minus shell chrome.
@@ -73,6 +74,7 @@ def _make_tab(root: tk.Tk, store, viewport, *, controller=None) -> PhotoOptimize
     width, height, scaling = viewport
     root.tk.call("tk", "scaling", scaling)
     apply_theme(root)
+    uncap_window_size(root)
     root.geometry(f"{width}x{height + 40}+0+0")
     root.deiconify()  # a withdrawn root is never given real geometry
     root.rowconfigure(0, weight=1)
@@ -452,6 +454,7 @@ def test_state_survives_switching_to_another_notebook_tab_and_back(tk_root, tmp_
     store, assets = _store(tmp_path)
     tk_root.tk.call("tk", "scaling", CASES["1366x768@100"][2])
     apply_theme(tk_root)
+    uncap_window_size(tk_root)
     tk_root.geometry("1366x640+0+0")
     tk_root.deiconify()
     notebook = ttk.Notebook(tk_root)

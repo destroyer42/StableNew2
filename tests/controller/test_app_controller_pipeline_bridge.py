@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import threading
+import time
 from types import SimpleNamespace
+
+import pytest
 
 from src.contracts import PreviewRequest
 from src.controller import app_controller as app_controller_module
@@ -15,6 +19,16 @@ from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job, JobStatus
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 from tests.helpers.njr_factory import make_pipeline_njr
+
+
+def _settle_queue_projection(controller: AppController) -> None:
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        workers = [t for t in threading.enumerate() if t.name == "QueueProjectionRefresh"]
+        if not workers and controller._background_tasks.is_quiescent():
+            return
+        time.sleep(0.005)
+    pytest.fail("the background queue projection did not settle")
 
 
 class DummyPipelineController:
@@ -236,6 +250,8 @@ def test_refresh_app_state_queue_in_gui_mode_applies_built_queue_jobs() -> None:
     job.status = JobStatus.RUNNING
     job._normalized_record = _make_preview_job(job.job_id)  # type: ignore[attr-defined]
     controller.job_service.queue.submit(job)
+    # The submission refreshes on a worker. While that runs, a second refresh is only parked behind it.
+    _settle_queue_projection(controller)
     controller._background_tasks._run_inline = True
 
     controller._refresh_app_state_queue()
