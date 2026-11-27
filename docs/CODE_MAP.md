@@ -69,6 +69,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
 - `review_gateway_publish.py`: Publish Output Library items to the review gateway (RG-120)
+- `review_gateway_sources.py`: Which Output Library items are a job's authoritative outputs, for phone publishing (PHONE-FAST)
 - `review_gateway_store.py`: Local state of the review gateway sync worker (RG-120): its protected settings and its durable ledger
 - `review_gateway_sync.py`: The review gateway sync worker (RG-120): one background thread, outbound only, no Tk
 - `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
@@ -337,6 +338,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `history_compare_service.py`: Read-only "Compare with Parent" (PR-HISTORY-610B): resolve and assess ONE direct parent/child pair
 - `history_iterate_service.py`: Glue for "Iterate from History" (PR-HISTORY-610A): re-reads the canonical record, then hands off - never queu…
+- `keep_rates_loader.py`: LEARN-JOIN: compose the three read-only sources of the keep-rates report
 - `learning_controller.py`: Coordinate Learning experiment design, plan construction, execution, review, and ratings
 - `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
@@ -451,6 +453,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `experiment_design_panel.py`: Present Learning study selection, experiment inputs, and Preview controls
 - `generate_tab_frame_v2.py`: N6 Generate workspace: the Packs x Models batch builder, the Queue and Recent outputs on one page
 - `grid_design_frame.py`: Edit the two axes of a Learning grid and show proposed cell and image counts
+- `keep_rates_window.py`: LEARN-JOIN: one read-only window showing keep and favourite rates by recipe
 - `learning_analytics_panel.py`: Analytics display panel for learning system
 - `learning_baseline_editor.py`: Editor for Learning's own experiment baseline (the fixed settings every variant shares)
 - `learning_grid_view.py`: Render frozen Learning grid cells as scrollable result tiles with contact-sheet export
@@ -651,6 +654,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `baseline_exclusions.py`: Settings a controlled Learning study refuses, detected in and cleared from the Learning baseline draft only
 - `compatibility_probe.py`: Compatibility probe design (MEC-901): "does this checkpoint run here, and what kind of model is it?"
 - `controlled_study_display.py`: Presentation dispatch for the controlled single-position studies (Prompt Slot, LoRA Composition, Embedding)
+- `decision_rates.py`: LEARN-JOIN: what the owner keeps
 - `design_estimate.py`: How much work a design would create, before any Preview is built
 - `discovered_grouping.py`: Grouping engine for discovered-review candidate selection
 - `discovered_review_models.py`: Discovered-review group and item models

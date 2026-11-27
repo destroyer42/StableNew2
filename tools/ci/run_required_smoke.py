@@ -16,6 +16,18 @@ REQUIRED_SMOKE_TARGETS = (
     "tests/system/test_njr_construction_guard.py",
     "tests/tools/test_code_map.py",
     "tests/system/test_status_contract.py",
+    # The rest of the static guards, version pins and goldens that failed only about 13 minutes into the census
+    # between 2026-11-20 and 11-27, mostly after parallel merges (CI-LEAN). About 20 s together.
+    "tests/tools/test_ruff_ratchets.py::test_the_checked_in_baseline_is_well_formed_and_refers_to_real_files",
+    "tests/tools/test_mypy_ratchet.py::test_the_checked_in_baseline_is_well_formed_and_refers_to_real_files",
+    "tests/review_gateway_service/test_deploy_contract.py::test_the_application_never_imports_the_gateway",
+    "tests/app/test_runtime_stack_negative_p3_2.py::test_n1_every_authority_construction_site_is_allowlisted",
+    "tests/video/test_pr_vid_194_one_variable_experiments.py::test_controller_stays_small_and_owns_no_njr_construction",
+    "tests/gui_v2/test_config_source_contract_500.py::test_stable_tab_identities_and_legacy_order_are_unchanged",
+    "tests/video/test_pr_vid_196_readiness_and_guidance.py::test_registered_workflow_versions_and_graphs_are_unchanged",
+    "tests/golden",
+    # A test run never reaches the operator's live runtimes.
+    "tests/safety/test_host_isolation.py",
     "tests/video/test_svd_restoration_readiness.py",
     "tests/safety/test_runtime_state_hygiene.py",
     "tests/state/test_workspace_paths.py",

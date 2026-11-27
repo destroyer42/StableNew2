@@ -255,6 +255,7 @@ class LearningTabFrame(ttk.Frame):
             command=self._on_commit_stored_drafts,
         )
         self.stored_drafts_button.grid(row=1, column=5, columnspan=3, sticky="e", padx=(4, 0), pady=(6, 0))
+        from src.gui.views.keep_rates_window import open_keep_rates
         from src.gui.views.model_evidence_window import open_model_evidence
 
         evidence_actions = ttk.Frame(self.header_frame)
@@ -262,6 +263,9 @@ class LearningTabFrame(ttk.Frame):
         ttk.Button(evidence_actions, text="Model Evidence Catalog", command=lambda: open_model_evidence(self)).pack(side="right")
         self.test_next_button = ttk.Button(evidence_actions, text="What Should I Test Next?", command=self._on_test_next)
         self.test_next_button.pack(side="right", padx=(0, 4))
+        # LEARN-JOIN: read-only keep and favourite rates; shown in Simple and Advanced.
+        self.keep_rates_button = ttk.Button(evidence_actions, text="What You Keep", command=lambda: open_keep_rates(self))
+        self.keep_rates_button.pack(side="right", padx=(0, 4))
         attach_tooltip(
             self.stored_drafts_button,
             "Save the rated drafts left in other saved experiments as ratings. Shows what it will do first.",

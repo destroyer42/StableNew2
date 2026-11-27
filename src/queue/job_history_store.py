@@ -22,6 +22,8 @@ INTERRUPTED_RESTART_ACTION_REQUIRED = "INTERRUPTED_RESTART_ACTION_REQUIRED"
 #: job is CANCELLED (never requeued) and carries an envelope of this type plus the control action below.
 CANCEL_RETURN_REFUSED_DISPATCH_UNCERTAIN = "CANCEL_RETURN_REFUSED_DISPATCH_UNCERTAIN"
 RETURN_REFUSED_CONTROL_ACTION = "return_to_queue_refused_dispatch_uncertain"
+#: ``last_control_action`` of a job the application close interrupted and re-queued (owner decision 2026-11-27).
+APP_CLOSE_REQUEUE_CONTROL_ACTION = "interrupted_by_app_close"
 
 
 def _utcnow() -> datetime:

@@ -154,7 +154,9 @@ StableNew may control lifecycle only for a process its appropriate process
 manager launched and owns. An external A1111/Comfy process may use supported
 API, health/progress observation, and A1111 interrupt/cancellation, but is
 never adopted, terminated, killed, or restarted automatically; ambiguous
-dispatched generation POSTs are never automatically replayed. Do not change
+dispatched generation POSTs are never automatically replayed (one exception, owner
+decision 2026-11-27: a normal application close re-queues the running job, which
+runs whole on the next start; a crash or kill does not). Do not change
 external hardware, GPU, firmware, model, backend, or configuration state unless
 the approved work package explicitly authorizes that action.
 
