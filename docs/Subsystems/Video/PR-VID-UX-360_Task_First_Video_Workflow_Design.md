@@ -210,3 +210,51 @@ The VID-UX-360 task model, pins and suggestions are unchanged; the layout around
   `eval_panel`, `experiment_panel`, `motion_readiness_panel`, `suggested_line`.
 - Modules: `video_workflow_layout_v2.py`, `video_workflow_evaluate_view_v2.py`, `video_workflow_media_pane_v2.py`,
   `video_workflow_sections_v2.py`, `video_workflow_rate_review_v2.py`. Tests: `tests/gui_v2/test_vid_ux_384_layout.py`, `tests/gui_v2/test_vid_ux_384_rate_review.py`. Live-app screenshots (1366x768, 1920x1080, forced narrow Form | Media): `docs/assessments/evidence/vid_ux_384/`.
+
+## 9. Prompt-only motion panel (V1-1)
+
+V1 (`docs/work_packages/V1_motion_controls.md`, owner decisions D1-D8 accepted 2026-11-26) evolves the tasks in
+place. Task ids are unchanged; `animate` reads **Prompt-only motion** and `follow_clip` **Follow a driving video**.
+
+- **Seconds first.** The settings block in the open shows **Duration** (about 2, 3 and 5 s and the engine's longest,
+  or typed seconds). `src/video/motion_intent.py` `frames_for_duration` rounds to the nearest legal `4n+1` length in
+  the engine's range (ties shorter) and the line shows both (`3.1 s · 49 frames at 16 fps`, with the existing
+  advisory above `advisory_above`). The count shown is the count submitted; `parse_frame_count` still validates it.
+- **Presets** (`src/video/motion_presets.py`, versioned data: Subtle, Gesture, Walk, Dance, each `version` 1) are one
+  more suggestion source: their duration and motion phrase go through the same pins and `reconcile`, so an edited
+  field is kept, the chip reads `Walk (modified)` and **Reset to preset** forgets those edits. A setting the engine does
+  not declare is skipped with a note. The default is **None**, so an untouched form submits what it always did.
+- **Motion phrase (D3).** A visible, editable *Motion* field; the prompt-only task submits `"<prompt>, <motion>"` and
+  the panel previews it (`Sends: ...`). Other tasks neither show nor send it.
+- **Advanced** (the old *More settings*; attribute `advanced_section` kept) now also holds the engine picker, the raw
+  Length, seed, smoothing and motion profile. The summary line above it names them (`engine · 3.1 s · Walk · smoothed ·
+  random seed`) with **Change**. This supersedes the VID-UX-384 "settings always visible" placement (section 8).
+- **Provenance only (D5, amends section 1's "a task never reaches the NJR").** A prompt-only submission carries
+  `motion_intent` (`stablenew.motion-intent.v1`: intent, preset id/version/modified, phrase, requested seconds with the
+  frozen frames, and the basis of each choice). `VideoWorkflowNjrBuilder` normalizes it into
+  `extra_metadata["video_workflow"]["motion_intent"]`; admission and replay ignore it and a malformed record never
+  refuses a job. Saved tab state gains `motion_preset` and `motion_phrase` (never submitted).
+- Tests: `tests/video/test_v1_motion_intent.py`, `test_v1_motion_presets.py`, `test_v1_motion_intent_provenance.py`,
+  `tests/gui_v2/test_v1_prompt_motion_panel.py`.
+
+## 10. Re-run with tweaks (V1-2)
+
+- **Entry points.** Recent outputs and Job History offer **Re-run with tweaks...** for a completed clip. The job is read
+  and its driving video verified on a worker (`src/gui/views/video_workflow_rerun_host.py`); the tab then restores the
+  form from the job's **intent snapshot** (`src/video/motion_rerun.py` `intent_snapshot`: intent, scene prompt and
+  motion phrase split apart, preset id/version, length, engine, seed, controls, driver). Every value is pinned and the
+  seed is a new random one; nothing is queued until the operator presses Queue.
+- **Lineage.** Queue builds a new NJR through `VideoWorkflowNjrBuilder` whose source is `HISTORY_REPLAY` to the parent
+  with the content-free `history_variation` marker (`kind: video_rerun_with_tweaks`, edited field names only). The
+  lineage applies while the form still uses the parent's source image; the parent NJR is never changed. An untouched
+  re-run differs from Replay only by its seed and that marker.
+- **Tweak vocabulary** (the phone uses the same functions, RG-140): `prompt` (at most 2000 characters), `motion` (300),
+  `preset` (an id or `none`), `duration_seconds` (0-60, resolved by `frames_for_duration`), `seed` (`random` by
+  default, `same`, or 0-2^31-1), `more_motion` / `less_motion` (one step on Subtle -> Gesture -> Dance; prompt-only
+  changes the phrase only). `parse_tweaks` refuses unknown names and bad values; `rerun_submission_form` produces the
+  form the desktop submits after the same edits, so both build the same job.
+- **Driving videos.** `driver_rerun_plan`: an unchanged window whose prepared clip still verifies is reused (adopted
+  into Prepare Motion Source, where it goes stale like any result); a changed length or a missing prepared clip
+  re-prepares from the original when its bytes still verify (the window is filled in and preparation starts on a
+  worker); a changed original, or a changed aligned clip, refuses with the reason.
+- Tests: `tests/video/test_v1_motion_rerun.py`, `tests/gui_v2/test_v1_rerun_with_tweaks_ui.py`.

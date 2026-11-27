@@ -65,9 +65,19 @@ The Pipeline sidebar presents the four canonical stage flags as a task-oriented 
 
 ### Task navigation (PR-GUI-410)
 
-The nine workspaces stay nine tabs of the one `MainWindowV2.center_notebook`; `_tab_registry` and the `*_tab` attributes remain the tab-identity authority and the notebook the selection authority. `view_contracts/task_navigation_contract.py` maps the stable tab ids to presentation groups only (Create: prompt, pipeline; Edit: review, photo_optimize; Motion: video_workflow, svd, movie_clips; Learn: learning; Advanced: character_training, shown as HOLD). A group is not a tab, job or queue authority, and Job History stays inside Pipeline. `widgets/task_navigation_bar_v2.py` is the single visible navigation surface: it calls `MainWindowV2.select_tab` and mirrors the notebook through `<<NotebookTabChanged>>` without calling back, so controller handoffs that call `center_notebook.select(frame)` keep working and update the highlight.
+The workspaces stay tabs of the one `MainWindowV2.center_notebook`; `_tab_registry` and the `*_tab` attributes remain the tab-identity authority and the notebook the selection authority. `view_contracts/task_navigation_contract.py` maps the stable tab ids to presentation groups only (Create: generate, prompt, pipeline; Edit: review, photo_optimize; Motion: video_workflow, storyboard, svd, movie_clips; Learn: learning; Advanced: character_training, shown as HOLD). A group is not a tab, job or queue authority, and Job History stays inside Pipeline. `widgets/task_navigation_bar_v2.py` is the single visible navigation surface: it calls `MainWindowV2.select_tab` and mirrors the notebook through `<<NotebookTabChanged>>` without calling back, so controller handoffs that call `center_notebook.select(frame)` keep working and update the highlight.
 
 The notebook's own tab strip is hidden only after the bar is built (`hide_notebook_tab_strip`); if the bar cannot be built, or the theme refuses the empty tab layout, the native strip stays (documented fallback), and Ctrl+Tab / Ctrl+PageUp/PageDown cycle the notebook either way. `tabs.selected_tab_id` is the persisted selection; the historic numeric `tabs.selected_index` is still written for older builds and is read only when no valid id is stored, translated through `LEGACY_TAB_ORDER` (the notebook creation order, which must not be reordered). The stored tab is restored after the panels attach, because `LayoutManagerV2.attach_panels` raises Pipeline. A tab that fails to build shows a placeholder and is listed by `MainWindowV2.tab_failures()`; a tab that cannot be added to the notebook is not registered and its navigation button is disabled.
+
+### Simple and Advanced workspace (N6)
+
+`view_contracts/workspace_mode_contract.py` (Tk-free) owns the mode. **Simple** is the default; it is stored as `workspace.mode` in the UI state file, written when the bar's **Advanced** checkbutton is toggled and again on close.
+
+- **Simple** shows Generate, Review, Video Workflow, Storyboard and Learning, and opens on Generate unless the stored tab is one of these.
+- **Advanced** shows every destination as PR-GUI-410 did, plus Generate.
+- **Presentation only.** Every tab is still built and registered. `select_tab`, handoffs and Ctrl+Tab still reach a hidden tab, and the bar shows it while it is open. `MainWindowV2.set_workspace_mode` applies the mode to the bar and to `LearningTabFrame.set_workspace_mode`. In Simple, Learning hides the Discovered Outputs view (its notebook tab state is `hidden`) and the four zero-use study entries, unless the hidden study is the selected one.
+- **Generate tab.** `views/generate_tab_frame_v2.py` embeds the N5 `BatchBuilderPanel` (`batch_builder_dialog.py`, also hosted by the Pipeline tab's Packs × Models dialog) beside a `QueuePanelV2` and a `JobHistoryPanelV2` (Recent outputs). The tab owns those two hot surfaces as rule 8 describes for the Pipeline shell: the panels are mounted with `manage_app_state_subscriptions=False`, and the tab refreshes them only while they are mapped (rule 9).
+- **No new authority.** The Generate tab adds no queue, history or submission authority; planning and Queue go through the N5 service.
 
 ### Pipeline settings sources (PR-GUI-UX-500, PR-GUI-UX-520)
 
@@ -76,6 +86,14 @@ The Pipeline sidebar keeps these things apart, and `view_contracts/config_source
 **Generation profile strip (PR-IMG-PROFILE-630).** Directly under the Model row, `GenerationProfileStrip` (`src/gui/generation_profile_strip.py`) shows a Profile combobox (No profile, Research, Learning, Custom; a favorite is starred) and one status line. A "Details" toggle reveals Restore selected profile, Save as Custom, Update Custom, Favorite for this model and the per-setting evidence. The strip renders `src/gui_v2/generation_profile_projection.py` and calls `AppController.generation_profiles` (`GenerationProfileController`, `src/controller/generation_profile_controller.py`); it holds no profile logic and no persistence. Picking a checkpoint in the Model combobox (`<<ComboboxSelected>>`, not the value trace, so restores and programmatic loads never re-apply) applies that model's preferred profile through `BaseGenerationPanelV2.apply_profile_values`, which sets only the named controls. Nothing here queues, dispatches or rewrites a PromptPack, a draft entry or a Preview record.
 
 The Pipeline preview thumbnail shows a saved image of the previewed job (the last of the previewed jobs) or says why there is none: no job, no image saved yet, or hidden by the content-visibility setting. Ticking "Show media" never generates an image.
+
+**Queue refusals and the batch model list (DESK-QUICK).** A refused Add to Queue, Run or Replay publishes
+`AppStateV2.queue_refusal` (through `run_submission_service.report_queue_refusal`); the Preview panel shows it under
+Add to Queue until the next submission or a changed Preview, and the window header (`HeaderZone`) shows the same text
+on every tab, the Generate workspace included, with click to dismiss. The Packs x Models model list is
+`src/gui/batch_model_picker.py` (`ModelListPicker`): search keeps selected rows visible, and each row's status (completed
+txt2img jobs here, N1 warning, missing files from the Tk-free `src/services/model_file_health.py`) is read on a tracked
+worker and polled from Tk. Status informs only; it never disables a model.
 
 ### Controller presentation-state seam (GUI-SEAM-700)
 

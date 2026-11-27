@@ -27,7 +27,7 @@ except Exception:  # pragma: no cover - Tk not ready
 
 
 from src.gui import main_window
-from src.utils.gpu_survivor_telemetry import start_gpu_session_telemetry
+from src.utils.gpu_survivor_telemetry import start_gpu_session_telemetry_in_background
 from src.utils.graceful_exit import graceful_exit
 from src.utils.single_instance import SingleInstanceLock
 
@@ -730,6 +730,12 @@ def main() -> None:
             except Exception:  # noqa: BLE001 - remote update is optional; the app must still start
                 logging.getLogger(__name__).exception("Remote update from the phone is unavailable")
 
+    # VID-FRAME: day-old video PNG frames are removed in the background while the queue is empty.
+    from src.app.frame_retention_service import schedule_frame_retention
+    from src.gui.frame_cleanup_dialog import ask_with_dialog
+
+    stop_frame_retention = schedule_frame_retention(root, app_controller, ask=ask_with_dialog(root))
+
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(
             app_controller,
@@ -760,8 +766,9 @@ def main() -> None:
 
     atexit.register(shutdown_persistence_worker, timeout=None)
 
-    # Observation-only GPU state record for the whole app session, stopped by the coordinator.
-    start_gpu_session_telemetry()
+    # Observation-only GPU state record for the whole app session, stopped by the coordinator. Started off
+    # this (Tk) thread: its first record inspects every process and froze the window at startup.
+    start_gpu_session_telemetry_in_background()
 
     try:
         root.mainloop()
@@ -778,6 +785,7 @@ def main() -> None:
         )
         if site_connection is not None:
             site_connection.shutdown()
+        stop_frame_retention()
         if review_gateway is not None:
             review_gateway.shutdown()
         if live_update is not None:

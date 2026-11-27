@@ -191,11 +191,12 @@ def test_a_changed_handoff_is_refused_before_an_njr_exists(
         )
 
 
-def test_storyboard_takes_refuse_smoothing(
+def test_storyboard_takes_refuse_an_unsupported_smoothing_factor(
     tmp_path: Path, a14b_builder: VideoWorkflowNjrBuilder, registry: Any
 ) -> None:
-    form = {**_a14b_form(), "interpolation": {"enabled": True, "multiplier": 2}}
-    with pytest.raises(SequencePlanError, match="RIFE smoothing is not applied inside a sequence"):
+    # VID-FRAME smooths a take's assembled cut; a factor RIFE cannot run is still refused before any job exists.
+    form = {**_a14b_form(), "interpolation": {"enabled": True, "multiplier": 3}}
+    with pytest.raises(ValueError, match="multiplier"):
         build_sequence_njr(
             njr_builder=a14b_builder,
             registry=registry,

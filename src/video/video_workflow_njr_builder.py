@@ -22,7 +22,9 @@ from pathlib import Path
 from typing import Any
 
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
+from src.pipeline.history_variation_marker import VARIATION_KEY
 from src.pipeline.job_models_v2 import LearningJobContext, NormalizedJobRecord
+from src.pipeline.njr_core_v26 import SourceDescriptor, SourceKind
 from src.pipeline.policy_warnings import SURFACE_DESKTOP, merge_accepted_warnings
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import (
@@ -37,6 +39,8 @@ from src.video.motion_alignment_preparation import (
     verify_aligned_source_binding,
 )
 from src.video.motion_alignment_support import alignment_support
+from src.video.motion_intent import MOTION_INTENT_FIELD, normalize_motion_intent_record
+from src.video.motion_rerun import RERUN_LINEAGE_FIELD, normalize_rerun_lineage, variation_marker
 from src.video.motion_source_plan import motion_source_contract
 from src.video.motion_source_preparation import validate_prepared_record
 from src.video.rife_runtime import default_rife_multiplier, find_rife_executable
@@ -63,10 +67,11 @@ from src.video.workflow_input_integrity import (
     workflow_identity,
 )
 from src.video.workflow_source_preparation import (
+    discarded_fraction,
     passthrough_declared_workflow_source,
     prepare_declared_workflow_source,
 )
-from src.video.workflow_warnings import experimental_workflow_warning
+from src.video.workflow_warnings import experimental_workflow_warning, source_crop_warning
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 # Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
@@ -747,7 +752,9 @@ class VideoWorkflowNjrBuilder:
         # Optional RIFE smoothing of the finished clip (PR-VID-SMOOTH-302). Validated here, so a missing
         # runtime or an unsupported factor is refused at admission, and frozen as resolved values so the queued
         # job and any replay smooth the same way.
-        smoothing = normalize_interpolation_request(form_data.get("interpolation"))
+        # VID-FRAME: a sequence smooths its assembled cut (``cut_interpolation``), never a segment's clip.
+        interpolation_key = "interpolation" if sequence_plan is None else "cut_interpolation"
+        smoothing = normalize_interpolation_request(form_data.get(interpolation_key))
         frozen_interpolation: dict[str, Any] | None = None
         if smoothing is not None:
             resolved_executable = find_rife_executable(smoothing.executable_path)
@@ -761,7 +768,7 @@ class VideoWorkflowNjrBuilder:
                 else str(resolved_executable),
                 "model_dir": smoothing.model_dir,
             }
-            workflow_config["interpolation"] = frozen_interpolation
+            workflow_config[interpolation_key] = frozen_interpolation
         if sequence_plan is not None:
             # One NJR, N sequential segments (PR-VID-SEQ-330-CORE): the plan was frozen at admission and the
             # runner executes it inside this single job.
@@ -789,6 +796,15 @@ class VideoWorkflowNjrBuilder:
             extra_metadata["video_workflow"]["depth_input"] = depth_input
         if source_preparation:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
+            # VID-FRAME: how much of the source the chosen size cuts away (absent: the whole picture).
+            source_size = source_preparation["source_dimensions"]
+            target_size = source_preparation["target_dimensions"]
+            cut = discarded_fraction(
+                (source_size["width"], source_size["height"]),
+                (target_size["width"], target_size["height"]),
+            )
+            if round(cut, 4) > 0:
+                extra_metadata["video_workflow"]["source_crop_fraction"] = round(cut, 4)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
         if frozen_interpolation is not None:
@@ -823,6 +839,15 @@ class VideoWorkflowNjrBuilder:
                 fps=length_policy["fps"],
                 approximate_seconds=approximate_seconds(frozen_frame_count, length_policy["fps"]),
             )
+        # V1 (D5): the applied motion preset and the basis of each automatic choice, as provenance only. Admission and
+        # replay never read it; the frozen length above is the one it records.
+        intent_record = normalize_motion_intent_record(
+            form_data.get(MOTION_INTENT_FIELD),
+            frame_count=frozen_frame_count,
+            fps=None if length_policy is None else length_policy["fps"],
+        )
+        if intent_record is not None:
+            extra_metadata["video_workflow"][MOTION_INTENT_FIELD] = intent_record
         if sequence_plan is not None:
             extra_metadata["video_workflow"]["sequence"] = {
                 "sequence_id": sequence_plan.get("sequence_id"),
@@ -830,11 +855,19 @@ class VideoWorkflowNjrBuilder:
             }
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
+        # N1: the operator's Queue on a summary that showed these warnings accepts them.
+        accepted = []
         warning = experimental_workflow_warning(spec)
         if warning is not None and extra_metadata["video_workflow"]["experimental_opt_in"] is True:
-            # N1: the job's opt-in is the operator's Queue on a summary that showed this warning.
+            accepted.append(warning)
+        size = (source_preparation or {}).get("source_dimensions")
+        if size:
+            crop = source_crop_warning(spec, size["width"], size["height"])
+            if crop is not None:
+                accepted.append(crop)
+        if accepted:
             surface = str(form_data.get(WARNING_SURFACE_FIELD) or SURFACE_DESKTOP)
-            extra_metadata = merge_accepted_warnings(extra_metadata, (warning,), surface=surface)
+            extra_metadata = merge_accepted_warnings(extra_metadata, accepted, surface=surface)
         trusted_lineage = {
             key: str((lineage or {}).get(key) or "").strip()
             for key in ("source_job_id", "source_artifact_id")
@@ -860,6 +893,21 @@ class VideoWorkflowNjrBuilder:
                 identity["source_artifact_id"] = parent_artifact
                 extra_metadata["parent_artifact_id"] = parent_artifact
             extra_metadata["video_workflow"]["source_identity"] = identity
+        # V1-2: a re-run with tweaks is a new NJR built here like any other, whose source is HISTORY_REPLAY lineage to
+        # the finished job it came from, with a content-free variation marker (the edited field names only).
+        rerun = normalize_rerun_lineage(form_data.get(RERUN_LINEAGE_FIELD))
+        rerun_source: SourceDescriptor | None = None
+        if rerun is not None:
+            extra_metadata["parent_job_id"] = rerun["parent_job_id"]
+            rerun_source = SourceDescriptor(
+                kind=SourceKind.HISTORY_REPLAY,
+                display_name="Video Workflow",
+                parent_job_id=rerun["parent_job_id"],
+                metadata={
+                    "original_source_kind": rerun["original_source_kind"],
+                    VARIATION_KEY: variation_marker(rerun),
+                },
+            )
 
         njr = ReprocessJobBuilder().build_reprocess_job(
             input_image_paths=[frozen.prepared_source_path],
@@ -872,6 +920,7 @@ class VideoWorkflowNjrBuilder:
             source="video_workflow",
             extra_metadata=extra_metadata,
             learning_context=learning_context,
+            source_descriptor=rerun_source,
         )
         return VideoWorkflowBuild(
             njr=njr,

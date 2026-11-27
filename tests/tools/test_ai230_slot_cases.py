@@ -18,8 +18,8 @@ from src.ai_assist.framing import (
     PROPOSAL_EXAMPLE,
     VARIETY_EXAMPLE,
     build_json_schema,
+    render_prompt,
 )
-from src.ai_assist.remote import _ollama_prompt
 from tools.qualification.ai230 import __main__ as driver
 from tools.qualification.ai230.slot_cases import (
     CASES,
@@ -101,7 +101,7 @@ def test_every_case_builds_a_production_request() -> None:
         assert request.kind is expected
         assert request.goal_text == case.goal
         # the frame carries the worked example, so the measured prompt is the shipped prompt
-        prompt = _ollama_prompt(request)
+        prompt = render_prompt(request)
         example = {
             KIND_VARIETY: VARIETY_EXAMPLE,
             KIND_PROPOSAL: PROPOSAL_EXAMPLE,
@@ -282,7 +282,7 @@ def test_the_driver_posts_the_production_body(monkeypatch: pytest.MonkeyPatch) -
     ((url, body),) = sent
     assert url == "http://127.0.0.1:11434/api/generate"
     assert body["model"] == "some-model"
-    assert body["prompt"] == _ollama_prompt(request)
+    assert body["prompt"] == render_prompt(request)
     assert body["format"] == build_json_schema(request)
     assert body["stream"] is False and body["think"] is False
     assert (

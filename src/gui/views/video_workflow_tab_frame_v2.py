@@ -61,12 +61,15 @@ from src.gui.views.video_workflow_media_pane_v2 import (
     readiness_chip_text,
     readiness_is_relevant,
 )
+from src.gui.views.video_workflow_motion_ai_host import MotionAiHost
+from src.gui.views.video_workflow_motion_intent_v2 import MotionIntentPanel
 from src.gui.views.video_workflow_motion_library_panel_v2 import WorkflowMotionLibraryPanel
 from src.gui.views.video_workflow_motion_prep_panel_v2 import WorkflowMotionPreparationPanel
 from src.gui.views.video_workflow_rate_review_v2 import (
     OPEN_OPERATOR_SITE_EVENT,
     RateReviewSection,
 )
+from src.gui.views.video_workflow_rerun_host import RerunHost
 from src.gui.views.video_workflow_runtime_strip_v2 import WorkflowRuntimeReadinessStrip
 from src.gui.views.video_workflow_sections_v2 import (
     build_details_section,
@@ -88,15 +91,46 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
 )
 from src.video.conditioning_inspection import build_inspection_context
+from src.video.motion_intent import (
+    LONGEST_SUFFIX,
+    MOTION_INTENT_FIELD,
+    LengthPolicy,
+    choice_for_frames,
+    compose_prompt,
+    duration_label,
+    duration_options,
+    frames_for_duration,
+    length_policy,
+    motion_intent_record,
+    parse_seconds,
+)
 from src.video.motion_library.handoff import (
     FIELD_LIBRARY_BINDING,
     HandoffPlan,
     binding_for_submission,
 )
 from src.video.motion_library.harvest_service import HarvestSourceRef
+from src.video.motion_presets import (
+    FIELD_MOTION_PHRASE,
+    INTENT_PROMPT_ONLY,
+    NO_PRESET_ID,
+    NO_PRESET_LABEL,
+    intent_suggestions,
+    preset_by_id,
+    preset_by_label,
+    preset_is_modified,
+)
+from src.video.motion_rerun import (
+    DRIVER_REPREPARE,
+    DRIVER_REUSE,
+    RERUN_LINEAGE_FIELD,
+    RerunOpening,
+    rerun_edits,
+    rerun_lineage,
+)
 from src.video.recent_video_outputs import RecentVideoOutput
 from src.video.workflow_frame_count import frame_count_advisory
-from src.video.workflow_picker import workflow_choices
+from src.video.workflow_picker import offered_workflow_ids, workflow_choices
 from src.video.workflow_tasks import (
     FIELD_ENGINE,
     FIELD_LENGTH,
@@ -117,6 +151,7 @@ from src.video.workflow_tasks import (
     smoothing_warning,
     suggest_settings,
 )
+from src.video.workflow_warnings import source_crop_warning_for_path
 
 _IMAGE_FILETYPES = [
     ("PNG files", "*.png"),
@@ -134,6 +169,7 @@ _SETTINGS_FIELD_TITLES = {
     FIELD_SMOOTH: "Smoothing",
     FIELD_SEED: "Seed",
     FIELD_NEGATIVE: "Negative",
+    FIELD_MOTION_PHRASE: "Motion phrase",
 }
 _SETTINGS_FIELDS = frozenset({FIELD_ENGINE, *_SETTINGS_FIELD_TITLES})
 
@@ -170,6 +206,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     reasons_label: ttk.Label
     depth_path_entry: ttk.Entry
     depth_browse_button: ttk.Button
+    motion_intent_panel: MotionIntentPanel
 
     def __init__(
         self,
@@ -198,11 +235,20 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._suggestion_notes: list[str] = []
         self._engine_by_task: dict[str, str] = {}
         self._rife_found = False
+        # V1-1: the chosen motion preset (a suggestion source, like the engine's own), why each value was chosen
+        # (provenance only, D5) and the seconds the operator last typed with the length they resolved to.
+        self._preset_id = NO_PRESET_ID
+        self._suggestion_basis: dict[str, str] = {}
+        self._requested_seconds: tuple[float, int] | None = None
+        # V1-2: the finished job a Re-run with tweaks opened (its lineage applies while the source is unchanged).
+        self._rerun: RerunOpening | None = None
         # VID-UX-384: which half of the tab is showing (a GUI preference, saved with the form, never
         # submitted), the one Show media preference shared by every media render in the tab, and whether
         # the operator opened the motion-readiness details from the header chip.
         self._view = VIEW_CREATE
         self.show_media_var = tk.BooleanVar(master=self, value=True)
+        # N13: unrated speed arms and superseded arms are offered only when this is on (saved with the form).
+        self.show_experimental_var = tk.BooleanVar(master=self, value=False)
         self._readiness_opened = False
 
         defaults = self._load_defaults()
@@ -337,6 +383,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._build_body()
         self.show_media_var.trace_add("write", lambda *_args: self._apply_show_media())
         self._apply_show_media()
+        self.show_experimental_var.trace_add("write", lambda *_args: self._sync_engine_choices())
         self.bind("<Map>", self._on_map, add="+")
         self._refresh_workflow_choices()
         self._set_text_value(self.prompt_text, str(defaults.get("prompt") or ""))
@@ -371,7 +418,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.output_route_var,
         ):
             variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
+        self.source_image_var.trace_add("write", lambda *_args: self._refresh_queue_gate())
         self.frame_count_var.trace_add("write", lambda *_args: self._refresh_frame_count_advisory())
+        self.frame_count_var.trace_add("write", lambda *_args: self._sync_duration())
+        self.motion_intent_panel.phrase_var.trace_add(
+            "write", lambda *_args: self._refresh_suggested_line()
+        )
+        for sequence in ("<KeyRelease>", "<<Paste>>", "<<Cut>>"):
+            self.prompt_text.bind(sequence, lambda _e: self._refresh_composed(), add="+")
         self.smooth_var.trace_add("write", lambda *_args: self._refresh_advanced_status())
         self.smooth_var.trace_add("write", lambda *_args: self._refresh_suggested_line())
         self.negative_prompt_text.bind(
@@ -395,6 +449,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             (FIELD_MOTION, self.motion_profile_var),
             (FIELD_SMOOTH, self.smooth_var),
             (FIELD_SEED, self.seed_var),
+            (FIELD_MOTION_PHRASE, self.motion_intent_panel.phrase_var),
         )
         for field, watched_variable in watched:
             self._pins.watch(field, watched_variable)
@@ -574,7 +629,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         body.rowconfigure(0, weight=1)
         self._body_frame = body
 
-        # Left pane, top to bottom: the prompt, the settings (always visible), More settings, the task's own
+        # Left pane, top to bottom: the prompt, the task's settings, the summary line, Advanced, the task's own
         # inputs, then named disclosures for everything else.
         self._build_task_inputs(body)
         self._build_settings_section(body)
@@ -583,9 +638,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_change=self._toggle_settings,
             on_reset=self._reset_to_suggested,
             title="",
-            change_label="More settings",
-            hide_label="Hide more settings",
-            show_summary=False,
+            change_label="Change",
+            hide_label="Hide advanced",
         )
         self.suggested_line.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.advanced_section.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(0, 6))
@@ -653,6 +707,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 "on_library_changed": self._refresh_motion_library,
                 "harvest_motion": self._harvest_recent_output,
                 "continue_in_storyboard": self._continue_output_in_storyboard,
+                "rerun_with_tweaks": lambda output: self.open_rerun(output.job_id),
             },
         )
         self.show_media_check = self._media_pane.check
@@ -777,7 +832,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.sequence_panel.refresh_lengths()
 
     def _build_settings_section(self, body: ttk.Frame) -> None:
-        """Row 1: the always-visible settings (engine, motion, length, seed, smoothing); row 3: More settings."""
+        """Row 1: the task's settings (motion phrase, preset, duration); row 3: Advanced (engine and raw settings)."""
 
         build_settings_section(self, body)
 
@@ -925,6 +980,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
     def _on_workflow_id_changed(self) -> None:
         self._sync_workflow_label()
+        self._sync_engine_choices()  # a hidden engine left behind drops out of the picker
         self._invalidate_experiment_preview()
         self._refresh_queue_gate()
 
@@ -938,13 +994,23 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         Queue on this header records the job's opt-in; the full why-and-fix text is the same data the phone shows."""
 
         meta = self._workflow_map.get(self.workflow_var.get(), {})
+        # VID-FRAME: a source this workflow would crop is warned about, approved or not.
+        crop = source_crop_warning_for_path(
+            (meta.get("motion_readiness") or {}).get("source_preparation"),
+            f"{meta.get('workflow_id')}@{meta.get('workflow_version')}",
+            self.source_image_var.get().strip(),
+        )
         if not meta.get("experimental"):
-            return "", ""
+            if crop is None:
+                return "", ""
+            return f"Warning: {crop.title} Queue runs it anyway (hover for why).", crop.text()
         warnings = [PolicyWarning.from_dict(item) for item in meta.get("policy_warnings") or ()]
         title = " ".join(warning.title for warning in warnings) or (
             f"{meta.get('display_name') or 'This workflow'} is experimental."
         )
         full = " ".join(warning.text() for warning in warnings) or title
+        if crop is not None:
+            title, full = f"{title} {crop.title}", f"{full} {crop.text()}"
         return (
             f"Warning: {title} Queue runs it anyway and records your opt-in (hover for why).",
             full,
@@ -1056,7 +1122,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
         visible = dict(workflow_meta.get("form_visibility") or {})
         supported = (lambda key: bool(visible.get(key, True))) if visible else (lambda key: True)
-        state = {
+        state: dict[str, Any] = {
             "workflow_id": self.workflow_var.get().strip(),
             "workflow_version": str(workflow_meta.get("workflow_version") or "").strip(),
             "source_image_path": self.source_image_var.get().strip(),
@@ -1121,7 +1187,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                     state[FIELD_LIBRARY_BINDING] = binding
         if self.workflow_controls_panel.control_names:
             state["operator_controls"] = self.workflow_controls_panel.get_values()
+        phrase = self.motion_intent_panel.phrase_var.get().strip()
+        if for_submission and self._task == TASK_ANIMATE:
+            # V1-1 (D3, D5): the visible motion phrase is part of the submitted prompt; the preset and the basis of
+            # each choice travel as provenance only.
+            state["prompt"] = compose_prompt(state["prompt"], phrase)
+            state[MOTION_INTENT_FIELD] = self._motion_intent_record(phrase)
+        elif not for_submission:
+            state["motion_phrase"] = phrase
+            state["motion_preset"] = self._preset_id
         if for_submission:
+            state.update(self._rerun_submission_fields(state))
             # N1: Queue on a header that shows the experimental warning is the job's opt-in; it is only ever part of
             # a submission, never saved state.
             state["experimental_opt_in"] = bool(workflow_meta.get("experimental"))
@@ -1131,6 +1207,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             # VID-UX-384: layout preferences, saved with the form and never part of a job.
             state["view"] = self._view
             state["show_media"] = bool(self.show_media_var.get())
+            state["show_experimental"] = bool(self.show_experimental_var.get())  # N13
         return state
 
     def restore_video_workflow_state(self, state: dict[str, Any] | None) -> None:
@@ -1140,6 +1217,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.select_view(VIEW_EVALUATE if state.get("view") == VIEW_EVALUATE else VIEW_CREATE)
         if "show_media" in state:
             self.show_media_var.set(bool(state.get("show_media")))
+        preset = preset_by_id(state.get("motion_preset"))
+        self._preset_id = NO_PRESET_ID if preset is None else preset.preset_id
+        if "show_experimental" in state:
+            self.show_experimental_var.set(bool(state.get("show_experimental")))
         self._restore_task_and_engine(state)
         self._invalidate_experiment_preview()
         self._refresh_queue_gate()
@@ -1177,6 +1258,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if self.pose_video_frame.winfo_manager():
             self.pose_video_var.set(str(state.get("pose_video_path") or ""))
         self.workflow_controls_panel.set_values(state.get("operator_controls"))
+        self.motion_intent_panel.phrase_var.set(str(state.get("motion_phrase") or ""))
         # Restored values are the operator's own: suggestions never replace them (PR-VID-UX-360).
         self._pins.pin_all(_SETTINGS_FIELDS)
         self._apply_suggestions()
@@ -1326,6 +1408,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.frame_count_combo["values"] = []
             self.frame_count_var.set("")
             self.frame_count_frame.grid_remove()
+            self.motion_intent_panel.show_duration(False)
             self._refresh_sequence_lengths()
             return
         self._frame_count_labels = {
@@ -1333,7 +1416,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         }
         self.frame_count_combo["values"] = list(self._frame_count_labels)
         self.frame_count_frame.grid()
+        self.motion_intent_panel.show_duration(True)
         self._select_frame_count(projection.get("default"))
+        self._sync_duration()
         self._refresh_sequence_lengths()
 
     def _refresh_sequence_lengths(self) -> None:
@@ -1530,7 +1615,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if self._task == TASK_BATCH and task_id != TASK_BATCH and not self._leave_batch_mode():
             self.task_selector.set_task(self._task)
             return False
-        records = list(self._workflow_map.values())
         current = self.workflow_var.get().strip()
         if FIELD_ENGINE in self._pins.pinned and current:
             self._engine_by_task[self._task] = (
@@ -1539,7 +1623,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         pinned = pinned_workflow_id or self._engine_by_task.get(task_id, "")
         if not pinned and FIELD_ENGINE in self._pins.pinned:
             pinned = current
-        choice = choose_workflow(task_id, records, pinned)
+        choice = choose_workflow(task_id, self._offered_records(pinned), pinned)
         if choice is None:
             self.task_selector.set_task(self._task)
             self.status_var.set(NO_ENGINE_MESSAGE)
@@ -1591,6 +1675,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.sequence_panel.grid()
         else:
             self.sequence_panel.grid_remove()
+        self.motion_intent_panel.show_prompt_only(task_id == TASK_ANIMATE)
         self._sync_batch_strip()
         self._sync_engine_choices()
         readiness = getattr(self, "motion_readiness_panel", None)
@@ -1614,7 +1699,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         if not hasattr(self, "task_selector"):
             return
-        records = list(self._workflow_map.values())
+        # N13: only offered engines (Show experimental decides the unrated arms), plus the selected one.
+        records = self._offered_records(self.workflow_var.get().strip())
         eligible = {record["workflow_id"] for record in eligible_workflows(self._task, records)}
         self.workflow_combo["values"] = [
             label
@@ -1627,6 +1713,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 for task in TASKS
             }
         )
+
+    def _offered_records(self, *keep: str) -> list[dict[str, Any]]:
+        """N13: the records the picker offers now, plus ``keep`` (a selected or pinned engine stays offered)."""
+
+        records = list(self._workflow_map.values())
+        show = bool(self.show_experimental_var.get())
+        offered = offered_workflow_ids(records, show_experimental=show, keep=keep)
+        return [record for record in records if record["workflow_id"] in offered]
 
     def _rife_available(self) -> bool:
         getter = getattr(self._experiment_controller(), "rife_available", None)
@@ -1643,6 +1737,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             suggestions = suggest_settings(
                 self._task, workflow_meta, rife_available=self._rife_found
             )
+            # V1-1: the motion preset is one more suggestion source, through the same pins.
+            overlay, intent_notes = intent_suggestions(self._task, self._preset_id, workflow_meta)
+            suggestions.update(overlay)
             if kept_length is None:
                 kept_length = self._frame_count_labels.get(self.frame_count_var.get())
             values, notes = reconcile(
@@ -1655,11 +1752,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                     )  # an engine change reset it to the default
                 for field, value in values.items():
                     self._write_suggested(field, value)
-            self._suggestion_notes = notes
+            self._suggestion_notes = notes + intent_notes
+            self._suggestion_basis = {
+                field: suggestion.reason for field, suggestion in suggestions.items()
+            }
             records = list(self._workflow_map.values())
             automatic = choose_workflow(self._task, records)
             if automatic is not None and automatic.workflow_id == workflow_meta["workflow_id"]:
                 reasons.append(f"Engine: {automatic.reason}")
+                self._suggestion_basis[FIELD_ENGINE] = automatic.reason
             else:
                 reasons.append("Engine: Your choice.")
             reasons.extend(
@@ -1681,6 +1782,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.seed_var.set(str(value))
         elif field == FIELD_NEGATIVE:
             self._set_text_value(self.negative_prompt_text, str(value))
+        elif field == FIELD_MOTION_PHRASE:
+            self.motion_intent_panel.phrase_var.set(str(value))
 
     def _refresh_suggested_line(self) -> None:
         line = getattr(self, "suggested_line", None)
@@ -1695,10 +1798,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         seed = self.seed_var.get().strip()
         smooth = bool(self.smooth_var.get())
+        policy, frames = self._length_policy(), self._current_frames()
+        preset = preset_by_id(self._preset_id) if self._task == TASK_ANIMATE else None
+        self._refresh_composed()
+        self._refresh_preset_status()
         line.set_summary(
             [
                 self._workflow_id_to_label.get(workflow_id) or workflow_id or "No engine",
-                self.frame_count_var.get() if self._frame_count_labels else "",
+                duration_label(frames, policy).removesuffix(LONGEST_SUFFIX)
+                if policy is not None and frames is not None
+                else "",
+                ""
+                if preset is None
+                else preset.label + (" (modified)" if self._preset_modified() else ""),
                 f"{self.motion_profile_var.get().strip()} motion"
                 if shows("motion_profile")
                 else "",
@@ -1712,6 +1824,215 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 smoothing_warning(self._task, smooth, rife_available=self._rife_found),
             ]
         )
+
+    # ------------------------------------------------------------------ motion intent (V1-1)
+
+    def _length_policy(self) -> LengthPolicy | None:
+        if not self._frame_count_labels:
+            return None
+        meta = self._workflow_map.get(self.workflow_var.get().strip(), {})
+        return length_policy(meta.get("frame_count"))
+
+    def _current_frames(self) -> int | None:
+        return self._frame_count_labels.get(self.frame_count_var.get())
+
+    def _sync_duration(self) -> None:
+        """Show the selected legal length as seconds (and its frames); writing the display is never an edit."""
+
+        policy, frames = self._length_policy(), self._current_frames()
+        if policy is None or frames is None:
+            self.motion_intent_panel.set_duration("", "", "", ())
+            return
+        choice = choice_for_frames(frames, policy)
+        options = [option.label for option in duration_options(policy)]
+        self.motion_intent_panel.set_duration(
+            duration_label(frames, policy), choice.line(), choice.advisory, options
+        )
+
+    def _on_duration_entered(self, text: str) -> None:
+        """The operator chose or typed a duration: the nearest legal length becomes their (pinned) length."""
+
+        policy = self._length_policy()
+        if policy is None:
+            return
+        try:
+            seconds = parse_seconds(text)
+            choice = frames_for_duration(seconds, policy)
+        except ValueError as exc:
+            self.status_var.set(str(exc))
+            self._sync_duration()
+            return
+        if choice.frames == self._current_frames():
+            self._sync_duration()  # the same length again is not an edit
+            return
+        self._requested_seconds = (seconds, choice.frames)
+        self._select_frame_count(choice.frames)
+
+    def _on_preset_chosen(self, label: str) -> None:
+        preset = preset_by_label(label)
+        self._preset_id = NO_PRESET_ID if preset is None else preset.preset_id
+        self._apply_suggestions()
+
+    def _on_reset_preset(self) -> None:
+        """Forget the edits to what the preset sets (its duration and phrase) and take the preset's values again."""
+
+        self._pins.pinned.difference_update({FIELD_LENGTH, FIELD_MOTION_PHRASE})
+        self._apply_suggestions()
+
+    def _preset_modified(self) -> bool:
+        meta = self._workflow_map.get(self.workflow_var.get().strip(), {})
+        current = {
+            FIELD_LENGTH: self._current_frames(),
+            FIELD_MOTION_PHRASE: self.motion_intent_panel.phrase_var.get(),
+        }
+        return preset_is_modified(preset_by_id(self._preset_id), INTENT_PROMPT_ONLY, meta, current)
+
+    def _refresh_preset_status(self) -> None:
+        preset = preset_by_id(self._preset_id)
+        if preset is None:
+            self.motion_intent_panel.set_preset(NO_PRESET_LABEL, "", modified=False)
+            return
+        modified = self._preset_modified()
+        side = preset.prompt_only
+        status = " ".join(
+            part for part in ("Modified." if modified else "", side.basis, side.warning) if part
+        )
+        self.motion_intent_panel.set_preset(preset.label, status, modified=modified)
+
+    def _refresh_composed(self) -> None:
+        """Preview of the prompt that is sent, whenever a motion phrase is added to it (D3)."""
+
+        phrase = self.motion_intent_panel.phrase_var.get().strip()
+        prompt = self.prompt_text.get("1.0", "end").strip()
+        shown = phrase and self._task == TASK_ANIMATE
+        self.motion_intent_panel.set_composed(compose_prompt(prompt, phrase) if shown else "")
+
+    def _motion_intent_record(self, phrase: str) -> dict[str, Any]:
+        policy, frames = self._length_policy(), self._current_frames()
+        duration = None
+        if policy is not None and frames is not None:
+            typed = self._requested_seconds
+            duration = choice_for_frames(
+                frames, policy, typed[0] if typed is not None and typed[1] == frames else None
+            )
+        basis = {
+            field: "Your choice." if field in self._pins.pinned else reason
+            for field, reason in self._suggestion_basis.items()
+        }
+        if FIELD_ENGINE in self._pins.pinned or FIELD_ENGINE not in basis:
+            basis[FIELD_ENGINE] = "Your choice."
+        return motion_intent_record(
+            intent=self._task,
+            preset=preset_by_id(self._preset_id),
+            preset_modified=self._preset_modified(),
+            motion_phrase=phrase,
+            duration=duration,
+            basis=basis,
+        )
+
+    @property
+    def motion_ai_host(self) -> MotionAiHost:
+        host = getattr(self, "_motion_ai_host", None)
+        if host is None:
+            panel = self.motion_intent_panel
+            host = self._motion_ai_host = MotionAiHost(
+                self,
+                ai=lambda: getattr(self.app_controller, "ai_assist", None),
+                source=self.source_image_var.get,
+                prompt=lambda: self.prompt_text.get("1.0", "end"),
+                phrase_var=panel.phrase_var,
+                pins=self._pins,
+                on_status=self.status_var.set,
+                on_busy=panel.set_suggest_busy,
+                on_undo_available=panel.show_undo,
+            )
+        return host
+
+    # ------------------------------------------------------------------ re-run with tweaks (V1-2)
+
+    @property
+    def rerun_host(self) -> RerunHost:
+        host = getattr(self, "_rerun_host", None)
+        if host is None:
+            host = self._rerun_host = RerunHost(
+                self,
+                repository=lambda: getattr(
+                    getattr(self.app_controller, "job_service", None), "history_store", None
+                ),
+                on_opened=self.apply_rerun,
+                on_refused=self._fail,
+                on_status=self.status_var.set,
+            )
+        return host
+
+    def open_rerun(self, job_id: str) -> None:
+        """Re-run with tweaks: read the finished job on a worker, then fill the form from it (nothing is queued)."""
+
+        self.rerun_host.open(job_id)
+
+    def apply_rerun(self, opening: RerunOpening) -> None:
+        """Fill the form from a finished job (every value pinned, a new random seed); Queue builds a new NJR with
+        lineage to it through the normal builder."""
+
+        if not self._leave_batch_mode():
+            return
+        self.select_view(VIEW_CREATE)
+        self.submission_notice.clear()
+        self.restore_video_workflow_state(dict(opening.form))
+        self._rerun = opening
+        message = (
+            f"Re-run with tweaks of job {opening.snapshot.job_id}: change what you like, then Queue "
+            "(a new random seed is used)."
+        )
+        binding, driver = opening.snapshot.driver, opening.driver
+        if binding is not None and driver is not None:
+            settings = binding.settings
+            requested = settings.get("requested") if isinstance(settings, Mapping) else None
+            start = (requested or {}).get("start") if isinstance(requested, Mapping) else None
+            end = (requested or {}).get("end") if isinstance(requested, Mapping) else None
+            self.motion_prep_panel.set_window(
+                start=float(start) if isinstance(start, int | float) else 0.0,
+                end=float(end) if isinstance(end, int | float) else None,
+                convert=settings.get("fps_conversion") == "workflow_rate",
+            )
+            if driver.action == DRIVER_REPREPARE:
+                self.motion_prep_panel.prepare()
+                message += f" {driver.reason}"
+            elif driver.prepared is not None and not binding.aligned:
+                self.motion_prep_panel.adopt_record(driver.prepared, driver.reason)
+            elif driver.prepared is not None:
+                message += " The aligned driving clip is reused while the length stays the same."
+        self.status_var.set(message)
+
+    def _rerun_submission_fields(self, state: Mapping[str, Any]) -> dict[str, Any]:
+        """The lineage (and an aligned clip the re-run reuses) while the form still starts from that job's source."""
+
+        opening = self._rerun
+        if opening is None or self.source_image_var.get().strip() != str(
+            opening.form.get("source_image_path") or ""
+        ):
+            return {}
+        fields: dict[str, Any] = {}
+        binding, driver = opening.snapshot.driver, opening.driver
+        if (
+            binding is not None
+            and binding.aligned
+            and driver is not None
+            and driver.action == DRIVER_REUSE
+            and driver.prepared is not None
+            and ALIGN_PREPARED_FIELD not in state
+            and state.get("pose_video_path") == binding.path
+        ):
+            if state.get("frame_count") == opening.snapshot.frame_count:
+                fields[ALIGN_PREPARED_FIELD] = dict(driver.prepared)
+            else:
+                fields[ALIGN_BLOCKED_FIELD] = (
+                    f"The aligned driving clip was made for {opening.snapshot.frame_count} frames. "
+                    "Apply Align Motion again for the new length, or keep the original length."
+                )
+        edits = rerun_edits(opening.snapshot, self.get_video_workflow_state())
+        fields[RERUN_LINEAGE_FIELD] = rerun_lineage(opening.snapshot, edits)
+        return fields
 
     def _toggle_settings(self) -> None:
         self.advanced_section.toggle()

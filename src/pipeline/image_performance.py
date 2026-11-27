@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar
@@ -84,6 +84,8 @@ class ImagePerformanceTrace:
         self.active: StagePerformance | None = None
         self.stages: list[dict[str, Any]] = []
         self.operations: list[dict[str, Any]] = []
+        #: Job-level time outside the backend operations above (preparation, admission, result writing).
+        self.steps: list[dict[str, Any]] = []
         self.stages_omitted = 0
         self.operations_omitted = 0
         self._adetailer_index = 0
@@ -116,6 +118,15 @@ class ImagePerformanceTrace:
                 self.operations.append(entry)
             else:
                 self.operations_omitted += 1
+
+    @contextmanager
+    def step(self, name: str) -> Iterator[None]:
+        started = self.clock()
+        try:
+            yield
+        finally:
+            if len(self.steps) < _MAX_RECORDS:
+                self.steps.append({"step": name, "duration_ms": _ms(self.clock() - started)})
 
     @contextmanager
     def backend_request(self) -> Iterator[None]:
@@ -162,9 +173,16 @@ class ImagePerformanceTrace:
             "outcome": outcome,
             "stages": list(self.stages),
             "operations": list(self.operations),
+            "steps": list(self.steps),
             "stages_omitted": self.stages_omitted,
             "operations_omitted": self.operations_omitted,
         }
+
+
+def timed_step(trace: Any, name: str) -> AbstractContextManager[None]:
+    """Time ``name`` into the job's record; a caller without a trace (a stand-in pipeline) is not measured."""
+
+    return trace.step(name) if isinstance(trace, ImagePerformanceTrace) else nullcontext()
 
 
 def observe_cleanup(

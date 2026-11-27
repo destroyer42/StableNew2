@@ -779,3 +779,13 @@ def test_the_composed_queue_view_is_counts_only(remote):
     assert built.status_payload()["queue"] == {"state": "running", "queued": 3}
     unknown = build_remote_update(SimpleNamespace(), remote["service"], spawn=Spawned())
     assert unknown.status_payload()["queue"] == {"state": "unknown", "queued": 0}
+
+
+@pytest.mark.parametrize("reason", [lu.NOT_GITHUB_SIGNED, lu.GITHUB_UNAVAILABLE])
+def test_the_signature_refusals_reach_the_phone_with_their_own_words(reason):
+    receipt = protocol.update_receipt({"status": "refused", "reason": reason, "source": "remote"})
+
+    validate_def(receipt, "update_receipt")
+    assert receipt["reason_code"] == reason
+    page = SRC.parent / "services" / "review_gateway" / "review_gateway" / "static" / "app.js"
+    assert f"\n  {reason}:" in page.read_text(encoding="utf-8")

@@ -38,6 +38,7 @@ from src.pipeline.image_performance import (
 from src.pipeline.image_performance import (
     ImagePerformanceTrace,
     observe_cleanup,
+    timed_step,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.njr_core_v26 import thaw_json
@@ -876,15 +877,16 @@ class PipelineRunner:
         run_started_monotonic = time.monotonic()
         trace = getattr(self._pipeline, "_image_performance", None)
         trace = trace if isinstance(trace, ImagePerformanceTrace) else None
-        self._cleanup_at_job_start(trace, image_backend_id)
+        self._cleanup_at_job_start(trace, image_backend_id, njr.job_id)
         if any(job.stage_name == StageTypeEnum.TRAIN_LORA.value for job in plan.jobs):
             if len(plan.jobs) != 1 or plan.jobs[0].stage_name != StageTypeEnum.TRAIN_LORA.value:
                 raise ValueError("train_lora must be the only enabled stage in an NJR run plan.")
             return self._run_train_lora_njr(njr=njr, plan=plan, cancel_token=cancel_token)
 
-        self._log_job_pressure_outlook(njr)
-        dirs = self._prepare_run_dir(njr)
-        self._stamp_run_identity(njr)
+        with timed_step(trace, "prepare_run"):
+            self._log_job_pressure_outlook(njr)
+            dirs = self._prepare_run_dir(njr)
+            self._stamp_run_identity(njr)
 
         # Initialize stage tracking for runtime status
         stage_chain = [stage.stage_name for stage in plan.jobs]
@@ -899,12 +901,13 @@ class PipelineRunner:
             metadata["image_backend_id"] = image_backend_id
         metadata["output_dir"] = str(dirs.run_dir)
         metadata["output_route"] = dirs.output_route
-        survivor_telemetry = self._start_gpu_survivor_telemetry(
-            njr=njr,
-            run_id=dirs.run_id,
-            workflow=stage_chain,
-            backend_id=image_backend_id or None,
-        )
+        with timed_step(trace, "start_gpu_telemetry"):
+            survivor_telemetry = self._start_gpu_survivor_telemetry(
+                njr=njr,
+                run_id=dirs.run_id,
+                workflow=stage_chain,
+                backend_id=image_backend_id or None,
+            )
         stage_ctx = StageRunContext(
             runner=self,
             njr=njr,
@@ -964,26 +967,34 @@ class PipelineRunner:
 
         if not success:
             error = self._with_backend_exit_cause(error, run_started_monotonic)
-        result = self._build_run_result(
-            njr=njr,
-            plan=plan,
-            run_id=dirs.run_id,
-            success=success,
-            error=error,
-            stage_ctx=stage_ctx,
-            stage_events=stage_events,
-        )
-        self._write_run_metadata_file(
-            njr=njr,
-            run_id=dirs.run_id,
-            route_root=dirs.route_root,
-            metadata=metadata,
-            variants=result.variants,
-        )
+        with timed_step(trace, "assemble_result"):
+            result = self._build_run_result(
+                njr=njr,
+                plan=plan,
+                run_id=dirs.run_id,
+                success=success,
+                error=error,
+                stage_ctx=stage_ctx,
+                stage_events=stage_events,
+            )
+        with timed_step(trace, "write_run_metadata"):
+            self._write_run_metadata_file(
+                njr=njr,
+                run_id=dirs.run_id,
+                route_root=dirs.route_root,
+                metadata=metadata,
+                variants=result.variants,
+            )
+        # The record was snapshotted while the result was assembled: add the steps that finished after that.
+        recorded = result.metadata.get(IMAGE_PERFORMANCE_KEY)
+        if trace is not None and isinstance(recorded, dict):
+            recorded["steps"] = list(trace.steps)
         self._last_run_result = result
         return result
 
-    def _cleanup_at_job_start(self, trace: ImagePerformanceTrace | None, image_backend_id: str = "") -> None:
+    def _cleanup_at_job_start(
+        self, trace: ImagePerformanceTrace | None, image_backend_id: str = "", job_id: str = ""
+    ) -> None:
         # Best-effort local cleanup. Refresh is reserved for explicitly requested maintenance. A backend that does not
         # use the WebUI client (PR-IMG-120 Diffusers) owns its runtime entirely; no WebUI request is made for it.
         if image_backend_id and not self._backend_uses_webui_client(image_backend_id):
@@ -996,7 +1007,10 @@ class PipelineRunner:
                     client, trace, reason="job_start", unload_model=False, refresh_checkpoints=False,
                 )
         except Exception:
-            pass
+            logger.warning(
+                "Pre-job memory cleanup failed for job %s; the job continues", job_id,
+                exc_info=True,
+            )
 
     def _backend_uses_webui_client(self, backend_id: str) -> bool:
         try:
@@ -1890,12 +1904,18 @@ class PipelineRunner:
                 else:
                     self._learning_record_writer.write(record)
             except Exception:
-                pass
+                logger.warning(
+                    "Learning record was NOT written for job %s", getattr(run_result, "run_id", None),
+                    exc_info=True,
+                )
         if self._learning_record_callback:
             try:
                 self._learning_record_callback(record)
             except Exception:
-                pass
+                logger.warning(
+                    "Learning record callback failed for job %s", getattr(run_result, "run_id", None),
+                    exc_info=True,
+                )
         return record
 
 

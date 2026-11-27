@@ -41,6 +41,15 @@ if ($code -eq 0) {
 exit $code
 """
 
+# A "new build" that ends with success without ever writing the started marker.
+QUIET_LAUNCHER = "exit 0\n"
+# A "new build" that edits a tracked file the update changed, then fails: Git must then refuse the rollback.
+DIRTYING_LAUNCHER = r"""
+$root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+Set-Content -LiteralPath (Join-Path $root "src\main.py") -Value "written by the app"
+exit 11
+"""
+
 FILES = {
     "src/main.py": "print('v1')\n",
     "scripts/launch_stablenew.ps1": STUB_LAUNCHER,
@@ -279,3 +288,52 @@ def test_malformed_sha_is_refused_without_touching_the_checkout(repos, state):
     assert (result["status"], result["reason"]) == ("refused", "invalid_request")
     assert repos.head == old
     assert launches(state) == [old]  # relaunched unchanged
+
+
+@windows_only
+def test_a_new_build_that_ends_cleanly_without_reporting_in_is_rolled_back(repos, state):
+    old = repos.head
+    new = repos.merge_upstream({"scripts/launch_stablenew.ps1": QUIET_LAUNCHER})
+    git(repos.live, "fetch", "-q", "origin", "main")
+    _write_intent(state, old, new)
+
+    result, run = run_updater(repos, state, _old_app(0.5).pid, old, new)
+
+    assert (result["status"], result["reason"]) == ("refused", "rolled_back"), (
+        run.stdout + run.stderr
+    )
+    assert "exited:0" in result["detail"]
+    assert repos.head == old and launches(state) == [old]
+
+
+@windows_only
+def test_a_rollback_git_refuses_is_reported_and_keeps_the_local_change(repos, state):
+    old = repos.head
+    new = repos.merge_upstream(
+        {"scripts/launch_stablenew.ps1": DIRTYING_LAUNCHER, "src/main.py": "print('v2')\n"}
+    )
+    git(repos.live, "fetch", "-q", "origin", "main")
+    _write_intent(state, old, new)
+
+    result, run = run_updater(repos, state, _old_app(0.5).pid, old, new)
+
+    assert (result["status"], result["reason"]) == ("refused", "rollback_failed"), (
+        run.stdout + run.stderr
+    )
+    assert result["new_sha"] == new and repos.head == new
+    assert (repos.live / "src/main.py").read_text(encoding="utf-8").strip() == "written by the app"
+
+
+@windows_only
+def test_a_merge_git_refuses_keeps_the_untracked_file_and_relaunches_the_old_code(repos, state):
+    old = repos.head
+    new = repos.merge_upstream({"notes.txt": "from upstream\n"})
+    git(repos.live, "fetch", "-q", "origin", "main")
+    (repos.live / "notes.txt").write_text("mine\n", encoding="utf-8")
+    _write_intent(state, old, new)
+
+    result, _run = run_updater(repos, state, _old_app(0.5).pid, old, new)
+
+    assert (result["status"], result["reason"]) == ("refused", "merge_failed")
+    assert repos.head == old and launches(state) == [old]
+    assert (repos.live / "notes.txt").read_text(encoding="utf-8") == "mine\n"

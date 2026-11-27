@@ -41,6 +41,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         on_library_changed: Callable[[], None] | None = None,
         harvest_motion: Callable[[RecentVideoOutput], None] | None = None,
         continue_in_storyboard: Callable[[RecentVideoOutput], None] | None = None,
+        rerun_with_tweaks: Callable[[RecentVideoOutput], None] | None = None,
         ask_library_details: Callable[[RecentVideoOutput], Mapping[str, Any] | None] | None = None,
         decode: Any = None,
         shown_var: tk.BooleanVar | None = None,
@@ -52,6 +53,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         self._closed = False
         self._harvest_motion = harvest_motion
         self._continue_in_storyboard = continue_in_storyboard
+        self._rerun_with_tweaks = rerun_with_tweaks
         self._runner: BackgroundWorkRunner | None = None
         self._previewed: str = ""
         self.status_var = tk.StringVar(value="")
@@ -96,6 +98,13 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             command=self._on_continue_in_storyboard,
             state="disabled",
         )
+        self.rerun_button = ttk.Button(
+            actions,
+            text="Re-run with tweaks...",
+            style="Dark.TButton",
+            command=self._on_rerun_with_tweaks,
+            state="disabled",
+        )
         for button in (
             self.refresh_button,
             self.open_button,
@@ -104,6 +113,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             self.library_button,
             self.harvest_button,
             self.storyboard_button,
+            self.rerun_button,
         ):
             button.pack(side="left", padx=(0, 6))
 
@@ -213,6 +223,11 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
                 if selected is not None and self._continue_in_storyboard is not None
                 else "disabled"
             )
+            self.rerun_button.configure(
+                state="normal"
+                if selected is not None and self._rerun_with_tweaks is not None
+                else "disabled"
+            )
             self.refresh_button.configure(state="disabled" if self.session.busy else "normal")
             self.status_var.set(
                 "Reading recent outputs..." if self.session.busy else self.session.status
@@ -282,6 +297,17 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             self._continue_in_storyboard(output)
         except (RuntimeError, OSError, ValueError) as exc:
             self.status_var.set(f"Continue in Storyboard failed: {exc}")
+
+    def _on_rerun_with_tweaks(self) -> None:
+        """Open the selected clip's job in the form to change and queue again (nothing is queued here)."""
+
+        output = self.session.selected
+        if output is None or self._rerun_with_tweaks is None:
+            return
+        try:
+            self._rerun_with_tweaks(output)
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.status_var.set(f"Re-run with tweaks failed: {exc}")
 
     def _on_add_to_library(self) -> None:
         output = self.session.selected

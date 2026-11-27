@@ -206,6 +206,7 @@ class ReprocessJobBuilder:
         source: str = "reprocess",
         extra_metadata: dict[str, Any] | None = None,
         learning_context: LearningJobContext | None = None,
+        source_descriptor: SourceDescriptor | None = None,
     ) -> NormalizedJobRecord:
         """Build a single reprocessing job for a batch of images.
 
@@ -220,6 +221,8 @@ class ReprocessJobBuilder:
             pack_name: Pack name for folder organization.
             learning_context: Optional experiment identity recorded in the immutable
                 provenance (``None`` leaves provenance unchanged for every other caller).
+            source_descriptor: Optional explicit source (V1-2: a Video Workflow re-run's ``HISTORY_REPLAY``
+                lineage); ``None`` derives the source from ``source`` exactly as before.
 
         Returns:
             NormalizedJobRecord configured for reprocessing.
@@ -329,7 +332,8 @@ class ReprocessJobBuilder:
             NjrDraft(
                 job_id=self._id_fn(),
                 workload_kind=workload_type,
-                source=SourceDescriptor(
+                source=source_descriptor
+                or SourceDescriptor(
                     kind=reprocess_source_kind(source, is_video=is_video),
                     display_name=pack_name,
                     parent_job_id=metadata.get("parent_job_id"),

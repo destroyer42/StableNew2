@@ -29,7 +29,7 @@ from src.pipeline.njr_core_v26 import thaw_json
 from src.queue.job_model import JobStatus
 from src.queue.job_repository import JobRepository
 from src.utils.image_metadata import ImageMetadataContractV26, read_image_metadata
-from src.utils.njr_identity import snapshot_fingerprint
+from src.utils.njr_identity import snapshot_envelope, snapshot_fingerprint
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 from src.video.video_eval_ratings_store import ARTIFACT_COLUMN
 from src.video.video_eval_rubric import parse_rating_row
@@ -119,6 +119,32 @@ def _validate_advice(
         raise SiteOutputError("followup_ineligible")
 
 
+def _embedded_identity_matches(
+    metadata: Mapping[str, Any], snapshot: Mapping[str, Any], stored: str
+) -> bool:
+    """Whether the image's embedded NJR fingerprint names this History snapshot.
+
+    The runner stamps the fingerprint of the record it ran: the stored snapshot hydrated and serialized again
+    (``PipelineRunner._stamp_run_identity``). That serialization can differ from the stored text in empty values
+    (``""`` stored, ``None`` after hydration), so the stored fingerprint alone misses every such job. Both name the same
+    snapshot of the same job, so either is accepted; nothing else is.
+    """
+
+    embedded = metadata.get(ImageMetadataContractV26.KEY_NJR_SHA256)
+    if not isinstance(embedded, str) or not embedded:
+        return False
+    if embedded == stored:
+        return True
+    try:
+        record = normalized_job_from_snapshot(snapshot)
+        if record is None:
+            return False
+        ran = snapshot_fingerprint(snapshot_envelope(record.job_id, record.to_queue_snapshot()))
+    except Exception:  # noqa: BLE001 - an unreadable snapshot is an unverified one
+        return False
+    return embedded == ran
+
+
 def verified_history_source(
     repository: JobRepository, path: Path, raw: bytes
 ) -> tuple[NormalizedJobRecord, str]:
@@ -139,7 +165,7 @@ def verified_history_source(
     snapshot = snapshot_fingerprint(entry.snapshot or {})
     if (
         Path(assessment.image_path or "").absolute() != path
-        or metadata.get(ImageMetadataContractV26.KEY_NJR_SHA256) != snapshot
+        or not _embedded_identity_matches(metadata, entry.snapshot or {}, snapshot)
         or type(record.seed) is not int
         or record.seed < 0
         or assessment.recorded_seed not in (None, record.seed)
@@ -205,7 +231,7 @@ def verified_recipe_source(
         record is None
         or record.job_id != job_id
         or path.absolute() not in _recorded_images(getattr(entry, "result", None))
-        or metadata.get(ImageMetadataContractV26.KEY_NJR_SHA256) != fingerprint_
+        or not _embedded_identity_matches(metadata, snapshot, fingerprint_)
     ):
         raise SiteOutputError("followup_provenance_unverified")
     return record, fingerprint_
