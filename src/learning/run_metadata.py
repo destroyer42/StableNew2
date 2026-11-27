@@ -26,6 +26,7 @@ def write_run_metadata(
     stage_outputs: list[dict[str, Any]] | None = None,
     base_dir: str | Path = "runs",
     async_write: bool = True,
+    job_id: str = "",
 ) -> Path:
     """Persist run metadata to runs/<run_id>/run_metadata.json.
 
@@ -58,7 +59,7 @@ def write_run_metadata(
         worker = get_persistence_worker()
         task = PersistenceTask(
             task_type="run_metadata",
-            data={"file_path": str(path), "payload": payload},
+            data={"file_path": str(path), "payload": payload, "job_id": job_id},
             priority=1,  # Critical - always process
         )
         worker.enqueue(task, critical=True)
