@@ -18,6 +18,7 @@ from src.gui.output_settings_panel_v2 import OutputSettingsPanelV2
 from src.gui.widgets.flow_row_v2 import FlowRow
 from src.state.output_routing import OUTPUT_ROUTE_TESTING
 from tests.helpers.gui_harness_v2 import GuiV2Harness
+from tests.helpers.hidden_test_windows import uncap_window_size
 from tests.helpers.reachability_760 import probe_notebook_pages
 
 pytestmark = pytest.mark.gui
@@ -31,6 +32,7 @@ def _settle(root: tk.Misc, cycles: int = 6) -> None:
 
 def _host(root: tk.Tk, width: int) -> ttk.Frame:
     root.deiconify()
+    uncap_window_size(root)
     root.geometry(f"{width + 40}x600+0+0")
     host = ttk.Frame(root, width=width, height=500)
     host.pack(side="left", anchor="nw")
@@ -273,6 +275,7 @@ def _apply_geometry(root: tk.Tk, geometry: str) -> None:
     want = tuple(int(part) for part in geometry.split("x"))
     root.deiconify()
     for _ in range(3):
+        uncap_window_size(root)
         root.geometry(f"{geometry}+0+0")
         _journey_settle(root, 0.5)
         if (root.winfo_width(), root.winfo_height()) == want:

@@ -23,7 +23,7 @@ pull requests. PR narrative lives in the PR body and `git log`; per-feature deta
 - `main` is protected: a PR is required, force pushes and deletion are blocked, the owner may bypass. Required checks:
   `required`, `full-suite` (the sharded census) and `windows`. Docs-only changes take a cheap path.
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below), the controller Tk import
-  boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
+  boundary, isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--parity` adds the tests the change affects, as the hosted runner sees them; `--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
 - Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`; `python tools/ci/ci_truth.py --ratchets` prints the current figures): whole-`src` strict mypy, unformatted files, blind/silent excepts in `src` (BLE001, S110, S112), thread and layering rules (daemon threads, raw threads, utils importing upward, controller importing the GUI), plain truncating file writes outside `atomic_io` (allowlist in `tools/ci/run_architecture_ratchets.py`), and the four controller line ceilings. Figures are not repeated here, so parallel ratchet-lowering PRs don't conflict; a figure stated here must still match the baseline.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.

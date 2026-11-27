@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import checkout_write_guard, hidden_test_windows
+from tests.helpers import checkout_write_guard, hidden_test_windows, host_isolation
 
 
 # --- Quiet local runs (PR-DEVEX-QUIET-LOCAL-TESTS) ----------------------------------------
@@ -41,12 +41,23 @@ _QUIET_RUN = _load_quiet_run()
 # docstring for the opt-outs (STABLENEW_TESTS_VISIBLE=1, the physical desktop lane).
 hidden_test_windows.install()
 
+# --- A run's verdict does not depend on this machine's runtimes (CI-LEAN) -------------------------------------------
+# A live Forge/ComfyUI/Ollama is refused like an absent one. ``STABLENEW_TESTS_CI_PARITY=1`` (the PR gate's
+# ``--parity``) also hides FFmpeg, RIFE and ``nvidia-smi``, which the hosted runner does not have.
+host_isolation.install_network_guard()
+
+
+# Hidden for the whole session, before collection: module-level ``skipif`` checks must see what the runner would see.
+_HIDDEN_TOOLS = pytest.MonkeyPatch()
+
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config):
     if _QUIET_RUN is not None:
         _QUIET_RUN.relaunch_pytest_session()
     checkout_write_guard.install(Path(__file__).resolve().parents[1])
+    if host_isolation.ci_parity():
+        host_isolation.hide_host_tools(_HIDDEN_TOOLS.setattr, _HIDDEN_TOOLS.delenv)
 
 
 # --- Tests never write into the checkout's runtime folders ----------------------------------------
@@ -118,6 +129,7 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 def pytest_unconfigure(config):
+    _HIDDEN_TOOLS.undo()
     gc.collect = _REAL_GC_COLLECT
     if _GC_WAS_ENABLED:
         gc.enable()

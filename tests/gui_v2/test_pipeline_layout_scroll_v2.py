@@ -17,6 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.helpers.hidden_test_windows import keep_hit_testable, uncap_window_size
+
 # -----------------------------------------------------------------------------
 # ScrollableFrame Tests
 # -----------------------------------------------------------------------------
@@ -63,6 +65,7 @@ def test_scrollable_frame_wheel_router_is_shared_scoped_and_cleaned_up() -> None
     try:
         from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame, _WheelRouter
 
+        uncap_window_size(root)
         root.geometry("900x300+50+50")  # wide enough that both frames are visible
         first = ScrollableFrame(root)
         second = ScrollableFrame(root)
@@ -75,7 +78,8 @@ def test_scrollable_frame_wheel_router_is_shared_scoped_and_cleaned_up() -> None
             for index in range(60):
                 ttk.Label(frame.inner, text=f"row {index}").pack()
         root.deiconify()
-        # winfo_containing() is z-order based: keep the test window above other desktop windows
+        # winfo_containing() is z-order based: keep the test window above other desktop windows, and hit-testable
+        keep_hit_testable(root)
         root.attributes("-topmost", True)
         root.lift()
         root.update()
@@ -211,6 +215,7 @@ def test_pipeline_tab_never_resizes_the_root_window(tmp_path: Path) -> None:
     """The shared screen-aware window layout is the only root-size authority; Pipeline no longer forces a width."""
     try:
         root = tk.Tk()
+        uncap_window_size(root)
         root.geometry("800x600+100+100")
     except tk.TclError as exc:
         pytest.skip(f"Tkinter not available: {exc}")
@@ -245,6 +250,7 @@ def _pipeline_tab_at_width(root: tk.Tk, width: int):
     from src.gui.app_state_v2 import AppStateV2
     from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 
+    uncap_window_size(root)
     root.geometry(f"{width}x800+0+0")
     root.deiconify()  # a withdrawn root never realizes its children's sizes
     tab = PipelineTabFrame(root, app_state=AppStateV2())
