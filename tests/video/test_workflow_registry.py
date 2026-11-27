@@ -70,6 +70,7 @@ def test_default_workflow_registry_holds_only_real_evidence_backed_workflows() -
         ("wan_animate2_drive_i2v_v1", "1.0.0"),
         ("wan_animate2_drive_i2v_v1", "1.1.0"),
         ("wan_animate2_drive_i2v_v1", "1.2.0"),
+        ("wan_animate2_drive_i2v_v1", "1.3.0"),
         ("wan_animate2_prompt_i2v_v1", "1.0.0"),
         ("wan_animate2_prompt_i2v_v1", "1.1.0"),
         ("wan_animate2_prompt_i2v_v1", "1.2.0"),

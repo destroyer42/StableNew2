@@ -184,9 +184,11 @@ def test_preview_notes_separate_exact_from_approximate_and_tag_every_advisory():
 
 def test_engine_rows_show_both_engines_without_selecting_one_or_hiding_a_refusal():
     specs = [s for s in build_builtin_workflow_specs() if "pose_video" in s.declared_input_names]
-    rows = engine_rows(specs, selected=(ANIMATE, "1.2.0"), representation="rendered_silhouette")
+    # The rows show each engine's newest version; Animate's is the CK, keep-warm 1.3.0.
+    rows = engine_rows(specs, selected=(ANIMATE, "1.3.0"), representation="rendered_silhouette")
     by_id = {r.workflow_id: r for r in rows}
     assert {FUN, ANIMATE} <= set(by_id)
+    assert by_id[ANIMATE].workflow_version == "1.3.0"
     assert by_id[ANIMATE].selected and not by_id[FUN].selected
     fun = by_id[FUN]
     assert fun.workflow_version == "1.1.0" and fun.status == "Experimental trial (not qualified)"
