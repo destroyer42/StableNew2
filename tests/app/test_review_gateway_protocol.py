@@ -291,6 +291,59 @@ def test_outgoing_payloads_validate_against_the_checked_in_schema():
         acknowledgement(RECORD["record_id"], "applied", receipt={"path": "C:/x"})
 
 
+def _manifest(batch):
+    return item_manifest(
+        item=ItemRef("b" * 32, DIGEST),
+        kind="image",
+        run_id="20261125_213000_portraits",
+        created_at=datetime(2026, 11, 25, 21, 30, tzinfo=UTC),
+        media={
+            "thumb_320": MediaVariant("c" * 64, 1200, "image/webp", 320, 240),
+            "original": MediaVariant(DIGEST, 99_000, "image/png", 1024, 768),
+        },
+        batch=batch,
+    )
+
+
+def test_a_manifest_names_its_batch_bounded_and_without_paths():
+    manifest = _manifest(
+        {
+            "batch_id": "5B0C4F8E-2A1D-4E3B-9C7A-1F2E3D4C5B6A",
+            "name": "  2026-11-26\tportraits " + "x" * 200,
+            "cell": {
+                "pack": "portraits",
+                "model": "C:\\Users\\rob\\Forge\\models\\juggernautXL.safetensors",
+            },
+        }
+    )
+    validate_def(manifest, "item_manifest")
+    validate(manifest)
+    batch = manifest["batch"]
+    assert batch["batch_id"] == "5b0c4f8e-2a1d-4e3b-9c7a-1f2e3d4c5b6a"
+    assert batch["name"].startswith("2026-11-26 portraits x") and len(batch["name"]) == 120
+    assert batch["cell"] == {"pack": "portraits", "model": "juggernautXL.safetensors"}
+    assert "rob" not in json.dumps(manifest)
+
+
+@pytest.mark.parametrize(
+    "batch",
+    [
+        None,
+        {},
+        {"batch_id": "not-a-uuid", "name": "x"},
+        {"batch_id": "5b0c4f8e-2a1d-4e3b-9c7a-1f2e3d4c5b6a", "name": "  "},
+        {"batch_id": "5b0c4f8e-2a1d-4e3b-9c7a-1f2e3d4c5b6a"},
+        {"batch_id": 7, "name": "x"},
+    ],
+)
+def test_a_batch_without_an_identity_and_a_name_is_left_out(batch):
+    """An unnamed or unreadable batch is no reason to hold an item back: it is grouped by run folder instead."""
+
+    manifest = _manifest(batch)
+    assert "batch" not in manifest
+    validate_def(manifest, "item_manifest")
+
+
 def test_the_validator_itself_rejects_contract_violations():
     with pytest.raises(SchemaViolation):
         validate_def({**RECORD, "path": "x"}, "outbox_record")

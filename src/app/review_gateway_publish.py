@@ -1,7 +1,9 @@
 """Publish Output Library items to the review gateway (RG-120).
 
-The source is the Output Library index (``src/app/site_library_index.py``): its own rebuildable SQLite cache, never the
-job database. Each item crosses the boundary as a manifest naming its library id and SHA-256 plus media bodies
+The source is the Output Library index (``src/app/site_library_index.py``): its own rebuildable SQLite cache. The one
+exception is an image's N5 batch name, read only from the immutable snapshot of the job its embedded job id names
+(``job_batch_reader``), and sent only to a gateway that groups its inbox by batch. Each item crosses the boundary as a
+manifest naming its library id and SHA-256 plus media bodies
 addressed by their own SHA-256; no path, file name or folder ever leaves the PC (RG-100 invariant 3). Publishing is
 idempotent by SHA-256 (the manifest goes first and the gateway names the bodies it still lacks, so a body it already
 holds is not sent again; an unchanged item is skipped from the ledger) and resumable (the ledger records an item only
@@ -23,7 +25,7 @@ import logging
 import os
 import re
 import tempfile
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -63,6 +65,7 @@ _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
 _PROMPT_EXCERPT = 240
+_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 
 Transcode = Callable[[BinaryIO, Path, Callable[[], bool]], bool]
 
@@ -192,6 +195,47 @@ def ffmpeg_mobile_transcode(source: BinaryIO, target: Path, cancelled: Callable[
     return outcome.returncode == 0 and target.is_file() and target.stat().st_size > 0
 
 
+BatchOf = Callable[[Path], Mapping[str, Any] | None]
+
+
+def job_batch_reader(
+    repository: Any,
+    identity: Callable[[Any], Mapping[str, Any] | None],
+    *,
+    job_id_of: Callable[[Path], str] | None = None,
+) -> BatchOf:
+    """The N5 batch of the job that wrote an image (``provenance.metadata.batch``), for inbox grouping.
+
+    The job is named by the image's own embedded job id and read from the job repository's immutable snapshot (read
+    only); ``identity`` is N5's ``batch_identity``, injected so this module stays free of controller imports. A batch
+    without a name (a Video Workflow or retry batch shares the key) is no batch here. Only images are looked up: N5
+    batches are image batches. Any failure is ``None``: the item is then grouped by its run folder.
+    """
+
+    def read(path: Path) -> Mapping[str, Any] | None:
+        from src.review.review_evidence import image_source_job
+
+        if path.suffix.lower() not in _IMAGE_SUFFIXES:
+            return None
+        try:
+            job_id = (job_id_of or image_source_job)(path)
+            entry = repository.get_job(job_id) if job_id else None
+            batch = identity(getattr(entry, "snapshot", None) or {})
+        except Exception:  # noqa: BLE001 - grouping is display only; it must never hold publishing back
+            log.debug("Review gateway publish could not read an item's batch")
+            return None
+        if batch is None or not isinstance(batch.get("name"), str):
+            return None
+        cell = batch.get("cell") if isinstance(batch.get("cell"), Mapping) else {}
+        return {
+            "batch_id": batch.get("batch_id"),
+            "name": batch["name"],
+            "cell": {"pack": cell.get("pack_name"), "model": cell.get("model")},
+        }
+
+    return read
+
+
 class GatewayPublisher:
     def __init__(
         self,
@@ -200,11 +244,24 @@ class GatewayPublisher:
         *,
         transcode: Transcode | None = ffmpeg_mobile_transcode,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        batch_of: BatchOf | None = None,
     ) -> None:
         self._library = library
         self._ledger = ledger
         self._transcode = transcode
         self._now = now
+        self._batch_of = batch_of
+
+    def _batch(self, client: GatewayClient, path: Path) -> Mapping[str, Any] | None:
+        """The item's batch, only for a gateway that groups by it (an older one's schema refuses the field)."""
+
+        if self._batch_of is None or "item_batch" not in client.features:
+            return None
+        try:
+            return self._batch_of(path)
+        except Exception:  # noqa: BLE001 - grouping is display only; it must never hold publishing back
+            log.debug("Review gateway publish could not read an item's batch")
+            return None
 
     @property
     def root(self) -> Path:
@@ -345,6 +402,7 @@ class GatewayPublisher:
                 media={name: body.variant for name, body in bodies.items()},
                 duration_s=item.duration,
                 display=_display(item),
+                batch=self._batch(client, path),
             )
             # The file must still be the bytes the manifest names when the gateway records it.
             self._library.path_for(item)

@@ -148,6 +148,99 @@ def test_publish_sends_manifests_and_media_without_any_path(env, tmp_path):
         assert forbidden not in text
 
 
+BATCH = {
+    "batch_id": "5b0c4f8e-2a1d-4e3b-9c7a-1f2e3d4c5b6a",
+    "name": "2026-11-26 portraits x 2 models",
+    "cell": {"pack": "portraits", "model": "juggernautXL.safetensors"},
+}
+
+
+@pytest.mark.parametrize(
+    "features, expected", [(None, None), (["item_batch"], BATCH), (["other"], None)]
+)
+def test_a_batch_is_published_only_to_a_gateway_that_groups_by_it(tmp_path, features, expected):
+    """An older gateway's schema refuses a manifest with ``batch``, so it is sent only when health lists the feature."""
+
+    environment = Env(tmp_path)
+    try:
+        environment.gateway.features = features
+        environment.publisher = GatewayPublisher(
+            environment.library,
+            environment.ledger,
+            transcode=None,
+            batch_of=lambda path: BATCH if path.name == "large.png" else None,
+        )
+        environment.publish_all()
+        large_id, _sha = environment.item(environment.large)
+        small_id, _sha = environment.item(environment.small)
+        assert environment.gateway.manifests[large_id].get("batch") == expected
+        assert "batch" not in environment.gateway.manifests[small_id]
+    finally:
+        environment.close()
+
+
+def test_an_unreadable_batch_never_holds_an_item_back(env):
+    def broken(_path):
+        raise RuntimeError("the job database is locked")
+
+    env.gateway.features = ["item_batch"]
+    env.publisher = GatewayPublisher(env.library, env.ledger, transcode=None, batch_of=broken)
+    env.publish_all()
+    assert all("batch" not in manifest for manifest in env.gateway.manifests.values())
+
+
+def _snapshot(batch):
+    return {"normalized_job": {"job_id": "job-1", "provenance": {"metadata": {"batch": batch}}}}
+
+
+def test_the_batch_of_an_image_is_read_from_the_job_that_wrote_it(tmp_path):
+    from src.app.review_gateway_publish import job_batch_reader
+    from src.controller.app_controller_services.pack_model_batch_service import batch_identity
+
+    n5 = {
+        "schema": "stablenew.batch.v1",
+        "batch_id": BATCH["batch_id"],
+        "name": BATCH["name"],
+        "cell": {
+            "pack_id": "portraits",
+            "pack_name": "portraits",
+            "model": "C:\\Forge\\models\\juggernautXL.safetensors",
+            "model_key": "juggernautxl",
+        },
+        "cells": 2,
+        "jobs": 8,
+    }
+    entries = {
+        "job-1": SimpleNamespace(snapshot=_snapshot(n5)),
+        # A Video Workflow batch has the same key but no name: grouped by run folder.
+        "job-2": SimpleNamespace(
+            snapshot=_snapshot({"schema": "stablenew.batch.v1", "batch_id": "b", "source_index": 0})
+        ),
+    }
+    repository = SimpleNamespace(get_job=entries.get)
+    job_ids = {"a.png": "job-1", "b.png": "job-2", "c.png": "job-3", "d.png": ""}
+    read = job_batch_reader(repository, batch_identity, job_id_of=lambda path: job_ids[path.name])
+
+    assert read(tmp_path / "a.png") == {
+        "batch_id": BATCH["batch_id"],
+        "name": BATCH["name"],
+        "cell": {"pack": "portraits", "model": "C:\\Forge\\models\\juggernautXL.safetensors"},
+    }
+    for name in ("b.png", "c.png", "d.png"):
+        assert read(tmp_path / name) is None
+    assert (
+        read(tmp_path / "clip.mp4") is None
+    )  # N5 batches are images; a clip's job is not looked up
+
+    def locked(_job_id):
+        raise OSError("database is locked")
+
+    unreadable = job_batch_reader(
+        SimpleNamespace(get_job=locked), batch_identity, job_id_of=lambda _p: "job-1"
+    )
+    assert unreadable(tmp_path / "a.png") is None
+
+
 def test_publish_is_idempotent_and_resumes_after_restart(env, tmp_path):
     env.publish_all()
     uploads = list(env.gateway.uploads)

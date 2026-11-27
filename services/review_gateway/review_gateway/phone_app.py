@@ -152,7 +152,11 @@ def build_phone_app(store: Store, clock: Clock) -> Starlette:
         await session(request)
         run_id = request.path_params["run_id"]
         return JSONResponse(
-            {"run_id": run_id, "items": await run_in_threadpool(store.run_items, run_id)}
+            {
+                "run_id": run_id,
+                "name": await run_in_threadpool(store.group_name, run_id),
+                "items": await run_in_threadpool(store.run_items, run_id),
+            }
         )
 
     async def decisions(request: Request) -> Response:

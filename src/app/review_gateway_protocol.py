@@ -443,8 +443,14 @@ def item_manifest(
     media: Mapping[str, MediaVariant],
     duration_s: float | None = None,
     display: Mapping[str, Any] | None = None,
+    batch: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a manifest; refuses anything the contract does not allow rather than trimming silently."""
+    """Build a manifest; refuses anything the contract does not allow rather than trimming silently.
+
+    ``batch`` (the job's N5 batch: ``batch_id``, ``name`` and optionally ``cell`` with ``pack`` and ``model``) is
+    display and grouping text: it is bounded and scrubbed like ``display``, and left out when it has no valid id or
+    no name, so an unreadable batch never holds an item back.
+    """
 
     _text(item.library_id, LIBRARY_ID)
     _text(item.sha256, SHA256)
@@ -477,6 +483,30 @@ def item_manifest(
     shown = _display(display or {})
     if shown:
         body["display"] = shown
+    grouped = _batch(batch or {})
+    if grouped:
+        body["batch"] = grouped
+    return body
+
+
+def _batch(values: Mapping[str, Any]) -> dict[str, Any] | None:
+    try:
+        batch_id = parse_uuid(str(values.get("batch_id") or "").lower())
+    except ProtocolError:
+        return None
+    name = scrub_text(values.get("name"), 120) if isinstance(values.get("name"), str) else ""
+    if not name:
+        return None
+    body: dict[str, Any] = {"batch_id": batch_id, "name": name}
+    cell = values.get("cell")
+    if isinstance(cell, Mapping):
+        shown = {
+            key: scrub_text(cell[key], limit)  # a checkpoint path is reduced to its file name
+            for key, limit in (("pack", 120), ("model", 200))
+            if isinstance(cell.get(key), str) and cell[key].strip()
+        }
+        if shown:
+            body["cell"] = shown
     return body
 
 

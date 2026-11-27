@@ -47,7 +47,7 @@ is refused at startup, so there is no plain-HTTP LAN mode. Every request carries
 
 | Method and path | Body | Success |
 |---|---|---|
-| `GET /sync/v1/health` | - | `{"status":"ok","schema_version":...}` |
+| `GET /sync/v1/health` | - | `{"status":"ok","schema_version":...,"features":[...]}` (rule 13) |
 | `POST /sync/v1/items` | `item_manifest` | `{"status":"ready"\|"incomplete"\|"purged","missing":[sha256,...]}` |
 | `HEAD /sync/v1/media/{sha256}` | - | 200 stored, 404 not |
 | `PUT /sync/v1/media/{sha256}` | raw bytes | 201 stored, 200 already stored |
@@ -84,6 +84,9 @@ Rules:
     an item's decision. They never change `latest_record_id`, an Immich upload or the decision state, and they are
     never superseded. Their answer is the ordinary acknowledgement; its `receipt` may carry `action_summary`,
     `job_ids` and `detail` (section 7).
+13. `features` in the health reply lists the optional parts of v1 this gateway accepts. The PC sends an optional part
+    only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
+    the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch` (section 3.1).
 
 `immich_receipt` has no place in `outbox_page`, so it has its own route (section 5).
 
@@ -94,14 +97,38 @@ Rules:
   `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
 - JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata
   is put on screen with `textContent` only. Originals are `private, no-store`; derivatives `private, max-age=3600`.
-- Inbox grouped by run with counts; a run's grid; triage with Keep, Favorite, Delete buttons and swipes (right, up,
-  left) and the six reason tags. A refused item counts as "to review" again.
+- Inbox grouped by named batch, else by run folder, with counts (section 3.1); a group's grid; triage with Keep,
+  Favorite, Delete buttons and swipes (right, up, left) and the six reason tags. A refused item counts as "to review"
+  again.
 - A decision is shown at once and kept on the phone until the gateway accepts it, resent with the same idempotency key.
   States: sending, waiting for PC, applied, refused (with the PC's reason).
 - A decision the gateway will not take (for example an item it no longer has) moves to a "not saved" list on the phone,
   with Try again and Dismiss; it is never dropped silently. The unsent list is shared safely between tabs.
 - The decision buttons and swipes stay off until the item has loaded. If it cannot load, the owner may retry or choose
   to decide without seeing it.
+
+### 3.1 Inbox grouped by batch
+
+A packs × models batch (N5) writes many run folders, but the owner queued it as one thing. Every N5 job records
+`provenance.metadata.batch` (`batch_id`, `name`, `cell`).
+
+- **PC.** For an image, the publisher reads the job id embedded in the file and that job's immutable snapshot in the
+  job repository (read only; `job_batch_reader` in `src/app/review_gateway_publish.py`). It puts the batch in the
+  manifest as `batch`: `batch_id`, `name` (up to 120 characters), and `cell` with the PromptPack name and the
+  checkpoint file name. Paths are reduced to their last part, as for `display`. A batch with no name is left out,
+  such as a Video Workflow or retry batch, which share the key. So is one that cannot be read: the item is then grouped
+  by run folder and is never held back. Only a gateway that lists `item_batch` gets the field (section 2, rule 13).
+- **Gateway.** `item.batch_id` and `item.batch` are stored with the item; a database made before them gains both
+  columns when it is opened. `GET /api/runs` lists one group per named batch, with `run_id` `batch:<batch_id>`,
+  `kind` `batch` and the batch `name`, and one group per run folder for everything else, with `kind` `run` and a null
+  `name`. Groups are ordered by their newest item. `GET /api/runs/batch:<batch_id>` lists that batch's items across
+  all its run folders, and `name`. A batched item appears under its batch only. Each item carries `batch`, which is
+  null when it has none.
+- **Phone.** A batch card shows the batch name and the word "Batch". The item's info panel shows the batch and its
+  cell.
+- **Compatibility.** An older PC sends no `batch`, so its items stay grouped by run folder. A newer PC sends nothing
+  new to an older gateway. Items published before both sides were updated are not published again, so they keep
+  their run folder groups.
 
 ## 4. Retention (D4)
 

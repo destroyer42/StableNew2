@@ -83,7 +83,11 @@ const key = (item) => `${item.library_id}/${item.sha256}`;
 const mediaUrl = (item, variant) =>
   `/media/${encodeURIComponent(item.library_id)}/${encodeURIComponent(item.sha256)}/${variant}`;
 
+// A group is a named batch ("batch:<id>", N5) or an output run folder; batch names come from the server.
+const groupNames = new Map();
+
 function runName(runId) {
+  if (runId.startsWith("batch:")) return groupNames.get(runId) || "Batch";
   const match = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}_(.*)$/.exec(runId);
   if (!match) return runId;
   const [, year, month, day, hour, minute, name] = match;
@@ -302,6 +306,7 @@ function showRejected() {
 
 async function loadRun(runId) {
   const data = await api(`/api/runs/${encodeURIComponent(runId)}`);
+  if (data.name) groupNames.set(runId, data.name);
   const items = overlayUnsent(data.items);
   runItems.set(runId, items);
   return items;
@@ -384,8 +389,10 @@ function runCard(run) {
         },
       })
     : null;
+  if (run.kind === "batch" && run.name) groupNames.set(run.run_id, run.name);
   return el("section", { class: "run", tabindex: "0", onclick: open }, [
     el("h2", { text: runName(run.run_id) }),
+    run.kind === "batch" ? el("p", { class: "muted", text: "Batch" }) : null,
     el("div", { class: "counts" }, [
       countChip(waiting, "to review", "todo"),
       countChip(run.keep, "kept"),
@@ -529,7 +536,11 @@ function mediaElement(item) {
 function infoPanel(item) {
   const display = item.display;
   const line = (name, value) => (value ? el("p", { text: `${name}: ${value}` }) : null);
+  const batch = item.batch;
+  const cell = batch && batch.cell ? [batch.cell.pack, batch.cell.model].filter(Boolean).join(" · ") : "";
   return el("div", { class: "info", hidden: "" }, [
+    line("Batch", batch ? batch.name : ""),
+    line("Cell", cell),
     line("Model", display.model),
     line("Workflow", display.workflow),
     line("Seed", display.seed),

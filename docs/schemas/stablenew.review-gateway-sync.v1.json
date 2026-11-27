@@ -109,6 +109,40 @@
         }
       }
     },
+    "item_batch": {
+      "description": "The named batch (N5 packs x models) the job that made this item was queued in, from its provenance.metadata.batch. Display and grouping only: the phone inbox groups by batch when there is one, and by run_id otherwise. A PC sends it only to a gateway whose health lists the 'item_batch' feature.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batch_id",
+        "name"
+      ],
+      "properties": {
+        "batch_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "cell": {
+          "description": "This item's cell of the batch: the PromptPack name and the checkpoint file name (never a path).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pack": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "model": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        }
+      }
+    },
     "item_manifest": {
       "description": "PC to gateway: one publishable item. Media bodies are uploaded separately and addressed by their sha256. Idempotent by (library_id, sha256).",
       "type": "object",
@@ -170,6 +204,9 @@
               "$ref": "#/$defs/media_variant"
             }
           }
+        },
+        "batch": {
+          "$ref": "#/$defs/item_batch"
         },
         "display": {
           "description": "Display-only text, rendered as text on the phone (S7). Never used for decisions.",

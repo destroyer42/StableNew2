@@ -217,13 +217,15 @@ def build_review_gateway_sync(
     """
 
     from src.app.review_gateway_apply import RecordApplier
-    from src.app.review_gateway_publish import GatewayPublisher
+    from src.app.review_gateway_publish import GatewayPublisher, job_batch_reader
     from src.app.review_gateway_store import GatewaySettingsStore, SyncLedger
     from src.app.review_gateway_sync import ReviewGatewaySync as Sync
     from src.app.site_media_files import SiteOutputError
     from src.app.site_output_library import OutputLibrary
+    from src.controller.app_controller_services.pack_model_batch_service import batch_identity
     from src.learning.learning_paths import get_learning_records_path
     from src.review.archive import active_input_paths, configured_output_root, job_queue_of
+    from src.review.review_lineage import repository_of
 
     root = configured_output_root(getattr(app, "_config_manager", None))
     try:
@@ -267,7 +269,10 @@ def build_review_gateway_sync(
         library = OutputLibrary(
             root, "review-gateway", require_active, preview_idle=lambda: not busy()
         )
-        return GatewayPublisher(library, ledger)
+        repository = repository_of(app)
+        # N5: the inbox groups an image by the named batch its job was queued in (read-only snapshot lookup).
+        batch_of = job_batch_reader(repository, batch_identity) if repository is not None else None
+        return GatewayPublisher(library, ledger, batch_of=batch_of)
 
     extra = {"transport_factory": transport_factory} if transport_factory is not None else {}
     sync = Sync(
