@@ -1,0 +1,20 @@
+{
+  "schema": "stablenew.video-eval-suite.v1",
+  "suite_id": "a14b-full-picture-v1",
+  "description": "Example only: Wan2.2 I2V-A14B 4-step 1.0.0 (480x832, crops a 3:4 or square source) against the experimental full-picture workflow. Replace the synthetic image names with your own 768x1024 and 1024x1024 sources before running.",
+  "seed": 374,
+  "baseline_arm": "a14b_base",
+  "cases": [
+    {"case_id": "portrait_turn", "image": "images/synthetic_3x4_portrait.png", "prompt": "the person turns around slowly in place until their back faces the camera, static camera, smooth continuous motion", "tags": ["body", "rotation"]},
+    {"case_id": "portrait_walk", "image": "images/synthetic_3x4_portrait.png", "prompt": "the person walks slowly toward the camera at a steady natural pace, static camera", "tags": ["body", "locomotion"]},
+    {"case_id": "square_face", "image": "images/synthetic_square.png", "prompt": "close-up: the person blinks, then slowly turns their head toward the camera and smiles, static camera", "tags": ["face"]},
+    {"case_id": "square_wave", "image": "images/synthetic_square.png", "prompt": "the person raises their right hand and waves at the camera twice, then lowers it, static camera", "tags": ["body", "gesture"]},
+    {"case_id": "landscape_sit", "image": "images/synthetic_4x3_landscape.png", "prompt": "the person slowly sits down on the bench beside them, static camera", "tags": ["body", "landscape"]}
+  ],
+  "arms": [
+    {"arm_id": "a14b_base", "label": "I2V-A14B 4-step 1.0.0 (approved baseline)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_i2v_a14b_4step_v1", "workflow_version": "1.0.0", "frame_count": 81}},
+    {"arm_id": "a14b_full_picture", "label": "Full-picture sizes (experimental)", "backend": "video_workflow",
+     "form": {"workflow_id": "wan22_i2v_a14b_4step_full_picture_v1", "workflow_version": "1.0.0", "frame_count": 81, "experimental_opt_in": true}}
+  ]
+}

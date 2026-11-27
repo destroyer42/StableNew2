@@ -53,11 +53,8 @@ def build_sequence_njr(
     controls = unsupported_controls(form)
     if controls:
         raise SequencePlanError(" ".join(controls))
-    if (form.get("interpolation") or {}).get("enabled"):
-        raise SequencePlanError(
-            "RIFE smoothing is not applied inside a sequence; the sequence is assembled from each segment's "
-            "original frames"
-        )
+    # VID-FRAME: smoothing applies to the assembled cut only, so it is frozen apart from a segment's own setting.
+    form["cut_interpolation"] = form.pop("interpolation", None)
     segments = sequence_intent.get("segments")
     first = segments[0] if isinstance(segments, (list, tuple)) and segments else {}
     if isinstance(first, Mapping):

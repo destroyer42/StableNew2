@@ -153,7 +153,7 @@ class ComfyProcessManager:
         pid = self.pid
         if pid is None or not self.is_running():
             raise ComfyStartupError(
-                "A14B attention requires a live StableNew-owned ComfyUI process."
+                "Attention-profile launches require a live StableNew-owned ComfyUI process."
             )
         try:
             url = urlsplit(base_url)
@@ -180,9 +180,11 @@ class ComfyProcessManager:
                 host = str(address) if address.version == 4 else f"[{address}]"
                 return f"{url.scheme}://{host}:{port}"
         except (ValueError, OSError) as exc:
-            raise ComfyStartupError("Could not verify the owned A14B ComfyUI listener.") from exc
+            raise ComfyStartupError(
+                "Could not verify the owned attention-profile ComfyUI listener."
+            ) from exc
         raise ComfyStartupError(
-            "The configured A14B ComfyUI endpoint is not served by the owned launch."
+            "The configured attention-profile ComfyUI endpoint is not served by the owned launch."
         )
 
     def verify_a14b_attention(
@@ -193,7 +195,7 @@ class ComfyProcessManager:
         pid = self.pid
         if pid is None or not self.owns_process or not self.is_running():
             raise ComfyStartupError(
-                "A14B attention requires a live StableNew-owned ComfyUI process."
+                "Attention-profile launches require a live StableNew-owned ComfyUI process."
             )
         command = self.running_command
         system = system_stats.get("system")
@@ -226,7 +228,7 @@ class ComfyProcessManager:
             )
             if ck_enabled != (profile == "ck") or not dynamic_vram:
                 raise ComfyStartupError(
-                    f"ComfyUI startup did not verify A14B attention profile '{profile}' "
+                    f"ComfyUI startup did not verify attention profile '{profile}' "
                     "with dynamic VRAM enabled. Check the managed ComfyUI startup log."
                 )
             self._verified_attention_profile = profile
