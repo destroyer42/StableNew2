@@ -200,6 +200,10 @@ CREATE TABLE IF NOT EXISTS published (
 CREATE INDEX IF NOT EXISTS published_digest ON published (sha256);
 -- PHONE-FAST: images whose phone rendition has been sent (a table, so an older app's inserts still work).
 CREATE TABLE IF NOT EXISTS renditions (library_id TEXT PRIMARY KEY);
+-- PHONE-FAST: a video is sent without its metadata, so the gateway knows it by other bytes than the PC's file.
+CREATE TABLE IF NOT EXISTS public_digest (
+    library_id TEXT PRIMARY KEY, public_sha256 TEXT NOT NULL, file_sha256 TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS records (
     record_id TEXT PRIMARY KEY, idempotency_key TEXT, outcome TEXT NOT NULL, reason TEXT NOT NULL,
     receipt TEXT NOT NULL, ack_sent INTEGER NOT NULL, at TEXT NOT NULL
@@ -369,6 +373,22 @@ class SyncLedger:
                 " kind=excluded.kind, state=excluded.state, at=excluded.at",
                 (library_id, version, rel_path, sha256, kind, state, at),
             )
+
+    def set_public_digest(self, library_id: str, public_sha256: str, file_sha256: str) -> None:
+        with self._transaction() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO public_digest VALUES (?, ?, ?)",
+                (library_id, public_sha256, file_sha256),
+            )
+
+    def file_digest(self, library_id: str, public_sha256: str) -> str:
+        """The SHA-256 of the PC's file for an item the gateway knows by ``public_sha256``."""
+
+        rows = self._read(
+            "SELECT file_sha256 FROM public_digest WHERE library_id = ? AND public_sha256 = ?",
+            (library_id, public_sha256),
+        )
+        return str(rows[0][0]) if rows else public_sha256
 
     def published_many(self, library_ids: Sequence[str]) -> dict[str, sqlite3.Row]:
         """The publish rows of up to a page of items, in one read."""

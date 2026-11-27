@@ -135,6 +135,12 @@ Rules:
   completes, its new outputs publish at once even if the next job is already running.
 - **Phone rendition.** Every image is sent with a WebP (JPEG where WebP is unavailable) of at most 1080 px on its long
   side, never enlarged. Images published before this get one a few at a time while the PC is idle.
+- **No PC paths in videos** (invariant 3). A video's original is sent as a bit-exact copy of its picture and sound
+  without any container, stream or chapter metadata (no re-encode; the PC's file is not touched), and the mobile copy
+  is made the same way. The item is known to the gateway and Immich by the SHA-256 of the bytes sent; the PC maps a
+  decision back to its file (`public_digest`). A video that cannot be stripped (no FFmpeg, or FFmpeg fails) is not
+  sent. Videos sent before this keep their metadata. **Open:** image originals are still sent with their embedded
+  StableNew metadata, which can name PC paths.
 - **One-time withdrawal.** Frames and un-smoothed clips published before the rule above are withdrawn once: the PC
   classifies its publish ledger and posts `item_withdrawal` to a gateway listing `item_withdraw`. The gateway purges
   those items without recording a decision or touching Immich, and leaves any item with a decision or a request the

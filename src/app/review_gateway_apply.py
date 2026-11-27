@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -169,13 +169,20 @@ class RecordApplier:
         if scope not in device.scopes:
             raise _Refused(NOT_GRANTED)
 
-    def _resolve(self, record: OutboxRecord) -> tuple[Path, str]:
+    def _resolve(self, record: OutboxRecord) -> tuple[OutboxRecord, Path, str]:
+        """The file a record is about. The record returned names the PC file's own digest (a video is sent without its
+        metadata, so the phone knows it by other bytes)."""
+
         published = self._ledger.published(record.target.library_id)
         if published is None or published["state"] != "published":
             raise _Refused(UNKNOWN_ITEM)
         if published["sha256"] != record.target.sha256:
             raise _Refused(DIGEST_MISMATCH)
-        return self._root / str(published["rel_path"]), str(published["rel_path"])
+        target = record.target
+        file_sha = self._ledger.file_digest(target.library_id, target.sha256)
+        if file_sha != target.sha256:
+            record = replace(record, target=replace(target, sha256=file_sha))
+        return record, self._root / str(published["rel_path"]), str(published["rel_path"])
 
     def _current_digest(self, path: Path) -> str | None:
         """SHA-256 of the file now at ``path`` (``None`` when absent); refuses links and paths outside the root."""
@@ -207,7 +214,7 @@ class RecordApplier:
             raise _Refused(FAVORITE_WITH_DELETE)
         if decision.verdict == "delete" and "needs_fix" in decision.tags:
             raise _Refused(INVALID_RECORD)
-        path, rel_path = self._resolve(record)
+        record, path, rel_path = self._resolve(record)
         if decision.verdict == "keep":
             return self._keep(record, path)
         return self._discard(record, path, rel_path)
@@ -226,7 +233,7 @@ class RecordApplier:
         self._authorize(record, "queue")
         if self._actions is None:
             raise _Refused(NOT_GRANTED)
-        path, _rel_path = self._resolve(record)
+        record, path, _rel_path = self._resolve(record)
         current = self._current_digest(path)
         if current is None:
             raise _Refused(UNKNOWN_ITEM)
