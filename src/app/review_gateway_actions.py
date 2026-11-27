@@ -77,6 +77,9 @@ _TITLES = {
     "make_video": "Make a video",
 }
 _PASSES = {"fix_face": (True, False), "fix_hands": (False, True), "fix_both": (True, True)}
+#: PHONE-FAST: actions that make one replacement of the image, so the phone compares the two and keeps one. The
+#: gateway holds the same list.
+REWORK_ACTIONS = frozenset(_PASSES) | {"another_model", "aspect_ratio"}
 #: Compiler and admission refusals that keep their own name on the phone; anything else is ``compile_failed``.
 _DETAIL_ALIASES = {
     "followup_provenance_unverified": "provenance_unverified",
@@ -313,6 +316,8 @@ class GatewayActions:
             return _refused(ADMISSION_REFUSED, detail="compile_failed")
         receipt = {"job_ids": job_ids, "action_summary": summary.payload()}
         self._ledger.mark_prepare_admitted(str(prepared["record_id"]), record.record_id, receipt)
+        if request.action in REWORK_ACTIONS:
+            self._ledger.remember_rework(job_ids, record.target.library_id, record.target.sha256)
         return ActionOutcome("applied", receipt=receipt)
 
     # -- summary ---------------------------------------------------------------------------------------------------

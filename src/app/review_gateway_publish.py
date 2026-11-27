@@ -209,6 +209,18 @@ def ffmpeg_mobile_transcode(source: BinaryIO, target: Path, cancelled: Callable[
 BatchOf = Callable[[Path], Mapping[str, Any] | None]
 
 
+def image_source_job(path: Path) -> str:
+    """The job id an image's embedded metadata names (``""`` when none or unreadable)."""
+
+    from src.review.review_evidence import image_source_job as read
+
+    try:
+        return read(path)
+    except Exception:  # noqa: BLE001 - lineage is extra; it must never hold publishing back
+        log.debug("Review gateway publish could not read an item's job")
+        return ""
+
+
 def job_batch_reader(
     repository: Any,
     identity: Callable[[Any], Mapping[str, Any] | None],
@@ -279,6 +291,17 @@ class GatewayPublisher:
         except Exception:  # noqa: BLE001 - grouping is display only; it must never hold publishing back
             log.debug("Review gateway publish could not read an item's batch")
             return None
+
+    def _parent(self, key: str, item: LibraryItem, path: Path) -> tuple[str, str] | None:
+        """The original a phone rework made this image from, recorded in the ledger as its lineage."""
+
+        if item.kind != "image" or not self._ledger.has_rework():
+            return None
+        original = self._ledger.rework_original(image_source_job(path))
+        if original is None or original[0] == key:
+            return None
+        self._ledger.remember_result(key, *original)
+        return original
 
     @property
     def root(self) -> Path:
@@ -536,6 +559,7 @@ class GatewayPublisher:
         with self._extra_bodies(item, path, cancel, allow_transcode) as extra:
             bodies.update(extra)
             created = datetime.fromtimestamp(item.effective_time / 1_000_000, UTC)
+            parent = self._parent(key, item, path)
             manifest = item_manifest(
                 item=ItemRef(key, digest),
                 kind=item.kind,
@@ -545,6 +569,8 @@ class GatewayPublisher:
                 duration_s=item.duration,
                 display=_display(item),
                 batch=self._batch(client, path),
+                # Only for a gateway that takes it: an older one's schema refuses the field.
+                parent=ItemRef(*parent) if parent and "item_parent" in client.features else None,
             )
             # The file must still be the bytes the manifest names when the gateway records it.
             self._library.path_for(item)

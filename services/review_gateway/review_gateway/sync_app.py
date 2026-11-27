@@ -25,7 +25,8 @@ PAGE_DEFAULT = 200
 PAGE_LIMIT = 500
 #: Optional parts of the v1 contract this gateway accepts, listed by health so a PC sends them only here (an older
 #: gateway's schema would refuse the whole payload). ``item_batch``: the manifest's ``batch`` (N5 inbox grouping).
-FEATURES = ("item_batch",)
+#: ``item_parent``: the manifest's ``parent`` (PHONE-FAST rework lineage).
+FEATURES = ("item_batch", "item_parent")
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
 

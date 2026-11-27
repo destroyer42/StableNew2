@@ -42,6 +42,9 @@ const WORDS = {
   prompt_tweak: { required: true, hint: "Words added to this image's prompt, then img2img of the image.", placeholder: "smiling, golden hour" },
   make_video: { required: false, hint: "What should move? Leave it empty to use the image's own prompt.", placeholder: "she turns towards the window" },
 };
+// PHONE-FAST: actions that replace the image (the gateway holds the same list). The original then counts as reviewed
+// until the result arrives and one of the two is kept.
+const REWORK = new Set(["fix_face", "fix_hands", "fix_both", "another_model", "aspect_ratio"]);
 const SLICE_TWO = new Set(["another_model", "aspect_ratio", "prompt_tweak", "make_video"]);
 const DETAILS = {
   not_an_image: "only images can be fixed",
@@ -418,6 +421,7 @@ function runCard(run) {
       countChip(run.keep, "kept"),
       countChip(run.favorite, "favorite"),
       countChip(run.delete, "deleted"),
+      countChip(run.rework, "in rework"),
       countChip(run.pending, "waiting for PC"),
       countChip(run.applied, "applied"),
       countChip(run.refused, "refused", "refused"),
@@ -442,13 +446,14 @@ async function showInbox(serial) {
   show("Review", false, ...[update, ...content].filter(Boolean));
 }
 
-const STATE_BADGES = { unsent: "…", pending: "⏳", applied: "✓", refused: "!", rejected: "!" };
+const STATE_BADGES = { unsent: "…", pending: "⏳", applied: "✓", refused: "!", rejected: "!", rework: "↻" };
 
 function tile(runId, item) {
   const decision = item.decision;
   const classes = ["tile"];
   if (decision) classes.push(decision.favorite ? "favorite" : decision.verdict);
-  const label = decision ? `${decision.verdict}, ${item.state}` : "not decided";
+  const label =
+    item.state === "rework" ? "sent for rework" : decision ? `${decision.verdict}, ${item.state}` : "not decided";
   return el(
     "button",
     {
@@ -527,7 +532,8 @@ async function showTriage(runId, libraryId, serial) {
 }
 
 function statusText(item) {
-  if (!item.decision) return "Not decided";
+  if (item.state === "rework") return "Sent for rework";
+  if (!item.decision) return item.compare ? "Rework result: which is better?" : "Not decided";
   const choice = item.decision.favorite ? "Favorite" : item.decision.verdict === "keep" ? "Keep" : "Delete";
   if (item.state === "unsent") return `${choice} · sending…`;
   if (item.state === "pending") return `${choice} · waiting for PC`;
@@ -630,6 +636,7 @@ function renderItem() {
   const item = list[index];
   triage.tags = new Set(item.decision ? item.decision.tags : []);
   history.replaceState(null, "", `#/triage/${encodeURIComponent(runId)}/${item.library_id}`);
+  if (item.compare && needsReview(item)) return renderCompare(item);
 
   const media = mediaElement(item);
   const info = infoPanel(item);
@@ -702,6 +709,155 @@ function renderItem() {
   );
   updateTriageStatus();
   prefetch(list.slice(index + 1, index + 1 + PREFETCH));
+}
+
+// --- compare a rework with its original (PHONE-FAST) --------------------------------------------------------------
+// Side by side first; tap one to see it alone, then tap or swipe to flip. Picking keeps one and discards the other.
+
+function renderCompare(item) {
+  const { list, index, runId } = triage;
+  const original = item.compare;
+  const current = triage;
+  const sides = [
+    ["Original", original],
+    ["Rework", item],
+  ];
+  const images = sides.map(([name, side]) =>
+    el("img", {
+      src: mediaUrl(side, side.variants.includes("preview") ? "preview" : "original"),
+      alt: name,
+      draggable: "false",
+    }),
+  );
+  const figures = sides.map(([name], position) =>
+    el("figure", {}, [el("figcaption", { text: name }), images[position]]),
+  );
+  const stage = el("div", { class: "stage compare" }, figures);
+  const layout = el("button", { type: "button", text: "Side by side" });
+  let shown = 1;
+  const showSide = (position) => {
+    shown = position;
+    stage.classList.add("single");
+    figures.forEach((figure, i) => figure.classList.toggle("shown", i === shown));
+    layout.hidden = false;
+  };
+  layout.hidden = true;
+  layout.addEventListener("click", () => {
+    stage.classList.remove("single");
+    layout.hidden = true;
+  });
+  let start = null;
+  stage.addEventListener("pointerdown", (event) => {
+    start = event.isPrimary ? { x: event.clientX, y: event.clientY, target: event.target } : null;
+  });
+  stage.addEventListener("pointercancel", () => (start = null));
+  stage.addEventListener("pointerup", (event) => {
+    if (!start || event.target.closest(".info")) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    const touched = figures.findIndex((figure) => figure.contains(start.target));
+    start = null;
+    const zoomed = window.visualViewport && window.visualViewport.scale > 1.05;
+    if (zoomed) return;
+    const tap = Math.abs(dx) < 8 && Math.abs(dy) < 8;
+    const swipe = Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy);
+    if (stage.classList.contains("single")) {
+      if (tap || swipe) showSide(1 - shown);
+    } else if (tap && touched >= 0) {
+      showSide(touched);
+    }
+  });
+
+  const button = (className, text, onclick) =>
+    el("button", { type: "button", class: className, text, "aria-label": text, onclick });
+  const choices = [
+    button("keep", "Keep original", () => pick(original, item)),
+    button("keep", "Keep rework", () => pick(item, original)),
+  ];
+  const allow = () => {
+    if (triage !== current || current.list[current.index] !== item) return;
+    current.ready = true;
+    for (const choice of choices) choice.disabled = false;
+  };
+  current.ready = false;
+  for (const choice of choices) choice.disabled = true;
+  let loaded = 0;
+  for (const image of images) {
+    image.addEventListener("load", () => (loaded += 1) === images.length && allow(), { once: true });
+    image.addEventListener(
+      "error",
+      () =>
+        stage.append(
+          el("div", { class: "info" }, [
+            el("p", { text: "One of the two could not be loaded." }),
+            el("button", { type: "button", class: "primary", text: "Try again", onclick: renderItem }),
+            el("button", { type: "button", text: "Decide without seeing it", onclick: allow }),
+          ]),
+        ),
+      { once: true },
+    );
+  }
+  const info = infoPanel(item);
+  stage.append(info);
+  const previous = button("", "‹", () => step(-1));
+  previous.disabled = index === 0;
+  const next = button("", "›", () => step(1));
+  next.disabled = index === list.length - 1;
+  show(
+    runName(runId),
+    true,
+    el("div", { class: "triage" }, [
+      el("div", { class: "status" }, [
+        el("span", { id: "state", role: "status" }),
+        layout,
+        el("button", { type: "button", text: `${index + 1} / ${list.length} · info`, onclick: () => (info.hidden = !info.hidden) }),
+      ]),
+      stage,
+      actionRow(item),
+      el("div", { class: "actions compare-actions" }, [previous, ...choices, next]),
+    ]),
+  );
+  updateTriageStatus();
+  prefetch(list.slice(index + 1, index + 1 + PREFETCH));
+}
+
+function pick(winner, loser) {
+  if (!triage || Date.now() < triage.lockedUntil) return;
+  if (!triage.ready) {
+    toast("Still loading");
+    return;
+  }
+  for (const [side, verdict] of [
+    [winner, "keep"],
+    [loser, "delete"],
+  ]) {
+    queueDecision(side, verdict, false, []);
+    for (const copy of findItem(key(side))) {
+      copy.decision = side.decision;
+      copy.state = side.state;
+    }
+  }
+  if (navigator.vibrate) navigator.vibrate(15);
+  toast("Picked; the other goes to the archive");
+  advance();
+}
+
+// Sent for rework: the item counts as reviewed at once; a refusal puts it back.
+function markRework(item, sent) {
+  for (const copy of [item, ...findItem(key(item))]) {
+    if (sent && needsReview(copy)) {
+      copy.before = copy.state;
+      copy.state = "rework";
+    } else if (!sent && copy.state === "rework" && copy.before) {
+      copy.state = copy.before;
+    }
+  }
+  updateTriageStatus();
+}
+
+function closeAfterRework(item) {
+  closeSheet();
+  if (triage && key(triage.list[triage.index]) === key(item) && item.state === "rework") advance();
 }
 
 // The next few phone renditions, held so the browser does not drop the requests. Originals are never fetched ahead.
@@ -897,6 +1053,7 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
   const summary = answer.receipt && answer.receipt.action_summary;
   const choices = answer.receipt && answer.receipt.choices;
   if (answer.state === "applied" && choices && !summary) return showChoices(item, action, choices);
+  if (answer.state === "refused" && REWORK.has(action)) markRework(item, false);
   if (answer.state === "refused" && !(answer.reason_code === "summary_changed" && summary)) {
     return fail(`Not possible: ${refusalText(answer)}`);
   }
@@ -906,8 +1063,13 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
     return sheet(
       el("h2", { text: `${label}: queued` }),
       el("p", { text: `${ids.length} job${ids.length === 1 ? "" : "s"} admitted on the PC. ${where}` }),
-      el("p", { class: "muted", text: "The result appears in the inbox once it is published." }),
-      cancel,
+      el("p", {
+        class: "muted",
+        text: REWORK.has(action)
+          ? "This image counts as reviewed. When the result arrives, compare the two and keep one."
+          : "The result appears in the inbox once it is published.",
+      }),
+      el("button", { type: "button", text: "Close", onclick: () => closeAfterRework(item) }),
     );
   }
   const node = sheet(
@@ -933,7 +1095,11 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
               params: { step: "confirm", prepared_record: recordId, summary_revision: summary.revision },
               idempotency_key: idempotencyKey(),
             });
-            node.querySelector(".sheet-actions").replaceChildren(el("p", { class: "muted", text: "Waiting for the PC…" }));
+            if (REWORK.has(action)) markRework(item, true);
+            node.querySelector(".sheet-actions").replaceChildren(
+              el("p", { class: "muted", text: "Waiting for the PC…" }),
+              el("button", { type: "button", text: "Close", onclick: () => closeAfterRework(item) }),
+            );
             const result = await waitFor(sent.record_id, alive);
             if (result) showAnswer(item, action, sent.record_id, result, cancel, failHere);
           } catch (error) {
@@ -1151,6 +1317,10 @@ function decide(verdict, favorite) {
   queueDecision(item, verdict, favorite, tags);
   if (navigator.vibrate) navigator.vibrate(15);
   toast(favorite ? "★ Favorite" : verdict === "keep" ? "Kept" : "Deleted");
+  advance();
+}
+
+function advance() {
   if (triage.index + 1 < triage.list.length) {
     triage.index += 1;
     renderItem();

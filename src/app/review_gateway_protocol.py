@@ -566,6 +566,7 @@ def item_manifest(
     duration_s: float | None = None,
     display: Mapping[str, Any] | None = None,
     batch: Mapping[str, Any] | None = None,
+    parent: ItemRef | None = None,
 ) -> dict[str, Any]:
     """Build a manifest; refuses anything the contract does not allow rather than trimming silently.
 
@@ -608,6 +609,10 @@ def item_manifest(
     grouped = _batch(batch or {})
     if grouped:
         body["batch"] = grouped
+    if parent is not None:
+        _text(parent.library_id, LIBRARY_ID)
+        _text(parent.sha256, SHA256)
+        body["parent"] = {"library_id": parent.library_id, "sha256": parent.sha256}
     return body
 
 

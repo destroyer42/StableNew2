@@ -169,6 +169,10 @@
         "item": {
           "$ref": "#/$defs/item_ref"
         },
+        "parent": {
+          "description": "PHONE-FAST: the item this one is a phone rework of. Sent only to a gateway whose health lists item_parent.",
+          "$ref": "#/$defs/item_ref"
+        },
         "kind": {
           "enum": [
             "image",

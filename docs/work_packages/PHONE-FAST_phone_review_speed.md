@@ -57,8 +57,8 @@ PR 1 holds (a) to (d); PR 2 holds (e) and (f).
 
 ### (d) Sent for rework, then compare
 
-- Rework actions are Fix face, Fix hands and Fix both (they replace an image). More like this makes variations and does
-  not change the original's state.
+- Rework actions are those with one result to compare: Fix face, Fix hands, Fix both, Another model and Aspect ratio
+  (default pending the owner's answer). More like this, Tweak prompt and Make video do not change the original's state.
 - Once the phone has queued a rework, the original counts as reviewed ("sent for rework") and leaves the unreviewed
   stream. A refused request returns it. It can still be decided from the run grid.
 - The PC records which admitted job made which original's rework, and names the original (`parent`) in the result's
