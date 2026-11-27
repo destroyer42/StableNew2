@@ -110,6 +110,22 @@ button {
 .covers img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 0.4rem; background: var(--line); }
 .run .open { width: 100%; margin-top: 0.6rem; }
 
+/* PHONE-FAST: one row per source of outputs */
+.folder {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 3.4rem;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+.folder-icon { font-size: 1.4rem; }
+.folder-name { flex: 1; }
+.folder .chip { font-size: 0.85rem; font-weight: 600; }
+.wide { width: 100%; min-height: 3rem; margin-bottom: 0.75rem; }
+.counting button { font-size: 0.85rem; }
+
 /* grid */
 .tools { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 .tools .grow { flex: 1; }
@@ -177,7 +193,25 @@ button {
 }
 .compare figcaption { font-size: 0.85rem; color: var(--muted); }
 .compare figure img { max-height: calc(100% - 1.6rem); }
-.compare.single figure:not(.shown) { display: none; }
+.compare.flip figure:not(.shown) { display: none; }
+.modes { display: flex; justify-content: center; gap: 0.35rem; padding: 0 0.5rem 0.3rem; }
+.modes button { padding: 0.25rem 0.65rem; font-size: 0.85rem; border-radius: 1rem; }
+.modes button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+/* Both pictures fill the same box, so the divider cuts them at the same place. */
+.compare.slider { touch-action: none; }
+.compare.slider figure { position: absolute; inset: 0; background: var(--bg); }
+.compare.slider figure img { width: 100%; height: calc(100% - 1.6rem); max-height: none; }
+.compare.slider figcaption { width: 100%; padding: 0 0.75rem; text-align: left; }
+.compare.slider figure + figure figcaption { text-align: right; }
+.divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  background: var(--accent);
+  pointer-events: none;
+}
 .actions.compare-actions { grid-template-columns: 3rem 1fr 1fr 3rem; }
 .badge.state.rework { background: var(--accent); }
 .hint {
@@ -220,6 +254,28 @@ button {
 .actions .keep { background: var(--keep); border-color: var(--keep); }
 .actions .favorite { background: var(--favorite); border-color: var(--favorite); color: #1b1500; }
 .actions button:disabled { opacity: 0.35; }
+
+/* PHONE-FAST: the full-resolution original; its zoom and pan are the page's own. */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
+  touch-action: none;
+  user-select: none;
+}
+.viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.viewer-status { position: absolute; top: calc(1rem + env(safe-area-inset-top)); left: 1rem; margin: 0; }
+.viewer-close {
+  position: absolute;
+  top: calc(0.75rem + env(safe-area-inset-top));
+  right: 0.75rem;
+  opacity: 0.85;
+}
 
 /* RG-140 phone actions: a row of requests and the PC's one-screen summary. */
 .fixes { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; padding: 0 0.5rem; }

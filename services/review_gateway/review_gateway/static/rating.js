@@ -77,13 +77,13 @@ const Rating = (() => {
     }
   }
 
-  // --- the tab on the inbox -------------------------------------------------------------------------------------
+  // --- the entry on the home screen -------------------------------------------------------------------------------------
 
-  // The navigation hook: a "To rate" button with the open count as its badge, for any top-level bar to place beside
-  // its own entries. On a gateway without rating tasks it hides itself and calls ``unavailable``.
+  // The navigation hook: a full-width "To rate" button with the open count as its badge, for the home screen. On a
+  // gateway without rating tasks it hides itself and calls ``unavailable``.
   function entry(unavailable = () => {}) {
     const count = el("span", { class: "rt-count", hidden: "" });
-    const open = el("button", { type: "button", onclick: () => (location.hash = "#/rate") }, [
+    const open = el("button", { type: "button", class: "wide", onclick: () => (location.hash = "#/rate") }, [
       document.createTextNode("To rate"),
       count,
     ]);
@@ -99,16 +99,6 @@ const Rating = (() => {
       },
     );
     return open;
-  }
-
-  // The inbox's bar while it has no sections of its own.
-  function tab() {
-    const nav = el("nav", { class: "rt-tabs" });
-    nav.append(
-      el("button", { type: "button", text: "Review", "aria-current": "page" }),
-      entry(() => (nav.hidden = true)),
-    );
-    return nav;
   }
 
   // --- the list -------------------------------------------------------------------------------------------------
@@ -538,5 +528,5 @@ const Rating = (() => {
 
   window.addEventListener("online", () => flush());
 
-  return { route, tab, entry };
+  return { route, entry };
 })();

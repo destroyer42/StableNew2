@@ -28,8 +28,9 @@ PAGE_LIMIT = 500
 #: Optional parts of the v1 contract this gateway accepts, listed by health so a PC sends them only here (an older
 #: gateway's schema would refuse the whole payload). ``item_batch``: the manifest's ``batch`` (N5 inbox grouping).
 #: ``item_parent``: the manifest's ``parent`` (PHONE-FAST rework lineage). ``item_withdraw``: the withdrawals route.
+#: ``item_source``: the manifest's ``source`` and the item-sources route (PHONE-FAST review sections).
 #: ``rating_tasks``: the RG-170 rating routes.
-FEATURES = ("item_batch", "item_parent", "item_withdraw", "rating_tasks")
+FEATURES = ("item_batch", "item_parent", "item_withdraw", "item_source", "rating_tasks")
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
 
@@ -159,6 +160,11 @@ def build_sync_app(
         count = await run_in_threadpool(store.withdraw, body["library_ids"])
         return JSONResponse({"withdrawn": count})
 
+    async def item_sources(request: Request) -> Response:
+        body = await payload(request, "item_sources")
+        pairs = [(entry["library_id"], entry["source"]) for entry in body["items"]]
+        return JSONResponse({"labelled": await run_in_threadpool(store.label_sources, pairs)})
+
     async def immich_receipts(request: Request) -> Response:
         cursor = request.query_params.get("cursor", "")
         return JSONResponse(await run_in_threadpool(store.immich_receipts, cursor))
@@ -195,6 +201,7 @@ def build_sync_app(
             Route("/sync/v1/pc-status", pc_status, methods=["PUT"]),
             *sync_rating_routes(ratings),
             Route("/sync/v1/withdrawals", withdrawals, methods=["POST"]),
+            Route("/sync/v1/item-sources", item_sources, methods=["POST"]),
         ],
         middleware=[Middleware(_SyncSecret, secret=secret)],
         exception_handlers=EXCEPTION_HANDLERS,
