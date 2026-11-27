@@ -1,6 +1,7 @@
 # RG-160 — Phone actions queued while the PC is away
 
-Status: **phase 1, design only (2026-11-27). No code. Waits for the owner answers below and for PHONE-FAST to merge.**
+Status: **phase 1, design only (2026-11-27). No code. Questions answered
+("Decisions on the open questions" below). Phase 2 waits for PHONE-FAST to merge and for the orchestrator's go.**
 Builds on [RG-100](RG-100_phone_review_gateway.md) (invariants and controls), [RG-140](RG-140_phone_actions.md) (phone
 actions) and [`REVIEW_GATEWAY.md`](../Subsystems/ReviewGateway/REVIEW_GATEWAY.md). Payloads:
 [`stablenew.review-gateway-sync.v1`](../schemas/stablenew.review-gateway-sync.v1.json).
@@ -182,8 +183,9 @@ Waiting list (from the header):
 
 They are ordinary published items. The admission path is the same one, so PHONE-FAST (d)'s `rework_result` mapping must
 record deferred admissions as it records confirmed ones; the compare view then works unchanged. Decided (relayed with
-this task): a rework joins the original's batch group. That is not on `main` or in PHONE-FAST's written slices. Proposed:
-when a published item names a `parent` that has a batch and has none itself, the gateway gives it the parent's batch.
+this task): a rework joins the original's batch group. **PHONE-FAST owns it** (orchestrator, 2026-11-27); this
+package treats it as already present. If it is not on `main` when phase 2 starts, report that to the orchestrator
+instead of building it here.
 
 ## Decisions taken as agent defaults
 
@@ -191,19 +193,18 @@ One-step `queue` through the existing outbox; no catalog revision, family, motio
 gateway-observed PC liveness; not-ready waits instead of refusing; a waiting Forge request does not hold ready ones;
 priorities unchanged (so fixes gathered while away all run ahead of NORMAL queued work); cancel semantics above.
 
-## Owner questions (recommended default first)
+## Decisions on the open questions (2026-11-27, relayed by the orchestrator)
 
-1. **No summary before queueing when the PC is away?** Default: yes. The tap on "Queue when the PC is back" is the
-   opt-in, including for any N1 warning the compile finds; the warnings are shown on the sheet where known and listed on
-   the receipt. This needs one sentence added to `AGENTS.md` section 2 and RG-100 S12, which today tie the opt-in to the
-   summary. Alternative: a request whose compile shows a warning waits for one more tap on the phone.
-2. **Expiry?** Default: never; cancel by hand.
-3. **"Send to movie clips":** default: it means the phone's **Make video** button. If it means adding images to a Movie
-   Clips assembly (the desktop's Movie Clips tab), that is a new phone action and a separate package.
-4. **Delete an image that has a request waiting:** default: warn, then cancel the request. Alternative: keep the file
-   until the request has run.
-5. **Opening the phone page with no connection to the gateway:** default: not in this package (an already open page
-   still saves requests). It would need a service worker and cached media on the phone.
+| # | Question | Decision | Decided by |
+|---|---|---|---|
+| Q1 | No summary before queueing when the PC is away? | "One tap, warnings after". The tap on "Queue when the PC is back" is the opt-in, including for any N1 warning the compile finds; warnings are shown on the sheet where known and listed on the receipt. The one-line amendment to `AGENTS.md` section 2 and RG-100 S12, which today tie the opt-in to the summary, is approved. | Owner, in chat |
+| Q2 | Expiry? | Never; cancel by hand. | Orchestrator |
+| Q3 | What is "send to movie clips"? | The phone's **Make video** button. Adding images to a Movie Clips assembly is out of scope. | Owner, in chat ("Make video") |
+| Q4 | Delete an image that has a request waiting? | Warn, then cancel the waiting request (section 8). | Orchestrator |
+| Q5 | Open the phone page with no connection to the gateway? | Not in this package; an already open page still saves requests. | Orchestrator |
+
+The orchestrator also accepted: liveness from outbox pulls, no motion presets in the catalog, and waiting while the
+image backend's lists load.
 
 ## Security
 
@@ -224,14 +225,15 @@ gateway first, then update the PC; the first catalog needs one session with Forg
 
 ## Package facts
 
-- **Execution class:** Standard-high (security boundary; amends the N1 opt-in wording if question 1 is accepted; no
-  queue, runner or compiler change).
+- **Execution class:** Standard-high (security boundary; amends the N1 opt-in wording, approved under Q1; no queue,
+  runner or compiler change).
 - **Model recommendation:** Claude Code Opus 5.5 High; Codex GPT-6 Astra High.
 - **Surface:** gateway `{phone_app,store,sync_app}.py`, `static/{app.js,app.css,index.html}`; PC
   `src/app/review_gateway_{protocol,actions,apply,sync,client,store}.py`, a small catalog module, and composition in
   `src/app/runtime_stack.py`; the schema. **Controller Surface Assessment:** no controller code changes.
 - **Order:** after PHONE-FAST merges; same gateway files.
-- **Docs:** `REVIEW_GATEWAY.md`, the schema, `STATUS.md`, `CODE_MAP.md`, and `AGENTS.md`/RG-100 only per question 1.
+- **Docs:** `REVIEW_GATEWAY.md`, the schema, `STATUS.md`, `CODE_MAP.md`, and the one-line `AGENTS.md` section 2 and
+  RG-100 S12 amendment (Q1). The PR body quotes the owner's "One tap, warnings after".
 
 ## Acceptance and validation plan
 
