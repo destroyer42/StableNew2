@@ -182,13 +182,18 @@ def sweep_retained_frames(
         if folder.name != "manifests":
             continue
         run = folder.parent
-        if (run / _SEQUENCE_LEDGER).exists():
+        # A large output folder holds far more image records than clip records: open only a clip's own manifest
+        # (named after it), and none in a run already swept or inside a sequence.
+        if (run / _SEQUENCE_LEDGER).exists() or frames_were_removed(run):
+            continue
+        clips = {clip.stem for clip in run.glob("*.mp4")}
+        if not clips:
             continue
         if should_stop():
             break
         doomed: dict[str, int] = {}
         for name in files:
-            if not name.endswith(".json"):
+            if not name.endswith(".json") or name.removesuffix(".json") not in clips:
                 continue
             try:
                 record = _read(folder / name)
