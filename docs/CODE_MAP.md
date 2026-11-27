@@ -58,6 +58,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
+- `frame_retention_service.py`: Run the video frame retention sweep in the background while the queue is empty (VID-FRAME)
 - `live_update.py`: Update the live checkout to an approved ``origin/main`` commit and restart (LAUNCH-UPDATE-1)
 - `live_update_remote.py`: The phone side of a live update, on the PC (LAUNCH-UPDATE-2): the ``pc_status`` publish and ``admin_request``
 - `live_update_service.py`: The running app's side of a live update (LAUNCH-UPDATE-1): switch, rate limit, drain, hand-off and receipt
@@ -1016,6 +1017,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `depth_map_resolver.py`: Validate supplied depth maps or materialize estimated depth images for conditioned video workflows
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
+- `frame_retention.py`: Remove a clip's retained PNG frames a day after the clip exists (VID-FRAME, owner decision 2026-11-27)
 - `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
 - `history_media_projection.py`: Read-only media-selection decisions over existing Job History entries
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
@@ -1123,7 +1125,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `workflow_registry.py`: Resolve exact workflow versions and list offerable entries under the catalog's governance rules
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
 - `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
-- `workflow_warnings.py`: The N1 warning for an experimental Comfy video workflow (``src/pipeline/policy_warnings.py``)
+- `workflow_warnings.py`: The N1 warnings for a Comfy video workflow: experimental, and a cropped source (``policy_warnings.py``)
 
 ## src/video/motion/
 

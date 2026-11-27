@@ -130,6 +130,17 @@ Every MP4 written from frames goes through `VideoCreator.create_video_from_image
 | `wan_animate2_drive_i2v_v1` | 1.0.0, 1.1.0, 1.2.0 | experimental | Adds a driving video (the qualified mode). 1.1.0 binds the real `WanAnimate2ToVideo` controls (motion prompt, pose strength, pose window, reference strength). Requires `--disable-pinned-memory`. |
 | `hunyuan_video15_i2v_480p_8step_v1`, `hunyuan_video15_i2v_480p_12step_v1` | 1.0.0 each | experimental (VID-CAND-382), per-job opt-in, never the picker default | HunyuanVideo 1.5 480p I2V step-distilled FP8 on stock nodes (`src/video/workflow_catalog_hunyuan15.py`), two ids that differ only in the sampler step count (8 or 12): Qwen2.5-VL 7B and ByT5 glyph encoders through `DualCLIPLoader` (`hunyuan_video_15`), the HunyuanVideo 1.5 VAE, SigCLIP vision encoding of the source image, `HunyuanVideo15ImageToVideo`, one Euler/simple `KSampler` at CFG 1 with the model's own shift of 7.0, five pinned files with SHA-256 and `Comfy-Org/Hunyuan-Video-1.5@1405a2b7`, frames out at 24 fps, 17-121 frames (default 121), source-aware 480x848 / 848x480. The probe also requires the `hunyuan_video_15` recipe and the `clip_vision_output` input. All values are unmeasured and NOT QUALIFIED; the earlier HunyuanVideo NO-GO (PR-VID-160A) was for a different artifact. |
 
+**Frame sizes and crops (VID-FRAME).** `wan22_i2v_a14b_4step_v1` **1.4.0** (experimental, never run on the GPU) is the
+1.0.0 graph with `aspect_targets` 480x832, 544x720, 624x624, 720x544, 832x480: the size that crops the source least is
+chosen. An A14B crop above 5% (declared beside the specs) is an N1 warning (`video_source_cropped`) beside
+Queue, in the batch preview and in the job's accepted warnings, and `video_workflow.source_crop_fraction` records it.
+
+**Frame retention (VID-FRAME).** `src/video/frame_retention.py` removes a frames-out clip's PNGs a day after the clip
+exists (setting `video_frame_cleanup_enabled`, default on, Engine Settings; runs only while the queue is empty). It keeps
+the clip, every recorded output, the first and last frame, frames a cut manifest or Storyboard file names, and skips
+sequence runs, evaluations and the archive; `frames_removed.json` marks a swept run. Continue in Storyboard then decodes
+that clip, and the Movie Clips handoff uses the clip. Deletion cannot be undone.
+
 The catalog holds no disabled placeholder. The two former LTX multi-frame-anchor specs (`ltx_multiframe_anchor_v1`, `ltx_multiframe_anchor_v1_conditioned`) were retired because the bridge nodes they named never existed and no runtime evidence was accepted; future LTX support is not ruled out and would need bridge implementations plus accepted runtime evidence. `RETIRED_WORKFLOW_IDS` in `src/video/workflow_registry.py` is a message-only record: a stored job or history snapshot that still names a retired id loads and displays, and an execution request for it fails with `Workflow '<id>' is not registered: ... was removed ...` (`WorkflowLookupError`, a `KeyError` subclass whose `str()` is that plain message; the resolver reports it as `invalid_workflow`). It never aliases or substitutes a workflow. The disabled governance state still exists and is enforced (not offerable, lookup refused even with the experimental opt-in); tests exercise it with a synthetic disabled spec.
 
 Governance is part of a published version's pinned spec: `WorkflowSpec.to_dict()` carries `governance_state`, the display name and the notes, and `tests/video/test_pr_comfy_runtime_100_workflow_versions.py` pins the digest of every historical version. So the TI2V-5B promotion applies to 1.2.0 and 1.3.0 (the picker offers 1.3.0; 1.2.0 stays approved so stored jobs replay on their exact graph), both qualified on the managed ComfyUI 0.38.0 runtime that production uses. 1.0.0 and 1.1.0 (qualified on ComfyUI 0.3.65) stay `experimental`, so a stored job that names them replays under the opt-in it recorded. A stored 1.2.0 job that recorded `experimental_opt_in: true` before the promotion still runs (an approved spec ignores the flag), and new 1.2.0 jobs record `false`.
@@ -270,7 +281,7 @@ Movie Clips assembles existing outputs (stills, frames, generated clips) into on
 
 Two modes. **Sequence:** every image is one frame at the FPS (images only; a list with a video switches the tab to slideshow). **Slideshow:** a still holds for its duration, a video plays for its probed duration; every input is fitted to the target (`scale` with the aspect kept, `pad` with black, `setsar=1`), resampled to the target rate (`fps`) and cut to an exact frame count (`tpad` clone plus `trim`), then neighbours are crossfaded with `xfade` (offsets computed in whole frames by `plan_timeline`: the movie has the sum of the clip frames minus one transition per boundary) or joined with `concat` when the transition is 0. A transition longer than half of the shortest item is refused at admission. The optional music track is padded with silence or cut to the movie's length (`apad,atrim`), faded out (`afade`), encoded as AAC and mapped with `-shortest`; clip audio is not kept. Encoding uses the shared settings (section 3.3).
 
-Cancel reaches FFmpeg through the job's cancel token (the partial file is removed). `frozen_input_checks` lists every clip and the audio track with its digest, so a retry is refused up front when an input changed. Not built: interpolation of the assembled movie, per-video trims, clip audio passthrough.
+Cancel reaches FFmpeg through the job's cancel token (the partial file is removed). `frozen_input_checks` lists every clip and the audio track with its digest, so a retry is refused up front when an input changed. Not built: interpolation of a Movie Clips assembly (a sequence's assembled movie can be smoothed, section 7.1), per-video trims, clip audio passthrough.
 
 A multi-segment sequence assembles inside its own job through this same engine (section 7.1). `send_history_job_to_movie_clips` and `video_workspace_handoff.py` only route an existing output into the tab.
 
@@ -293,7 +304,13 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   Refused before an NJR exists, never clipped or defaulted: an illegal frame count (Wan 4n+1, the SVD model's maximum), an unknown field anywhere, a
   missing, unreadable or non-image (a video file) anchor, an authored anchor that is not exactly the sequence's frame size, an unapproved workflow
   (an `experimental` one only with this job's recorded opt-in), a workflow needing inputs a sequence cannot supply (end anchor, driving video, operator
-  controls), mixed frame rates or source preparation, RIFE smoothing in a Comfy sequence (native SVD segments may smooth; the plan then plays at the multiplied rate), a loop or ping-pong export, a transition, too many segments or frames.
+  controls), mixed frame rates or source preparation, native SVD segments may smooth (the plan then plays at the multiplied rate), a loop or ping-pong export, a transition, too many segments or frames.
+- **Smoothing the cut (VID-FRAME):** a sequence or Storyboard take can smooth its *assembled* movie with RIFE. The
+  choice is frozen as `cut_interpolation` (never `interpolation`, so no segment smooths its own clip); segments,
+  hand-offs and cut manifests stay at native frames. Long cuts are interpolated in 200-frame chunks with a one-frame
+  overlap (`interpolate_cut_frames`). The `_smooth.mp4` is the movie (primary); the native-rate movie stays as
+  `retained_source` and is recorded under `assembly.native`. The form suggests it on when RIFE is found, and
+  Storyboard takes use it whenever RIFE is found. Deterministic tests only; no physical RIFE run.
 - **Carry-forward** is the exact last frame as a lossless PNG with a recorded SHA-256, never an MP4 path (`src/video/sequence_frames.py`). Basis
   `native`: the last PNG a frames-out Comfy workflow saved (byte-identical, cross-checked against the backend's own per-frame hashes) or, for native SVD,
   the last generated frame saved before RIFE, loop export or upscaling (`SVDResult.native_final_frame`, written under the run's `sequence/native`
@@ -381,7 +398,7 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
     and referenced from the job's `sequence_artifact` (`src/video/storyboard_cuts.py` resolves a job's parent cut).
   - *Pass-through source*: a take with a lead-in starts from the exact handoff PNG. No source preparation runs and no substitute file
     is made (`src/video/workflow_source_preparation.py`, `exact_source`); admission refuses a handoff PNG that is not exactly the
-    target size. Takes never inherit RIFE smoothing; a smoothed root uses its generated frames at the workflow's fps.
+    target size. A take never smooths its segments (its stitched cut is smoothed, below); a smoothed root uses its generated frames at the workflow's fps.
   - *Executor*: the sequence executor assembles the lead-in prefix (referenced, never copied into the take's segments) plus the
     take's segments, and the lead-in does not count against the 12-segment and 972-frame caps
     (`src/pipeline/video_sequence_executor.py`).
