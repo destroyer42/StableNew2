@@ -98,7 +98,8 @@ Rules:
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
     the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch`
     (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`, the withdrawals route (section 3.0).
-    `item_source`, the manifest's `source` and the item-sources route (section 3.4).
+    `item_source`, the manifest's `source` and the item-sources route (section 3.4); `item_info`, the manifest's
+    `info` (section 3.6).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -225,6 +226,18 @@ PC's publish ledger (`item_sources`); until then they count as Other.
 - **Scroll.** The home, section and run lists return to where they were left.
 - **Full resolution.** Double-tapping a picture loads the `original` variant with pinch zoom and pan; double-tapping
   returns to fit, and from fit closes it. A single tap keeps its meaning after a short wait. Videos are unchanged.
+
+### 3.6 More info (NAME-INFO)
+
+Every item, and each side of a compare, has **More info**: the stage path (`txt2img → ADetailer`, `img2img`,
+`clip (A14B) from <source model>`, `storyboard take (...)`), the short and full model or workflow name, prompt pack,
+prompt number and variant, date and time, seed and batch name. The PC derives them when it publishes
+(`src/review/output_info.py`) from the file's embedded metadata, its run manifest and the job's immutable snapshot,
+all read only; a reprocess or clip job takes pack and prompt from the job of its input, at most four hops back. They
+travel as the manifest's optional `info`, a closed list of bounded fields with paths reduced to their last part, only
+to a gateway that lists `item_info`. Short names come from `src/pipeline/output_naming.py` and
+`config/output_model_names.json`. An item published without `info` shows what it already has (model, batch, seed,
+date); items already on the phone are not published again for it. The page's code is `static/moreinfo.js`.
 
 ## 4. Retention (D4)
 

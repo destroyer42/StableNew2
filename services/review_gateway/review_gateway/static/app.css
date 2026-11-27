@@ -240,6 +240,7 @@ button {
 }
 .info a { color: var(--accent); }
 .info button { margin-right: 0.5rem; }
+.info h2 { font-size: 0.95rem; margin: 0.6rem 0 0.2rem; }
 .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.35rem; padding: 0.4rem 0.5rem; }
 .tags button { padding: 0.3rem 0.65rem; font-size: 0.85rem; border-radius: 1rem; }
 .tags button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }

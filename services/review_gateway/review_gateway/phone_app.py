@@ -53,6 +53,7 @@ _PAGES = {
     "/static/app.js": ("app.js", "text/javascript"),
     "/static/app.css": ("app.css", "text/css"),
     "/static/rating.js": ("rating.js", "text/javascript"),
+    "/static/moreinfo.js": ("moreinfo.js", "text/javascript"),
     "/static/rating.css": ("rating.css", "text/css"),
     "/static/icon.svg": ("icon.svg", "image/svg+xml"),
 }

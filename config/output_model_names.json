@@ -1,0 +1,25 @@
+{
+  "schema": "stablenew.output-model-names.v1",
+  "help": "Short model names used in output file names and in review. To change one without blocking the Update button, copy the entry into config/output_model_names.local.json (same shape).",
+  "checkpoints": {
+    "sd_xl_base_1.0": "SDXL-base"
+  },
+  "workflows": {
+    "hunyuan_video15_i2v_480p_12step_v1": "HunyuanVideo",
+    "hunyuan_video15_i2v_480p_8step_v1": "HunyuanVideo",
+    "ltx25_distilled_i2v_audio_v1": "LTX-2.5",
+    "ltx25_distilled_i2v_v1": "LTX-2.5",
+    "ltx_multiframe_anchor_v1": "LTX",
+    "svd_native": "SVD",
+    "wan22_fun_control_5b_canny_i2v_v1": "FunControl-5B",
+    "wan22_i2v_a14b_4step_ck_v1": "A14B",
+    "wan22_i2v_a14b_4step_full_picture_v1": "A14B",
+    "wan22_i2v_a14b_4step_v1": "A14B",
+    "wan22_i2v_a14b_flf_v1": "A14B",
+    "wan22_i2v_a14b_svi": "A14B-SVI",
+    "wan22_ti2v_5b_i2v_720p_v1": "TI2V-5B-720p",
+    "wan22_ti2v_5b_i2v_v1": "TI2V-5B",
+    "wan_animate2_drive_i2v_v1": "Animate-2",
+    "wan_animate2_prompt_i2v_v1": "Animate-2"
+  }
+}

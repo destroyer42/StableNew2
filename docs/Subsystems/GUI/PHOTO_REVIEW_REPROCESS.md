@@ -275,6 +275,13 @@ A read-only viewer for one completed still-image job and its direct recorded par
 - **Settings.** `recipe_differences` (`src/gui_v2/history_compare_model.py`) is a pure, deterministically ordered typed projection of the two frozen NJRs (identity, prompts, model, sampling, dimensions, seed, LoRA, embeddings, per-stage settings, editing, prompt transformations, provenance, other frozen config). Each row is changed, unchanged, only in parent/child, not recorded or not comparable; nothing is filled from today's defaults, and a stage-specific value is never merged into a global one. Values the backend reported (actual seed) or the verified file shows (size) are separate `observed` rows. Frozen settings are not proof of execution or of visually identical output.
 - **Visibility and lifecycle.** Images use the shared `MediaInspector` content policy per side and text is redacted through `ContentVisibilityResolver` (re-rendered, not re-fetched, when the mode changes); the viewer uses the keyed latest-wins `EditWorkRunner`, drops results after close or a newer request, and never writes a record, queues a job or touches a draft. Not covered: arbitrary image pairs, grids, video, recursive lineage.
 
+### 3.6.1 More info (NAME-INFO)
+
+**More info** in Review (the selected image), in the compare window (both images) and in Compare with Parent opens a
+read-only table: stage path, model (short and full name), prompt pack, prompt number and variant, date, seed, batch
+and file name, one column per image. It is the same derivation the phone shows (`src/review/output_info.py`), read on
+a worker; values pass through content visibility redaction.
+
 ### 3.7 Task-first workspace (PR-REVIEW-LIFECYCLE-621)
 
 Review is one lifecycle: open images, decide each (Retain / Discard / Re-work, with an optional rating), re-work the marked ones through the existing Preview and Queue path, and decide again on the results that return. The tab ID is unchanged; its controls are grouped by task:

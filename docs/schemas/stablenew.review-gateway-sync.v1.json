@@ -237,6 +237,50 @@
         }
       }
     },
+    "item_info": {
+      "description": "NAME-INFO: what the phone's More info shows, derived by the PC from the job's immutable record and the file's own metadata. Display only, never used for decisions; no path (RG-100 invariant 3). Sent only to a gateway that lists the item_info feature. seed is text because it can exceed JavaScript's exact integers.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stage_path": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "model_name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "pack": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "prompt_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "variant": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "made_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "seed": {
+          "type": "string",
+          "pattern": "^[0-9]{1,19}$"
+        },
+        "batch": {
+          "type": "string",
+          "maxLength": 120
+        }
+      }
+    },
     "item_manifest": {
       "description": "PC to gateway: one publishable item. Media bodies are uploaded separately and addressed by their sha256. Idempotent by (library_id, sha256).",
       "type": "object",
@@ -308,6 +352,9 @@
         },
         "batch": {
           "$ref": "#/$defs/item_batch"
+        },
+        "info": {
+          "$ref": "#/$defs/item_info"
         },
         "display": {
           "description": "Display-only text, rendered as text on the phone (S7). Never used for decisions.",

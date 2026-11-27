@@ -572,6 +572,7 @@ def item_manifest(
     batch: Mapping[str, Any] | None = None,
     parent: ItemRef | None = None,
     source: str = "",
+    info: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a manifest; refuses anything the contract does not allow rather than trimming silently.
 
@@ -616,6 +617,9 @@ def item_manifest(
     grouped = _batch(batch or {})
     if grouped:
         body["batch"] = grouped
+    described = _info(info or {})
+    if described:
+        body["info"] = described
     if parent is not None:
         _text(parent.library_id, LIBRARY_ID)
         _text(parent.sha256, SHA256)
@@ -642,6 +646,34 @@ def _batch(values: Mapping[str, Any]) -> dict[str, Any] | None:
         if shown:
             body["cell"] = shown
     return body
+
+
+#: NAME-INFO: the closed list of ``info`` text fields and their bounds (the schema's ``item_info``).
+_INFO_LIMITS = {"stage_path": 200, "model": 40, "model_name": 200, "pack": 120, "batch": 120}
+
+
+def _info(values: Mapping[str, Any]) -> dict[str, Any]:
+    """What "More info" shows: bounded text with paths reduced to their last part; anything else is left out."""
+
+    shown: dict[str, Any] = {}
+    for key, limit in _INFO_LIMITS.items():
+        value = values.get(key)
+        if isinstance(value, str) and (text := scrub_text(value, limit)):
+            shown[key] = text
+    for key in ("prompt_number", "variant"):
+        number = values.get(key)
+        if type(number) is int and 1 <= number <= 9999:
+            shown[key] = number
+    seed = values.get("seed")
+    if isinstance(seed, str) and re.fullmatch(r"[0-9]{1,19}", seed):
+        shown["seed"] = seed
+    made = values.get("made_at")
+    if isinstance(made, str):
+        try:
+            shown["made_at"] = utc_text(parse_timestamp(made))
+        except ProtocolError:
+            pass
+    return shown
 
 
 _DISPLAY_LIMITS = {"model": 200, "prompt_excerpt": 512, "job_id": 64, "workflow": 120}

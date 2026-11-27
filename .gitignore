@@ -132,3 +132,6 @@ data/job_history.jsonl
 
 # Directory a leaking test creates when a MagicMock is used as a path
 /MagicMock/
+
+# NAME-INFO: the owner's local short-name edits (a tracked file would block the Update button)
+config/output_model_names.local.json

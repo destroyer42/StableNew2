@@ -288,6 +288,8 @@ def ffmpeg_mobile_transcode(source: BinaryIO, target: Path, cancelled: Callable[
 
 
 BatchOf = Callable[[Path], Mapping[str, Any] | None]
+#: NAME-INFO: ``(file, library item) -> info fields`` for the manifest.
+InfoOf = Callable[[Path, LibraryItem], Mapping[str, Any]]
 
 
 def image_source_job(path: Path) -> str:
@@ -300,6 +302,26 @@ def image_source_job(path: Path) -> str:
     except Exception:  # noqa: BLE001 - lineage is extra; it must never hold publishing back
         log.debug("Review gateway publish could not read an item's job")
         return ""
+
+
+def job_info_reader(repository: Any, identity: Callable[[Any], Mapping[str, Any] | None]) -> InfoOf:
+    """NAME-INFO: what "More info" shows for a library item (``src/review/output_info.py``), read only."""
+
+    from src.review.output_info import OutputDescriber
+
+    describer = OutputDescriber(repository, batch_identity=identity)
+
+    def read(path: Path, item: LibraryItem) -> Mapping[str, Any]:
+        return describer.describe(
+            path,
+            kind=item.kind,
+            made_at=datetime.fromtimestamp(item.effective_time / 1_000_000, UTC),
+            model=item.model or "",
+            workflow=item.workflow or "",
+            seed=item.seed,
+        )
+
+    return read
 
 
 def job_batch_reader(
@@ -352,12 +374,14 @@ class GatewayPublisher:
         batch_of: BatchOf | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         strip: Transcode = ffmpeg_strip_metadata,
+        info_of: InfoOf | None = None,
     ) -> None:
         self._library = library
         self._ledger = ledger
         self._transcode = transcode
         self._now = now
         self._batch_of = batch_of
+        self._info_of = info_of
         self._sources = SourceFilter(library.root)
         self._monotonic = monotonic
         self._strip = strip
@@ -373,6 +397,19 @@ class GatewayPublisher:
             return self._batch_of(path)
         except Exception:  # noqa: BLE001 - grouping is display only; it must never hold publishing back
             log.debug("Review gateway publish could not read an item's batch")
+            return None
+
+    def _info(
+        self, client: GatewayClient, path: Path, item: LibraryItem
+    ) -> Mapping[str, Any] | None:
+        """The item's "More info", only for a gateway that takes it (an older one's schema refuses the field)."""
+
+        if self._info_of is None or "item_info" not in client.features:
+            return None
+        try:
+            return self._info_of(path, item)
+        except Exception:  # noqa: BLE001 - display only; it must never hold publishing back
+            log.debug("Review gateway publish could not describe an item")
             return None
 
     def _parent(self, key: str, item: LibraryItem, path: Path) -> tuple[str, str] | None:
@@ -733,6 +770,7 @@ class GatewayPublisher:
                 # Only for a gateway that takes it: an older one's schema refuses the field.
                 parent=ItemRef(*parent) if parent and "item_parent" in client.features else None,
                 source=source_of(item.path, item.kind) if "item_source" in client.features else "",
+                info=self._info(client, path, item),
             )
             # The file must still be the bytes the manifest names when the gateway records it.
             self._library.path_for(item)
