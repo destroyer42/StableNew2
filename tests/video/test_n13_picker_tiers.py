@@ -26,6 +26,7 @@ ARMS = {
 }
 ALWAYS = {
     "wan22_i2v_a14b_4step_v1",
+    "wan22_i2v_a14b_flf_v1",  # the only engine that takes an end image
     "wan22_ti2v_5b_i2v_v1",
     "wan22_ti2v_5b_i2v_720p_v1",
     "wan_animate2_drive_i2v_v1",

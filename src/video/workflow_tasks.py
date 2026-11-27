@@ -21,6 +21,7 @@ from src.video.workflow_picker import approved_in_preference_order
 
 TASK_ANIMATE = "animate"
 TASK_FOLLOW_CLIP = "follow_clip"
+TASK_BETWEEN = "between_images"
 TASK_SEQUENCE = "sequence"
 TASK_BATCH = "batch"
 
@@ -44,6 +45,11 @@ TASKS: tuple[VideoTask, ...] = (
         TASK_FOLLOW_CLIP,
         "Follow a driving video",
         "Transfer the motion of a short video onto the character in the image.",
+    ),
+    VideoTask(
+        TASK_BETWEEN,
+        "Start and end image",
+        "Make the clip that goes from one image to another.",
     ),
     VideoTask(
         TASK_SEQUENCE,
@@ -77,6 +83,10 @@ def _accepts_driving_clip(record: Mapping[str, Any]) -> bool:
     return bool(_visibility(record).get("pose_video", False))
 
 
+def _needs_end_image(record: Mapping[str, Any]) -> bool:
+    return "end_anchor" in (record.get("required_inputs") or ())
+
+
 def _is_approved(record: Mapping[str, Any]) -> bool:
     return str(
         record.get("governance_state") or ""
@@ -98,6 +108,8 @@ def _is_trial(record: Mapping[str, Any]) -> bool:
 def _is_eligible(task_id: str, record: Mapping[str, Any]) -> bool:
     if not record.get("workflow_id"):
         return False
+    if task_id == TASK_BETWEEN or _needs_end_image(record):
+        return task_id == TASK_BETWEEN and _needs_end_image(record)
     if task_id == TASK_FOLLOW_CLIP:
         return _accepts_driving_clip(record)
     if _accepts_driving_clip(record):
@@ -159,6 +171,8 @@ def infer_task(record: Mapping[str, Any] | None, saved_task: Any = None) -> str:
     saved = str(saved_task or "")
     if saved in _TASK_IDS and _is_eligible(saved, record):
         return saved
+    if _needs_end_image(record):
+        return TASK_BETWEEN
     return TASK_FOLLOW_CLIP if _accepts_driving_clip(record) else TASK_ANIMATE
 
 
@@ -166,6 +180,7 @@ __all__ = [
     "NO_ENGINE_MESSAGE",
     "TASKS",
     "TASK_ANIMATE",
+    "TASK_BETWEEN",
     "TASK_BATCH",
     "TASK_FOLLOW_CLIP",
     "TASK_SEQUENCE",

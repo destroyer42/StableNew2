@@ -57,7 +57,7 @@ def env_no_rife(tk_root, tmp_path):
 # ---------------------------------------------------------------- widgets
 
 
-def test_selector_lists_four_tasks_and_reverts_on_refusal(tk_root):
+def test_selector_lists_the_tasks_and_reverts_on_refusal(tk_root):
     calls: list[str] = []
 
     def on_select(task_id: str) -> bool:
@@ -65,7 +65,7 @@ def test_selector_lists_four_tasks_and_reverts_on_refusal(tk_root):
         return task_id != "batch"
 
     sel = WorkflowTaskSelector(tk_root, on_select=on_select)
-    assert list(sel.buttons) == ["animate", "follow_clip", "sequence", "batch"]
+    assert list(sel.buttons) == ["animate", "follow_clip", "between_images", "sequence", "batch"]
     sel.set_task("animate")
     sel.buttons["batch"].invoke()
     assert calls == ["batch"]
