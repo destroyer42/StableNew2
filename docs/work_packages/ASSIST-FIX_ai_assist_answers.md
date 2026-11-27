@@ -119,7 +119,7 @@ python -m tools.ai_assist_replay live --packs "$env:LOCALAPPDATA\StableNew\Promp
 Run, after the OK (pictures: ordinary, non-library test sources chosen by the owner):
 
 ```powershell
-python -m tools.ai_assist_replay live --packs "$env:LOCALAPPDATA\StableNew\PromptPacks" --motion-image <picture> --out reportsi_assist_replay.json --owner-approved
+python -m tools.ai_assist_replay live --packs "$env:LOCALAPPDATA\StableNew\PromptPacks" --motion-image <picture> --out reports\ai_assist_replay.json --owner-approved
 ```
 
 - **Read-out:** G1 passes if the `after` arm shows `refused_pct_of_answered` under 5 and `malformed_pct_of_answered`

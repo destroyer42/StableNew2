@@ -152,7 +152,12 @@ class MotionAiHost:
         suggestion = outcome.suggestion
         if suggestion is None or not suggestion.motion_phrase:
             text = provider_outcome_text(outcome)
-            if outcome.code is OutcomeCode.UNAVAILABLE and outcome.reason.startswith("image_"):
+            # A fallback outcome means the worker was unreachable: the ordinary text says that.
+            if (
+                outcome.code is OutcomeCode.UNAVAILABLE
+                and outcome.reason.startswith("image_")
+                and not outcome.details.get("fallback")
+            ):
                 text = NEEDS_REMOTE
             self._finish(text)
             return

@@ -148,3 +148,17 @@ def test_an_unusable_setup_sends_nothing(env, problem) -> None:
     env.panel.suggest_button.invoke()
     env.root.update()
     assert not env.ai.requests and env.tab.status_var.get()
+
+
+def test_an_unreachable_worker_is_not_reported_as_a_model_choice_problem(env) -> None:
+    press_suggest(env)
+    request = env.ai.requests[-1]
+    env.ai.done(
+        AssistOutcome(
+            OutcomeCode.UNAVAILABLE,
+            request.request_id,
+            "image_needs_remote",
+            details={"provider": "local", "fallback": True},
+        )
+    )
+    assert env.tab.status_var.get().startswith("Remote unavailable.")
