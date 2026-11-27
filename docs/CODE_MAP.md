@@ -505,6 +505,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_workflow_rate_review_v2.py`: Rate & review section of the Evaluate view (VID-UX-384 follow-up)
 - `video_workflow_recent_outputs_panel_v2.py`: Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
+- `video_workflow_rerun_host.py`: Re-run with tweaks for the Video Workflow tab (V1-2): read a finished job off the Tk thread, then fill the fo…
 - `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workflow_sections_v2.py`: Section builders for the Video Workflow tab's left pane (VID-UX-384)
 - `video_workflow_sequence_panel_v2.py`: Tk rendering of the Video Workflow "Multi-shot sequence" section (PR-VID-SEQ-331A)
@@ -1031,6 +1032,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `motion_alignment_support.py`: Which registered workflows can honestly be offered spatial alignment (PR-VID-MOTION-420)
 - `motion_intent.py`: The task-first motion intent layer (V1, ``docs/work_packages/V1_motion_controls.md`` sections 5.3, 5.4, 5.9 a…
 - `motion_presets.py`: Versioned motion presets for the task-first Video Workflow (V1, ``docs/work_packages/V1_motion_controls.md``…
+- `motion_rerun.py`: Re-run with tweaks: the intent snapshot of a finished clip and the typed tweak vocabulary (V1-2, section 5.9…
 - `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
 - `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories
