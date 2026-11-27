@@ -12,9 +12,7 @@ from src.controller.app_controller_services.run_submission_service import (
 )
 from src.gui.app_state_v2 import AppStateV2
 
-_BLOCK = (
-    "ADetailer cannot run with Z-Image on forge_webui. Create a fresh job with a supported checkpoint."
-)
+_BLOCK = "ADetailer cannot run with Z-Image on forge_webui. Create a fresh job with a supported checkpoint."
 
 
 def _controller(**attributes: Any) -> AppController:
@@ -48,7 +46,9 @@ def test_refusal_text_says_nothing_was_queued_why_and_the_fix() -> None:
 
 
 def test_refusal_text_does_not_repeat_a_message_that_already_says_nothing_was_queued() -> None:
-    text = queue_refusal_text(ValueError("The runtime cannot do this. Nothing was queued. Switch it."))
+    text = queue_refusal_text(
+        ValueError("The runtime cannot do this. Nothing was queued. Switch it.")
+    )
 
     assert text.count("Nothing was queued.") == 1
 
@@ -127,7 +127,9 @@ def test_a_superseded_preview_run_is_refused_on_screen() -> None:
         append_log=lambda _text: None, capture_stage_plan_for_tests=lambda _c: None
     )
 
-    assert service.accepted_preview_jobs(state, SimpleNamespace(get_preview_jobs=compile_fresh)) == []
+    assert (
+        service.accepted_preview_jobs(state, SimpleNamespace(get_preview_jobs=compile_fresh)) == []
+    )
     assert "nothing was queued" in state.queue_refusal.lower()
 
 

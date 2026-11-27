@@ -109,7 +109,10 @@ def test_lines_name_every_model_and_say_when_nothing_is_missing(tmp_path) -> Non
 def test_every_offered_video_workflow_file_has_a_known_model_folder() -> None:
     """A new loader node in the catalog must be mapped, or its files would silently go unchecked."""
 
-    from src.video.workflow_registry import build_default_workflow_registry, latest_spec_per_workflow
+    from src.video.workflow_registry import (
+        build_default_workflow_registry,
+        latest_spec_per_workflow,
+    )
 
     specs = latest_spec_per_workflow(
         list(build_default_workflow_registry().list_offerable_specs("comfy"))

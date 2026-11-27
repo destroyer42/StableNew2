@@ -380,9 +380,7 @@ def install_for_repository(repository: Any) -> ObservedExecutionIndex | None:
 _COUNTS: tuple[float, ObservedExecutionIndex, dict[str, int]] | None = None
 
 
-def installed_run_counts(
-    *, cancelled: Callable[[], bool] = lambda: False
-) -> dict[str, int] | None:
+def installed_run_counts(*, cancelled: Callable[[], bool] = lambda: False) -> dict[str, int] | None:
     """``read_run_counts`` over the application repository, cached for ``TTL_SECONDS`` (``None``: no repository).
 
     Blocking: call it on a worker.

@@ -73,8 +73,14 @@ class ModelFileHealth:
 def _profile_modules(name: str) -> tuple[Any, ...]:
     """The separate files an exact Forge profile checkpoint needs, identified by its name."""
 
-    from src.image_backends.forge_klein_profile import is_klein_transformer_name, latest_klein_profile
-    from src.image_backends.forge_zimage_profile import ZIMAGE_PROFILE_V1, is_zimage_transformer_name
+    from src.image_backends.forge_klein_profile import (
+        is_klein_transformer_name,
+        latest_klein_profile,
+    )
+    from src.image_backends.forge_zimage_profile import (
+        ZIMAGE_PROFILE_V1,
+        is_zimage_transformer_name,
+    )
 
     if is_klein_transformer_name(name):
         return tuple(latest_klein_profile().modules)

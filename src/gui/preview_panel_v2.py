@@ -765,7 +765,9 @@ class PreviewPanelV2(ttk.Frame):
         try:
             self.queue_refusal_label.configure(text=text)
             if text:
-                self.queue_refusal_label.grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+                self.queue_refusal_label.grid(
+                    row=3, column=0, columnspan=2, sticky="w", pady=(4, 0)
+                )
             else:
                 self.queue_refusal_label.grid_remove()
         except tk.TclError:

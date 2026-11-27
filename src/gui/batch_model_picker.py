@@ -155,7 +155,7 @@ class ModelListPicker(ttk.Frame):
             if internal in selected
             or all(word in f"{display} {internal}".lower() for word in words)
         ]
-        top = self.listbox.yview()[0]  # type: ignore[no-untyped-call]
+        top = self.listbox.yview()[0]
         self.listbox.delete(0, "end")
         for index, (display, internal) in enumerate(self._shown):
             self.listbox.insert("end", self._row(display, internal))
