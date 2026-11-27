@@ -73,6 +73,16 @@ WAN_A14B_SPEED_ARM_VERSIONS = (
     WAN_A14B_MERGED_VERSION,
     WAN_A14B_GPU_TEXT_ENCODER_VERSION,
 )
+# VID-FRAME: 1.0.0's graph with frame sizes chosen from the source's shape ("whole source picture at same pixel
+# count").  Every size is a multiple of 16 and no larger than 480x832 (399,360 pixels).
+WAN_A14B_FULL_PICTURE_VERSION = "1.4.0"
+WAN_A14B_ASPECT_TARGETS = ((480, 832), (544, 720), (624, 624), (720, 544), (832, 480))
+# A crop above this share of the source is warned about, never done silently.  Declared beside the specs, not inside
+# them: published versions stay byte-identical.
+WAN_A14B_MAX_CROP_FRACTION = 0.05
+WAN_A14B_CROP_WARNED_IDS = frozenset(
+    {"wan22_i2v_a14b_4step_v1", "wan22_i2v_a14b_4step_ck_v1", "wan22_i2v_a14b_svi"}
+)
 # ComfyUI 0.38.0 comfy_extras/nodes_model_advanced.py: ModelAttentionBackend(model, attention).  The combo lists
 # "comfy kitchen attention" only when the build's Comfy Kitchen package has INT8 attention; validate_inputs accepts
 # any value and execute falls back to PyTorch attention with a warning, so readiness checks the advertised option.
@@ -683,13 +693,48 @@ def build_wan_a14b_ck_launch_spec() -> WorkflowSpec:
     )
 
 
+def build_wan_a14b_full_picture_spec() -> WorkflowSpec:
+    """1.4.0: the 1.0.0 graph and files; only the frame sizes differ, chosen from the source's shape."""
+
+    base = build_wan_a14b_spec()
+    defaults = deepcopy(base.backend_defaults)
+    defaults["make_video_default"] = False
+    sizes = ", ".join(f"{width}x{height}" for width, height in WAN_A14B_ASPECT_TARGETS)
+    defaults["source_preparation"]["aspect_targets"] = [
+        {"width": width, "height": height} for width, height in WAN_A14B_ASPECT_TARGETS
+    ]
+    defaults["provenance"]["qualification"] = (
+        "NOT QUALIFIED: VID-FRAME sizes on the approved 1.0.0 graph; offline tests only"
+    )
+    fixed = defaults["operator_projection"]["fixed_settings"]
+    fixed["geometry"] = f"from the source's shape: {sizes}"
+    fixed["hardware"] = "NOT QUALIFIED at these sizes; readiness floors are 1.0.0's (321F)"
+    return replace(
+        base,
+        workflow_version=WAN_A14B_FULL_PICTURE_VERSION,
+        display_name="Wan2.2 I2V-A14B 4-step full picture (Experimental)",
+        description=(
+            "The approved Wan2.2 I2V-A14B 4-step graph with portrait, 3:4, square, 4:3 and landscape sizes "
+            "at about the same pixel count, so common source shapes are not cropped."
+        ),
+        governance_state=WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+        pinned_revision=f"catalog:{WAN_A14B_ID}@{WAN_A14B_FULL_PICTURE_VERSION}",
+        governance_notes=(
+            "EXPERIMENTAL, per-job opt-in only (VID-FRAME). Memory and motion quality at 544x720, 624x624 and "
+            "720x544 are unmeasured. NOT QUALIFIED."
+        ),
+        backend_defaults=defaults,
+    )
+
+
 def a14b_launch_attention(spec: WorkflowSpec) -> str | None:
     """Resolve launch mode from the immutable workflow identity, including old baseline jobs."""
 
-    if getattr(spec, "workflow_version", None) == WAN_A14B_VERSION:
+    version = getattr(spec, "workflow_version", None)
+    if version in (WAN_A14B_VERSION, WAN_A14B_FULL_PICTURE_VERSION):
         if spec.workflow_id == WAN_A14B_ID:
             return "baseline"
-        if spec.workflow_id == WAN_A14B_CK_LAUNCH_ID:
+        if spec.workflow_id == WAN_A14B_CK_LAUNCH_ID and version == WAN_A14B_VERSION:
             return "ck"
     return None
 
@@ -702,6 +747,7 @@ def build_wan_a14b_specs() -> tuple[WorkflowSpec, ...]:
         build_wan_a14b_ck_attention_spec(),
         build_wan_a14b_merged_spec(),
         build_wan_a14b_gpu_text_encoder_spec(),
+        build_wan_a14b_full_picture_spec(),
         build_wan_a14b_ck_launch_spec(),
     )
 
@@ -711,7 +757,11 @@ __all__ = [
     "WAN_A14B_CK_ATTENTION",
     "WAN_A14B_CK_ATTENTION_VERSION",
     "WAN_A14B_CK_LAUNCH_ID",
+    "WAN_A14B_ASPECT_TARGETS",
+    "WAN_A14B_CROP_WARNED_IDS",
     "WAN_A14B_FRAME_COUNT_POLICY",
+    "WAN_A14B_FULL_PICTURE_VERSION",
+    "WAN_A14B_MAX_CROP_FRACTION",
     "WAN_A14B_GPU_TEXT_ENCODER_VERSION",
     "WAN_A14B_ID",
     "WAN_A14B_KEEP_WARM_SECONDS",

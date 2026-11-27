@@ -90,7 +90,7 @@ def _no_encode(monkeypatch):
 def test_the_arms_are_registered_beside_the_approved_1_0_0_as_experimental_versions() -> None:
     registry = build_default_workflow_registry()
 
-    assert registry.list_versions(WAN_A14B_ID) == ["1.0.0", "1.1.0", "1.2.0", "1.3.0"]
+    assert registry.list_versions(WAN_A14B_ID) == ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"]
     assert _spec(WAN_A14B_VERSION).governance_state == "approved"
     for version in WAN_A14B_SPEED_ARM_VERSIONS:
         spec = _spec(version)

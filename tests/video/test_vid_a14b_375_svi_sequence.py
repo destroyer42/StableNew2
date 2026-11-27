@@ -171,7 +171,7 @@ def test_three_experimental_svi_versions_are_registered_and_need_the_opt_in() ->
 def test_the_approved_a14b_stays_the_picker_default_and_its_versions_are_unchanged() -> None:
     registry = build_default_workflow_registry()
 
-    assert registry.list_versions(WAN_A14B_ID) == ["1.0.0", "1.1.0", "1.2.0", "1.3.0"]
+    assert registry.list_versions(WAN_A14B_ID) == ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"]
     controller = VideoWorkflowController(
         app_controller=SimpleNamespace(job_service=SimpleNamespace(), output_dir="out")
     )

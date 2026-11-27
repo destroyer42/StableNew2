@@ -56,6 +56,7 @@ def test_default_workflow_registry_holds_only_real_evidence_backed_workflows() -
         ("wan22_i2v_a14b_4step_v1", "1.1.0"),
         ("wan22_i2v_a14b_4step_v1", "1.2.0"),
         ("wan22_i2v_a14b_4step_v1", "1.3.0"),
+        ("wan22_i2v_a14b_4step_v1", "1.4.0"),
         ("wan22_i2v_a14b_svi", "1.0.0"),
         ("wan22_i2v_a14b_svi", "1.1.0"),
         ("wan22_i2v_a14b_svi", "1.2.0"),
