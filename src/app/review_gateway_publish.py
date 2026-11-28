@@ -82,8 +82,8 @@ WITHDRAW_PAGE = 500
 WITHDRAW_PAGES = 10
 #: Ledger keys of that sweep. They are renamed when the source filter excludes more (RG-170: eval outputs), so a PC
 #: that already swept looks through its ledger once again.
-_SWEEP_DONE = "sources_withdrawn_v2"
-_SWEEP_CURSOR = "sources_withdraw_cursor_v2"
+_SWEEP_DONE = "sources_withdrawn_v3"
+_SWEEP_CURSOR = "sources_withdraw_cursor_v3"
 _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
@@ -585,8 +585,8 @@ class GatewayPublisher:
         self._deferred[key] = (version, failures, self._monotonic() + seconds)
 
     def withdraw_unpublishable(self, client: GatewayClient, cancel: Event) -> None:
-        """Once per ledger: ask the gateway to stop showing eval outputs, frames and un-smoothed clips published
-        earlier.
+        """Once per ledger: ask the gateway to stop showing eval outputs, frames, un-smoothed clips and working files
+        published earlier.
 
         Kept in steps, so a stop or an unreachable gateway resumes where it was.
         """

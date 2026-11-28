@@ -1,10 +1,20 @@
 """Which Output Library items are a job's authoritative outputs, for phone publishing (PHONE-FAST).
 
-A video job leaves working files beside its result: the frames Comfy saved, and the un-smoothed clip behind a RIFE
+Finished images and clips below the Output root are published, in the job output folders and in any folder the owner
+made (each is a phone section). StableNew's working files are not (``WORKING``), and are withdrawn if they were sent:
+
+* the folders directly under the root that it fills with inputs and intermediates (prepared video and driving-video
+  sources, eval plan media, storyboard and continue-clip frames);
+* temporary and hidden folders, wherever they are;
+* the Photo Optimize workspace, except an asset's results;
+* conditioning and sequence folders inside a run folder (an owner's folder may use those names).
+
+A video job also leaves working files beside its result: the frames Comfy saved, and the un-smoothed clip behind a RIFE
 result. Neither is something to review. They are recognized without the job database:
 
 * every image under the ``movie_clips`` route is a frame (that route's outputs are movies);
-* an image a video manifest of its own run folder lists in ``frame_paths`` is a frame, whatever the route;
+* an image a video manifest of its own run folder lists in ``frame_paths``, or names as the clip's poster
+  (``thumbnail_path``), is a frame, whatever the route;
 * a clip a manifest records as retained, or (for manifests written before ``retained_paths`` existed) a clip listed
   after the first of an interpolated result, is the un-smoothed source.
 
@@ -25,9 +35,14 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from src.app.review_gateway_protocol import RUN_ID
 from src.app.site_media_files import SiteOutputError, inside, open_scoped
 from src.app.site_output_library import LibraryItem
-from src.state.output_routing import OUTPUT_ROUTE_MOVIE_CLIPS
+from src.state.output_routing import (
+    KNOWN_OUTPUT_ROUTE_DIRS,
+    OUTPUT_ROUTE_MOVIE_CLIPS,
+    OUTPUT_ROUTE_PHOTO_OPTIMIZE,
+)
 from src.video.video_eval_run import EVAL_OUTPUT_FOLDER, RUN_MANIFEST_NAME
 
 log = logging.getLogger(__name__)
@@ -36,6 +51,23 @@ log = logging.getLogger(__name__)
 FRAME = "frame"
 RETAINED = "retained"
 EVAL = "eval_output"
+WORKING = "working_file"
+
+#: Folders directly under the Output root that StableNew fills with inputs and intermediates. Literals, so the sync
+#: worker does not import the video modules that write them; a test checks them against those modules' own names.
+_WORKING_FOLDERS = frozenset(
+    {
+        "prepared_video_sources",
+        "prepared_driving_videos",
+        "eval_plans",
+        "storyboards",
+        "continue_frames",
+    }
+)
+_ROUTES = frozenset(route.casefold() for route in KNOWN_OUTPUT_ROUTE_DIRS)
+#: Working folders inside a run folder.
+_RUN_WORKING_FOLDERS = frozenset({"conditioning", "sequence"})
+_SVD_TEMP_FOLDER = "_svd_temp"
 
 _MANIFEST_LIMIT = 8 * 1024 * 1024
 _CACHED_FOLDERS = 256
@@ -59,8 +91,25 @@ def _names(values: Any) -> set[str]:
     return {Path(value).name.casefold() for value in values if isinstance(value, str) and value}
 
 
+def _is_working(parts: tuple[str, ...]) -> bool:
+    """Whether this Output-relative path is in one of StableNew's working folders."""
+
+    folders = [part.casefold() for part in parts[:-1]]
+    if not folders:
+        return False
+    if folders[0] in _WORKING_FOLDERS:
+        return True
+    if any(name == _SVD_TEMP_FOLDER or name.startswith(".") for name in folders):
+        return True
+    if folders[:2] == [OUTPUT_ROUTE_PHOTO_OPTIMIZE.casefold(), "workspace"]:
+        return not (len(folders) == 5 and folders[2] == "assets" and folders[4] == "outputs")
+    # A route, or a run folder from before the routes, directly under the root.
+    in_job_folders = folders[0] in _ROUTES or RUN_ID.fullmatch(parts[0]) is not None
+    return in_job_folders and not _RUN_WORKING_FOLDERS.isdisjoint(folders[1:])
+
+
 def _listed(payload: Mapping[str, Any]) -> tuple[set[str], set[str]]:
-    """``(frame names, retained clip names)`` one video manifest records; both empty for any other manifest."""
+    """``(frame and poster names, retained clip names)`` one video manifest records; both empty for any other."""
 
     if not payload.get("video_path"):
         return set(), set()
@@ -69,7 +118,10 @@ def _listed(payload: Mapping[str, Any]) -> tuple[set[str], set[str]]:
     videos = payload.get("video_paths")
     if payload.get("interpolation") and isinstance(videos, list):
         retained |= _names(videos[1:])
-    return _names(payload.get("frame_paths")), retained
+    posters = [payload.get("thumbnail_path")]
+    if isinstance(artifact, Mapping):
+        posters.append(artifact.get("thumbnail_path"))
+    return _names(payload.get("frame_paths")) | _names(posters), retained
 
 
 def _job_ids(value: Any, depth: int = 0) -> set[str]:
@@ -125,7 +177,7 @@ class SourceFilter:
         return not recorded.isdisjoint(self._eval_job_ids())
 
     def exclusion(self, item: LibraryItem) -> str:
-        """``EVAL``, ``FRAME``, ``RETAINED`` or ``""`` (publish it)."""
+        """``EVAL``, ``FRAME``, ``RETAINED``, ``WORKING`` or ``""`` (publish it)."""
 
         return self.exclusion_of(item.path, item.kind)
 
@@ -145,7 +197,8 @@ class SourceFilter:
             return FRAME
         if kind == "video" and name in retained:
             return RETAINED
-        return ""
+        # Last, so a frame or un-smoothed clip is recognized as one wherever its run folder is.
+        return WORKING if _is_working(parts) else ""
 
     def _read_json(self, path: Path) -> Mapping[str, Any] | None:
         try:

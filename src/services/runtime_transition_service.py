@@ -69,6 +69,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+from urllib.parse import urlsplit
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +229,32 @@ def _default_webui_endpoint_identity() -> str:
     return probe_endpoint_runtime_identity(base_url).identity
 
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _nothing_listens_locally(base_url: str) -> bool:
+    """True only when the URL is on this computer and the OS lists no listener on its port.
+
+    Asked before an HTTP probe because Windows takes about two seconds to refuse a closed localhost port, so the probe
+    of an absent runtime spent its whole timeout on every job. Asked afresh each time, so a runtime that has started is
+    seen at once. Any listener on the port, another host or an unreadable port list leaves the HTTP probe to decide.
+    """
+
+    try:
+        url = urlsplit(base_url)
+        port = url.port
+        if url.hostname not in _LOOPBACK_HOSTS or port is None:
+            return False
+        return not any(
+            connection.status == psutil.CONN_LISTEN
+            and connection.laddr
+            and connection.laddr.port == port
+            for connection in psutil.net_connections(kind="tcp")
+        )
+    except (OSError, ValueError, psutil.Error):
+        return False
+
+
 def _default_comfy_endpoint_presence() -> bool:
     """Observe only the configured Comfy endpoint; never discover or mutate processes."""
 
@@ -234,6 +263,8 @@ def _default_comfy_endpoint_presence() -> bool:
     base_url = _configured_endpoint(
         "comfy_base_url", "STABLENEW_COMFY_BASE_URL", "http://127.0.0.1:8188"
     )
+    if _nothing_listens_locally(base_url):
+        return False
     return probe_comfy_endpoint(base_url, timeout=0.5) != "free"
 
 
