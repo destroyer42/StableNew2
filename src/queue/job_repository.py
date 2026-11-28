@@ -687,79 +687,144 @@ class JobRepository(JobHistoryStore):
         """
 
         with self.transaction() as connection:
-            row = connection.execute(
-                "SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)
-            ).fetchone()
-            if row is None:
-                raise JobRepositoryError(f"Unknown job identity {job.job_id!r}")
-            current = JobStatus(row["status"])
-            if expected_status is not None and current != expected_status:
-                raise JobStatusChanged(job.job_id, expected_status, current)
-            if status != current and status not in _ALLOWED_TRANSITIONS[current]:
-                raise InvalidLifecycleTransition(
-                    f"Cannot transition {job.job_id} from {current.value} to {status.value}"
-                )
-            now = datetime.utcnow()
-            started_at = row["started_at"]
-            completed_at = row["completed_at"]
-            progress, eta_seconds = float(job.progress), job.eta_seconds
-            if status == JobStatus.RUNNING and not started_at:
-                started_at = _iso(job.started_at) or now.isoformat()
-            if status == JobStatus.QUEUED:
-                started_at = None
-                completed_at = None
-            elif status in _TERMINAL_STATUSES:
-                completed_at = _iso(job.completed_at) or now.isoformat()
-                progress, eta_seconds = 0.0, None
-            effective_result = result if result is not None else job.result
-            effective_error = error_message or job.error_message
-            connection.execute(
-                """
-                UPDATE jobs SET status = ?, started_at = ?, completed_at = ?, updated_at = ?,
-                    progress = ?, eta_seconds = ?, worker_id = ?, execution_metadata = ?,
-                    error_message = ?, error_envelope = ?, result_json = ?,
-                    artifact_references = ?
-                WHERE job_id = ? AND status = ?
-                """,
-                (
-                    status.value,
-                    started_at,
-                    completed_at,
-                    now.isoformat(),
-                    progress,
-                    eta_seconds,
-                    str(job.worker_id) if job.worker_id is not None else None,
-                    _json_dumps(_execution_metadata_to_dict(job.execution_metadata)),
-                    effective_error,
-                    _json_dumps(serialize_envelope(job.error_envelope))
-                    if job.error_envelope is not None
-                    else None,
-                    self._stored_result(connection, effective_result),
-                    _json_dumps(_artifact_references(effective_result)),
-                    job.job_id,
-                    current.value,
-                ),
+            persisted, entry = self._apply_transition(
+                connection,
+                job,
+                status,
+                error_message=error_message,
+                result=result,
+                expected_status=expected_status,
+                to_queue_front=to_queue_front,
             )
-            if to_queue_front and status == JobStatus.QUEUED:
-                connection.execute(
-                    """
-                    UPDATE jobs SET queue_order = COALESCE(
-                        (SELECT MIN(queue_order) - 1 FROM jobs WHERE status = 'queued' AND job_id != ?),
-                        queue_order
-                    ) WHERE job_id = ?
-                    """,
-                    (job.job_id, job.job_id),
-                )
-            committed_row = connection.execute(
-                "SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)
-            ).fetchone()
-            persisted = self._row_to_job(committed_row)
-            entry = self._row_to_history(committed_row)
         try:
             self._emit(entry)
         except Exception:  # noqa: BLE001 - the transition is already durable; announcing it is best-effort
             logger.exception("Announcing the committed transition of %s failed", job.job_id)
         return persisted
+
+    def _apply_transition(
+        self,
+        connection: sqlite3.Connection,
+        job: Job,
+        status: JobStatus,
+        *,
+        error_message: str | None = None,
+        result: dict[str, Any] | None = None,
+        expected_status: JobStatus | None = None,
+        to_queue_front: bool = False,
+    ) -> tuple[Job, JobHistoryEntry]:
+        """One guarded lifecycle UPDATE inside the caller's open transaction; nothing is written when it raises."""
+
+        row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)).fetchone()
+        if row is None:
+            raise JobRepositoryError(f"Unknown job identity {job.job_id!r}")
+        current = JobStatus(row["status"])
+        if expected_status is not None and current != expected_status:
+            raise JobStatusChanged(job.job_id, expected_status, current)
+        if status != current and status not in _ALLOWED_TRANSITIONS[current]:
+            raise InvalidLifecycleTransition(
+                f"Cannot transition {job.job_id} from {current.value} to {status.value}"
+            )
+        now = datetime.utcnow()
+        started_at = row["started_at"]
+        completed_at = row["completed_at"]
+        progress, eta_seconds = float(job.progress), job.eta_seconds
+        if status == JobStatus.RUNNING and not started_at:
+            started_at = _iso(job.started_at) or now.isoformat()
+        if status == JobStatus.QUEUED:
+            started_at = None
+            completed_at = None
+        elif status in _TERMINAL_STATUSES:
+            completed_at = _iso(job.completed_at) or now.isoformat()
+            progress, eta_seconds = 0.0, None
+        effective_result = result if result is not None else job.result
+        effective_error = error_message or job.error_message
+        connection.execute(
+            """
+            UPDATE jobs SET status = ?, started_at = ?, completed_at = ?, updated_at = ?,
+                progress = ?, eta_seconds = ?, worker_id = ?, execution_metadata = ?,
+                error_message = ?, error_envelope = ?, result_json = ?,
+                artifact_references = ?
+            WHERE job_id = ? AND status = ?
+            """,
+            (
+                status.value,
+                started_at,
+                completed_at,
+                now.isoformat(),
+                progress,
+                eta_seconds,
+                str(job.worker_id) if job.worker_id is not None else None,
+                _json_dumps(_execution_metadata_to_dict(job.execution_metadata)),
+                effective_error,
+                _json_dumps(serialize_envelope(job.error_envelope))
+                if job.error_envelope is not None
+                else None,
+                self._stored_result(connection, effective_result),
+                _json_dumps(_artifact_references(effective_result)),
+                job.job_id,
+                current.value,
+            ),
+        )
+        if to_queue_front and status == JobStatus.QUEUED:
+            connection.execute(
+                """
+                UPDATE jobs SET queue_order = COALESCE(
+                    (SELECT MIN(queue_order) - 1 FROM jobs WHERE status = 'queued' AND job_id != ?),
+                    queue_order
+                ) WHERE job_id = ?
+                """,
+                (job.job_id, job.job_id),
+            )
+        committed_row = connection.execute(
+            "SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)
+        ).fetchone()
+        persisted = self._row_to_job(committed_row)
+        entry = self._row_to_history(committed_row)
+        return persisted, entry
+
+    def transition_jobs(
+        self,
+        jobs: Sequence[Job],
+        status: JobStatus,
+        *,
+        error_message: str | None = None,
+        expected_status: JobStatus | None = None,
+    ) -> list[tuple[Job, Job | Exception]]:
+        """Apply the same transition to many rows in ONE transaction (one COMMIT), in order.
+
+        Each row goes through exactly the guarded UPDATE ``transition_job`` uses, so the committed rows and the
+        history entries are the ones single transitions would have produced. A job the guard refuses
+        (``JobStatusChanged``, ``InvalidLifecycleTransition``, unknown identity) is returned as its exception and
+        nothing is written for it; the others still commit. Any other failure rolls the whole batch back and
+        raises. Observers are told per committed row, after the commit.
+        """
+
+        outcomes: list[tuple[Job, Job | Exception]] = []
+        entries: list[JobHistoryEntry] = []
+        with self.transaction() as connection:
+            for job in jobs:
+                try:
+                    persisted, entry = self._apply_transition(
+                        connection,
+                        job,
+                        status,
+                        error_message=error_message,
+                        expected_status=expected_status,
+                    )
+                except (
+                    JobRepositoryError
+                ) as refusal:  # incl. JobStatusChanged and InvalidLifecycleTransition
+                    outcomes.append((job, refusal))
+                    continue
+                outcomes.append((job, persisted))
+                entries.append(entry)
+        for entry in entries:
+            try:
+                self._emit(entry)
+            except Exception:  # noqa: BLE001 - already durable; announcing is best-effort
+                logger.exception("Announcing the committed transition of %s failed", entry.job_id)
+        return outcomes
 
     def update_progress(self, job_id: str, progress: float, eta_seconds: float | None) -> bool:
         """Record progress/ETA only while the row is still RUNNING; ``False`` when it is in any other state.
