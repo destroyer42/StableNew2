@@ -32,6 +32,7 @@ from src.video.workflow_catalog_ltx25 import (
     LTX25_REVISION,
     LTX25_STOCK_NODES,
     LTX25_VERSION,
+    LTX25_VERSIONS,
 )
 from src.video.workflow_catalog_wan_a14b import (
     WAN_A14B_FULL_PICTURE_CK_VERSION,
@@ -120,7 +121,7 @@ def test_both_ids_are_experimental_and_refused_without_the_opt_in(workflow_id: s
     registry = build_default_workflow_registry()
     spec = _spec(workflow_id)
 
-    assert registry.list_versions(workflow_id) == [LTX25_VERSION]
+    assert registry.list_versions(workflow_id) == list(LTX25_VERSIONS)
     assert spec.governance_state == "experimental" and spec.is_experimental
     assert spec.pinned_revision == f"catalog:{workflow_id}@{LTX25_VERSION}"
     assert "(Experimental)" in spec.display_name
@@ -167,11 +168,29 @@ def test_the_licence_restriction_is_visible_to_the_operator(workflow_id: str) ->
     records = workflow_warning_records(spec)
     assert [r["code"] for r in records] == [CODE_VIDEO_EXPERIMENTAL, CODE_VIDEO_LICENCE_RESTRICTION]
     licence = records[1]
-    assert "sexually explicit" in licence["title"] and licence["why"] and licence["fix"]
+    # Owner decision 2026-11-28: say that explicit use may break the license and who carries that risk; never block.
+    assert licence["title"] == "LTX-2.5: explicit content may violate its license."
+    assert (
+        licence["why"]
+        == "Its license includes a Lightricks use policy that bans sexually explicit content."
+    )
+    assert licence["fix"] == (
+        "StableNew does not check or block this. You are responsible for following the license, "
+        "and you use it at your own risk."
+    )
     assert licence["subject"] == f"{workflow_id}@{LTX25_VERSION}"
     assert [w.code for w in accepted_workflow_warnings(spec, opted_in=False)] == [
         CODE_VIDEO_LICENCE_RESTRICTION
     ]
+
+
+def test_the_first_version_keeps_the_warning_its_jobs_recorded() -> None:
+    spec = build_default_workflow_registry().get(LTX25_ID, "1.0.0", allow_experimental=True)
+
+    assert (
+        workflow_warning_records(spec)[1]["title"]
+        == "LTX-2.5's licence forbids sexually explicit content."
+    )
 
 
 def test_a_workflow_without_a_declared_licence_warning_gets_none() -> None:
@@ -209,16 +228,25 @@ def test_every_model_file_is_pinned_by_sha256_size_folder_revision_and_loader_in
 # The published specs are immutable once registered: a change is a new version (VIDEO_PIPELINE section 13).
 # sha256 of json.dumps(spec.to_dict(), sort_keys=True, ensure_ascii=False, default=str), pinned from the first
 # registration; ``test_pr_vid_196_readiness_and_guidance.py`` pins the graphs with the rest of the catalog.
-PINNED_SPEC_SHA256 = {
+FIRST_VERSION_SPEC_SHA256 = {
     LTX25_ID: "e607b620403b6749614396f6ffb902115993ece80be59cc03b23b20399f5a5ce",
     LTX25_AUDIO_ID: "4027c4e95071b226bd29ecd9820c639460407de54d10cfe33e623904cf579cff",
+}
+PINNED_SPEC_SHA256 = {  # 1.0.1: the reworded licence warning
+    LTX25_ID: "9859cd7f9d579867c78327330f15ad4205eb2af8269634a9bcb4883d1458d92c",
+    LTX25_AUDIO_ID: "7f555ddecabb910a6568d53f6f5d9ef84cbd4041ebd10a28ab76cfcf074610bc",
 }
 
 
 @pytest.mark.parametrize("workflow_id", LTX25_IDS)
 def test_the_registered_specs_are_pinned_byte_for_byte(workflow_id: str) -> None:
-    text = json.dumps(_spec(workflow_id).to_dict(), sort_keys=True, ensure_ascii=False, default=str)
-    assert hashlib.sha256(text.encode("utf-8")).hexdigest() == PINNED_SPEC_SHA256[workflow_id]
+    registry = build_default_workflow_registry()
+    for version, pins in zip(
+        LTX25_VERSIONS, (FIRST_VERSION_SPEC_SHA256, PINNED_SPEC_SHA256), strict=True
+    ):
+        spec = registry.get(workflow_id, version, allow_experimental=True)
+        text = json.dumps(spec.to_dict(), sort_keys=True, ensure_ascii=False, default=str)
+        assert hashlib.sha256(text.encode("utf-8")).hexdigest() == pins[workflow_id]
 
 
 # --- the graphs --------------------------------------------------------------------------------

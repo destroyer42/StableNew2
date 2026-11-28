@@ -52,6 +52,19 @@ still dated 3 November 2026.
 - **Download, 2026-11-27:** the owner accepted the gate and the five files of section 5 were downloaded at the pinned
   revision (13:22-13:30 UTC), each matching its size and SHA-256, and placed as section 5 says.
 
+- **Owner decision, 2026-11-28 (direct), on what users see:** warn that explicit use may violate the license and that
+  the user takes that risk; do not control, block or disallow it. The typed warning now reads: "LTX-2.5: explicit
+  content may violate its license." / "Its license includes a Lightricks use policy that bans sexually explicit
+  content." / "StableNew does not check or block this. You are responsible for following the license, and you use it at
+  your own risk." The 2026-11-27 rule for agent-run test sources and prompts is not changed by this. The workflow
+  description, governance notes and fixed-settings line still state the restriction. Published specs are immutable,
+  so the wording is version 1.0.1 of both ids (graph, files and settings unchanged); 1.0.0 stays registered with the
+  warning its jobs recorded.
+- **What the license and policy text say about scope, 2026-11-28:** the policy describes itself as covering Lightricks'
+  own apps, web services and API; Attachment A is what applies it to the downloaded model. StableNew uses no
+  Lightricks API (local ComfyUI nodes only). This record reads Attachment A as binding local use, and knows of no
+  statement from Lightricks either way.
+
 Other terms: free below USD 10M annual revenue (personal use free); the licensee must not remove or disable provenance
 marks or watermarks and must disclose that disseminated content is machine generated; the licensor reserves the right
 to restrict use in breach; New York law. Access to the weights is gated: accepting shares the account's contact details
