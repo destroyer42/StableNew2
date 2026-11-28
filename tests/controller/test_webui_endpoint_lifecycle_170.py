@@ -445,3 +445,45 @@ def test_no_unreachable_alternate_port_discovery_remains():
     assert not hasattr(healthcheck, "find_webui_port")
     assert not hasattr(wpm, "discover_webui_port")
     assert not hasattr(app_controller.AppController, "_create_api_client_with_discovery")
+
+
+# -- STARTUP-STALL: a booting runtime is not an error ------------------------------------------------------------------
+
+
+def _probed_not_ready(monkeypatch, pid):
+    manager, _ = _started(monkeypatch, pid)
+    controller = WebUIConnectionController(base_url_provider=lambda: FORGE_URL)
+    controller.attach_process_manager(manager)
+    monkeypatch.setattr(controller, "_evaluate_strict_readiness", lambda: (False, "not listening"))
+    controller.refresh_health()  # the periodic status probe, while Forge is still loading
+    return manager, controller
+
+
+def test_an_owned_runtime_inside_its_startup_window_reads_as_connecting_not_error(monkeypatch):
+    manager, controller = _probed_not_ready(monkeypatch, 721)
+
+    assert controller.get_state() is WebUIConnectionState.CONNECTING
+
+    manager._start_time = time.time() - 10_000  # the bounded window has passed
+    assert controller.get_state() is WebUIConnectionState.ERROR
+
+
+def test_an_exited_runtime_or_a_failed_outage_still_reads_as_error_in_the_window(monkeypatch):
+    manager, controller = _probed_not_ready(monkeypatch, 722)
+
+    controller.set_outage_provider(lambda: {"status": "action_required"})
+    assert controller.get_state() is WebUIConnectionState.ERROR
+
+    controller.set_outage_provider(lambda: {"status": "healthy"})
+    monkeypatch.setattr(manager, "is_running", lambda: False)
+    assert controller.get_state() is WebUIConnectionState.ERROR
+
+
+def test_a_manager_that_cannot_answer_never_reads_as_connecting():
+    controller = WebUIConnectionController(base_url_provider=lambda: FORGE_URL)
+    manager = mock.MagicMock()
+    manager.owns_process = False
+    controller.attach_process_manager(manager)
+    controller._set_state(WebUIConnectionState.ERROR)
+
+    assert controller.get_state() is WebUIConnectionState.ERROR

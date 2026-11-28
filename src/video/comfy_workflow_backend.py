@@ -520,8 +520,10 @@ class ComfyWorkflowVideoBackend:
         self._transition = transition or RuntimeTransitionCoordinator()
         self._process_manager = process_manager
         self._managed_process_manager: ComfyProcessManager | None = None
-        #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one).
+        #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one),
+        #: and that segment's workflow id and version.
         self._sequence_warm_pid: int | None = None
+        self._sequence_warm_key: tuple[str, str] | None = None
         #: The process-wide idle hold between consecutive jobs of one workflow (VID-WARM-373).
         self._warm_hold = warm_hold or get_runtime_warm_hold()
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
@@ -628,6 +630,7 @@ class ComfyWorkflowVideoBackend:
                 # Remember which owned process now holds the model, so the next segment is judged warm only if
                 # it is still that very process.
                 self._sequence_warm_pid = self._owned_running_pid()
+                self._sequence_warm_key = warm_key
             return result
 
         # Declared runtime policy: once this job has touched the managed runtime, release the
@@ -762,11 +765,19 @@ class ComfyWorkflowVideoBackend:
                 and warm_claim.pid is not None
                 and self._owned_running_pid() == warm_claim.pid
             )
+            # The model the owned process already holds is not another program's memory (it counts almost none
+            # of it as PyTorch's), so a verified reuse for the same workflow skips the GPU check: a claimed hold
+            # (standalone job or a sequence's first segment) or the sequence's own previous segment.
             readiness = self._readiness.evaluate(
                 spec,
                 system_stats=system_stats,
                 warm_sequence=sequence_warm or held_warm,
-                owned_warm_reuse=held_warm and not request.hold_runtime,
+                owned_warm_reuse=held_warm
+                or (
+                    sequence_warm
+                    and self._sequence_warm_key
+                    == (str(spec.workflow_id), str(spec.workflow_version))
+                ),
             )
             # Record the measurements and RAM advisories even if allocation or dispatch later fails.
             logger.info(
@@ -1151,6 +1162,7 @@ class ComfyWorkflowVideoBackend:
         did not launch and still own is never stopped, and a workflow with no such policy leaves it running."""
 
         self._sequence_warm_pid = None  # the sequence is over: nothing is warm any more
+        self._sequence_warm_key = None
         for workflow_id, version in dict.fromkeys(workflows):
             try:
                 spec = self._workflow_registry.get(workflow_id, version, allow_experimental=True)

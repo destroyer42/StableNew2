@@ -40,10 +40,13 @@ from src.learning.learning_paths import get_learning_records_path
 from src.pipeline.job_models_v2 import UnifiedJobSummary, WorkloadKind
 from src.review.review_lineage import repository_of, verified_review_outputs
 from src.state.output_routing import get_output_root
+from src.utils.thread_registry import get_thread_registry
 
 log = logging.getLogger(__name__)
 _MAX_PREVIEW_JOBS = 250
 _RECEIPT_SECONDS = 20
+_PACKS_SHARED = "Visible PromptPacks and slot prompts are shared for this session."
+_PACKS_FAILED = "The visible PromptPacks could not be shared."
 
 
 class PreviewQueueConnection:
@@ -304,6 +307,9 @@ class SiteConnectionDialog:
         self._shared_output: Path | None = None
         self._omit_output = False
         self._startup_error = ""
+        self._pack_request = 0
+        self._packs_pending = False
+        self._pack_status: ttk.Label | None = None
         repository = repository_of(app)
         self._review_outputs = partial(verified_review_outputs, repository) if repository else None
         records = get_learning_records_path(create_parent=False)
@@ -529,11 +535,13 @@ class SiteConnectionDialog:
             anchor="w", pady=6
         )
         pack_text = (
-            "Visible PromptPacks are shared."
+            "Preparing the visible PromptPacks…"
+            if self._packs_pending
+            else "Visible PromptPacks are shared."
             if session.pack_catalog is not None
             else "PromptPacks are unavailable."
         )
-        pack_status = ttk.Label(frame, text=pack_text, wraplength=370)
+        self._pack_status = pack_status = ttk.Label(frame, text=pack_text, wraplength=370)
         pack_status.pack(anchor="w")
         ttk.Button(
             frame,
@@ -552,25 +560,50 @@ class SiteConnectionDialog:
             self.root.after(300, self.open)
 
     def _share_packs(self, session: SiteSession, status: ttk.Label | None = None) -> None:
+        """List the visible PromptPacks on a worker; the UI thread publishes the result.
+
+        STARTUP-STALL: resolving each pack on the Tk thread froze startup for 4-6 s. The newest request wins, and a
+        result for a revoked session or a closing app is dropped. Until then the session keeps what it had.
+        """
         if session.expired:
             return
+        # Read live app state here, on the UI thread; the worker gets plain snapshots.
+        root, packs = self.app._packs_dir, list(self.app.packs)
+        load_config = self.app._config_manager.load_pack_config
+        resources = dict(self.app.app_state.resources or {})
+        self._pack_request += 1
+        request = self._pack_request
+        self._packs_pending = True
+
+        def deliver(catalog: SitePackCatalog | None) -> None:
+            if request != self._pack_request:
+                return
+            self._packs_pending = False
+            if session.expired or self.app._is_shutting_down:
+                return
+            if catalog is not None:
+                session.share_packs(catalog)
+            label = status or self._pack_status
+            if label is not None and label.winfo_exists():
+                label.configure(text=_PACKS_SHARED if catalog is not None else _PACKS_FAILED)
+
+        def build() -> None:
+            catalog = None
+            try:
+                catalog = SitePackCatalog(root, packs, load_config, resources)
+            except (OSError, ValueError):
+                log.warning("The visible PromptPacks could not be listed for the Operator Site")
+            finally:
+                self.app._ui_dispatch(partial(deliver, catalog))
+
         try:
-            session.share_packs(
-                SitePackCatalog(
-                    self.app._packs_dir,
-                    list(self.app.packs),
-                    self.app._config_manager.load_pack_config,
-                    self.app.app_state.resources,
-                )
+            get_thread_registry().spawn(
+                target=build,
+                name="SitePackCatalog",
+                purpose="List the PromptPacks shared with the Operator Site off the UI thread",
             )
-        except (OSError, ValueError):
-            if status is not None:
-                status.configure(text="The visible PromptPacks could not be shared.")
-            return
-        if status is not None:
-            status.configure(
-                text="Visible PromptPacks and slot prompts are shared for this session."
-            )
+        except RuntimeError:  # the app is closing; nothing is left to share with
+            log.debug("PromptPacks were not shared: the app is shutting down")
 
     def _confirm_prepare(self, command: PreparePack) -> bool:
         dialog = self.dialog
@@ -677,7 +710,7 @@ class SiteConnectionDialog:
 
     def _destroyed(self, event: tk.Event[Any]) -> None:
         if event.widget is self.dialog:
-            self.dialog = None
+            self.dialog = self._pack_status = None
 
     def _disconnect(self, *, cancel_timer: bool = True) -> None:
         self.dialog = None
