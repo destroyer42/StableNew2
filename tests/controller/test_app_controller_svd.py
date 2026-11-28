@@ -221,7 +221,9 @@ def test_on_webui_ready_triggers_deferred_autostart() -> None:
     )
     controller._background_tasks = SimpleNamespace(submit=lambda *_args, **_kwargs: None)
     controller._application_runtime_coordinator = ApplicationRuntimeCoordinator(
-        job_controller=job_controller, webui_connection_controller=webui
+        job_controller=job_controller,
+        webui_connection_controller=webui,
+        spawn=lambda work: work(),
     )
 
     # GUI becomes ready first while WebUI is still starting: autostart is deferred.

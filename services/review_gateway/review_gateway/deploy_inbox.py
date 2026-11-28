@@ -45,6 +45,16 @@ def _commit(value: object) -> str | None:
     return value if isinstance(value, str) and _COMMIT.fullmatch(value) else None
 
 
+def deployed_commit(release_dir: Path) -> str | None:
+    """The commit the installer wrote into the release's ``source.json``; None when there is none."""
+
+    source = _small_text(release_dir / "source.json", 4096)
+    try:
+        return _commit(json.loads(source).get("commit")) if source else None
+    except (ValueError, AttributeError):
+        return None
+
+
 def _request_id(value: object) -> str | None:
     if not isinstance(value, str):
         return None
@@ -134,16 +144,11 @@ class DeployInbox:
         }
 
     def status(self) -> dict[str, Any]:
-        source = _small_text(self.release_dir / "source.json", 4096)
-        try:
-            deployed = _commit(json.loads(source).get("commit")) if source else None
-        except (ValueError, AttributeError):
-            deployed = None
         return {
             "schema_version": SCHEMA_VERSION,
             "type": "deploy_status",
             "remote_deploy": "enabled" if self.enabled else "disabled",
-            "deployed_commit": deployed,
+            "deployed_commit": deployed_commit(self.release_dir),
             "pending": self._pending(),
             "last": self._last(),
         }

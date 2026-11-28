@@ -34,6 +34,7 @@ from src.video.workflow_catalog_ltx25 import (
     LTX25_VERSION,
 )
 from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_CK_VERSION,
     WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_ID,
     WAN_A14B_VERSION,
@@ -143,7 +144,7 @@ def test_the_approved_a14b_stays_the_default_and_the_candidates_are_never_presel
     form = controller.build_default_form_state()
     assert (form["workflow_id"], form["workflow_version"]) == (
         WAN_A14B_FULL_PICTURE_ID,
-        WAN_A14B_VERSION,
+        WAN_A14B_FULL_PICTURE_CK_VERSION,
     )
     for workflow_id in LTX25_IDS:
         assert records[workflow_id]["experimental"] is True

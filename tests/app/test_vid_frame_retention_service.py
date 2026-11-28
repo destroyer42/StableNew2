@@ -1,4 +1,5 @@
-"""VID-FRAME: the first frame cleanup waits for the operator's confirmation; later ones run on schedule."""
+"""VID-FRAME / KEEP-SPACE: the first frame cleanup waits for the operator's confirmation; later ones run on schedule,
+and a Recycle Bin that cannot take the frames is explained once."""
 
 from __future__ import annotations
 
@@ -54,6 +55,7 @@ def sweeps(monkeypatch):
         return FrameSweep(frames=3, bytes=3_000_000_000, runs=1)
 
     monkeypatch.setattr(service, "sweep_retained_frames", sweep)
+    monkeypatch.setattr(service, "RecycleBin", object)  # the real shell is never built
     monkeypatch.setattr(service, "get_thread_registry", lambda: InlineThreads())
     return calls
 
@@ -93,13 +95,13 @@ def test_nothing_is_deleted_before_the_operator_confirms(tmp_path, sweeps) -> No
     assert len(asked) == 1 and asked[0][0].frames == 3
 
 
-def test_delete_now_confirms_once_sweeps_and_never_asks_again(tmp_path, sweeps) -> None:
+def test_move_now_confirms_once_sweeps_and_never_asks_again(tmp_path, sweeps) -> None:
     asked: list[Any] = []
     settings = Settings()
     root = _start(tmp_path, settings, asked)
     _drive(root, 3)
 
-    asked[0][1](service.CHOICE_DELETE_NOW)
+    asked[0][1](service.CHOICE_MOVE_NOW)
     _drive(root, 3)
 
     assert settings[service.CONFIRMED_KEY] is True
@@ -110,7 +112,7 @@ def test_delete_now_confirms_once_sweeps_and_never_asks_again(tmp_path, sweeps) 
 
 
 @pytest.mark.parametrize("choice", [service.CHOICE_NOT_NOW, service.CHOICE_TURN_OFF])
-def test_not_now_and_turn_off_delete_nothing(tmp_path, sweeps, choice) -> None:
+def test_not_now_and_turn_off_move_nothing(tmp_path, sweeps, choice) -> None:
     asked: list[Any] = []
     settings = Settings()
     root = _start(tmp_path, settings, asked)
@@ -153,3 +155,33 @@ def test_stopping_cancels_the_scheduled_run(tmp_path, sweeps) -> None:
     root.run_next()
 
     assert root.scheduled == [] and sweeps == []
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_a_bin_that_cannot_take_the_frames_is_explained_once(
+    tmp_path, sweeps, monkeypatch, confirmed
+) -> None:
+    full = FrameSweep(bin_refusal="The Recycle Bin is full.")
+    monkeypatch.setattr(service, "sweep_retained_frames", lambda *_a, **_k: full)
+    asked: list[Any] = []
+    settings = Settings({service.CONFIRMED_KEY: confirmed})
+
+    _drive(_start(tmp_path, settings, asked), 8)  # several six-hour passes
+
+    assert [preview for preview, _choose in asked] == [full]
+    assert settings[service.CONFIRMED_KEY] is confirmed
+
+
+def test_a_bin_that_filled_after_move_now_is_still_explained(tmp_path, sweeps, monkeypatch) -> None:
+    def sweep(_root, *, dry_run=False, **_kwargs):
+        return FrameSweep(frames=3, bytes=3, runs=1) if dry_run else FrameSweep(bin_refusal="Full.")
+
+    monkeypatch.setattr(service, "sweep_retained_frames", sweep)
+    asked: list[Any] = []
+    root = _start(tmp_path, Settings(), asked)
+    _drive(root, 3)
+
+    asked[0][1](service.CHOICE_MOVE_NOW)
+    _drive(root, 6)
+
+    assert [preview.bin_refusal for preview, _choose in asked] == ["", "Full."]

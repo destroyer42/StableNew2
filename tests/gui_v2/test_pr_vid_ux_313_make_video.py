@@ -268,10 +268,15 @@ def test_the_picker_shows_friendly_names_but_state_keeps_the_workflow_id(env) ->
         TI2V_ID not in label and RECOMMENDED_ID not in label and ANIMATE2_ID not in label
         for label in labels
     )
-    assert env.tab.workflow_label_var.get() == "Wan2.2 I2V-A14B 4-step full picture (recommended)"
+    default_label = "Wan2.2 I2V-A14B 4-step full picture, CK attention (recommended)"
+    assert env.tab.workflow_label_var.get() == default_label
+    assert "Wan2.2 I2V-A14B 4-step full picture, standard attention" in labels
 
     state = env.tab.get_video_workflow_state()
     assert state["workflow_id"] == RECOMMENDED_ID  # persisted state is unchanged by the picker
+    # A form saved before CK became the default names the same id: it opens at the CK version.
+    env.tab.restore_video_workflow_state({**state, "workflow_version": "1.0.0"})
+    assert env.tab.get_video_workflow_state()["workflow_version"] == "1.1.0"
     env.tab.restore_video_workflow_state({**state, "workflow_id": ANIMATE2_ID})
     assert env.tab.workflow_var.get() == ANIMATE2_ID
     assert "Driving Video" in env.tab.workflow_label_var.get()

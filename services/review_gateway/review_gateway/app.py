@@ -31,7 +31,8 @@ class Gateway:
         self.ratings = RatingStore(self.store)
 
     def phone_app(self) -> Starlette:
-        return build_phone_app(self.store, self.clock, self.ratings)
+        release = self.settings.release_dir or running_release()
+        return build_phone_app(self.store, self.clock, self.ratings, release)
 
     def sync_app(self) -> Starlette:
         deploys = DeployInbox(

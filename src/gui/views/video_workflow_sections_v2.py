@@ -96,7 +96,7 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
     tab.show_experimental_check.grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
     attach_tooltip(
         tab.show_experimental_check,
-        "Also list unrated speed arms and superseded engine arms (A14B CK attention and SVI, "
+        "Also list unrated and superseded engine arms (A14B CK attention at 480x832 only, A14B SVI, "
         "HunyuanVideo 1.5). They stay experimental: Queue warns and records your opt-in.",
     )
     tab.workflow_combo = cast(

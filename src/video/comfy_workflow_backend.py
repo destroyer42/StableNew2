@@ -376,6 +376,9 @@ def _has_model_inventory(payload: Any) -> bool:
 # interval (SystemWatchdogV2.RUNNER_STALL_S) and is only ever emitted inside the backend's own
 # execution wait (`history_timeout`), so it can never suppress a stall past that bound.
 _LIVENESS_REPORT_INTERVAL_S = 5.0
+# VID-FINISH: how long the VRAM check before the upscale waits for ComfyUI to finish unloading.
+UPSCALE_UNLOAD_WAIT_SECONDS = 30.0
+UPSCALE_UNLOAD_POLL_SECONDS = 1.0
 
 
 def _queue_membership(queue: Any, prompt_id: str) -> str | None:
@@ -552,8 +555,10 @@ class ComfyWorkflowVideoBackend:
         self._transition = transition or RuntimeTransitionCoordinator()
         self._process_manager = process_manager
         self._managed_process_manager: ComfyProcessManager | None = None
-        #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one).
+        #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one),
+        #: and that segment's workflow id and version.
         self._sequence_warm_pid: int | None = None
+        self._sequence_warm_key: tuple[str, str] | None = None
         #: The process-wide idle hold between consecutive jobs of one workflow (VID-WARM-373).
         self._warm_hold = warm_hold or get_runtime_warm_hold()
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
@@ -662,6 +667,7 @@ class ComfyWorkflowVideoBackend:
                 # Remember which owned process now holds the model, so the next segment is judged warm only if
                 # it is still that very process.
                 self._sequence_warm_pid = self._owned_running_pid()
+                self._sequence_warm_key = warm_key
             return result
 
         # Declared runtime policy: once this job has touched the managed runtime, release the
@@ -798,6 +804,8 @@ class ComfyWorkflowVideoBackend:
                 fps = int(smoothed.output_fps)
         finally:
             if work_dir is not None:
+                # SeedVR2 must not stay loaded, or the next job's VRAM check reads it as another program's memory.
+                self._unload_owned_models(client)
                 shutil.rmtree(work_dir, ignore_errors=True)
         if finishing is not None and finishing.edits:
             _raise_if_cancelled(request.cancel_token, "before the clip was trimmed or looped")
@@ -829,9 +837,18 @@ class ComfyWorkflowVideoBackend:
 
         token = request.cancel_token
         _raise_if_cancelled(token, "before the upscale")
-        readiness = self._readiness.evaluate(
-            upscale_readiness_spec(), system_stats=client.get_system_stats()
-        )
+        # The video workflow's models are still loaded, and Comfy counts almost none of them as PyTorch's
+        # (VID-WARM-373), so they are unloaded first; the stop rule then judges other programs' memory only.
+        unloaded = self._unload_owned_models(client)
+        deadline = time.monotonic() + (UPSCALE_UNLOAD_WAIT_SECONDS if unloaded else 0.0)
+        while True:
+            readiness = self._readiness.evaluate(
+                upscale_readiness_spec(), system_stats=client.get_system_stats()
+            )
+            if readiness.ready or time.monotonic() >= deadline:
+                break
+            _raise_if_cancelled(token, "while ComfyUI was unloading models")
+            time.sleep(UPSCALE_UNLOAD_POLL_SECONDS)
         logger.info("SeedVR2 upscale resource readiness: %s", readiness.to_dict())
         if not readiness.ready:
             raise RuntimeError(f"The SeedVR2 upscale is not resource-ready: {readiness.message}")
@@ -877,8 +894,21 @@ class ComfyWorkflowVideoBackend:
             **dict(upscale),
             "prompt_id": prompt_id,
             "frame_count": len(upscaled),
+            "unloaded_models_first": unloaded,
             "resource_readiness": readiness.to_dict(),
         }
+
+    def _unload_owned_models(self, client: ComfyApiClient) -> bool:
+        """Ask the ComfyUI StableNew owns to unload its models; never one it does not own.  Best effort."""
+
+        if self._owned_running_pid() is None:
+            return False
+        try:
+            client.free_memory()
+        except Exception as exc:  # noqa: BLE001 - the VRAM check that follows judges what is actually free
+            logger.warning("Could not ask ComfyUI to unload its models: %s", exc)
+            return False
+        return True
 
     def _hold_owned_runtime(self, spec: Any, key: tuple[str, str]) -> dict[str, Any] | None:
         """Arm the warm hold for the owned process that just served ``spec``; ``None`` means release as usual."""
@@ -993,11 +1023,19 @@ class ComfyWorkflowVideoBackend:
                 and warm_claim.pid is not None
                 and self._owned_running_pid() == warm_claim.pid
             )
+            # The model the owned process already holds is not another program's memory (it counts almost none
+            # of it as PyTorch's), so a verified reuse for the same workflow skips the GPU check: a claimed hold
+            # (standalone job or a sequence's first segment) or the sequence's own previous segment.
             readiness = self._readiness.evaluate(
                 spec,
                 system_stats=system_stats,
                 warm_sequence=sequence_warm or held_warm,
-                owned_warm_reuse=held_warm and not request.hold_runtime,
+                owned_warm_reuse=held_warm
+                or (
+                    sequence_warm
+                    and self._sequence_warm_key
+                    == (str(spec.workflow_id), str(spec.workflow_version))
+                ),
             )
             # Record the measurements and RAM advisories even if allocation or dispatch later fails.
             logger.info(
@@ -1357,6 +1395,7 @@ class ComfyWorkflowVideoBackend:
         did not launch and still own is never stopped, and a workflow with no such policy leaves it running."""
 
         self._sequence_warm_pid = None  # the sequence is over: nothing is warm any more
+        self._sequence_warm_key = None
         for workflow_id, version in dict.fromkeys(workflows):
             try:
                 spec = self._workflow_registry.get(workflow_id, version, allow_experimental=True)

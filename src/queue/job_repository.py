@@ -36,6 +36,7 @@ from src.queue.job_model import (
     RetryAttempt,
     StageCheckpoint,
 )
+from src.queue.result_blocks import REFERENCE_MARKER, externalize, restore
 from src.utils.contention_lock import ContentionLock
 from src.utils.error_envelope_v2 import (
     UnifiedErrorEnvelope,
@@ -155,12 +156,14 @@ def _json_loads(value: str | None, default: Any, *, column: str = "", row: Any =
                 job_id = str(row["job_id"])
         except Exception:  # noqa: BLE001 - diagnostics must not raise
             job_id = ""
-        logger.error(
-            "Stored JSON is corrupt (job_id=%s column=%s): %s; using the default", job_id, column, exc
-        )
-        with _INTEGRITY_LOCK:
-            _INTEGRITY_ERRORS.append({"job_id": job_id, "column": column, "error": str(exc)[:200]})
+        _record_integrity_error(job_id, column, str(exc))
         return default
+
+
+def _record_integrity_error(job_id: str, column: str, error: str) -> None:
+    logger.error("Stored JSON is corrupt (job_id=%s column=%s): %s", job_id, column, error)
+    with _INTEGRITY_LOCK:
+        _INTEGRITY_ERRORS.append({"job_id": job_id, "column": column, "error": error[:200]})
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -391,6 +394,15 @@ class JobRepository(JobHistoryStore):
                     created_at TEXT NOT NULL
                 )
                 """,
+                # KEEP-SPACE: records a job result repeats, stored once by hash (see ``result_blocks``). Additive and
+                # idempotent like the table above; rows are only inserted, in the transaction that writes the result.
+                """
+                CREATE TABLE IF NOT EXISTS result_blocks (
+                    sha256 TEXT PRIMARY KEY,
+                    block_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """,
             )
             for statement in statements:
                 connection.execute(statement)
@@ -578,7 +590,7 @@ class JobRepository(JobHistoryStore):
                 _json_dumps(serialize_envelope(job.error_envelope))
                 if job.error_envelope is not None
                 else None,
-                _json_dumps(job.result) if job.result is not None else None,
+                self._stored_result(connection, job.result),
                 _json_dumps(_artifact_references(job.result)),
                 prepared.parent_job_id,
                 prepared.parent_artifact_id,
@@ -722,7 +734,7 @@ class JobRepository(JobHistoryStore):
                     _json_dumps(serialize_envelope(job.error_envelope))
                     if job.error_envelope is not None
                     else None,
-                    _json_dumps(effective_result) if effective_result is not None else None,
+                    self._stored_result(connection, effective_result),
                     _json_dumps(_artifact_references(effective_result)),
                     job.job_id,
                     current.value,
@@ -1233,13 +1245,49 @@ class JobRepository(JobHistoryStore):
             completed_at=_parse_datetime(row["completed_at"]),
             error_message=row["error_message"],
             error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None, column="error_envelope", row=row)),
-            result=_json_loads(row["result_json"], None, column="result_json", row=row),
+            result=self._read_result(row),
             execution_metadata=_execution_metadata_from_dict(
                 _json_loads(row["execution_metadata"], {}, column="execution_metadata", row=row)
             ),
             snapshot=_json_loads(row["njr_snapshot"], {}, column="njr_snapshot", row=row),
             cursor=int(row["cursor"]),
         )
+
+    @staticmethod
+    def _stored_result(connection: sqlite3.Connection, result: Any) -> str | None:
+        """The ``result_json`` text of ``result``, storing its repeated records on the caller's transaction."""
+
+        if result is None:
+            return None
+        compact, bodies = externalize(result)
+        created = datetime.utcnow().isoformat()
+        connection.executemany(
+            "INSERT OR IGNORE INTO result_blocks(sha256, block_json, created_at) VALUES (?, ?, ?)",
+            [(digest, body, created) for digest, body in bodies.items()],
+        )
+        return _json_dumps(compact)
+
+    def _read_result(self, row: sqlite3.Row) -> Any:
+        """The result as it was written: stored records are put back, and verified, on every read."""
+
+        text = row["result_json"]
+        result = _json_loads(text, None, column="result_json", row=row)
+        if not text or REFERENCE_MARKER not in text:
+            return result
+
+        def lookup(digest: str) -> str | None:
+            with self._lock:
+                found = self._connection.execute(
+                    "SELECT block_json FROM result_blocks WHERE sha256 = ?", (digest,)
+                ).fetchone()
+            return None if found is None else str(found["block_json"])
+
+        def report(digest: str, reason: str) -> None:
+            _record_integrity_error(
+                str(row["job_id"]), "result_json", f"stored result block {digest[:12]} {reason}"
+            )
+
+        return restore(result, lookup, report)
 
     def record_status_change(
         self,
@@ -1452,7 +1500,7 @@ class JobRepository(JobHistoryStore):
                 _json_dumps(_execution_metadata_to_dict(job.execution_metadata)),
                 job.error_message,
                 _json_dumps(serialize_envelope(job.error_envelope)) if job.error_envelope else None,
-                _json_dumps(job.result) if job.result is not None else None,
+                self._stored_result(connection, job.result),
                 _json_dumps(_artifact_references(job.result)),
                 parent_job_id,
                 parent_artifact_id,
@@ -1477,7 +1525,7 @@ class JobRepository(JobHistoryStore):
             completed_at=_parse_datetime(row["completed_at"]),
             randomizer_metadata=_json_loads(row["randomizer_metadata"], {}, column="randomizer_metadata", row=row),
             error_message=row["error_message"],
-            result=_json_loads(row["result_json"], None, column="result_json", row=row),
+            result=self._read_result(row),
             worker_id=row["worker_id"],
             run_mode=str(row["run_mode"]),
             source=str(row["source"]),
@@ -1512,7 +1560,7 @@ class JobRepository(JobHistoryStore):
             error_message=row["error_message"],
             worker_id=row["worker_id"],
             run_mode=str(row["run_mode"]),
-            result=_json_loads(row["result_json"], None, column="result_json", row=row),
+            result=self._read_result(row),
             prompt_source=str(row["prompt_source"]),
             prompt_pack_id=row["prompt_pack_id"],
             snapshot=_json_loads(row["njr_snapshot"], {}, column="njr_snapshot", row=row),

@@ -288,7 +288,8 @@ importing existing suites.
 | `a14b_480p` | `wan22_i2v_a14b_4step_v1` 1.0.0 | approved since VID-CLIP-372 | Wan2.2 I2V-A14B with the lightx2v 4-step LoRAs at 480x832 / 832x480. |
 
 * No arm needs the experimental opt-in any more. The picker offers all three engines as separate approved entries (A14B is
-  recommended, today its full-picture workflow; TI2V-5B 480p and the 720p workflow are listed beside it).
+  recommended, today its full-picture workflow with CK attention; its standard-attention entry, TI2V-5B 480p and the
+  720p workflow are listed beside it).
 * The execution-time GPU guard still applies to every arm. The A14B arm needs the six pinned files (two experts, two
   LoRAs, the UMT5 encoder and the Wan 2.1 VAE; names and SHA-256 in `docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md`
   and the catalog) and a managed Comfy launched with `--disable-pinned-memory`. A missing file refuses the job before

@@ -10,6 +10,8 @@ Site** is in the top toolbar beside **Readiness**.
    the Windows pairing code and allow browser access to the local listener if prompted.
 2. Pairing grants the Site access to visible PromptPacks and allows it to prepare and submit its own reviewed
    Previews until the session closes. For eval or result media, select **Share eval output…** and choose a folder.
+   StableNew lists the PromptPacks in the background; for the first seconds after it starts, the Site can report
+   them as not shared yet.
 3. To work from another device, click **Start remote session** in the paired PC browser. Keep that tab, the StableNew
    window and the PC online. Sign in to the same private Site on the other device and enter the separate remote code.
    Hosted requests are handled by the paired browser on the PC. The local StableNew pairing code stays on the PC.

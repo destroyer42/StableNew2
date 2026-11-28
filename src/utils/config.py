@@ -820,9 +820,9 @@ class ConfigManager:
             "global_positive_enabled": False,
             "global_negative_enabled": True,
             "output_dir": str(Path("output")),
-            # VID-FRAME (owner decision 2026-11-27): remove a clip's PNG frames a day after the clip exists.
+            # VID-FRAME / KEEP-SPACE (owner decision 2026-11-28): recycle a clip's PNG frames 7 days after it exists.
             "video_frame_cleanup_enabled": True,
-            # Set by Delete now on the one-time confirmation; until then no frame is removed.
+            # Set by Move now on the one-time confirmation; until then no frame is moved.
             "video_frame_cleanup_confirmed": False,
             "eval_plans_dir": "",
             "model_dir": str(Path("models")),

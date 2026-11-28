@@ -276,6 +276,7 @@ def test_startup_shares_configured_output_and_visible_packs_without_opening_a_di
     packs.mkdir()
     app = Mock(_is_shutting_down=False, _packs_dir=packs, packs=[])
     app.app_state.resources = {}
+    app._ui_dispatch = lambda fn: fn()
     app._config_manager.load_settings.return_value = {"output_dir": str(output)}
     phone = Mock()
     monkeypatch.setattr(site_connection_dialog, "SitePhoneConnector", Mock(return_value=phone))
@@ -291,6 +292,9 @@ def test_startup_shares_configured_output_and_visible_packs_without_opening_a_di
     session = listener.call_args.args[0]
     assert session.remember_enabled
     assert session.output_catalog is not None
+    deadline = time.monotonic() + 5  # the PromptPacks are listed on a worker (STARTUP-STALL)
+    while session.pack_catalog is None and time.monotonic() < deadline:
+        time.sleep(0.005)
     assert session.pack_catalog is not None
     dialog._timer = "pending"
     dialog.shutdown()

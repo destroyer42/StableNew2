@@ -24,6 +24,13 @@ V1 end frame (2026-11-27, owner "Accept re-scope"): ``wan22_i2v_a14b_flf_v1`` 1.
 ``WanImageToVideo`` replaced by the stock ``WanFirstLastFrameToVideo`` and a second ``LoadImage`` for the end image;
 experimental until rated.  Whether the installed 4-step I2V experts follow the end frame well is not measured.
 
+CK attention default (owner decision 2026-11-28): the Make Video default is the full-picture workflow's 1.1.0, the
+1.0.0 graph, files and sizes on a ComfyUI launched with Comfy Kitchen attention (the ``ck`` launch profile; no graph
+node).  The owner's blind rating of nine pairs against standard attention (2026-11-27, 480x832 only) found likeness and
+stability the same in all nine, and motion the same in seven and better with standard attention in two.  CK was not
+rated or measured at the other full-picture sizes.  ``wan22_i2v_a14b_4step_full_picture_standard_v1`` keeps standard
+attention selectable (its own id, as the picker offers one entry per id); jobs frozen at full picture 1.0.0 keep it.
+
 VID-A14B-SPEED-374 registers three EXPERIMENTAL speed arms of the same workflow id beside the approved 1.0.0, for an
 owner-rated eval (``docs/runbooks/examples/video_eval_a14b_speed_arms.suite.json``).  Each changes exactly one thing:
 
@@ -82,6 +89,9 @@ WAN_A14B_SPEED_ARM_VERSIONS = (
 # count").  Every size is a multiple of 16 and no larger than 480x832 (399,360 pixels).  Its own workflow id, like the
 # CK launch profile, because the picker offers one entry per id.
 WAN_A14B_FULL_PICTURE_ID = "wan22_i2v_a14b_4step_full_picture_v1"
+#: 1.1.0 of the full-picture id is the CK-attention default; the same sizes with standard attention keep their own id.
+WAN_A14B_FULL_PICTURE_CK_VERSION = "1.1.0"
+WAN_A14B_FULL_PICTURE_STANDARD_ID = "wan22_i2v_a14b_4step_full_picture_standard_v1"
 WAN_A14B_ASPECT_TARGETS = (
     (480, 832),
     (512, 768),
@@ -106,6 +116,7 @@ WAN_A14B_CROP_WARNED_IDS = frozenset(
         "wan22_i2v_a14b_4step_ck_v1",
         "wan22_i2v_a14b_svi",
         WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_FULL_PICTURE_STANDARD_ID,
         WAN_A14B_FLF_ID,
     }
 )
@@ -762,6 +773,72 @@ def build_wan_a14b_full_picture_spec() -> WorkflowSpec:
     )
 
 
+def build_wan_a14b_full_picture_ck_spec() -> WorkflowSpec:
+    """1.1.0: full picture 1.0.0 on a ComfyUI launched with CK attention; the Make Video default."""
+
+    base = build_wan_a14b_full_picture_spec()
+    defaults = deepcopy(base.backend_defaults)
+    defaults["provenance"]["qualification"] = (
+        "WAN-BENCH-373 (about 27% faster warm) and the owner's blind rating of nine pairs (2026-11-27), both at "
+        "480x832; CK attention at the other full-picture sizes is unmeasured; not QUALIFIED by the ledger"
+    )
+    fixed = defaults["operator_projection"]["fixed_settings"]
+    fixed["attention"] = (
+        "Comfy Kitchen attention via the managed ComfyUI launch; output is close to, but not identical to, "
+        "standard attention"
+    )
+    fixed["hardware"] = (
+        "RTX 4070 Ti 12 GB, 32 GB RAM. Memory at these sizes was measured with standard attention only (peak 10.3 GB "
+        "VRAM at 81 frames; a 121-frame clip left 3.8 GiB of host RAM free: close other programs for long clips). "
+        "Not QUALIFIED by the ledger"
+    )
+    return replace(
+        base,
+        workflow_version=WAN_A14B_FULL_PICTURE_CK_VERSION,
+        display_name="Wan2.2 I2V-A14B 4-step full picture, CK attention",
+        description=(
+            "The full-picture Wan2.2 I2V-A14B 4-step graph and sizes on a ComfyUI launched with Comfy Kitchen "
+            "attention, which is faster when warm. The Make Video default. A ComfyUI without CK attention refuses "
+            "the job: choose the standard-attention full-picture engine."
+        ),
+        pinned_revision=f"catalog:{WAN_A14B_FULL_PICTURE_ID}@{WAN_A14B_FULL_PICTURE_CK_VERSION}",
+        governance_notes=(
+            "APPROVED by the owner's decision of 2026-11-28 as the Make Video default. In a blind rating of nine "
+            "pairs against standard attention at 480x832 (2026-11-27), likeness and stability were the same in all "
+            "nine; motion was the same in seven, better with standard attention in two and better with CK in none. "
+            "About 27% faster when warm (WAN-BENCH-373, 480x832). Not rated or measured with CK at the other "
+            "full-picture sizes. Not QUALIFIED by the ledger."
+        ),
+        backend_defaults=defaults,
+    )
+
+
+def build_wan_a14b_full_picture_standard_spec() -> WorkflowSpec:
+    """Full picture 1.0.0 under its own id: the standard-attention entry the operator can switch back to."""
+
+    base = build_wan_a14b_full_picture_spec()
+    defaults = deepcopy(base.backend_defaults)
+    defaults["make_video_default"] = False
+    defaults["operator_projection"]["fixed_settings"]["attention"] = (
+        "ComfyUI's standard attention (no Comfy Kitchen launch argument)"
+    )
+    return replace(
+        base,
+        workflow_id=WAN_A14B_FULL_PICTURE_STANDARD_ID,
+        display_name="Wan2.2 I2V-A14B 4-step full picture, standard attention",
+        description=(
+            "The same full-picture graph, files and sizes without Comfy Kitchen attention: slower than the default, "
+            "with the output the full-picture workflow gave before CK became the default."
+        ),
+        pinned_revision=f"catalog:{WAN_A14B_FULL_PICTURE_STANDARD_ID}@{WAN_A14B_VERSION}",
+        governance_notes=(
+            "APPROVED: the configuration the owner approved on 2026-11-27 (VID-FRAME, full picture 1.0.0), under its "
+            "own id so it stays selectable beside the CK default (2026-11-28). Not QUALIFIED by the ledger."
+        ),
+        backend_defaults=defaults,
+    )
+
+
 def _flf_template() -> dict[str, Any]:
     graph = _prompt_template()
     graph["10"]["class_type"] = WAN_A14B_FLF_NODE
@@ -827,11 +904,19 @@ def build_wan_a14b_flf_spec() -> WorkflowSpec:
 def a14b_launch_attention(spec: WorkflowSpec) -> str | None:
     """Resolve launch mode from the immutable workflow identity, including old baseline jobs."""
 
-    if getattr(spec, "workflow_version", None) == WAN_A14B_VERSION:
-        if spec.workflow_id in (WAN_A14B_ID, WAN_A14B_FULL_PICTURE_ID, WAN_A14B_FLF_ID):
-            return "baseline"
-        if spec.workflow_id == WAN_A14B_CK_LAUNCH_ID:
-            return "ck"
+    identity = (getattr(spec, "workflow_id", None), getattr(spec, "workflow_version", None))
+    if identity in {
+        (WAN_A14B_CK_LAUNCH_ID, WAN_A14B_VERSION),
+        (WAN_A14B_FULL_PICTURE_ID, WAN_A14B_FULL_PICTURE_CK_VERSION),
+    }:
+        return "ck"
+    if identity[1] == WAN_A14B_VERSION and identity[0] in {
+        WAN_A14B_ID,
+        WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_FULL_PICTURE_STANDARD_ID,
+        WAN_A14B_FLF_ID,
+    }:
+        return "baseline"
     return None
 
 
@@ -844,6 +929,8 @@ def build_wan_a14b_specs() -> tuple[WorkflowSpec, ...]:
         build_wan_a14b_merged_spec(),
         build_wan_a14b_gpu_text_encoder_spec(),
         build_wan_a14b_full_picture_spec(),
+        build_wan_a14b_full_picture_ck_spec(),
+        build_wan_a14b_full_picture_standard_spec(),
         build_wan_a14b_flf_spec(),
         build_wan_a14b_ck_launch_spec(),
     )
@@ -861,7 +948,9 @@ __all__ = [
     "WAN_A14B_FLF_NODE",
     "WAN_A14B_FLF_VERSION",
     "WAN_A14B_FRAME_COUNT_POLICY",
+    "WAN_A14B_FULL_PICTURE_CK_VERSION",
     "WAN_A14B_FULL_PICTURE_ID",
+    "WAN_A14B_FULL_PICTURE_STANDARD_ID",
     "WAN_A14B_MAX_CROP_FRACTION",
     "WAN_A14B_GPU_TEXT_ENCODER_VERSION",
     "WAN_A14B_ID",

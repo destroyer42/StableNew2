@@ -8,11 +8,13 @@ from html.parser import HTMLParser
 
 import pytest
 from review_gateway.contract import Contract
+from review_gateway.static_files import load_static
 
 from tests.review_gateway_service.conftest import GATEWAY_ROOT, SCHEMA_PATH
 
 RUN = "20261125_101500_pack"
 STATIC = GATEWAY_ROOT / "review_gateway" / "static"
+VERSION = load_static().version
 CSP_DIRECTIVES = (
     "default-src 'self'",
     "script-src 'self'",
@@ -344,9 +346,10 @@ def test_a_cross_site_form_post_cannot_reach_the_api(rig, path) -> None:
     "path",
     [
         "/",
-        "/static/app.js",
-        "/static/queued.js",
-        "/static/app.css",
+        f"/s/{VERSION}/core/main.js",
+        f"/s/{VERSION}/features/queued/queued.js",
+        f"/s/{VERSION}/core/core.css",
+        f"/s/{VERSION}/files.json",
         "/api/session",
         "/nowhere",
         "/sync/v1/health",
@@ -399,9 +402,9 @@ def test_video_supports_range_requests_for_playback(rig) -> None:
         "/media/lib-one_____/{other}/thumb",
         "/media/..%2F..%2F/{sha}/thumb",
         "/media/{sha}",
-        "/static/../app.py",
-        "/static/%2e%2e/config.py",
-        "/static/",
+        f"/s/{VERSION}/../app.py",
+        f"/s/{VERSION}/%2e%2e/config.py",
+        f"/s/{VERSION}/",
     ],
 )
 def test_nothing_else_is_downloadable(rig, path) -> None:
@@ -436,33 +439,30 @@ def test_the_page_has_no_inline_script_or_style_and_loads_only_bundled_files(rig
     assert page.problems == []
     assert page.sources
     for source in page.sources:
-        assert source.startswith(("/static/", "#")), source
-        if source.startswith("/static/"):
+        assert source.startswith(("/s/", "#")), source
+        if source.startswith("/s/"):
             assert rig.phone.get(source).status_code == 200
 
 
 def test_the_script_renders_metadata_only_as_text_and_calls_no_other_host() -> None:
-    script = "".join(
-        (STATIC / name).read_text(encoding="utf-8")
-        for name in ("app.js", "moreinfo.js", "rating.js", "queued.js")
-    )
-
-    for forbidden in (
-        "innerHTML",
-        "outerHTML",
-        "insertAdjacentHTML",
-        "document.write",
-        "eval(",
-        "Function(",
-    ):
-        assert forbidden not in script, forbidden
-    for name in ("app.js", "moreinfo.js", "queued.js", "app.css", "index.html"):
-        text = (STATIC / name).read_text(encoding="utf-8")
-        assert not re.search(r"(https?:)?//[a-z0-9-]+\.[a-z]", text, re.IGNORECASE), name
+    page = sorted(path for path in STATIC.rglob("*") if path.suffix in {".js", ".css", ".html"})
+    assert len(page) > 4
+    for path in page:
+        text = path.read_text(encoding="utf-8")
+        for forbidden in (
+            "innerHTML",
+            "outerHTML",
+            "insertAdjacentHTML",
+            "document.write",
+            "eval(",
+            "Function(",
+        ):
+            assert forbidden not in text, (path.name, forbidden)
+        assert not re.search(r"(https?:)?//[a-z0-9-]+\.[a-z]", text, re.IGNORECASE), path.name
 
 
 def test_the_script_sends_the_header_the_api_requires() -> None:
-    assert '"X-Review-Gateway": "1"' in (STATIC / "app.js").read_text(encoding="utf-8")
+    assert '"X-Review-Gateway": "1"' in (STATIC / "core" / "api.js").read_text(encoding="utf-8")
 
 
 def test_resending_a_withdrawn_decision_reports_the_decision_that_replaced_it(rig) -> None:

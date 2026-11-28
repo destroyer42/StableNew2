@@ -31,6 +31,7 @@ def test_default_workflow_registry_holds_only_real_evidence_backed_workflows() -
         "ltx25_distilled_i2v_v1",
         "wan22_fun_control_5b_canny_i2v_v1",
         "wan22_i2v_a14b_4step_ck_v1",
+        "wan22_i2v_a14b_4step_full_picture_standard_v1",
         "wan22_i2v_a14b_4step_full_picture_v1",
         "wan22_i2v_a14b_4step_v1",
         "wan22_i2v_a14b_flf_v1",  # V1 end frame
@@ -58,7 +59,9 @@ def test_default_workflow_registry_holds_only_real_evidence_backed_workflows() -
         ("wan22_fun_control_5b_canny_i2v_v1", "1.0.0"),
         ("wan22_fun_control_5b_canny_i2v_v1", "1.1.0"),
         ("wan22_i2v_a14b_4step_ck_v1", "1.0.0"),
+        ("wan22_i2v_a14b_4step_full_picture_standard_v1", "1.0.0"),
         ("wan22_i2v_a14b_4step_full_picture_v1", "1.0.0"),
+        ("wan22_i2v_a14b_4step_full_picture_v1", "1.1.0"),
         ("wan22_i2v_a14b_4step_v1", "1.0.0"),
         ("wan22_i2v_a14b_4step_v1", "1.1.0"),
         ("wan22_i2v_a14b_4step_v1", "1.2.0"),

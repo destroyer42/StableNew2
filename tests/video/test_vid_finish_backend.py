@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from PIL import Image
 
-from src.app.review_gateway_sources import RETAINED, SourceFilter
+from src.app.review_gateway_sources import RETAINED, WORKING, SourceFilter
 from src.video.clip_finishing import ClipFinishResult
+from src.video.comfy_api_client import ComfyApiClient
+from src.video.seedvr2_upscale import WORK_DIR_SUFFIX
 from src.video.video_interpolation import VideoInterpolationResult
 from tests.video.test_pr_vid_smooth_302_video import _rife
 from tests.video.test_pr_vid_wan_324_frames_out import (
@@ -317,24 +320,84 @@ def test_the_upscale_is_refused_before_anything_is_generated(
     assert client.queued == []
 
 
-def test_the_vram_stop_rule_is_checked_again_before_the_upscale_is_queued(tmp_path: Path) -> None:
-    client = _UpscaleComfy(tmp_path)
+def _holding_backend(
+    client: _UpscaleComfy,
+    *,
+    owned: bool,
+    still_held_after_unload: int = 0,
+    never_free: bool = False,
+):
+    """ComfyUI keeps the video workflow's models after generating (almost none counted as PyTorch's, VID-WARM-373),
+    so the driver reports little free memory until it is asked to unload them."""
+
     backend = _frames_backend(client)
-    low = _stats(free_mib=6000)
-    readings = iter([_driver_probe(client.stats), _driver_probe(low)])
-    probes: list[Any] = []
+    state = {"reads_after_unload": 0}
+    client.unloads = []
 
     def _probe(index: int):
-        probes.append(next(readings))
-        return probes[-1](index)
+        if not client.queued:  # the workflow's own check, before it loads anything
+            return _driver_probe(client.stats)(index)
+        if client.unloads and not never_free:
+            state["reads_after_unload"] += 1
+            if state["reads_after_unload"] > still_held_after_unload:
+                return _driver_probe(client.stats)(index)
+        return _driver_probe(_stats(free_mib=2000))(index)
 
+    client.free_memory = lambda: client.unloads.append(len(client.queued))
     backend._readiness = type(backend._readiness)(ram_probe=lambda: 24.0, gpu_probe=_probe)
+    backend._owned_running_pid = lambda: 4321 if owned else None
+    return backend
+
+
+def test_the_owned_comfy_unloads_before_the_vram_check_and_after_the_upscale(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(f"{BACKEND}.UPSCALE_UNLOAD_POLL_SECONDS", 0.0)
+    client = _UpscaleComfy(tmp_path)
+    backend = _holding_backend(client, owned=True, still_held_after_unload=2)
+
+    result = backend.execute(None, _frames_request(tmp_path, finishing={"upscale": dict(UPSCALE)}))
+
+    assert client.unloads == [1, 2]  # after the workflow's prompt, then after the upscale's
+    manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
+    assert manifest["upscale"]["unloaded_models_first"] is True
+    assert manifest["upscale"]["resource_readiness"]["ready"] is True
+
+
+def test_the_vram_stop_rule_still_refuses_when_other_programs_hold_the_memory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(f"{BACKEND}.UPSCALE_UNLOAD_WAIT_SECONDS", 0.0)
+    client = _UpscaleComfy(tmp_path)
+    backend = _holding_backend(client, owned=True, never_free=True)
 
     with pytest.raises(RuntimeError, match="upscale is not resource-ready"):
         backend.execute(None, _frames_request(tmp_path, finishing={"upscale": dict(UPSCALE)}))
 
     assert len(client.queued) == 1  # the clip was generated; the upscale was not dispatched
     assert not list((tmp_path / "run").glob("*_upscale_work"))
+
+
+def test_a_comfy_stablenew_does_not_own_is_never_asked_to_unload(tmp_path: Path) -> None:
+    client = _UpscaleComfy(tmp_path)
+    backend = _holding_backend(client, owned=False)
+
+    with pytest.raises(RuntimeError, match="upscale is not resource-ready"):
+        backend.execute(None, _frames_request(tmp_path, finishing={"upscale": dict(UPSCALE)}))
+
+    assert client.unloads == []
+
+
+def test_the_unload_request_is_comfys_own_free_endpoint() -> None:
+    sent: list[tuple[str, str, dict]] = []
+    client = ComfyApiClient(base_url="http://127.0.0.1:8188")
+    client._transport = SimpleNamespace(
+        send=lambda method, path, **kwargs: sent.append((method, path, kwargs["json"]))
+    )
+
+    client.free_memory()
+
+    assert sent == [("POST", "/free", {"unload_models": True, "free_memory": True})]
 
 
 def test_a_short_upscale_result_fails_instead_of_losing_frames(tmp_path: Path) -> None:
@@ -364,12 +427,15 @@ def test_an_upscaled_job_releases_the_runtime_instead_of_keeping_it_warm(
     assert released == ["released"]
 
 
-def test_leftovers_of_an_interrupted_upscale_are_never_published(tmp_path: Path) -> None:
+def test_leftovers_of_an_interrupted_upscale_are_working_files(tmp_path: Path) -> None:
     filtered = SourceFilter(tmp_path)
+    work = f"Reprocess/20261128_run/clip{WORK_DIR_SUFFIX}"
 
-    assert filtered.exclusion_of("run/clip_upscale_work/output/upscale_job_00001_.png", "image")
-    assert filtered.exclusion_of("run/clip_upscale_work/stablenew_upscale_job.mp4", "video")
-    assert filtered.exclusion_of("run/clip.mp4", "video") == ""
+    assert filtered.exclusion_of(f"{work}/output/upscale_job_00001_.png", "image") == WORKING
+    assert filtered.exclusion_of(f"{work}/stablenew_upscale_job.mp4", "video") == WORKING
+    assert filtered.exclusion_of("Reprocess/20261128_run/clip.mp4", "video") == ""
+    # An owner's own folder may use the name (#499's rule).
+    assert filtered.exclusion_of(f"holiday/clip{WORK_DIR_SUFFIX}/a.png", "image") == ""
 
 
 def test_continuation_decodes_the_native_clip_of_a_finished_job() -> None:

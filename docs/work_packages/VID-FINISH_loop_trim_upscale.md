@@ -1,6 +1,7 @@
 # VID-FINISH: optional loop, trim and SeedVR2 upscale for finished clips
 
-Status: built 2026-11-28 with deterministic tests. No GPU run, no download. Base `origin/main` 841f9b49, branch
+Status: built 2026-11-28 with deterministic tests. No GPU run, no download. Built on `origin/main` 841f9b49, then
+merged with 71e2a4a0; branch
 `claude/vid-finish-eceb88`. Finishes slice (d) of the 2026-11-27 Value Assessment's VID-FRAME item (owner pick
 2026-11-28).
 
@@ -32,7 +33,8 @@ is refused, never silently ignored.
 - Each step writes a new file (`<stem>_upscaled`, `_smooth`, `_finished`). The last is the primary output. Every earlier
   clip, the native one first, is listed in `retained_paths` and tagged `retained_source`, which is the existing rule that
   keeps it out of Review, the phone gateway and Immich. The manifest also records `native_video_path`, `finishing` and
-  `upscale`.
+  `upscale`. The upscale's temporary folder is removed after the pass; if the app stops mid-pass, the publisher
+  treats what is left in it as working files.
 - Trim and loop are one FFmpeg pass over the previous step's clip, with StableNew's encoder (CRF 16, BT.709). That is a
   second encode of an already encoded clip; at CRF 16 it is expected to be invisible, which has not been rated.
 - Trim and loop that the clip cannot satisfy are refused at Queue (and again before generation for stored jobs).
@@ -80,6 +82,13 @@ expected to stay below that. The gate is the existing VRAM stop rule (`WorkflowR
 own fp16 law this PC would only fit 1-frame chunks, so the first GPU run must treat out-of-memory as likely until shown
 otherwise.
 
+The video workflow's models are still loaded when the pass starts, and ComfyUI counts almost none of them as
+PyTorch's memory (V1-6 / VID-WARM-373), so the check would read them as another program's. The owned ComfyUI is
+therefore asked to unload (`POST /free`) before the check, which waits up to 30 s for the memory to appear, and
+again after the pass so the next job's check is not misled. A ComfyUI StableNew does not own is never asked, so
+after a generation its check will usually refuse. Whether unloading returns enough memory on this card is part of
+section 6.
+
 Host RAM: the same constants put about 9.9 GB of caches on the host at 1.6 MP, on top of the decoded frames. The 16 GB
 advisory is a warning only.
 
@@ -96,7 +105,8 @@ job fails; the native clip and frames stay on disk.
 - **Send to Movie Clips** prefers a clip's frames, so it assembles the native frames. Smoothed clips already behave
   this way.
 - Nothing was run on a GPU. The graph's input names come from the installed node sources and have not been accepted by a
-  running ComfyUI.
+  running ComfyUI. The A14B Make Video default now runs Comfy Kitchen attention with dynamic VRAM (1.1.0); the
+  upscale would run in that same process, which is also untested.
 - The lossless clip uploaded for the upscale is H.264 RGB (`libx264rgb -qp 0`); ComfyUI decoding it pixel-exactly is
   unverified.
 - The loop and trim tests that run real FFmpeg skip where FFmpeg is absent.

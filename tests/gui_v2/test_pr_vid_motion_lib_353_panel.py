@@ -343,7 +343,8 @@ def test_the_panel_lists_thumbnails_previews_and_hands_off_a_selected_clip(panel
     assert _pump_until(root, lambda: len(panel.tree.get_children()) == 3)
     first = panel.tree.get_children()[0]
     assert panel.tree.item(first, "values")[0] == "dance"
-    assert panel.tree.item(first, "image")  # the cached thumbnail is shown in the row
+    # Thumbnails decode on a worker (STARTUP-STALL), so the picture arrives after the rows.
+    assert _pump_until(root, lambda: bool(panel.tree.item(first, "image")))
     assert str(panel.use_button.cget("state")) == "disabled"
 
     panel.tree.selection_set(panel_env.ids["walk forward"])
@@ -650,3 +651,27 @@ def test_the_recent_outputs_panel_offers_add_only_with_a_selection_and_asks_befo
         assert added == before
     finally:
         declined.destroy()
+
+
+def test_thumbnails_are_decoded_off_the_tk_thread(panel_env, monkeypatch) -> None:
+    """STARTUP-STALL: opening and downscaling every thumbnail on Tk stalled the window."""
+
+    from src.gui.views import video_workflow_motion_library_panel_v2 as panel_module
+
+    opened_on: list[int] = []
+    real_open = panel_module.Image.open
+
+    def recording_open(path, *args, **kwargs):
+        opened_on.append(threading.get_ident())
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(panel_module.Image, "open", recording_open)
+    panel, root = panel_env.panel, panel_env.root
+    panel.request_refresh()
+
+    def all_rows_pictured() -> bool:
+        rows = panel.tree.get_children()
+        return len(rows) == 3 and all(panel.tree.item(row, "image") for row in rows)
+
+    assert _pump_until(root, all_rows_pictured)
+    assert opened_on and threading.get_ident() not in opened_on

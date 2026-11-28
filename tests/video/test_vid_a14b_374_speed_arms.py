@@ -24,6 +24,7 @@ from src.video.workflow_catalog_wan_a14b import (
     WAN_A14B_ATTENTION_NODE,
     WAN_A14B_CK_ATTENTION,
     WAN_A14B_CK_ATTENTION_VERSION,
+    WAN_A14B_FULL_PICTURE_CK_VERSION,
     WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_GPU_TEXT_ENCODER_VERSION,
     WAN_A14B_ID,
@@ -126,7 +127,7 @@ def test_the_approved_1_0_0_stays_the_picker_entry_for_its_id() -> None:
     form = controller.build_default_form_state()
     assert (form["workflow_id"], form["workflow_version"]) == (
         WAN_A14B_FULL_PICTURE_ID,
-        WAN_A14B_VERSION,
+        WAN_A14B_FULL_PICTURE_CK_VERSION,
     )
 
 

@@ -491,4 +491,9 @@ import asks its own questions); the phone has no length or frame picker.
 **Evidence boundary.** Offline tests only. No Storyboard or A14B continuation has run on hardware (3.3), so V1-6 claims
 nothing about how a continued clip looks until a GPU plan is run with the owner's OK.
 
+**First physical run (2026-11-28, eval harness, stopped).** The source clip completed; the first continuation was
+refused before generation, because the GPU readiness check counted the memory of the still-warm ComfyUI as another
+program's. Sequence segments now get the standalone jobs' verified warm reuse (`docs/Subsystems/Video/VIDEO_PIPELINE.md`,
+GPU readiness on a warm runtime). No continuation has completed on hardware yet.
+
 **Stop conditions.** Section 12's, plus any change to sequence admission or the sequence plan schema.

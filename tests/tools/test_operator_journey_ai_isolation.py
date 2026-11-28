@@ -22,7 +22,9 @@ from tools.operator_journey.workspace import AccessSpy, OperatorWorkspace  # noq
 MANIFESTS = ("managed_ai_runtime.json", "ai_model_registry.json")
 # Runtime identity manifests read by production code (Comfy launch-flag preflight, the Forge image backend).
 RUNTIME_MANIFESTS = ("managed_comfy_runtime.json", "managed_forge_runtime.json")
-READABLE_MANIFESTS = (*MANIFESTS, *RUNTIME_MANIFESTS)
+# NAME-INFO's checked-in display names, read when an output is named.
+NAMING_DATA = ("output_model_names.json",)
+READABLE_MANIFESTS = (*MANIFESTS, *RUNTIME_MANIFESTS, *NAMING_DATA)
 
 
 def _fake_repo(tmp_path: Path) -> Path:
@@ -32,6 +34,7 @@ def _fake_repo(tmp_path: Path) -> Path:
         *READABLE_MANIFESTS,
         "forge_klein_assets.json",
         "secret_local.json",
+        "output_model_names.local.json",
     ):
         (repo / "config" / name).write_text("{}", encoding="utf-8")
     (repo / "presets").mkdir()
@@ -50,7 +53,9 @@ def test_the_committed_manifests_may_be_read(tmp_path: Path, name: str) -> None:
     assert spy.read_protected == [] and spy.written == []
 
 
-@pytest.mark.parametrize("name", ["forge_klein_assets.json", "secret_local.json"])
+@pytest.mark.parametrize(
+    "name", ["forge_klein_assets.json", "secret_local.json", "output_model_names.local.json"]
+)
 def test_every_other_config_file_stays_guarded_for_reading(tmp_path: Path, name: str) -> None:
     repo = _fake_repo(tmp_path)
     with AccessSpy(repo_root=repo) as spy:

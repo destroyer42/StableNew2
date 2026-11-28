@@ -85,7 +85,10 @@ SWITCHED=0
 trap '[ "$SWITCHED" -eq 1 ] || rm -rf "$RELEASE"' EXIT
 install -d -m 0755 "$RELEASE" "$APP" "$APP/schema" "$APP/review_gateway" "$APP/review_gateway/static" "$APP/deploy"
 install -m 0644 "$SOURCE"/review_gateway/*.py "$APP/review_gateway/"
-install -m 0644 "$SOURCE"/review_gateway/static/* "$APP/review_gateway/static/"
+# The page: static/ has core/ and features/<id>/ below it, so the whole tree is copied; root's, readable by all.
+cp -R "$SOURCE/review_gateway/static/." "$APP/review_gateway/static/"
+find "$APP/review_gateway/static" -type d -exec chmod 0755 {} +
+find "$APP/review_gateway/static" -type f -exec chmod 0644 {} +
 install -m 0644 "$SOURCE/requirements.txt" "$APP/requirements.txt"
 install -m 0644 "$SOURCE/review-gateway.service" "$APP/review-gateway.service"
 install -m 0644 "$SOURCE/review-gateway-deploy.path" "$SOURCE/review-gateway-deploy.service" "$APP/"
