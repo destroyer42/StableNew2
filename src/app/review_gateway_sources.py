@@ -7,7 +7,8 @@ made (each is a phone section). StableNew's working files are not (``WORKING``),
   sources, eval plan media, storyboard and continue-clip frames);
 * temporary and hidden folders, wherever they are;
 * the Photo Optimize workspace, except an asset's results;
-* conditioning and sequence folders inside a run folder (an owner's folder may use those names).
+* conditioning and sequence folders inside a run folder (an owner's folder may use those names), and an upscale's
+  temporary folder there (VID-FINISH; left behind only when the app stopped mid-pass).
 
 A video job also leaves working files beside its result: the frames Comfy saved, and the un-smoothed clip behind a RIFE
 result. Neither is something to review. They are recognized without the job database:
@@ -16,7 +17,8 @@ result. Neither is something to review. They are recognized without the job data
 * an image a video manifest of its own run folder lists in ``frame_paths``, or names as the clip's poster
   (``thumbnail_path``), is a frame, whatever the route;
 * a clip a manifest records as retained, or (for manifests written before ``retained_paths`` existed) a clip listed
-  after the first of an interpolated result, is the un-smoothed source.
+  after the first of an interpolated result, is the un-smoothed source (VID-FINISH: or the untrimmed, unlooped or
+  not yet upscaled one).
 
 Eval outputs are not published either (RG-170): they are rated blind in the phone's "To rate" tab, and the Review inbox
 would show their model and workflow. They are anything under the ``video_eval`` run folders, and any output whose run
@@ -68,6 +70,7 @@ _ROUTES = frozenset(route.casefold() for route in KNOWN_OUTPUT_ROUTE_DIRS)
 #: Working folders inside a run folder.
 _RUN_WORKING_FOLDERS = frozenset({"conditioning", "sequence"})
 _SVD_TEMP_FOLDER = "_svd_temp"
+_UPSCALE_WORK_SUFFIX = "_upscale_work"
 
 _MANIFEST_LIMIT = 8 * 1024 * 1024
 _CACHED_FOLDERS = 256
@@ -105,7 +108,10 @@ def _is_working(parts: tuple[str, ...]) -> bool:
         return not (len(folders) == 5 and folders[2] == "assets" and folders[4] == "outputs")
     # A route, or a run folder from before the routes, directly under the root.
     in_job_folders = folders[0] in _ROUTES or RUN_ID.fullmatch(parts[0]) is not None
-    return in_job_folders and not _RUN_WORKING_FOLDERS.isdisjoint(folders[1:])
+    return in_job_folders and (
+        not _RUN_WORKING_FOLDERS.isdisjoint(folders[1:])
+        or any(name.endswith(_UPSCALE_WORK_SUFFIX) for name in folders[1:])
+    )
 
 
 def _listed(payload: Mapping[str, Any]) -> tuple[set[str], set[str]]:

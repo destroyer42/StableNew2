@@ -56,6 +56,7 @@ from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_driver_host_v2 import DriverClipHost, DriverInputs
 from src.gui.views.video_workflow_evaluate_view_v2 import VideoWorkflowEvaluateView
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
+from src.gui.views.video_workflow_finish_panel_v2 import FinishOptionsPanel
 from src.gui.views.video_workflow_harvest_host import HarvestHost
 from src.gui.views.video_workflow_layout_v2 import (
     PANE_FORM,
@@ -148,6 +149,7 @@ from src.video.motion_rerun import (
     rerun_lineage,
 )
 from src.video.recent_video_outputs import RecentVideoOutput
+from src.video.seedvr2_upscale import upscale_warning
 from src.video.workflow_frame_count import frame_count_advisory
 from src.video.workflow_picker import offered_workflow_ids, workflow_choices
 from src.video.workflow_tasks import (
@@ -225,6 +227,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     advanced_section: DisclosureSection
     workflow_combo: ttk.Combobox
     workflow_controls_panel: WorkflowControlsPanel
+    finish_panel: FinishOptionsPanel
     end_anchor_entry: ttk.Entry
     end_anchor_browse: ttk.Button
     mid_anchors_entry: ttk.Entry
@@ -1061,6 +1064,20 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                         why=f"{crop.why} {end_crop.why}",
                     )
                 )
+        panel = getattr(self, "finish_panel", None)
+        if panel is not None and panel.upscale_selected():
+            # VID-FINISH: the upscale is experimental on any workflow; Queue on this header is its opt-in.
+            extra = upscale_warning()
+            crop = (
+                extra
+                if crop is None
+                else replace(
+                    crop,
+                    title=f"{crop.title} {extra.title}",
+                    why=f"{crop.why} {extra.why}",
+                    fix=f"{crop.fix} {extra.fix}",
+                )
+            )
         if not meta.get("experimental"):
             if crop is None:
                 return "", ""
@@ -1083,6 +1100,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         An approved workflow the user already chose is kept; an experimental or missing selection is
         replaced by the recommended one. Nothing is queued, and the per-job experimental opt-in is never
         carried over (a changed selection resets it). Returns the selected workflow id."""
+        self.finish_panel.restore(
+            None
+        )  # VID-FINISH: a new Make Video starts untrimmed and unlooped
 
         controller = self._experiment_controller()
         getter = getattr(controller, "recommended_workflow_id", None)
@@ -1248,6 +1268,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                     state[FIELD_LIBRARY_BINDING] = binding
         if self.workflow_controls_panel.control_names:
             state["operator_controls"] = self.workflow_controls_panel.get_values()
+        if for_submission:
+            state.update(self._finishing_fields())  # VID-FINISH: per job, never saved with the form
         if for_submission and self._task == TASK_FOLLOW_CLIP:
             waiting = self._driver_block_reason()
             if waiting:  # never queue the unprepared clip while the panel is still preparing it
@@ -1335,6 +1357,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._select_frame_count(state.get("frame_count"))
         interpolation = state.get("interpolation")
         self.smooth_var.set(isinstance(interpolation, dict) and bool(interpolation.get("enabled")))
+        self.finish_panel.restore(state.get("finishing"))  # absent in a saved form: all off
         if self.pose_video_frame.winfo_manager():
             self.pose_video_var.set(str(state.get("pose_video_path") or ""))
         controls = state.get("operator_controls")
@@ -1635,6 +1658,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 shown = duration_label(frames, policy)  # V1-3: this task never shows frame counts
             effective_parts.append(f"length={shown}")
         effective_parts.extend(self.workflow_controls_panel.summary_parts())
+        panel = getattr(self, "finish_panel", None)
+        effective_parts.extend(panel.summary() if panel is not None else [])
         if (
             not visible
             or visible.get("camera_intent", False)
@@ -1681,7 +1706,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         section = getattr(self, "advanced_section", None)
         if section is None or not hasattr(self, "details_section"):
             return
-        modified = bool(self._pins.pinned & _SETTINGS_FIELDS)
+        panel = getattr(self, "finish_panel", None)
+        modified = bool(self._pins.pinned & _SETTINGS_FIELDS) or bool(panel and panel.value())
         section.set_status("modified" if modified else "", active=modified)
         keyframes: list[str] = []
         if self.end_anchor_var.get().strip():
@@ -1950,6 +1976,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 if shows("motion_profile")
                 else "",
                 "smoothed" if smooth else "not smoothed",
+                *self.finish_panel.summary(),
                 (f"seed {seed}" if seed else "random seed") if shows("seed") else "",
             ]
         )
@@ -2371,9 +2398,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                     f"The aligned driving clip was made for {opening.snapshot.frame_count} frames. "
                     "Apply Align Motion again for the new length, or keep the original length."
                 )
-        edits = rerun_edits(opening.snapshot, self.get_video_workflow_state())
+        form = {**self.get_video_workflow_state(), **self._finishing_fields()}
+        edits = rerun_edits(opening.snapshot, form)
         fields[RERUN_LINEAGE_FIELD] = rerun_lineage(opening.snapshot, edits)
         return fields
+
+    def _finishing_fields(self) -> dict[str, Any]:
+        panel = getattr(self, "finish_panel", None)
+        value = panel.value() if panel is not None else None
+        return {} if value is None else {"finishing": value}
+
+    def _on_finishing_changed(self) -> None:
+        self._refresh_workspace_summary()
+        self._refresh_queue_gate()
 
     def _toggle_settings(self) -> None:
         self.advanced_section.toggle()

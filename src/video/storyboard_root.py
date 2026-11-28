@@ -391,6 +391,7 @@ def clip_last_frame(
         raise StoryboardRootError(f"Job {job_id} recorded no video workflow output")
     manifests = [str(item) for item in artifact.get("manifest_paths") or () if item]
     interpolation: Mapping[str, Any] | None = None
+    backend: Any = None
     if manifests and Path(manifests[0]).is_file():
         try:
             backend = json.loads(Path(manifests[0]).read_text(encoding="utf-8"))
@@ -398,7 +399,9 @@ def clip_last_frame(
             raise StoryboardRootError(f"the backend manifest cannot be read: {exc}") from exc
         value = backend.get("interpolation") if isinstance(backend, Mapping) else None
         interpolation = value if isinstance(value, Mapping) else None
-    clip = _unsmoothed_clip(artifact, interpolation)
+    clip = _unsmoothed_clip(
+        artifact, interpolation, backend if isinstance(backend, Mapping) else None
+    )
     if clip is None or not clip.is_file():
         raise StoryboardRootError(f"the clip of job {job_id} is missing: {clip}")
     target = Path(folder) / "last_frame.png"
@@ -545,10 +548,17 @@ def _backend_manifest(job: _ClipJob, artifact: Mapping[str, Any]) -> Mapping[str
 
 
 def _unsmoothed_clip(
-    artifact: Mapping[str, Any], interpolation: Mapping[str, Any] | None
+    artifact: Mapping[str, Any],
+    interpolation: Mapping[str, Any] | None,
+    backend: Mapping[str, Any] | None = None,
 ) -> Path | None:
-    """Comfy's (or StableNew's) own clip: the primary output, or when smoothed the output that is not the RIFE clip."""
+    """Comfy's (or StableNew's) own clip: the primary output, or when smoothed the output that is not the RIFE clip.
 
+    VID-FINISH: a trimmed, looped or upscaled job records its native clip in the backend manifest."""
+
+    native = str((backend or {}).get("native_video_path") or "")
+    if native:
+        return Path(native)
     candidates = [
         str(item)
         for key in ("output_paths", "video_paths")
@@ -728,7 +738,7 @@ def prepare_clip_root(
         smoothing = interpolation if isinstance(interpolation, Mapping) else None
         if smoothing is not None:
             smoothed_fps = int(smoothing.get("output_fps") or 0)
-        unsmoothed = _unsmoothed_clip(artifact, smoothing)
+        unsmoothed = _unsmoothed_clip(artifact, smoothing, backend)
         if frames_output_fps(job.spec) is not None:
 
             def build_frames_out(staging: Path, final: Path) -> CutManifest:

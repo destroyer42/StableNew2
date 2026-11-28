@@ -243,6 +243,17 @@ The probe only reads host RAM, driver GPU memory, the configured command and, fo
 
 **In-app preview and Recent outputs (PR-VID-UX-314).** The Video Workflow tab lists the newest finished clips under *Recent outputs* (`src/video/recent_video_outputs.py`, `VideoWorkflowController.list_recent_video_outputs`): one bounded read of the repository's newest completed jobs (`JobRepository.list_recent_jobs`, 60-job window, 12 clips), keeping a job only when its recorded `video_bundle` names a supported video file that exists now. Provenance (workflow, source image, seed, length) is read from the frozen NJR snapshot, never recomputed, and nothing scans a folder. The list is read on a worker when the tab is first shown or Refresh is pressed, never at start-up. The selected clip plays as a looping, downscaled, frame-exact preview (`VideoPreviewWidget`, `VideoPreviewSession`): `prepare_review_preview` decodes through contained FFmpeg on a `ThreadRegistry` worker within its fixed bounds (256 px longer edge, 120 frames, 24 MB of raw frames), results return through `TkUiDispatcher` and are dropped when stale or after destroy, the Tk thread builds one `PhotoImage` per tick and repaints nothing while hidden, and a new selection, `stop` or destroy cancels the decode and releases the clip. **Open** and **Reveal** (`src/utils/os_shell.py`, argument vectors, no shell) report a missing file inline; **Send to Movie Clips** hands the recorded bundle to the existing Movie Clips handoff (intent only). The preview is a review aid, not the original. Tests: `tests/video/test_pr_vid_ux_314_recent_outputs.py`, `tests/gui_v2/test_pr_vid_ux_314_preview.py`, `tests/gui_v2/test_pr_vid_ux_314_recent_outputs_panel.py`, `tests/utils/test_os_shell_314.py`.
 
+**Finishing: upscale, trim and loop (VID-FINISH).** Optional per single-clip job, off by default, under Advanced and
+frozen as `video_workflow.finishing`. Inside the same stage the order is: native clip, SeedVR2 2x upscale, RIFE
+smoothing, trim (start/end seconds), loop (`ping_pong` or `crossfade`). Each step writes a new file
+(`src/video/clip_finishing.py`); only the last is primary and every earlier clip, the native one first, is
+`retained_source`, so the phone and Immich get the final clip only. The manifest records `native_video_path`, which
+continuation reads. The upscale (`src/video/seedvr2_upscale.py`, a pinned pass on ComfyUI 0.38.0's stock SeedVR2 nodes,
+not a catalog workflow) is **experimental and unrated**: no weights are installed, nothing has run on a GPU, it needs the
+job's own opt-in, is limited to 480p-class clips of at most 121 frames behind a 10,000 MiB VRAM floor, and refuses with
+what is missing (downloads need the owner's OK). Sequences refuse all three. Detail and the proposed GPU test:
+`docs/work_packages/VID-FINISH_loop_trim_upscale.md`.
+
 ### 4.4.1 Shared media inspection
 
 Recent Outputs, History/Browse All and SVD's recorded output use the shared `MediaInspector` for local Show and detach/return.

@@ -37,6 +37,7 @@ from PIL import Image, ImageOps
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.njr_core_v26 import thaw_json
+from src.video.seedvr2_upscale import upscale_warning
 from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
 from src.video.video_workflow_intent import (
     EXPERIMENTAL_OPT_IN_FIELD,
@@ -456,6 +457,8 @@ class VideoWorkflowBatchService:
                     "separate jobs with the same input."
                 )
         warnings.extend(_crop_texts(spec, rows_t))
+        if (form.get("finishing") or {}).get("upscale"):
+            warnings.append(upscale_warning().text())  # VID-FINISH: Queue is each job's opt-in
         if duplicates_omitted:
             notes.append(f"{duplicates_omitted} duplicate path(s) were omitted from the selection.")
 

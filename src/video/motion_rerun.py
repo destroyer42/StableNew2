@@ -26,6 +26,7 @@ from typing import Any, Final
 
 from src.pipeline.history_variation_marker import VARIATION_SCHEMA
 from src.pipeline.njr_core_v26 import thaw_json
+from src.video.clip_finishing import FINISHING_KEY, normalize_finishing
 from src.video.motion_intent import (
     MOTION_INTENT_FIELD,
     MOTION_PHRASE_MAX,
@@ -83,6 +84,7 @@ _COMPARED_FIELDS: Final[tuple[str, ...]] = (
     "negative_prompt",
     "operator_controls",
     "interpolation",
+    "finishing",
     "pose_video_path",
 )
 
@@ -142,6 +144,8 @@ class IntentSnapshot:
     has_provenance: bool = False
     #: V1 end frame: the operator's own end image (the job runs a prepared copy of it).
     end_image_path: str = ""
+    #: VID-FINISH: the loop, trim and upscale the job asked for, in the form's terms.
+    finishing: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def duration_seconds(self) -> float | None:
@@ -161,6 +165,15 @@ def _int_or_none(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _form_finishing(frozen: Any) -> dict[str, Any]:
+    """A job's frozen finishing block as the form states it (the upscale is just on or off)."""
+
+    block = dict(_mapping(frozen))
+    if "upscale" in block:
+        block["upscale"] = True
+    return block
 
 
 def intent_snapshot(njr: Any) -> IntentSnapshot:
@@ -217,6 +230,7 @@ def intent_snapshot(njr: Any) -> IntentSnapshot:
         output_route=str(video_meta.get("output_route") or ""),
         smoothing=bool(_mapping(stage.get("interpolation")).get("enabled")),
         operator_controls=dict(controls),
+        finishing=_form_finishing(stage.get(FINISHING_KEY)),
         driver=driver,
         experimental_opt_in=execution.get("experimental_opt_in") is True,
         has_provenance=bool(record),
@@ -515,6 +529,8 @@ def rerun_form_state(snapshot: IntentSnapshot) -> dict[str, Any]:
         form["interpolation"] = {"enabled": True}
     if snapshot.operator_controls:
         form["operator_controls"] = dict(snapshot.operator_controls)
+    if snapshot.finishing:
+        form[FINISHING_KEY] = dict(snapshot.finishing)
     if snapshot.driver is not None:
         form["pose_video_path"] = snapshot.driver.path
     if snapshot.end_image_path:
@@ -538,6 +554,13 @@ def _comparable(form: Mapping[str, Any], name: str) -> Any:
         return _int_or_none(value)
     if name == "interpolation":
         return bool(_mapping(value).get("enabled"))
+    if name == FINISHING_KEY:
+        try:
+            return normalize_finishing(value)
+        except ValueError:
+            return str(
+                value
+            )  # an invalid edit differs from the parent; the builder says what is wrong
     if name == "operator_controls":
         return {key: _control_value(item) for key, item in _mapping(value).items()}
     if name == "motion_preset":

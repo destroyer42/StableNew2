@@ -131,6 +131,17 @@ class ComfyApiClient:
             **self._request_options,
         )
 
+    def free_memory(self, *, timeout: float = 10.0) -> None:
+        """Ask Comfy to unload the models it holds; its worker does so as soon as it is idle.  Idempotent."""
+
+        self._transport.send(
+            "POST",
+            "/free",
+            policy=RequestPolicy(timeout=timeout, idempotent=True),
+            json={"unload_models": True, "free_memory": True},
+            **self._request_options,
+        )
+
     def upload_image(
         self,
         image_path: str | Path,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import shutil
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
@@ -28,6 +29,7 @@ from src.services.runtime_transition_service import (
 from src.services.runtime_warm_hold import RuntimeWarmHold, WarmHoldClaim, get_runtime_warm_hold
 from src.utils.atomic_io import atomic_write_json
 from src.utils.thread_registry import get_thread_registry
+from src.video.clip_finishing import FINISHING_KEY, finish_video_file, normalize_finishing
 from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.comfy_healthcheck import wait_for_comfy_ready
@@ -54,6 +56,22 @@ from src.video.managed_comfy_runtime import (
 )
 from src.video.motion_alignment_preparation import verify_aligned_dispatch
 from src.video.runtime_version_check import runtime_version_warning
+from src.video.seedvr2_upscale import (
+    HISTORY_TIMEOUT_SECONDS as UPSCALE_HISTORY_TIMEOUT_SECONDS,
+)
+from src.video.seedvr2_upscale import (
+    WORK_DIR_SUFFIX as UPSCALE_WORK_DIR_SUFFIX,
+)
+from src.video.seedvr2_upscale import (
+    build_upscale_prompt,
+    encode_lossless_input,
+    require_frozen_upscale,
+    upscale_install_issues,
+    upscale_node_issues,
+    upscale_readiness_spec,
+    upscale_refusal,
+    upscale_size_issue,
+)
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_backend_types import (
     CONTROL_CAMERA_INTENT,
@@ -70,6 +88,7 @@ from src.video.video_backend_types import (
     VideoExecutionRequest,
     VideoExecutionResult,
 )
+from src.video.video_export import export_image_sequence_video
 from src.video.video_interpolation import (
     interpolate_frame_files,
     interpolate_video_file,
@@ -236,6 +255,19 @@ def _with_output_role(
     return {**payload, "output_role": role}
 
 
+def _supersede_clip(outputs: Mapping[str, Any], clip: str) -> dict[str, Any]:
+    """``clip`` becomes the authoritative output; the one it was made from is kept as retained."""
+
+    return {
+        **outputs,
+        "retained_paths": [*(outputs.get("retained_paths") or ()), str(outputs["video_path"])],
+        "primary_path": clip,
+        "output_paths": [clip, *outputs["output_paths"]],
+        "video_path": clip,
+        "video_paths": [clip, *outputs["video_paths"]],
+    }
+
+
 def _expected_frame_count(stage_config: Mapping[str, Any]) -> int | None:
     """The frame count frozen at admission, when the job has one."""
 
@@ -344,6 +376,9 @@ def _has_model_inventory(payload: Any) -> bool:
 # interval (SystemWatchdogV2.RUNNER_STALL_S) and is only ever emitted inside the backend's own
 # execution wait (`history_timeout`), so it can never suppress a stall past that bound.
 _LIVENESS_REPORT_INTERVAL_S = 5.0
+# VID-FINISH: how long the VRAM check before the upscale waits for ComfyUI to finish unloading.
+UPSCALE_UNLOAD_WAIT_SECONDS = 30.0
+UPSCALE_UNLOAD_POLL_SECONDS = 1.0
 
 
 def _queue_membership(queue: Any, prompt_id: str) -> str | None:
@@ -599,6 +634,8 @@ class ComfyWorkflowVideoBackend:
         # runtime or an unknown frame rate fails here, not after the clip has been generated.
         if normalize_interpolation_request(stage_config.get("interpolation")) is not None:
             interpolation_source_fps(spec, stage_config)
+        # VID-FINISH: a bad loop/trim request, or an upscale that cannot run, also fails before anything starts.
+        upscale = self._require_finishing(spec, stage_config)
         # VID-WARM-373: take the process-wide warm hold before anything touches the runtime. The same workflow on
         # the very owned process that served the previous job reuses it; anything else held is released first,
         # so this job starts exactly as it would have without the hold (including the launch-flag check below,
@@ -647,7 +684,10 @@ class ComfyWorkflowVideoBackend:
             raise
         # VID-WARM-373: a workflow that declares an idle grace keeps the owned process warm after a successful
         # job instead of stopping it; the hold ends on the next claim, another runtime's preparation, or the grace.
-        release = self._hold_owned_runtime(spec, warm_key) or self._release_owned_runtime()
+        # VID-FINISH: an upscaled job leaves other models loaded, so its runtime is released, never held.
+        release = (
+            None if upscale is not None else self._hold_owned_runtime(spec, warm_key)
+        ) or self._release_owned_runtime()
         if result is not None:
             result.backend_metadata["runtime_release"] = dict(release)
             result.diagnostic_payload["runtime_release"] = dict(release)
@@ -655,6 +695,220 @@ class ComfyWorkflowVideoBackend:
                 result.backend_metadata["runtime_reuse"] = claim.to_dict()
                 result.diagnostic_payload["runtime_reuse"] = claim.to_dict()
         return result
+
+    def _require_finishing(
+        self, spec: Any, stage_config: Mapping[str, Any]
+    ) -> dict[str, Any] | None:
+        """VID-FINISH pre-dispatch checks; returns the job's upscale block, or ``None`` when it has none."""
+
+        finishing = normalize_finishing(stage_config.get(FINISHING_KEY))
+        if finishing is None:
+            return None
+        if finishing.edits:
+            interpolation_source_fps(spec, stage_config)
+        if not finishing.upscale:
+            return None
+        upscale = require_frozen_upscale(stage_config[FINISHING_KEY]["upscale"])
+        if frames_output_fps(spec) is None:
+            raise ValueError("The SeedVR2 upscale needs a workflow that saves its frames.")
+        target = _mapping_dict(
+            _mapping_dict(stage_config.get("source_preparation")).get("target_dimensions")
+        )
+        size_issue = upscale_size_issue(
+            int(target.get("width") or 0),
+            int(target.get("height") or 0),
+            _expected_frame_count(stage_config) or 0,
+        )
+        if size_issue:
+            raise ValueError(f"The SeedVR2 upscale cannot run: {size_issue}.")
+        manager = self._resolve_process_manager()
+        config = (
+            getattr(manager, "config", None) if manager else build_default_comfy_process_config()
+        )
+        issues = upscale_install_issues(config)
+        if issues:
+            raise ValueError(upscale_refusal(issues))
+        return upscale
+
+    def _finish_clip(
+        self,
+        pipeline: Any,
+        client: ComfyApiClient,
+        request: VideoExecutionRequest,
+        spec: Any,
+        stage_config: Mapping[str, Any],
+        resolved_outputs: dict[str, Any],
+        frames_out_record: FramesOutRecord | None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Upscale, smooth, then trim/loop the clip; return its outputs and what the manifest records.
+
+        Each step makes a new file. The last one is the authoritative output; every earlier clip (the native one
+        first) stays on disk and in the lists, recorded as retained, so it never reaches review, the phone gateway or
+        Immich (owner decision 2026-11-26)."""
+
+        smoothing = normalize_interpolation_request(stage_config.get("interpolation"))
+        finishing = normalize_finishing(stage_config.get(FINISHING_KEY))
+        records: dict[str, Any] = {}
+        native = str(resolved_outputs.get("video_path") or "")
+        if finishing is not None and not native:
+            raise RuntimeError("The workflow made no video file to upscale, trim or loop.")
+        stem = Path(native).stem if native else ""
+        smooth_stem = stem
+        output_dir = Path(request.output_dir)
+        frames = list(resolved_outputs.get("frame_paths") or ())
+        fps = 0
+        work_dir: Path | None = None
+        try:
+            if finishing is not None and finishing.upscale:
+                fps = int(frames_output_fps(spec) or 0)
+                smooth_stem = f"{stem}_upscaled"
+                work_dir = output_dir / f"{stem}{UPSCALE_WORK_DIR_SUFFIX}"
+                frames, records["upscale"] = self._upscale_frames(
+                    pipeline,
+                    client,
+                    request,
+                    require_frozen_upscale(stage_config[FINISHING_KEY]["upscale"]),
+                    frames,
+                    fps,
+                    work_dir,
+                )
+                if smoothing is None:
+                    upscaled = export_image_sequence_video(
+                        image_paths=[Path(path) for path in frames],
+                        output_path=output_dir / f"{smooth_stem}.mp4",
+                        fps=fps,
+                        cancel_token=request.cancel_token,
+                        require_all_frames=True,
+                    )
+                    resolved_outputs = _supersede_clip(resolved_outputs, str(upscaled))
+            if smoothing is not None and resolved_outputs.get("video_path"):
+                if frames_out_record is not None:
+                    smoothed = interpolate_frame_files(
+                        frame_paths=frames,
+                        output_dir=request.output_dir,
+                        stem=smooth_stem,
+                        source_fps=interpolation_source_fps(spec, stage_config),
+                        request=smoothing,
+                        cancel_token=request.cancel_token,
+                    )
+                else:
+                    smoothed = interpolate_video_file(
+                        video_path=str(resolved_outputs["video_path"]),
+                        output_dir=request.output_dir,
+                        source_fps=interpolation_source_fps(spec, stage_config),
+                        request=smoothing,
+                        cancel_token=request.cancel_token,
+                    )
+                resolved_outputs = _supersede_clip(resolved_outputs, smoothed.video_path)
+                records["interpolation"] = smoothed.to_dict()
+                fps = int(smoothed.output_fps)
+        finally:
+            if work_dir is not None:
+                # SeedVR2 must not stay loaded, or the next job's VRAM check reads it as another program's memory.
+                self._unload_owned_models(client)
+                shutil.rmtree(work_dir, ignore_errors=True)
+        if finishing is not None and finishing.edits:
+            _raise_if_cancelled(request.cancel_token, "before the clip was trimmed or looped")
+            source = str(resolved_outputs["video_path"])
+            finished = finish_video_file(
+                video_path=source,
+                output_path=output_dir / f"{Path(source).stem}_finished.mp4",
+                fps=fps or interpolation_source_fps(spec, stage_config),
+                request=finishing,
+                cancel_token=request.cancel_token,
+            )
+            resolved_outputs = _supersede_clip(resolved_outputs, finished.video_path)
+            records["finishing"] = finished.to_dict()
+        if finishing is not None:
+            records["native_video_path"] = native
+        return resolved_outputs, records
+
+    def _upscale_frames(
+        self,
+        pipeline: Any,
+        client: ComfyApiClient,
+        request: VideoExecutionRequest,
+        upscale: Mapping[str, Any],
+        frames: Sequence[str],
+        fps: int,
+        work_dir: Path,
+    ) -> tuple[list[str], dict[str, Any]]:
+        """The SeedVR2 pass on the same ComfyUI: lossless frames in, upscaled frames out (VID-FINISH)."""
+
+        token = request.cancel_token
+        _raise_if_cancelled(token, "before the upscale")
+        # The video workflow's models are still loaded, and Comfy counts almost none of them as PyTorch's
+        # (VID-WARM-373), so they are unloaded first; the stop rule then judges other programs' memory only.
+        unloaded = self._unload_owned_models(client)
+        deadline = time.monotonic() + (UPSCALE_UNLOAD_WAIT_SECONDS if unloaded else 0.0)
+        while True:
+            readiness = self._readiness.evaluate(
+                upscale_readiness_spec(), system_stats=client.get_system_stats()
+            )
+            if readiness.ready or time.monotonic() >= deadline:
+                break
+            _raise_if_cancelled(token, "while ComfyUI was unloading models")
+            time.sleep(UPSCALE_UNLOAD_POLL_SECONDS)
+        logger.info("SeedVR2 upscale resource readiness: %s", readiness.to_dict())
+        if not readiness.ready:
+            raise RuntimeError(f"The SeedVR2 upscale is not resource-ready: {readiness.message}")
+        source = encode_lossless_input(
+            frames,
+            work_dir,
+            fps=fps,
+            name=f"stablenew_upscale_{request.job_id or uuid.uuid4().hex}",
+            cancel_token=token,
+        )
+        uploaded = self._upload_image_for_load_image(client, str(source.resolve()), {})
+        graph = build_upscale_prompt(
+            str(uploaded),
+            seed=int(upscale["seed"]),
+            filename_prefix=f"stablenew/upscale_{request.job_id or 'clip'}",
+        )
+        _raise_if_cancelled(token, "before the upscale was queued")
+        # Not retried, like the workflow's own prompt: an unknown dispatch may already be running.
+        response = client.queue_prompt(
+            {"prompt": graph, "client_id": str(request.job_id or f"stablenew-{uuid.uuid4().hex}")}
+        )
+        prompt_id = str(response.get("prompt_id") or "").strip()
+        if not prompt_id:
+            raise RuntimeError("Comfy queue response for the upscale did not include prompt_id")
+        history = self._wait_for_history_entry(
+            client,
+            prompt_id=prompt_id,
+            report_liveness=self._liveness_reporter(pipeline, request),
+            timeout=max(self._history_timeout, UPSCALE_HISTORY_TIMEOUT_SECONDS),
+            cancel_token=token,
+        )
+        output_dir = work_dir / "output"
+        history = self._localize_comfy_outputs(client, history, output_dir, cancel_token=token)
+        outputs = self._resolve_output_paths(
+            history_entry=history, compiled_outputs={"output_dir": str(output_dir)}
+        )
+        upscaled = [str(path) for path in natural_frame_order(outputs["frame_paths"])]
+        if len(upscaled) != len(frames):
+            raise RuntimeError(
+                f"The upscale returned {len(upscaled)} frames for {len(frames)}; the clip was not replaced."
+            )
+        return upscaled, {
+            **dict(upscale),
+            "prompt_id": prompt_id,
+            "frame_count": len(upscaled),
+            "unloaded_models_first": unloaded,
+            "resource_readiness": readiness.to_dict(),
+        }
+
+    def _unload_owned_models(self, client: ComfyApiClient) -> bool:
+        """Ask the ComfyUI StableNew owns to unload its models; never one it does not own.  Best effort."""
+
+        if self._owned_running_pid() is None:
+            return False
+        try:
+            client.free_memory()
+        except Exception as exc:  # noqa: BLE001 - the VRAM check that follows judges what is actually free
+            logger.warning("Could not ask ComfyUI to unload its models: %s", exc)
+            return False
+        return True
 
     def _hold_owned_runtime(self, spec: Any, key: tuple[str, str]) -> dict[str, Any] | None:
         """Arm the warm hold for the owned process that just served ``spec``; ``None`` means release as usual."""
@@ -733,6 +987,10 @@ class ComfyWorkflowVideoBackend:
         dependency_result = probe.probe_workflow(spec, object_info=object_info)
         if not dependency_result.ready:
             raise RuntimeError(_format_missing_dependency_message(spec, dependency_result))
+        if (stage_config.get(FINISHING_KEY) or {}).get("upscale") is not None:
+            node_issues = upscale_node_issues(object_info)
+            if node_issues:
+                raise RuntimeError(upscale_refusal(node_issues))
 
         # Bounded, observe-only resource readiness (workflows that declare a policy): a failing
         # check fails the job before anything is queued; nothing is stopped or restarted.
@@ -873,41 +1131,17 @@ class ComfyWorkflowVideoBackend:
             primary_path = resolved_outputs["primary_path"]
             output_paths = resolved_outputs["output_paths"]
 
-        smoothing = normalize_interpolation_request(stage_config.get("interpolation"))
-        interpolation_record: dict[str, Any] | None = None
-        if smoothing is not None and resolved_outputs.get("video_path"):
-            unsmoothed_path = str(resolved_outputs["video_path"])
-            if frames_out_record is not None:
-                smoothed = interpolate_frame_files(
-                    frame_paths=resolved_outputs["frame_paths"],
-                    output_dir=request.output_dir,
-                    stem=Path(frames_out_record.video_path).stem,
-                    source_fps=interpolation_source_fps(spec, stage_config),
-                    request=smoothing,
-                    cancel_token=request.cancel_token,
-                )
-            else:
-                smoothed = interpolate_video_file(
-                    video_path=str(resolved_outputs["video_path"]),
-                    output_dir=request.output_dir,
-                    source_fps=interpolation_source_fps(spec, stage_config),
-                    request=smoothing,
-                    cancel_token=request.cancel_token,
-                )
-            # The smoothed clip is the authoritative output. The clip it was made from stays on disk and in the
-            # lists for retention only: it is recorded as retained so it never reaches review, the phone gateway or
-            # Immich (owner decision 2026-11-26).
-            resolved_outputs = {
-                **resolved_outputs,
-                "retained_paths": [unsmoothed_path],
-                "primary_path": smoothed.video_path,
-                "output_paths": [smoothed.video_path, *resolved_outputs["output_paths"]],
-                "video_path": smoothed.video_path,
-                "video_paths": [smoothed.video_path, *resolved_outputs["video_paths"]],
-            }
-            primary_path = resolved_outputs["primary_path"]
-            output_paths = resolved_outputs["output_paths"]
-            interpolation_record = smoothed.to_dict()
+        resolved_outputs, finishing_records = self._finish_clip(
+            pipeline,
+            client,
+            request,
+            spec,
+            stage_config,
+            resolved_outputs,
+            frames_out_record,
+        )
+        primary_path = resolved_outputs["primary_path"]
+        output_paths = resolved_outputs["output_paths"]
 
         length_provenance = _length_provenance(spec, stage_config)
         runtime_policy = _mapping_dict(spec.backend_defaults.get("runtime_policy"))
@@ -916,8 +1150,7 @@ class ComfyWorkflowVideoBackend:
             **_driving_video_provenance(stage_config),
             **_control_provenance(spec, request, stage_config),
         }
-        if interpolation_record is not None:
-            provenance_extra["interpolation"] = interpolation_record
+        provenance_extra.update(finishing_records)
         if frames_out_record is not None:
             provenance_extra["frames_out"] = frames_out_record.summary()
         if attention_evidence is not None:
