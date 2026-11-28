@@ -671,8 +671,15 @@ switch.
 
 ## 6. Staging gateway (deferred, OD-7)
 
-**Deferred by the owner on 2026-11-27 ("Not now").** PS-1 is not scheduled. The design below is kept for when it is
-wanted. Until then, pre-merge evidence is CI's `phone-e2e` and changes land on production directly, as today.
+**Deferred by the owner on 2026-11-27 ("Not now"), started on 2026-11-28 ("Start PS-1 now").** Promotion (owner,
+2026-11-28: "Auto-promote, you check big ones"): every merge is deployed to staging; `tools.review_gateway_promote`
+must print `PASS`; then the orchestrator deploys the same SHA to production. For a visible phone change the owner looks
+at staging first. Operator steps: [`review_gateway.md`](../runbooks/review_gateway.md#staging-gateway-and-promotion).
+
+**As built, PS-1:** the PC needs Tailscale, because the check loads the tailnet-only phone page. `reset` prints a
+console line (the sync API cannot wipe a gateway, and a decided item cannot be withdrawn); the line stops unless the
+container has `environment_label`. Staging settings that share production's address, certificate or secret are refused.
+The seeder generates its own fixtures with the shapes of the browser tests' seeder, and does not play the PC.
 
 **Topology: a second container, not a second instance** (OD-7). Cookies are scoped by host, not port.
 
