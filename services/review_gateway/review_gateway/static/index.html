@@ -7,13 +7,11 @@
   <meta name="theme-color" content="#101216">
   <meta name="mobile-web-app-capable" content="yes">
   <title>StableNew Review</title>
-  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css">
-  <link rel="stylesheet" href="/static/rating.css">
-  <script src="/static/moreinfo.js" defer></script>
-  <script src="/static/rating.js" defer></script>
-  <script src="/static/queued.js" defer></script>
-  <script src="/static/app.js" defer></script>
+  <!-- The server writes the version of the static files wherever {{V}} stands (static_files.py). -->
+  <link rel="icon" href="/s/{{V}}/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/s/{{V}}/core/core.css">
+  <link rel="stylesheet" href="/s/{{V}}/features/rating/rating.css">
+  <script type="module" src="/s/{{V}}/core/main.js"></script>
 </head>
 <body>
   <header id="bar">
@@ -23,7 +21,7 @@
     <button id="waiting" type="button" hidden></button>
     <button id="rejected" type="button" hidden></button>
   </header>
-  <main id="view"></main>
+  <main id="view"><p class="muted">Loading. If this stays, pull down to reload.</p></main>
   <div id="toast" role="status" hidden></div>
 </body>
 </html>

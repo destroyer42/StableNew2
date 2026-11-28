@@ -605,6 +605,11 @@ class WebUIProcessManager:
             return 0.0
         return max(self.startup_timeout_seconds - (time.time() - started), 0.0)
 
+    def is_starting_up(self) -> bool:
+        """Whether the owned process is still booting inside its bounded window (read-only: no network)."""
+
+        return self._within_startup_window()
+
     def _within_startup_window(self) -> bool:
         """An owned, live process that has not yet proven readiness and is inside its startup window."""
 

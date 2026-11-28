@@ -82,3 +82,15 @@ def test_a_refused_withdrawal_is_tried_again(env):
     env.gateway.refuse_withdrawals = False
     withdraw(env)
     assert len(env.gateway.withdrawn) == 3
+
+
+def test_working_files_published_earlier_are_withdrawn_after_an_earlier_sweep_finished(env):
+    env.gateway.features = ["item_withdraw"]
+    env.ledger.set_meta({"sources_withdrawn_v2": "done", "sources_withdraw_cursor_v2": "999"})
+    record(env, "prepared-still", "prepared_video_sources/0a_480x832_cover.png")
+    record(env, "prepared-driver", "prepared_driving_videos/0a.mp4", "video")
+    record(env, "still", f"{RUN}/portrait.png")
+    # The owner's own folders are phone folder sections like any other.
+    record(env, "owner-copy", "Best Examples/Motion Candidates/copy.mp4", "video")
+    withdraw(env)
+    assert sorted(env.gateway.withdrawn) == ["prepared-driver", "prepared-still"]

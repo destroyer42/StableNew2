@@ -45,7 +45,8 @@ Nine pairs from clips that already existed, copied (originals untouched) to
 same source, prompt, seed 123456 and 81 frames, and the three WAN-BENCH-373 run-002 cases. `HOW_TO_RATE.txt` gives the
 steps; `pairwise.csv` is the sheet; `pairwise_key.json` and `sources_DO_NOT_OPEN.json` stay closed until it is full.
 Score with `python -m tools.qualification.vid_cand382 score-pairwise --sheet pairwise.csv --key pairwise_key.json`.
-The prepared 10-job suite (`vid_a14b_ck_bench.suite.json`) was not run: it needs the GPU.
+The prepared 10-job suite (`vid_a14b_ck_bench.suite.json`) was not run: it needs the GPU. The sheet was filled in
+on 2026-11-27; the result and the decision are in section e.
 
 ## c. Animate 1.3.0 (rebased, separate branch)
 
@@ -103,3 +104,40 @@ Observation, not verified and not part of this package: the Output Library index
 1. 3:4 size: 544x720 (built; 0.7 % crop) or 528x704 (no crop, 7 % fewer pixels)?
 2. Selectable on the desktop before promotion? Built: yes, with Show experimental.
 3. A 2:3 size? Built: 512x768 and 768x512.
+
+## e. CK attention is the Make Video default (owner decision 2026-11-28)
+
+Execution class: Standard. Model recommendation: Claude Code Sonnet 5.5 at high effort, or Codex equivalent.
+Controller surface: none (catalog, picker text, names and tests). Validation: focused tests, `tests/video`, ratchets,
+code map, PR gate. No GPU run and no download.
+
+**Evidence.** The owner's blind rating of nine pairs, the 480x832 CK profile (`wan22_i2v_a14b_4step_ck_v1`) against A14B
+1.0.0, in `%USERPROFILE%\Videos\StableNewAcceptance\VID-FRAME\a14b_ck_blind` (`pairwise.csv`, unblinded with
+`pairwise_key.json`): six app pairs and the three WAN-BENCH-373 run-002 cases, 81 frames each.
+
+| Question | Same | Standard attention better | CK better |
+|---|---:|---:|---:|
+| Likeness (fidelity) | 9 | 0 | 0 |
+| Stability | 9 | 0 | 0 |
+| Motion | 7 | 2 | 0 |
+
+Speed: about 27% faster when warm (WAN-BENCH-373, 81 frames at 480x832: 85.1 s against 116.6 s of execution).
+
+**Limits.** Every rated and timed clip was 480x832. CK has not been run at the other full-picture sizes, memory with CK
+at those sizes is unmeasured, and no job of 1.1.0 itself has run on the GPU. Not QUALIFIED by the ledger.
+
+**Built.**
+
+- `wan22_i2v_a14b_4step_full_picture_v1` **1.1.0**: the 1.0.0 graph, files and sizes with the `ck` launch profile
+  (`--use-ck-attention`, no graph node, the profile that was rated); approved and the Make Video default. A saved form
+  that names the full-picture id, and the phone's Make Video, resolve to it.
+- `wan22_i2v_a14b_4step_full_picture_standard_v1` 1.0.0: the same configuration with standard attention, approved and
+  offered without Show experimental. It has its own id because the picker offers one entry per id.
+- Full picture 1.0.0 is unchanged: jobs and Storyboard drafts frozen at it replay with standard attention.
+- Warm-keep (120 s) and the launch guard are the existing ones. A running owned ComfyUI launched without CK refuses the
+  job, a held one is released and relaunched, an install without `--use-ck-attention` is refused before it starts, and a
+  startup that does not report CK attention blocks dispatch. A CK job never runs on standard attention.
+- The start-and-end-image and 480x832 workflows keep standard attention; the 1.1.0 node-based CK arm of A14B 1.0.0 is
+  a different, still unrated, eval arm.
+- Known limit: a multi-segment job that names workflows with different attention profiles per segment (only possible
+  from an eval suite or code) is refused at the first segment whose profile does not match the warm process.

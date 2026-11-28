@@ -128,7 +128,14 @@ class WebUIConnectionController:
                 return WebUIConnectionState.CONNECTING
             if outage.get("status") not in (None, "healthy"):
                 return WebUIConnectionState.ERROR
+        # STARTUP-STALL: an owned runtime still booting inside its bounded window is not an error yet.
+        if self._state is not WebUIConnectionState.READY and self._owned_runtime_starting():
+            return WebUIConnectionState.CONNECTING
         return self._state
+
+    def _owned_runtime_starting(self) -> bool:
+        starting = getattr(self._process_manager, "is_starting_up", None)
+        return callable(starting) and starting() is True
 
     def set_outage_provider(self, provider: Callable[[], dict]) -> None:
         self._outage_provider = provider

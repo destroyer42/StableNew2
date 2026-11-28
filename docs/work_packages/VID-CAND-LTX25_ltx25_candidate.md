@@ -1,9 +1,9 @@
 # VID-CAND-LTX25: LTX-2.5 distilled image-to-video candidate and three-way comparison
 
-Status: researched, built offline and the model files downloaded and verified on 2026-11-27. **No LTX-2.5 clip has been
-generated and neither graph has been validated by the real ComfyUI.** The two workflows are `experimental`, never the
-Make Video default, never preselected and not QUALIFIED. The owner has approved the download and the section 7 run for
-non-explicit clips only; every rating is the owner's (sections 1, 5 and 7).
+Status: **three-arm comparison run on 2026-11-28 (27 of 27 clips, no stop rule); the owner's blind ranking is
+pending** (section 7). No quality verdict exists. The 2026-11-27 run stopped after stage 0 because the frozen source
+images were not non-explicit; the comparison used new sources the owner labelled instead. The two workflows are
+`experimental`, never the Make Video default, never preselected and not QUALIFIED.
 
 Owner's words (2026-11-27): "Let's do both and compare. Still do the ltx-2.5 as well." The comparison is LTX-2.5
 against HunyuanVideo 1.5 (VID-CAND-382) and the current default, Wan2.2 I2V-A14B 4-step 1.0.0.
@@ -37,8 +37,12 @@ official model card links `https://github.com/Lightricks/LTX-2/blob/main/LICENSE
 - **Owner confirmation of the sources, 2026-11-27 (relayed by the orchestrator session):** all 16 source images in
   VID-CAND-382's stage 1 and stage 2 suites come from the output library. Asked to choose between a new safe-for-work set
   and reusing them, the owner chose "I'll vouch for the 16", confirming they are non-explicit and allowing them for
-  LTX-2.5. They are reused exactly as frozen (same paths and hashes). No agent opened them to check. This covers these 16
-  files only; every prompt must still be non-explicit.
+  LTX-2.5. They are reused exactly as frozen (same paths and hashes). No agent opened them before the run. This covers
+  these 16 files only; every prompt must still be non-explicit.
+- **Source check, 2026-11-27, after stage 0: that confirmation does not match the files.** An agent opened all 16
+  (hashes matching the suites): all but one contain nudity and several are sexually explicit. They must not be used
+  with LTX-2.5, whatever was confirmed. **Lesson for any restricted-use model: open every source before the first
+  generation; a statement about the files is not a check of them.**
 - **Download, 2026-11-27:** the owner accepted the gate and the five files of section 5 were downloaded at the pinned
   revision (13:22-13:30 UTC), each matching its size and SHA-256, and placed as section 5 says.
 
@@ -194,7 +198,97 @@ Rules, thresholds, stop rules and budget are in `tools/qualification/vid_cand_lt
 - **Audio:** reported, not gated (present, usable, in step with the motion, extra time and memory).
 - **Recorded per job:** cold and warm wall time, VRAM, host commit and available RAM peaks, and failures.
 
-## 7. Physical run plan (approved by the owner for non-explicit clips; not yet run)
+## 7. Physical runs
+
+### Three-arm comparison, 2026-11-28
+
+**Authority:** the owner approved the written plan (9 pictures x 3 arms, Hunyuan at 8 steps), relayed by the
+orchestrator session: "Yes, 8". It replaces the stage suites of section 6, which were not run.
+
+**Sources:** nine of the owner's own generated pictures, each labelled safe-for-work by the owner (37 of 40 candidates
+were) and opened by the agent before the run: clothed adults, no nudity or sexual pose. All 576x1024; five full body,
+two half body, two portrait. Only 9:16 pictures, because the Hunyuan and LTX-2.5 specs each have one tall size and would
+crop a 3:4 picture by about a quarter. Suite, prompts, labels and pictures stay outside the repository.
+
+| Arm | Workflow (1.0.0) | Output |
+|---|---|---|
+| `a14b_full` | `wan22_i2v_a14b_4step_full_picture_v1` (Make Video default) | 480x832, 81 frames, 16 fps |
+| `hy15_8step` | `hunyuan_video15_i2v_480p_8step_v1` | 480x848, 121 frames, 24 fps |
+| `ltx25_distilled` | `ltx25_distilled_i2v_v1`, silent | 768x1344, 121 frames, 24 fps |
+
+Seed 391, smoothing off, one attempt per clip, arm by arm. Code `841f9b49`, plan digest `3c5a4307e130`, suite SHA-256
+`2017ff00f8cc20dbe7972a989278ad2eb10623a9900d1c697061d2eb53af24da`, eval run
+`20261128_093148_vidcandltx25-threearm_eb9a95b8`; managed ComfyUI 0.38.0, torch 2.14.0+cu130.
+
+**Result:** 27 of 27 completed, no retry, no out-of-memory, no stop rule, about 84 minutes. The read-only verifier's
+identity checks passed, every clip decodes with its full frame count, and frames sampled from every clip showed no
+broken or explicit output.
+
+| Measure | A14B | Hunyuan 8-step | LTX-2.5 |
+|---|---|---|---|
+| First clip, includes model load (s) | 167 | 245 | 150 |
+| Later clips, median (range) of 8 (s) | 127 (120-128) | 295 (209-392) | 107 (100-118) |
+| Peak VRAM (MiB of 12,282) | 10,853 | 11,963 | 11,925 |
+| Peak host commit fraction | 0.72 | 0.78 | 0.75 |
+| Lowest available host RAM (GiB) | 5.0 | 5.8 | 9.8 |
+| Peak GPU temperature (C) | 83 | 83 | 78 |
+
+- All three make about 5 s of video, at different sizes and frame rates, so the times compare the specs as they ship,
+  not equal output.
+- Hunyuan (11,963 MiB) and LTX-2.5 (11,925 MiB) peaked above 11,500 MiB, the stop line of the V1-3 and V1-6 A14B
+  test plans; this plan had no VRAM stop line. These are whole-card readings (951 MiB in use before the run).
+- Free RAM before each clip was recorded: lowest 5.8 GiB (stop rule 0.25 GiB).
+- Another session's test run and an editor type check were using the CPU when the run started and were left alone, so
+  times may be high. Hunyuan's wide range is unexplained.
+- The eval kit marks the 121-frame clips `truncated`: its metrics measure the first 120 frames. The files hold 121.
+- Automated motion and colour metrics exist in the run folder. They are not repeated here, and should not be read,
+  before the owner has ranked: they can identify an arm.
+
+**Rating:** one blind ranking sitting in the phone's To rate tab, `vidcand-ltx25-threearm` (nine pictures, clips A/B/C,
+ranked on likeness, stability and motion, with notes). The running app sends it; it was registered with the app closed.
+No agent fills it. Blinding is partial: sharpness and frame rate can hint at the model, and the Review tab may name it.
+
+**Decision rule, fixed before the run:** for each challenger against A14B, its share over nine pictures x three
+questions (ties split): at least 0.50, at least as good; below 0.33, not worth adopting; between, no clear case. Not
+ready if any out-of-memory (none), host commit at or above 0.95 (peak 0.78) or more than one identity break in the
+owner's notes (pending). Screening only: nine pictures, one seed; nothing is promoted without a separate decision.
+
+### Result, 2026-11-27 (code `7b5c0a9e`, plan digest `81ab7ed14043`, run `20261128_001904_vidcandltx25-stage0_29babf76`)
+
+Preflight passed (ComfyUI port free, 11.5 GiB VRAM and 23.4 GiB RAM free, PCIe x16). Both stage 0 jobs completed, with
+no allocation failure, device loss or stop rule. The read-only verifier's identity checks all passed.
+
+| Measure (silent workflow, 768x1344, 121 frames, 24 fps) | Value |
+|---|---|
+| Wall time, cold / warm (one job each) | 192.9 s / 123.9 s |
+| Peak VRAM | 11,794 MiB of 12,282 MiB |
+| Peak host commit fraction | 0.70 |
+| Lowest available host RAM | 12.5 GiB |
+| Peak GPU temperature | 75 °C |
+| Output | both clips decode fully (H.264, 121 frames) with the diffusion video decoder |
+
+Other sessions' test suites were using the CPU at launch, so the times may be a little high. Quality was not assessed
+and nothing was rated.
+
+**Both stage 0 sources contain nudity and one is sexually explicit.** Generating from them broke the owner's condition
+and, for the explicit one, the licence's use policy (the AUP condition of section 1). The run stopped there. The two
+clips and their frames remain on the host, unpublished and unrated, **awaiting the owner's decision**: asked about
+deleting them, the owner did not say yes (2026-11-27), so no agent may delete, publish or reuse them.
+
+**Next (owner, 2026-11-27, relayed by the orchestrator session): new clothed sources, picked and classified by the
+owner.** Candidates go to the owner to be labelled safe-for-work or not, with their framing; only after that is a new
+GPU plan proposed, with 8-16 owner-confirmed safe-for-work sources across all three arms. An agent opens every chosen
+source before the first generation. The suites built for this run must not be reused.
+
+**Classification sitting, 2026-11-27:** 40 candidates (ten per named character, from the SDXL variants of the owner's
+character packs, picked from prompt metadata without opening any picture) are registered in the phone's To rate tab as
+`eval-sources-stormlight-2` (`-1` was withdrawn unanswered: a name collision had listed three pictures twice), an
+existing RG-170 `choice` sitting: safe-for-work or not (safe-for-work defined there as
+no nudity and no sexual pose or act), framing, an optional flawed-picture flag and notes. Nothing is generated from it.
+The owner's answers become a private source-labels file for later evaluations; the selection and labels stay outside
+the repository.
+
+### The plan as approved (kept for the record)
 
 Before any of it: the section 5 files present with matching SHA-256; VID-CAND-382 reports the GPU free; VID-FRAME's GPU
 test, which is queued first, has finished; StableNew, Forge and ComfyUI closed; and a one-line go/no-go check to the
@@ -237,11 +331,13 @@ three-way sheet can be built only after it does.
 | Category | What |
 |---|---|
 | Implementation | Spec module and registration, picker tier, the upscaler folder in the missing-model check, `tools/qualification/vid_cand_ltx25`, this record, VIDEO_PIPELINE, CODEX_MAP, CODE_MAP and tools README entries |
-| Demonstration | `tests/video/test_vid_cand_ltx25.py` and `tests/tools/test_vid_cand_ltx25_eval.py`: registry, opt-in, pins, graphs, probe, fake-Comfy runs, eval-kit admission, three-way sheet, all on synthetic data. Graph inputs were checked by reading the installed node sources; **the real ComfyUI has not validated either graph** |
+| Demonstration | `tests/video/test_vid_cand_ltx25.py` and `tests/tools/test_vid_cand_ltx25_eval.py`: registry, opt-in, pins, graphs, probe, fake-Comfy runs, eval-kit admission, three-way sheet, all on synthetic data. Graph inputs were checked by reading the installed node sources; **the real ComfyUI has accepted only the silent graph; the audio graph is unvalidated** |
+| Physical | Silent LTX graph: 2 stage 0 clips (2026-11-27) and 9 comparison clips beside 9 A14B and 9 Hunyuan clips (section 7). Not qualification evidence |
 | Qualification | None. No ledger entry |
-| Held or unverified | All physical stages, ratings, and every value marked unmeasured |
+| Held or unverified | The owner's ranking and so any quality verdict; the audio workflow (never run); landscape output; other seeds |
 
 ## 9. Recommendation and smallest next step
 
-LTX-2.5 stays a candidate for non-explicit work only, whatever its quality (section 1). The smallest next step that can
-change the decision is stage 0: two jobs that show whether it loads and decodes on 12 GB, and how long it takes.
+LTX-2.5 runs on 12 GB at 768x1344x121 in under two minutes warm. Whether it is worth keeping is open until the owner
+ranks sitting `vidcand-ltx25-threearm`; then score it against the section 7 rule and record the verdict here. It stays a
+candidate for non-explicit work only (section 1). The two stage 0 clips are still kept, undecided.

@@ -29,6 +29,11 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / "config" / "managed_forge_runtime.json"
 RUNBOOK = "docs/runbooks/managed_forge_runtime.md"
 
+#: Bounded managed startup window (STARTUP-STALL). The slowest observed cold boot reported "Startup time: 171.0s" and
+#: answered 176 s after launch, 4 s inside the previous 180 s; typical boots take 33-53 s. A process that exits ends
+#: the wait at once, so the longer window only delays the report for a live process that hangs.
+STARTUP_TIMEOUT_SECONDS = 300
+
 _SETUP_GUIDANCE = (
     "Managed Forge is StableNew's default still-image runtime, but it is not installed automatically. Build it once "
     f"with scripts/bootstrap_managed_forge_windows.ps1 (see {RUNBOOK}), or select the A1111 rollback explicitly by "
@@ -146,7 +151,7 @@ def build_launch_profile(manifest: dict[str, Any], *, install_dir: Path, model_h
         "working_dir": str(install_dir / "source"),
         "env_overrides": env,
         "endpoint": endpoint_for_port(port),
-        "startup_timeout_seconds": 180,
+        "startup_timeout_seconds": STARTUP_TIMEOUT_SECONDS,
     }
 
 

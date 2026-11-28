@@ -374,13 +374,14 @@ def test_review_retention_does_not_touch_rating_media(rig: Rig) -> None:
 
 def test_the_rating_page_is_served_and_never_writes_markup(rig: Rig) -> None:
     index = rig.phone.get("/").text
-    assert re.search(r'src="/static/rating\.js"[\s\S]*src="/static/app\.js"', index)
+    stylesheet = re.search(r'href="(/s/[0-9a-f]{12})/features/rating/rating\.css"', index)
+    assert stylesheet
     for path, kind in (
-        ("/static/rating.js", "text/javascript"),
-        ("/static/rating.css", "text/css"),
+        ("/features/rating/rating.js", "text/javascript"),
+        ("/features/rating/rating.css", "text/css"),
     ):
-        response = rig.phone.get(path)
+        response = rig.phone.get(stylesheet[1] + path)
         assert response.status_code == 200 and response.headers["content-type"].startswith(kind)
-    script = rig.phone.get("/static/rating.js").text
+    script = rig.phone.get(stylesheet[1] + "/features/rating/rating.js").text
     assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(", script)
     assert SCHEMA_VERSION not in script

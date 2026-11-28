@@ -613,6 +613,9 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
         "wan22_i2v_a14b_4step_v1@1.3.0": "1a21bfa93c2d6b51d45df50f363fe3d540f47cbbc3d891532f1704d2a8847982",
         # VID-FRAME: full-picture sizes on the 1.0.0 graph; re-pinned with A14B 1.0.0 when the default moved (2026-11-27).
         "wan22_i2v_a14b_4step_full_picture_v1@1.0.0": "3d792330076f24520746a8ccd5ac357f3c01f3be5976ad4eace3f44d54b43090",
+        # 2026-11-28: the CK-attention default (same graph and sizes) and the standard-attention entry.
+        "wan22_i2v_a14b_4step_full_picture_v1@1.1.0": "d4c067a04af46cb763d2d420c9ed6ef8a23f1a5fd34c103cdd6ce33b788ce3e3",
+        "wan22_i2v_a14b_4step_full_picture_standard_v1@1.0.0": "4f26e2de8068ece62d7805f3a40acdebcb97cf54631e4c0b8ef57ec3d00a174c",
         # V1 end frame: the start-and-end-image workflow, pinned from its first registration.
         "wan22_i2v_a14b_flf_v1@1.0.0": "e8b526579e251eea38921ac86ae8e5fd7d66d4aca32da48a21dd10328bfc502e",
         # VID-A14B-SVI-375: the three experimental SVI 2.0 versions.
