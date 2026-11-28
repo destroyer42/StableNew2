@@ -24,7 +24,11 @@ from src.video.video_backend_types import (
     CONTROL_PROMPT_TEXT,
     CONTROL_SOURCE_IMAGE,
 )
-from src.video.workflow_catalog_wan_a14b import WAN_A14B_CK_LAUNCH_ID, WAN_A14B_ID
+from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_CK_LAUNCH_ID,
+    WAN_A14B_FULL_PICTURE_ID,
+    WAN_A14B_ID,
+)
 from src.video.workflow_catalog_wan_animate2 import (
     WAN_ANIMATE2_DRIVE_ID,
     WAN_ANIMATE2_KEEP_WARM_SECONDS,
@@ -124,7 +128,11 @@ def test_the_profile_resolves_from_immutable_identity_and_only_for_the_speed_rev
     assert resolved[(WAN_A14B_ID, "1.0.0")] == "baseline"
     assert resolved[(WAN_A14B_CK_LAUNCH_ID, "1.0.0")] == "ck"
     assert sorted(key for key, value in resolved.items() if value == "ck") == sorted(
-        [(WAN_ANIMATE2_DRIVE_ID, WAN_ANIMATE2_SPEED_VERSION), (WAN_A14B_CK_LAUNCH_ID, "1.0.0")]
+        [
+            (WAN_ANIMATE2_DRIVE_ID, WAN_ANIMATE2_SPEED_VERSION),
+            (WAN_A14B_CK_LAUNCH_ID, "1.0.0"),
+            (WAN_A14B_FULL_PICTURE_ID, "1.1.0"),  # the A14B default since 2026-11-28
+        ]
     )
     assert (
         animate2_launch_attention(
