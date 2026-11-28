@@ -862,6 +862,9 @@ The owner's answers, read from his screenshots and relayed by the orchestrator. 
   - PW-1's manifest sets `id: "/"`. An app installed before then is identified by its start URL. If that URL is not
     `/`, Chrome may treat the PW-1 app as a different one, and the owner reinstalls once.
   - PW-1 acceptance adds a check: after deploy, the installed app updates in place, or the reinstall is stated.
+  - **Checked the same day.** The owner installed it, and `chrome://webapks` shows Start URL `/`, Scope `/` and
+    Manifest Id `/`, display standalone, owning browser Chrome. That matches PW-1's id and scope, so the update is in
+    place. Keep `"id": "/"` and `"scope": "/"`.
 - **Background Sync** (3.3) is more useful than the design assumed. With Tailscale's Always-on VPN, the phone's
   connectivity usually means the gateway is reachable. The page fallback stays, for the times Tailscale is down.
 - **Storage.** The 1 GB rendition cap is about 3 % of the free space.
