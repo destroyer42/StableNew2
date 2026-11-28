@@ -24,22 +24,26 @@ def read_current_policy(
     except Exception as exc:
         log(f"[controller] Failed to read global prompt policy: {exc}")
         positive, negative = {}, {}
-    if not positive and config_manager is not None:
-        positive = {
-            "enabled": bool(config_manager.get_global_positive_enabled()),
-            "text": config_manager.get_global_positive_prompt(),
-        }
-    if not negative and config_manager is not None:
-        negative = {
-            "enabled": bool(config_manager.get_global_negative_enabled()),
-            "text": config_manager.get_global_negative_prompt(),
-        }
+    if not positive:
+        positive = _saved_policy(config_manager, "positive")
+    if not negative:
+        negative = _saved_policy(config_manager, "negative")
     return {
         "positive_enabled": bool(positive.get("enabled", False)),
         "positive_text": str(positive.get("text") or ""),
         "negative_enabled": bool(negative.get("enabled", True)),
         "negative_text": str(negative.get("text") or ""),
     }
+
+
+def _saved_policy(config_manager: Any, kind: str) -> dict[str, Any]:
+    """The saved-settings policy for ``kind``; empty when the manager keeps none (a partial settings stand-in)."""
+
+    enabled = getattr(config_manager, f"get_global_{kind}_enabled", None)
+    text = getattr(config_manager, f"get_global_{kind}_prompt", None)
+    if not callable(enabled) or not callable(text):
+        return {}
+    return {"enabled": bool(enabled()), "text": text()}
 
 
 def policy_from_overrides(overrides: Mapping[str, Any] | None) -> dict[str, Any]:

@@ -4933,6 +4933,23 @@ class Pipeline:
                 self._note_no_output("img2img", "the input image could not be loaded")
                 return None
 
+            # Runtime admission, as every other WebUI stage has it (CODE-HEALTH (e)): img2img is often the first stage
+            # of a reprocess, photo-optimize or Klein-edit job, so nothing else has admitted the runtime yet. The
+            # workload launch policy is deliberately not applied: it has no img2img profile, and a profile restart
+            # needs GPU qualification. Admission itself still recovers a poisoned runtime or refuses the stage.
+            pressure_assessment = self._assess_stage_pressure(
+                stage_name="img2img",
+                width=int(config.get("width", 512) or 512),
+                height=int(config.get("height", 512) or 512),
+                batch_size=int(config.get("batch_size", 1) or 1),
+                steps=int(config.get("steps", 15) or 15),
+            )
+            self._mitigate_stage_pressure(pressure_assessment)
+            runtime_admission = self._ensure_runtime_admissible(
+                stage_name="img2img",
+                pressure_assessment=pressure_assessment,
+            )
+
             # Set model and VAE if specified
             model_name = config.get("model")
             vae_name = config.get("vae")
@@ -5158,6 +5175,17 @@ class Pipeline:
                 metadata["model"] = model_name
             if vae_name:
                 metadata["vae"] = vae_name
+            metadata["pressure_assessment"] = pressure_assessment
+            metadata["runtime_admission"] = runtime_admission
+            if str(runtime_admission.get("status") or "healthy") != "healthy":
+                self._attach_runtime_warning(
+                    metadata,
+                    {
+                        "type": "runtime_admission",
+                        "status": runtime_admission.get("status"),
+                        "reasons": list(runtime_admission.get("reasons") or []),
+                    },
+                )
             if outpaint_evidence is not None:
                 metadata["outpaint"] = outpaint_evidence
             if adaptive_refinement:
@@ -5701,7 +5729,11 @@ class Pipeline:
 
                 # Track timing for this stage
                 stage_start = time.monotonic()
-                # Call client.upscale_image() which properly formats the payload
+                # Deliberate (CODE-HEALTH (e)): single mode posts to the extras endpoint, not a sampler generation, so
+                # it bypasses _generate_images_with_progress. It already passed the same admission as img2img-mode
+                # upscale above (pressure, launch policy, runtime admission with its connection probe and recovery)
+                # and the entry drift check; the client applies UPSCALE_RETRY_POLICY and its own timeout. The parts it
+                # skips do not apply to extras: the txt2img/img2img payload validator and /progress stall polling.
                 response = self.client.upscale_image(
                     image_base64=input_image_b64,
                     upscaler=upscaler,

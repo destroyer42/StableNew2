@@ -22,7 +22,7 @@ from src.utils.logger import StructuredLogger
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 from tests.helpers.runtime_isolation import isolated_image_backends
 
-pytestmark = pytest.mark.usefixtures("forbid_host_runtime_access")
+pytestmark = pytest.mark.usefixtures("forbid_host_runtime_access", "healthy_runtime_admission")
 
 _TINY_PNG = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgWJ9awAAAABJRU5ErkJggg=="

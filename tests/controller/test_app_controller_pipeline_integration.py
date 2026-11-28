@@ -81,8 +81,14 @@ def test_stop_triggers_job_service_cancel_and_pipeline_stop(pack_file, monkeypat
     controller.app_state.run_config = make_run_config()
     controller.on_pack_selected(0)
 
-    controller.state.lifecycle = controller.state.lifecycle.RUNNING
+    cancels: list[bool] = []
+    controller.job_service.cancel_current = lambda *, return_to_queue=False: cancels.append(
+        return_to_queue
+    )
+    controller.job_service.runner._current_job = (
+        object()
+    )  # the runner holds a job (the real precondition)
     controller.on_stop_clicked()
 
     assert pipeline_controller.stop_calls == 0
-    assert controller.state.lifecycle == controller.state.lifecycle.IDLE
+    assert cancels == [False]  # the top-bar Stop cancels through JobService, the panel's path

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.controller.app_controller import AppController, CancelToken, LifecycleState
+from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
@@ -47,8 +47,9 @@ def test_stop_delegates_to_job_service_cancel() -> None:
     runner = DummyRunner()
     service = SpyJobService(job_queue, runner)
     controller = AppController(None, job_service=service)
-    controller.state.lifecycle = LifecycleState.RUNNING
-    controller._cancel_token = CancelToken()
+    runner.current_job = Job(
+        job_id="stop-target"
+    )  # the runner holds a job; production never sets RUNNING lifecycle
 
     controller.on_stop_clicked()
 

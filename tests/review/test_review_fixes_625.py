@@ -5,12 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
 from src.controller.app_controller import AppController
 from src.controller.review_batch_service import prepare_review_batch, review_output_dir
 from src.review.archive import configured_output_root
 from src.utils.image_metadata import build_contract_kv, write_image_metadata
+
+pytestmark = pytest.mark.usefixtures(
+    "healthy_runtime_admission"
+)  # img2img now passes runtime admission
 
 FALLBACK = {
     "model": "fallback.safetensors",

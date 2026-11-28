@@ -300,6 +300,25 @@ def forbid_host_runtime_access(monkeypatch: pytest.MonkeyPatch):
     assert attempts == [], "fake-client test attempted ambient runtime access"
 
 
+@pytest.fixture
+def healthy_runtime_admission(monkeypatch: pytest.MonkeyPatch):
+    """Opt-in: the executor's runtime admission reports healthy, for fake WebUI clients with no connection probe.
+
+    Admission itself is covered by ``tests/pipeline/test_stage_admission_control_v2.py`` and the per-stage tests.
+    """
+    from src.pipeline.executor import Pipeline
+
+    monkeypatch.setattr(
+        Pipeline,
+        "_ensure_runtime_admissible",
+        lambda *_args, **_kwargs: {
+            "schema": "stablenew.runtime-admission.v1",
+            "status": "healthy",
+            "reasons": [],
+        },
+    )
+
+
 @pytest.fixture(autouse=True)
 def _never_create_real_process_containers_for_webui_managers(
     monkeypatch: pytest.MonkeyPatch,
