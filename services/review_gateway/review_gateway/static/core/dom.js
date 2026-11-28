@@ -28,7 +28,7 @@ export function toast(message) {
 export function show(heading, canGoBack, ...nodes) {
   title.textContent = heading;
   back.hidden = !canGoBack;
-  view.replaceChildren(...nodes);
+  view.replaceChildren(...nodes.filter(Boolean)); // as in el(): a part that is not there is null, never text
 }
 
 export function closeSheet() {
