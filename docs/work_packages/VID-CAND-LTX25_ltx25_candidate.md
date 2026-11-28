@@ -235,6 +235,8 @@ broken or explicit output.
 
 - All three make about 5 s of video, at different sizes and frame rates, so the times compare the specs as they ship,
   not equal output.
+- Hunyuan (11,963 MiB) and LTX-2.5 (11,925 MiB) peaked above 11,500 MiB, the stop line of the V1-3 and V1-6 A14B
+  test plans; this plan had no VRAM stop line. These are whole-card readings (951 MiB in use before the run).
 - Free RAM before each clip was recorded: lowest 5.8 GiB (stop rule 0.25 GiB).
 - Another session's test run and an editor type check were using the CPU when the run started and were left alone, so
   times may be high. Hunyuan's wide range is unexplained.
