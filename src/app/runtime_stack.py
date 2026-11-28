@@ -167,7 +167,7 @@ def assemble_runtime_stack(
 def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
     """RG-140 phone actions over the running application, or ``None`` when it has no job repository."""
 
-    from src.app.review_gateway_actions import AppActionCompiler, GatewayActions
+    from src.app.review_gateway_actions import AppActionCompiler, GatewayActions, admission_claim
     from src.app.site_phone_admission import admit_phone_records
     from src.app.site_phone_preview_host import PhonePreviewHost
     from src.app.site_phone_queue import PhoneQueueView, gateway_owner
@@ -192,11 +192,35 @@ def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
             reprocess=compiled.reprocess,
             # D8 first step: touch-ups run after the current job, ahead of NORMAL work (the existing priority).
             policy=SubmissionPolicy(priority=JobPriority.HIGH if runs_next else JobPriority.NORMAL),
-            claim={"channel": "review_gateway"},
+            claim=admission_claim(compiled),
         )
 
+    def admitted(owner: str, receipt: str) -> list[str]:
+        found = PhoneQueueView(repository, app.job_service).receipt(owner, receipt)
+        return list(found["job_ids"]) if found["state"] == "admitted" else []
+
     compiler = AppActionCompiler(PhonePreviewHost(app, repository, records), repository, root)
-    return GatewayActions(ledger, compiler, admit, owner_of=gateway_owner)
+    return GatewayActions(ledger, compiler, admit, owner_of=gateway_owner, admitted=admitted)
+
+
+def _gateway_catalog(app: Any, ledger: Any, records: Path) -> Any:
+    """RG-160: what the phone may choose, read from the running application (``None`` without a repository)."""
+
+    from src.app.review_gateway_catalog import ChoiceCatalog
+    from src.app.site_phone_preview_host import PhonePreviewHost
+    from src.app.site_phone_video import gateway_video_label
+    from src.image_backends.model_policy_warnings import shown_warning_for
+    from src.review.review_lineage import repository_of
+
+    repository = repository_of(app)
+    if repository is None:
+        return None
+    return ChoiceCatalog(
+        ledger,
+        models=PhonePreviewHost(app, repository, records).gateway_models,
+        warning_of=shown_warning_for,
+        video=gateway_video_label,
+    )
 
 
 def _gateway_batch_of_job(app: Any, identity: Any) -> Any:
@@ -298,6 +322,7 @@ def build_review_gateway_sync(
         publisher_factory=publisher,
         applier=applier,
         busy=busy,
+        catalog=_gateway_catalog(app, ledger, records),
         **extra,
     )
     owner.append(sync)

@@ -29,6 +29,7 @@ SYNC_ROUTES = (
     ("POST", "/sync/v1/rating-acknowledgements"),
     ("POST", "/sync/v1/withdrawals"),
     ("POST", "/sync/v1/item-sources"),
+    ("PUT", "/sync/v1/choice-catalog"),
 )
 
 
@@ -227,6 +228,7 @@ def test_health_names_the_contract_version_and_its_features(rig) -> None:
             "item_source",
             "item_input",
             "rating_tasks",
+            "deferred_actions",
         ],
     }
 

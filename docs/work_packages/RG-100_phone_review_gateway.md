@@ -116,7 +116,7 @@ lost or compromised and a fallback could publish the route.
 | S9 | Lost decisions | Gateway SQLite in WAL mode with `synchronous=FULL`; nothing purged before acknowledgement; the PC acts only on validated records, never on gateway state alone. |
 | S10 | Container supply chain | Base image pinned by digest; hash-pinned requirements; bundled front-end assets; reproducible build; minimal dependency set. |
 | S11 | Revocation while the PC is offline | Revocation on the gateway itself as well as from the desktop; revoked devices refused within one request. |
-| S12 | Experimental work run from the phone without the warning | With N1, the phone summary shows the desktop's warnings and the accepted warning is recorded in provenance. |
+| S12 | Experimental work run from the phone without the warning | With N1, the phone summary shows the desktop's warnings and the accepted warning is recorded in provenance. A request made while the PC is away (RG-160, owner decision 2026-11-27) is accepted by its one tap: the warnings are recorded the same way and listed on its receipt. |
 | S13 | Forge on the AI worker reached by anything but the PC (RG-145) | Forge bound to `127.0.0.1` inside the container, without `--listen` or insecure extension access; reachable only through the PC's SSH forward as `ai-tunnel`, with that key limited to the Ollama and Forge ports; the gateway container has no route to the worker; Forge receives only compiled NJR stages, never raw phone payloads. |
 
 Existing-code findings this work touches: prompt text is logged at INFO into `logs/stablenew.log.jsonl` (sync logging
