@@ -242,4 +242,5 @@ def test_the_backend_asks_for_the_warm_floor_only_for_the_process_that_ran_the_l
     backend.execute(None, _request(tmp_path, hold=True))  # a new sequence starts cold
 
     assert Spy.calls == [False, True, False, False]
-    assert Spy.reuse == Spy.calls  # one workflow throughout: the warm segment is also a verified reuse
+    # One workflow throughout, so the warm segment is also a verified reuse.
+    assert Spy.reuse == Spy.calls
