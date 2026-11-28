@@ -1,0 +1,39 @@
+/* The inbox: the source folders, the run cards' Review button and the run grid. Cards, chips, covers, toolbars and
+   the badge shape are shared and stay in core/core.css. */
+.run .open { width: 100%; margin-top: 0.6rem; }
+
+/* PHONE-FAST: one row per source of outputs */
+.folder {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 3.4rem;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+.folder-icon { font-size: 1.4rem; }
+.folder-name { flex: 1; }
+.folder .chip { font-size: 0.85rem; font-weight: 600; }
+.counting button { font-size: 0.85rem; }
+
+/* grid */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: 0.3rem; }
+.tile {
+  position: relative;
+  padding: 0;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 3px solid transparent;
+  border-radius: 0.4rem;
+  content-visibility: auto;
+}
+.tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile.keep { border-color: var(--keep); }
+.tile.delete { border-color: var(--delete); }
+.tile.delete img { opacity: 0.45; }
+.tile.favorite { border-color: var(--favorite); }
+.badge.play { top: 0.2rem; left: 0.2rem; }
+.badge.state { bottom: 0.2rem; right: 0.2rem; }
+.badge.state.refused, .badge.state.rejected { background: var(--delete); }
+.badge.state.rework { background: var(--accent); }
