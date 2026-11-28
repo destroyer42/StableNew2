@@ -166,6 +166,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `batch_operations_service.py`: Unified Review / Video Workflow batch operations (PR-BATCH-OPS-201)
 - `batch_output_resolution.py`: Resolve a batch's recorded outputs against the file system (PR-BATCH-OPS-201)
 - `content_visibility_resolver.py`: Classify content from recorded metadata and filter or redact operator-facing projections
+- `continue_clip.py`: Continue a clip (V1-6, ``docs/work_packages/V1_motion_controls.md`` section 15): one facade for desktop and p…
 - `core_pipeline_controller.py`: Controller-owned base pipeline controller
 - `generation_profile_controller.py`: Controller adapter for model-aware generation profiles and startup defaults (PR-IMG-PROFILE-630)
 - `global_prompt_policy_service.py`: Controller-side projection of current global prompt intent
@@ -503,6 +504,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
 - `video_workflow_alignment_host.py`: Owns the one Align Motion session, workspace window and status row of the Video Workflow tab (PR-VID-MOTION-4…
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
+- `video_workflow_continue_v2.py`: The "Continue a clip" rows of the Video Workflow tab and their off-Tk work (V1-6)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
 - `video_workflow_driver_host_v2.py`: The driver clip of the "Follow a driving video" task (V1-3): read it, fit the length, prepare it
 - `video_workflow_evaluate_view_v2.py`: Evaluate view container for the Video Workflow tab (VID-UX-384)
