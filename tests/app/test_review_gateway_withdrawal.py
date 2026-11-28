@@ -90,7 +90,7 @@ def test_working_files_published_earlier_are_withdrawn_after_an_earlier_sweep_fi
     record(env, "prepared-still", "prepared_video_sources/0a_480x832_cover.png")
     record(env, "prepared-driver", "prepared_driving_videos/0a.mp4", "video")
     record(env, "still", f"{RUN}/portrait.png")
-    # The owner's own folder: no longer sent, but what is already on the phone stays.
+    # The owner's own folders are phone folder sections like any other.
     record(env, "owner-copy", "Best Examples/Motion Candidates/copy.mp4", "video")
     withdraw(env)
     assert sorted(env.gateway.withdrawn) == ["prepared-driver", "prepared-still"]

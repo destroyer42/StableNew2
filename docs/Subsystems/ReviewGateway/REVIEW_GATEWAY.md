@@ -135,14 +135,12 @@ Rules:
 
 ### 3.0 What the PC publishes (PHONE-FAST)
 
-- **Only authoritative outputs** (`src/app/review_gateway_sources.py`). Only a file where a job writes its final
-  outputs is published: an output route's run folder (`<route>/<run>/<file>`, or a stage folder such as `upscaled`
-  below it) or a Photo Optimize result
-  (`PhotoOptimize/workspace/assets/<asset>/outputs/`). Working files (prepared video and driving-video sources, eval
-  plan media, storyboard and continue-clip frames, imported originals, temporary and conditioning folders) and folders
-  the owner made are not published. Within a run folder, an image under `movie_clips`, an image a video manifest lists
-  as a frame or names as the clip's poster, and a retained un-smoothed clip are not published either. While a job runs,
-  an image that may be one of its frames waits.
+- **Only authoritative outputs** (`src/app/review_gateway_sources.py`). Finished images and clips are published from
+  the job output folders and from any folder the owner made under Output. StableNew's working files are not: prepared
+  video and driving-video sources, eval plan media, storyboard and continue-clip frames, temporary and hidden folders,
+  the Photo Optimize workspace except an asset's results, and conditioning or sequence folders inside a run folder.
+  An image under `movie_clips`, an image a video manifest lists as a frame or names as the clip's poster, and a
+  retained un-smoothed clip are not published either. While a job runs, an image that may be one of its frames waits.
 - **Nothing blocks the rest.** A row whose file is gone is recorded as `missing` and looked at again after a day; a row
   that fails for another reason is set aside for a while, longer each time (up to 10 minutes). A published item's
   ledger row is never overwritten.
@@ -160,7 +158,7 @@ Rules:
   back to its file (`public_digest`). Media that cannot be cleaned is not sent. Items sent before this are not sent
   again, so they keep their metadata.
 - **One-time withdrawal.** Frames, un-smoothed clips, working files and eval outputs (section 9) published before the
-  rules above are withdrawn once (files merely outside the output folders stay): the PC
+  rules above are withdrawn once: the PC
   classifies its publish ledger and posts `item_withdrawal` to a gateway listing `item_withdraw`. The gateway purges
   those items without recording a decision or touching Immich, and leaves any item with a decision or a request the
   PC has not refused. No PC file changes.

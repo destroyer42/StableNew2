@@ -165,7 +165,7 @@ def test_exclusion_reads_nothing_outside_the_output_root(env, tmp_path):
     assert Path(env.root).is_dir()
 
 
-# -- only authoritative outputs: working files and folders no job writes outputs to ---------------------------------
+# -- working files stay on the PC; finished outputs and the owner's own folders are published -------------------------
 
 WORKING_FILES = [
     ("prepared_video_sources/0a1b2c3d_480x832_cover_resize_center_crop.png", "image/png"),
@@ -177,9 +177,18 @@ WORKING_FILES = [
     ("PhotoOptimize/workspace/staging_runs/s1/PhotoOptimize/run/draft.png", "image/png"),
     ("SVD/run/_svd_temp/abc/postprocess/rife_output/0001.png", "image/png"),
     ("Pipeline/run/conditioning/depth.png", "image/png"),
+    ("movie_clips/run/sequence/prefix/part.mp4", "video/mp4"),
+    ("movie_clips/run/.asm_x1/part.mp4", "video/mp4"),
+    (".work/stage/driver.mp4", "video/mp4"),
 ]
-NOT_JOB_OUTPUTS = [
+OWNER_FILES = [
     ("Best Examples/Motion Candidates/copy.mp4", "video/mp4"),
+    ("Best Examples/20261114_134844_pack/final.png", "image/png"),
+    ("Second Best/20261114_150942_pack/final.png", "image/png"),
+    (
+        "Best Examples/sequence/clip.mp4",
+        "video/mp4",
+    ),  # an app folder name, but in the owner's folder
     ("some_new_folder/thing.png", "image/png"),
     ("loose.png", "image/png"),
 ]
@@ -194,16 +203,18 @@ FINAL_OUTPUTS = [
 ]
 
 
-@pytest.mark.parametrize(("relative", "mime"), WORKING_FILES + NOT_JOB_OUTPUTS)
-def test_what_is_not_a_job_output_is_never_published(env, monkeypatch, relative, mime):
+@pytest.mark.parametrize(("relative", "mime"), WORKING_FILES)
+def test_a_working_file_is_never_published(env, monkeypatch, relative, mime):
     item = make_item(env, relative, mime=mime, provenance="unknown")
     result = publish(env, monkeypatch, item)
     assert result.published == 0 and not env.gateway.manifests
-    assert state(env, item) in {"working_file", "not_output", "frame"}
+    assert state(env, item) in {"working_file", "frame"}
 
 
-@pytest.mark.parametrize(("relative", "mime"), FINAL_OUTPUTS)
-def test_a_final_output_is_published(env, monkeypatch, relative, mime):
+@pytest.mark.parametrize(("relative", "mime"), FINAL_OUTPUTS + OWNER_FILES)
+def test_a_final_output_or_a_file_in_the_owners_folder_is_published(
+    env, monkeypatch, relative, mime
+):
     item = make_item(env, relative, mime=mime)
     publish(env, monkeypatch, item)
     assert state(env, item) == "published"
