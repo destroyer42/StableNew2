@@ -36,6 +36,9 @@ _COMMITTED_READ_ONLY = frozenset(
         "config/ai_model_registry.json",
         "config/managed_forge_runtime.json",
         "config/managed_comfy_runtime.json",
+        # NAME-INFO's checked-in stage and model display names (src/pipeline/output_naming.py). The owner's untracked
+        # config/output_model_names.local.json override is operator data and stays protected.
+        "config/output_model_names.json",
     }
 )
 _ENV_KEYS = (
