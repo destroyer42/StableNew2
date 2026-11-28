@@ -11,6 +11,8 @@ tweak, Make Video, and "more like this" for whole recipes) and the inbox grouped
 hermetically only. They have not been run on the live phone or with a real backend. See section 7 and
 [RG-140](../../work_packages/RG-140_phone_actions.md).
 
+Requests made while the PC is away (RG-160, section 10) are tested hermetically only and are not deployed.
+
 Remote update and restart from the phone (LAUNCH-UPDATE-2) is built and tested hermetically only, against a fake
 gateway, fake Git and the real update service with an injected updater; no real checkout was updated. See section 8.
 
@@ -31,6 +33,7 @@ Immich after an explicit Keep (RG-100 invariant 5).
 | `contract.py` | Strict validation against the one schema file (whole-string patterns, time-zoned timestamps) |
 | `store.py` | SQLite (WAL, `synchronous=FULL`): items, the decision outbox, offers, devices, retention |
 | `media.py` | Content-addressed cache; a stored file is always complete and digest-verified |
+| `deferred.py` | RG-160: waiting requests, cancel, the PC's last-seen time and the choice catalog |
 | `upload_queue.py` | What Immich is still owed and the receipts for the PC, in the same SQLite file |
 | `uploader.py`, `immich.py` | The upload worker (its own thread) and the only calls made to Immich |
 | `phone_app.py` | Phone web app and API, loopback `:8443`, published by `tailscale serve` |
@@ -64,6 +67,7 @@ section 9). Errors are `{"error": "<code>"}`.
 | `POST /sync/v1/withdrawals` | `item_withdrawal` | `{"withdrawn": n}` (section 3.0) |
 | `GET /sync/v1/immich-receipts?cursor=` | - | `immich_receipt_page` (section 5); 400 `invalid_cursor` |
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
+| `PUT /sync/v1/choice-catalog` | `choice_catalog` | `{"status":"stored"}` (section 10) |
 
 The rating routes are in section 9.
 
@@ -91,15 +95,17 @@ Rules:
 11. Decisions a phone made before it was revoked stay in the outbox. A revoked device is absent from
     `enrolled_devices`; the PC decides whether to refuse its records (`revoked_device`).
 12. Action requests (RG-140) are outbox records of kind `action_request`, listed in the same pages. They never become
-    an item's decision. They never change `latest_record_id`, an Immich upload or the decision state, and they are
-    never superseded. Their answer is the ordinary acknowledgement; its `receipt` may carry `choices`,
+    an item's decision. They never change `latest_record_id`, an Immich upload or the decision state. Only a cancel
+    or a Delete supersedes one (section 10). Their answer is the ordinary acknowledgement; its `receipt` may carry
+    `choices`,
     `action_summary`, `job_ids` and `detail` (section 7).
 13. `features` in the health reply lists the optional parts of v1 this gateway accepts. The PC sends an optional part
     only to a gateway that lists it, because an older gateway's schema refuses the whole payload. A gateway from before
     the list has no `features`, so it gets none of them. Today: `item_batch`, the manifest's `batch`
     (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`, the withdrawals route (section 3.0).
     `item_source`, the manifest's `source` and the item-sources route (section 3.4);
-    `item_input`, the manifest's `input` and `input_missing` (section 3.6).
+    `item_input`, the manifest's `input` and `input_missing` (section 3.6); `deferred_actions`, the choice catalog
+    (section 10); `item_info`, the manifest's `info` (section 3.7).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -129,9 +135,12 @@ Rules:
 
 ### 3.0 What the PC publishes (PHONE-FAST)
 
-- **Only authoritative outputs** (`src/app/review_gateway_sources.py`). An image under `movie_clips`, an image a video
-  manifest lists as a frame, and a retained un-smoothed clip are never published. While a job runs, an image that may
-  be one of its frames waits.
+- **Only authoritative outputs** (`src/app/review_gateway_sources.py`). Finished images and clips are published from
+  the job output folders and from any folder the owner made under Output. StableNew's working files are not: prepared
+  video and driving-video sources, eval plan media, storyboard and continue-clip frames, temporary and hidden folders,
+  the Photo Optimize workspace except an asset's results, and conditioning or sequence folders inside a run folder.
+  An image under `movie_clips`, an image a video manifest lists as a frame or names as the clip's poster, and a
+  retained un-smoothed clip are not published either. While a job runs, an image that may be one of its frames waits.
 - **Nothing blocks the rest.** A row whose file is gone is recorded as `missing` and looked at again after a day; a row
   that fails for another reason is set aside for a while, longer each time (up to 10 minutes). A published item's
   ledger row is never overwritten.
@@ -148,8 +157,8 @@ Rules:
   touched. A changed item is known to the gateway and Immich by the SHA-256 of the bytes sent; the PC maps a decision
   back to its file (`public_digest`). Media that cannot be cleaned is not sent. Items sent before this are not sent
   again, so they keep their metadata.
-- **One-time withdrawal.** Frames, un-smoothed clips and eval outputs (section 9) published before the rules above
-  are withdrawn once: the PC
+- **One-time withdrawal.** Frames, un-smoothed clips, working files and eval outputs (section 9) published before the
+  rules above are withdrawn once: the PC
   classifies its publish ledger and posts `item_withdrawal` to a gateway listing `item_withdraw`. The gateway purges
   those items without recording a decision or touching Immich, and leaves any item with a decision or a request the
   PC has not refused. No PC file changes.
@@ -239,6 +248,20 @@ not regrouped: it stays in its own folder. A result whose input the gateway does
 already purged) is shown alone and says "original not found". Retention keeps an original while a result made from it
 is still to be judged.
 
+### 3.7 More info (NAME-INFO)
+
+Every item, and each side of a compare, has **More info**: the stage path (`txt2img → ADetailer`, `img2img`,
+`clip (A14B) from <source model>`, `storyboard take (...)`), the short and full model or workflow name, prompt pack,
+prompt number and variant, date and time, seed and batch name. The PC derives them when it publishes
+(`src/review/output_info.py`) from the file's embedded metadata, its run manifest and the job's immutable snapshot,
+all read only; a reprocess or clip job takes pack and prompt from the job of its input, at most four hops back. They
+travel as the manifest's optional `info`, a closed list of bounded fields with paths reduced to their last part, only
+to a gateway that lists `item_info`. Short names come from `src/pipeline/output_naming.py` and
+`config/output_model_names.json`. An item published without `info` shows what it already has (model, batch, seed,
+date); items already on the phone are not published again for it. The page's code is `static/moreinfo.js`.
+A file named by the descriptive scheme (NAME-INFO slice 2) also sends its name (only to a gateway that lists
+`item_file_name`), and Immich uploads under it; no other file name and no folder leaves the PC.
+
 ## 4. Retention (D4)
 
 Hourly, and by `review-gateway-admin purge`. An item is purged only when it has no unanswered record and its latest
@@ -308,6 +331,28 @@ dependencies are exact pins in `requirements-dev.txt` that a test holds equal to
 fake HTTP server on loopback (`fake_immich.py`) with the request and reply shapes read from Immich's v2.0.0 and v3.4.2
 sources; no real Immich has been used.
 
+**The phone page in a real browser** (PHONE-CORE PC-0, `tests/phone_e2e/`):
+
+- Headless Chromium (Playwright) with a Pixel-class viewport and real touch drives the page from `static/`, served by
+  the real phone app on loopback.
+- The PC is played through the real sync API: publish real PNG renditions, offer a pairing code, list the outbox,
+  answer action prepares and confirms, report `pc_status`, register a rating task.
+- The journeys cover:
+  - pairing and the HttpOnly cookie, and revocation back to pairing;
+  - swipes and tags, Undo, Keep the rest and Delete this run;
+  - rework compare;
+  - the two-step Fix face with its summary shown as text;
+  - Not saved;
+  - a decision made while unreachable, and a lost reply resent with the same key;
+  - To rate;
+  - the Update screen.
+- Each journey asserts what reached the gateway's outbox, not only the screen.
+- The suite runs only with `STABLENEW_PHONE_E2E=1` and its own hash-pinned lock (`tests/phone_e2e/requirements-e2e.txt`),
+  in the `phone-e2e` CI job. `full-suite` waits for that job and fails when it failed.
+- The suite has a cheap contract test in the census (`test_phone_e2e_contract.py`) that keeps the lock and the wiring
+  in step.
+- Run it locally with the commands in `tests/phone_e2e/conftest.py`.
+
 ## 7. Phone actions (RG-140 slices 1 and 2)
 
 **What.** On an image, a phone with the `queue` grant can ask for one of eight actions:
@@ -328,8 +373,14 @@ sources; no real Immich has been used.
   I2V-A14B 4-step) at its default length. The motion prompt is the owner's optional words, or else the image's own
   prompt.
 
-`rerun_clip` and `continue_clip` (N8) stay reserved and are refused (`invalid_record`). They will call V1's shared
-functions.
+- **Continue clip** (V1-6, video items only, the one action a video has): the desktop's *Continue a clip*, from the
+  clip's last generated frame, with the owner's optional words (else the clip's own prompt), its own length and a new
+  seed. The PC finds the job by its recorded output path and queues one take in the clip's Storyboard, creating it when
+  needed; preparing writes and queues nothing. A clip whose engine cannot make takes is offered as a Make Video of its
+  last frame, and the summary says so. It is never left waiting for an away PC (no `queue` step). Update the gateway
+  before the phone offers it. Code: `src/app/site_phone_continue.py`.
+
+`rerun_clip` (N8) stays reserved and is refused (`invalid_record`). It will call V1's shared functions.
 
 **Picking a checkpoint or a ratio (slice 2).** A prepare of `another_model` or `aspect_ratio` without
 `params.choice` is answered `applied` with `receipt.choices`: up to 100 items of `id`, `label` and `current` (the
@@ -548,3 +599,49 @@ Rules:
 manifest names a job an eval's `run.json` lists. Clips published before that rule are withdrawn by the one-time
 withdrawal of section 3.0, which runs once more for this rule.
 
+## 10. Requests made while the PC is away (RG-160)
+
+Built and tested hermetically only: not deployed, not run on the live phone or with a real backend. Design and owner
+answers: [RG-160](../../work_packages/RG-160_offline_phone_queue.md).
+
+**What.** With the PC away, a phone with the `queue` grant picks one of the eight actions of section 7, with the same
+choices, and taps **Queue when the PC is back**. One tap queues; there is no summary first, and the warnings are listed
+on the receipt afterwards (owner decision 2026-11-27). A request never expires.
+
+**Choice catalog.** `PUT /sync/v1/choice-catalog` (`$defs/choice_catalog`), sent only to a gateway listing
+`deferred_actions`, when its content changes, after a reconnect and every 10 minutes. It holds what the phone can choose
+today: checkpoints (hashed id, file name, warnings), the warning texts, the aspect ratios, whether a Make Video
+workflow is approved and its name, and when the model list was read. No paths; at most 60 KiB. A PC without a connected
+image backend repeats the last non-empty model list. The gateway shows it only to a `queue` phone and decides nothing
+from it. Without a catalog the phone behaves as before.
+
+**When the phone offers it.** At once when the PC's last outbox request is older than 3 minutes or the gateway cannot be
+reached; after 10 s without an answer to a prepare or confirm; and when a prepare is refused only because Forge's lists
+are not loaded. A confirm is turned into a waiting request only if the PC never received it.
+
+**On the PC.** Step `queue` of the same outbox record, with the same grant, item and digest checks. The record id is the
+admission receipt, so job ids are deterministic and a restart before the answer never admits twice. While the detector
+list (fixes) or model list (another model) is not loaded, or the app is busy or closing, the record is left unanswered
+and asked again; a request that is ready is not held up by one that waits. Otherwise it is compiled against what is true
+then, admitted at the priorities of section 7 with the warnings frozen as accepted on the phone, or refused with the
+same codes. The outbox is read to its last page every cycle.
+
+**Phone API.**
+
+| Route | Use |
+|---|---|
+| `GET /api/status` | also `pc_seen_at`, `image_backend_ready` and this phone's `waiting` count |
+| `GET /api/catalog` | the latest catalog and when it arrived |
+| `GET /api/requests` | this phone's waiting requests, and those answered or cancelled in the last 7 days |
+| `POST /api/actions/{record_id}/cancel` | `cancelled`, `cancel_sent` (the PC had it), `delivered` (a confirm the PC has is left alone), or the answer already given |
+
+**Cancel and Delete.** A cancelled record leaves the outbox. If the PC had received it and answers `applied` anyway, the
+gateway records that and the row reads "Queued (too late to cancel)". Deleting an image cancels what waits for it; the
+phone warns first, including when "Keep rework" would delete an original with a request waiting.
+
+**Phone offline.** A page already open saves the request in the same local list as unsent decisions, in order, and sends
+it with the same idempotency key; the catalog is kept on the phone. Opening the page with no connection is not covered.
+A request refused as `too_many_pending` moves to the "not saved" list so it does not hold up later decisions.
+
+**Rollout.** Deploy the gateway first, then update the PC. The first catalog needs one session with Forge connected to
+list checkpoints. A gateway database gains `outbox.cancelled_at` and a `pc_note` table when opened.

@@ -113,7 +113,8 @@ def test_a_prepare_becomes_an_outbox_request_and_leaves_the_decision_alone(queue
     [
         ("rm_rf", {"step": "prepare"}),
         ("rerun_clip", {"step": "prepare"}),  # N8: reserved, it will call V1's shared functions
-        ("continue_clip", {"step": "prepare"}),
+        ("continue_clip", {"step": "queue"}),  # V1-6: never queued while the PC is away
+        ("continue_clip", {"step": "prepare", "choice": "m1"}),
         ("fix_face", {"step": "prepare", "count": 2}),  # count belongs to more_like_this
         ("fix_face", {"step": "prepare", "choice": "2x3"}),  # choice belongs to slice-2 pickers
         ("make_video", {"step": "prepare", "choice": "2x3"}),
@@ -398,3 +399,20 @@ def test_an_outbox_from_before_rg140_is_migrated(tmp_path, clock) -> None:
             assert db.execute("SELECT scopes FROM device").fetchone()["scopes"] == '["review"]'
     finally:
         rig.close()
+
+
+def test_a_video_item_can_be_continued_and_an_image_cannot(rig) -> None:
+    clip = rig.publish("clip", kind="video")
+    image = rig.publish()
+    rig.pair(scopes=("review", "queue"))
+
+    accepted = prepare(rig, clip, "continue_clip", text="she sits down")
+    refused = prepare(rig, image, "continue_clip")
+
+    assert accepted.status_code == 200, accepted.text
+    assert (refused.status_code, refused.json()) == (422, {"error": "invalid_record"})
+    [record] = rig.outbox()["records"]
+    assert record["action_request"] == {
+        "action": "continue_clip",
+        "params": {"step": "prepare", "text": "she sits down"},
+    }

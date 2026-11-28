@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from types import SimpleNamespace
 
 from src.controller.app_controller_services.application_runtime_coordinator import (
@@ -30,6 +31,7 @@ def test_application_runtime_coordinator_waits_for_gui_ready() -> None:
     coordinator = ApplicationRuntimeCoordinator(
         job_controller=job_controller,
         webui_connection_controller=_WebUIStub(ready=True),
+        spawn=lambda work: work(),
     )
 
     coordinator.on_webui_ready()
@@ -66,6 +68,7 @@ def test_application_runtime_coordinator_defers_until_webui_ready_after_gui() ->
     coordinator = ApplicationRuntimeCoordinator(
         job_controller=job_controller,
         webui_connection_controller=webui,
+        spawn=lambda work: work(),
     )
 
     coordinator.on_gui_ready()
@@ -74,4 +77,32 @@ def test_application_runtime_coordinator_defers_until_webui_ready_after_gui() ->
     webui._ready = True
     coordinator.on_webui_ready()
 
+    assert job_controller.trigger_calls == 1
+
+
+def test_the_gui_ready_check_runs_off_the_calling_thread() -> None:
+    """STARTUP-STALL: the strict readiness probe does network I/O, so never on the Tk thread."""
+
+    checked_on: list[int] = []
+    done = threading.Event()
+
+    class _Probe:
+        def is_webui_ready_strict(self) -> bool:
+            checked_on.append(threading.get_ident())
+            return True
+
+    class _Job(_JobControllerStub):
+        def trigger_deferred_autostart(self) -> None:
+            super().trigger_deferred_autostart()
+            done.set()
+
+    job_controller = _Job()
+    coordinator = ApplicationRuntimeCoordinator(
+        job_controller=job_controller, webui_connection_controller=_Probe()
+    )
+
+    coordinator.on_gui_ready()
+
+    assert done.wait(5)
+    assert checked_on and checked_on != [threading.get_ident()]
     assert job_controller.trigger_calls == 1

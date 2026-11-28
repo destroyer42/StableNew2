@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
+
+from src.utils.thread_registry import get_thread_registry
 
 
 class ApplicationRuntimeCoordinator:
@@ -15,11 +18,13 @@ class ApplicationRuntimeCoordinator:
         job_controller: Any,
         webui_connection_controller: Any,
         logger: logging.Logger | None = None,
+        spawn: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
         self._job_controller = job_controller
         self._webui_connection_controller = webui_connection_controller
         self._logger = logger or logging.getLogger(__name__)
         self._gui_ready = False
+        self._spawn = spawn or self._spawn_tracked
 
     def sync_queue_state(self, *, app_state: Any, job_service: Any) -> None:
         job_controller = self._job_controller
@@ -44,8 +49,19 @@ class ApplicationRuntimeCoordinator:
                 pass
 
     def on_gui_ready(self) -> None:
+        """Called on the Tk thread; the strict readiness check does network I/O, so it runs on a worker."""
         self._gui_ready = True
-        self._maybe_trigger_deferred_autostart(reason="gui_ready")
+        self._spawn(lambda: self._maybe_trigger_deferred_autostart(reason="gui_ready"))
+
+    def _spawn_tracked(self, work: Callable[[], None]) -> None:
+        try:
+            get_thread_registry().spawn(
+                target=work,
+                name="DeferredAutostart",
+                purpose="Check WebUI readiness off the UI thread before deferred queue autostart",
+            )
+        except RuntimeError:  # the app is closing; nothing left to start
+            self._logger.debug("Deferred autostart skipped: the app is shutting down")
 
     def on_webui_ready(self) -> None:
         self._maybe_trigger_deferred_autostart(reason="webui_ready")

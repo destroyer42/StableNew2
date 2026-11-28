@@ -22,6 +22,7 @@ from src.app.review_gateway_actions import (
     AppActionCompiler,
     CompiledAction,
     GatewayActions,
+    admission_claim,
 )
 from src.app.review_gateway_apply import RecordApplier
 from src.app.review_gateway_protocol import ActionChoices, utc_text
@@ -167,7 +168,7 @@ class Env:
                 policy=SubmissionPolicy(
                     priority=JobPriority.HIGH if runs_next else JobPriority.NORMAL
                 ),
-                claim={"channel": "review_gateway"},
+                claim=admission_claim(compiled),
             )
 
         self.actions = GatewayActions(
@@ -345,9 +346,9 @@ def test_a_changed_file_is_refused_before_anything_compiles(env):
     assert env.compiler.calls == []
 
 
-@pytest.mark.parametrize("action", ["rerun_clip", "continue_clip"])
+@pytest.mark.parametrize("action", ["rerun_clip"])
 def test_a_reserved_action_is_refused(env, action):
-    """N8's clip actions stay reserved: they will call V1's shared functions, not build jobs here."""
+    """N8's re-run stays reserved: it will call V1's shared functions, not build jobs here."""
 
     ack = env.answer(env.request(action))
 

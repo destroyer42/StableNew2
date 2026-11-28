@@ -13,6 +13,9 @@ re-hashed (S3, invariant 3). This module then:
   for the ADetailer fixes, the History variation compiler for "more like this"), admits nothing, and answers with an
   ``action_summary``: PC-written text, the job count, where the jobs go in the queue and every N1 warning, all
   scrubbed of paths (S7, S12);
+* **queue** (RG-160), for a request made while this PC was away, compiles and admits in one step: the tap that made
+  it accepted the warnings, which the receipt lists. What would pass by itself leaves it unanswered; only a certain
+  failure refuses it, and the record id is its receipt id, so it can never be admitted twice;
 * **confirm** compiles again and admits only when the fresh summary has the revision the phone showed. Admission is
   one call to ``admit_phone_records`` (``JobService.submit_njrs``; invariant 6) with deterministic job ids, the
   shown warnings frozen as accepted on the phone, fixes at the queue's existing HIGH priority (D8 first step) and
@@ -30,7 +33,7 @@ import hashlib
 import json
 import logging
 import secrets
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path, PureWindowsPath
@@ -40,7 +43,9 @@ from src.app.review_gateway_protocol import (
     ACTION_UNAVAILABLE,
     ADMISSION_REFUSED,
     CHOICE_ACTIONS,
+    CLIP_ACTIONS,
     DETAILS,
+    IN_PROGRESS,
     INVALID_RECORD,
     MAX_SEEDS,
     PHONE_ACTIONS,
@@ -64,6 +69,10 @@ log = logging.getLogger(__name__)
 
 DEFAULT_SEEDS = 4
 PREPARE_TTL = timedelta(minutes=30)
+#: A backend list found missing is not asked for again before this, however many requests wait for it.
+READY_RECHECK = timedelta(seconds=3)
+#: A deferred request meeting one of these is left unanswered and tried again: it passes by itself.
+_PASSING = frozenset({"app_busy", "app_shutting_down"})
 _SEED_LIMIT = 2**31
 
 _TITLES = {
@@ -75,6 +84,7 @@ _TITLES = {
     "aspect_ratio": "Change the aspect ratio",
     "prompt_tweak": "Tweak the prompt",
     "make_video": "Make a video",
+    "continue_clip": "Continue the clip",
 }
 _PASSES = {"fix_face": (True, False), "fix_hands": (False, True), "fix_both": (True, True)}
 #: PHONE-FAST: actions that make one replacement of the image, so the phone compares the two and keeps one. The
@@ -102,6 +112,11 @@ class CompiledAction:
     require_current: Callable[[], None] = lambda: None
     #: Slice 2: for a ``CHOICE_ACTIONS`` action, the options with the one compiled selected, so the phone can change it.
     choices: ActionChoices | None = None
+    #: RG-160: made while the PC was away, so admitted without a summary first.
+    deferred: bool = False
+    #: V1-6: a Storyboard take, built only when admitted (``records`` is then empty): it is given the admission
+    #: of its records and returns the admitted job ids.
+    build: Callable[[Callable[[list[Any]], Sequence[str]]], list[str]] | None = None
 
 
 class ActionRefused(Exception):
@@ -124,9 +139,19 @@ class ActionCompiler(Protocol):
 
     def choices(self, action: str, path: Path, digest: str) -> ActionChoices: ...
 
+    def ready(self, action: str) -> bool: ...
+
 
 #: ``(owner, receipt id, compiled action, warnings shown, runs next) -> admitted job ids``.
 Admit = Callable[[str, str, CompiledAction, tuple[PolicyWarning, ...], bool], list[str]]
+#: ``(owner, receipt id) -> the job ids already admitted under it``.
+Admitted = Callable[[str, str], Sequence[str]]
+
+
+def admission_claim(compiled: CompiledAction) -> dict[str, str]:
+    """What each admitted job records about how it was asked for."""
+
+    return {"channel": "review_gateway", **({"deferred": "true"} if compiled.deferred else {})}
 
 
 def shown_warnings(compiled: CompiledAction) -> tuple[PolicyWarning, ...]:
@@ -180,6 +205,7 @@ class GatewayActions:
         owner_of: Callable[[str], str],
         clock: Callable[[], datetime] = utc_now,
         seeds: Callable[[], int] = lambda: secrets.randbelow(_SEED_LIMIT),
+        admitted: Admitted = lambda _owner, _receipt: (),
     ) -> None:
         self._ledger = ledger
         self._compiler = compiler
@@ -187,6 +213,41 @@ class GatewayActions:
         self._owner_of = owner_of
         self._clock = clock
         self._seeds = seeds
+        self.admitted = admitted
+        self._not_ready: dict[str, datetime] = {}
+
+    def admitted_before(self, record: OutboxRecord) -> ActionOutcome | None:
+        """The receipt of a deferred request already admitted (a restart before it was answered), else ``None``."""
+
+        request = record.action_request
+        assert request is not None
+        receipt_id = record.record_id.replace("-", "")
+        job_ids = list(self.admitted(self._owner_of(record.device_id), receipt_id))
+        if not job_ids:
+            return None
+        if request.action in REWORK_ACTIONS:
+            target = record.target
+            file_sha = self._ledger.file_digest(target.library_id, target.sha256)
+            self._ledger.remember_rework(job_ids, target.library_id, file_sha)
+        return ActionOutcome("applied", receipt={"job_ids": job_ids})
+
+    def ready(self, action: str) -> bool:
+        """Whether this PC can compile ``action`` now. ``False`` only for what passes by itself."""
+
+        now = self._clock()
+        found = self._not_ready.get(action)
+        if found is not None and now - found < READY_RECHECK:
+            return False
+        try:
+            ready = bool(self._compiler.ready(action))
+        except Exception as error:  # noqa: BLE001 - a busy or closing app is asked again later
+            log.debug("A waiting phone action is not ready (%s)", type(error).__name__)
+            ready = False
+        if ready:
+            self._not_ready.pop(action, None)
+        else:
+            self._not_ready[action] = now
+        return ready
 
     def handle(self, record: OutboxRecord, path: Path) -> ActionOutcome:
         request = record.action_request
@@ -196,6 +257,8 @@ class GatewayActions:
         now = self._clock()
         if request.step == "prepare":
             return self._prepare(record, path, now)
+        if request.step == "queue":
+            return self._queue(record, path, now)
         return self._confirm(record, path, now)
 
     # -- steps -----------------------------------------------------------------------------------------------------
@@ -203,7 +266,9 @@ class GatewayActions:
     def _seed_count(self, action: str, requested: int | None) -> int:
         if action == "more_like_this":
             return requested or DEFAULT_SEEDS
-        return 1 if action == "make_video" else 0  # one clip, with a fresh seed at each step
+        return (
+            1 if action in ("make_video", "continue_clip") else 0
+        )  # one clip, a fresh seed each step
 
     def _guarded(self, compile_step: Callable[[], Any]) -> Any:
         """Run a compiler call; every failure becomes a closed ``ActionRefused`` code, never its text."""
@@ -232,7 +297,7 @@ class GatewayActions:
             lambda: self._compiler.compile(action, path, digest, seeds, options)
         )
         # The compilers make one job per fix and one per seed; anything else is a compiler fault, not a request.
-        if len(compiled.records) != max(count, 1):
+        if compiled.build is None and len(compiled.records) != max(count, 1):
             raise ActionRefused("compile_failed")
         return compiled, self._summary(action, compiled, now)
 
@@ -265,6 +330,32 @@ class GatewayActions:
         if compiled.choices is not None:
             receipt["choices"] = replace(compiled.choices, selected=options.choice).payload()
         return ActionOutcome("applied", receipt=receipt)
+
+    def _queue(self, record: OutboxRecord, path: Path, now: datetime) -> ActionOutcome:
+        """RG-160: compile against what is true now and admit at once."""
+
+        request = record.action_request
+        assert request is not None
+        count = self._seed_count(request.action, request.count)
+        if count > MAX_SEEDS:
+            return _refused(INVALID_RECORD)
+        options = ActionInput(request.choice, request.text.strip())
+        if request.action == "prompt_tweak" and not options.text:
+            return _refused(ACTION_UNAVAILABLE, detail="prompt_required")
+        try:
+            compiled, summary = self._compile(
+                request.action, path, record.target.sha256, count, options, now
+            )
+        except ActionRefused as refusal:
+            if refusal.detail in _PASSING:
+                return ActionOutcome(IN_PROGRESS)
+            return _refused(ACTION_UNAVAILABLE, detail=refusal.detail)
+        outcome = self._admit_compiled(
+            record, record.record_id.replace("-", ""), replace(compiled, deferred=True), summary
+        )
+        if outcome.reason == ADMISSION_REFUSED and outcome.receipt.get("detail") in _PASSING:
+            return ActionOutcome(IN_PROGRESS)
+        return outcome
 
     def _confirm(self, record: OutboxRecord, path: Path, now: datetime) -> ActionOutcome:
         request = record.action_request
@@ -366,6 +457,7 @@ class GatewayActions:
     def _summary(self, action: str, compiled: CompiledAction, now: datetime) -> ActionSummary:
         warnings = tuple(_warning(item) for item in shown_warnings(compiled))
         position = "next" if action in _PASSES else "last"
+        jobs = 1 if compiled.build is not None else len(compiled.records)
         lines = (
             *compiled.lines,
             "Runs next, after the current job."
@@ -376,7 +468,7 @@ class GatewayActions:
             "action": action,
             "title": _TITLES[action],
             "lines": list(lines),
-            "job_count": len(compiled.records),
+            "job_count": jobs,
             "queue_position": position,
             "warnings": [item.payload() for item in warnings],
             "identity": list(compiled.identity),
@@ -389,7 +481,7 @@ class GatewayActions:
             revision=revision,
             title=_TITLES[action],
             lines=tuple(lines),
-            job_count=len(compiled.records),
+            job_count=jobs,
             queue_position=position,
             warnings=warnings,
             expires_at=now + PREPARE_TTL,
@@ -399,6 +491,7 @@ class GatewayActions:
 # -- the running application ------------------------------------------------------------------------------------------
 
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
+_VIDEO_SUFFIXES = frozenset({".mp4", ".webm"})
 _HASH_LIMIT = 256 * 1024 * 1024
 
 
@@ -451,11 +544,22 @@ class AppActionCompiler:
         output_root: Path,
         *,
         video: GatewayVideo = _default_video,
+        storyboards: Callable[[], Any] | None = None,
     ) -> None:
+        self._storyboards = storyboards
         self._host = host
         self._repository = repository
         self._root = output_root
         self._video = video
+
+    def ready(self, action: str) -> bool:
+        """Whether the backend list ``action`` is compiled from is loaded (RG-160); the other actions need none."""
+
+        if action in _PASSES:
+            return bool(self._host.gateway_detectors())
+        if action == "another_model":
+            return bool(self._host.gateway_models())
+        return True
 
     def compile(
         self,
@@ -466,6 +570,8 @@ class AppActionCompiler:
         options: ActionInput | None = None,
     ) -> CompiledAction:
         options = options or ActionInput()
+        if action in CLIP_ACTIONS:
+            return self._continue_clip(path, digest, seeds, options.text)
         if path.suffix.lower() not in _IMAGE_SUFFIXES:
             raise ActionRefused("not_an_image")
         if action in _PASSES:
@@ -746,6 +852,49 @@ class AppActionCompiler:
                 f"img2img of this exact image{self._denoise(job)}, same checkpoint.",
             ),
             (words, digest),
+        )
+
+    def _continue_clip(
+        self, path: Path, digest: str, seeds: tuple[int, ...], text: str
+    ) -> CompiledAction:
+        """V1-6: continue a published video through the shared facade (``site_phone_continue``)."""
+
+        if path.suffix.lower() not in _VIDEO_SUFFIXES:
+            raise ActionRefused("operation_unsupported")
+        if len(seeds) != 1:
+            raise ActionRefused("compile_failed")
+        if self._storyboards is None:
+            raise ActionRefused("video_unavailable")
+        from src.app.site_phone_continue import compile_continuation
+
+        found = compile_continuation(
+            self._storyboards(),
+            self._root,
+            path,
+            digest,
+            " ".join(text.split()),
+            seeds[0],
+            video=self._video,
+        )
+        lines = (*found.lines, "The clip comes back to the inbox when it is published.")
+        if found.build is not None:
+            return CompiledAction(
+                (),
+                lines,
+                found.warnings,
+                found.identity,
+                reprocess=False,
+                kind="video",
+                build=found.build,
+            )
+        return CompiledAction(
+            tuple(found.video.records),
+            lines,
+            found.warnings,
+            found.identity,
+            reprocess=False,
+            kind="video",
+            require_current=found.video.require_current,
         )
 
     def _make_video(

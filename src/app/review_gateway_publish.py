@@ -82,8 +82,8 @@ WITHDRAW_PAGE = 500
 WITHDRAW_PAGES = 10
 #: Ledger keys of that sweep. They are renamed when the source filter excludes more (RG-170: eval outputs), so a PC
 #: that already swept looks through its ledger once again.
-_SWEEP_DONE = "sources_withdrawn_v2"
-_SWEEP_CURSOR = "sources_withdraw_cursor_v2"
+_SWEEP_DONE = "sources_withdrawn_v3"
+_SWEEP_CURSOR = "sources_withdraw_cursor_v3"
 _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
@@ -290,6 +290,8 @@ def ffmpeg_mobile_transcode(source: BinaryIO, target: Path, cancelled: Callable[
 
 
 BatchOf = Callable[[Path], Mapping[str, Any] | None]
+#: NAME-INFO: ``(file, library item) -> info fields`` for the manifest.
+InfoOf = Callable[[Path, LibraryItem], Mapping[str, Any]]
 
 
 def image_source_job(path: Path) -> str:
@@ -302,6 +304,28 @@ def image_source_job(path: Path) -> str:
     except Exception:  # noqa: BLE001 - lineage is extra; it must never hold publishing back
         log.debug("Review gateway publish could not read an item's job")
         return ""
+
+
+def job_info_reader(repository: Any, identity: Callable[[Any], Mapping[str, Any] | None]) -> InfoOf:
+    """NAME-INFO: what "More info" shows for a library item (``src/review/output_info.py``), read only."""
+
+    from src.review.output_info import OutputDescriber
+
+    describer = OutputDescriber(repository, batch_identity=identity)
+
+    def read(path: Path, item: LibraryItem) -> Mapping[str, Any]:
+        info = describer.describe(
+            path,
+            kind=item.kind,
+            made_at=datetime.fromtimestamp(item.effective_time / 1_000_000, UTC),
+            model=item.model or "",
+            workflow=item.workflow or "",
+            seed=item.seed,
+        )
+        # The name only, for Immich; the manifest keeps it only when it follows the descriptive scheme.
+        return {**info, "file_name": path.name}
+
+    return read
 
 
 def job_batch_reader(
@@ -355,12 +379,14 @@ class GatewayPublisher:
         input_of: InputOf | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         strip: Transcode = ffmpeg_strip_metadata,
+        info_of: InfoOf | None = None,
     ) -> None:
         self._library = library
         self._ledger = ledger
         self._transcode = transcode
         self._now = now
         self._batch_of = batch_of
+        self._info_of = info_of
         self._input_of = input_of
         self._sources = SourceFilter(library.root)
         self._monotonic = monotonic
@@ -378,6 +404,23 @@ class GatewayPublisher:
         except Exception:  # noqa: BLE001 - grouping is display only; it must never hold publishing back
             log.debug("Review gateway publish could not read an item's batch")
             return None
+
+    def _info(
+        self, client: GatewayClient, path: Path, item: LibraryItem
+    ) -> Mapping[str, Any] | None:
+        """The item's "More info", only for a gateway that takes it (an older one's schema refuses the field)."""
+
+        if self._info_of is None or "item_info" not in client.features:
+            return None
+        try:
+            info = dict(self._info_of(path, item))
+        except Exception:  # noqa: BLE001 - display only; it must never hold publishing back
+            log.debug("Review gateway publish could not describe an item")
+            return None
+        # A gateway that knows ``info`` but not the file name would refuse the whole manifest.
+        if "item_file_name" not in client.features:
+            info.pop("file_name", None)
+        return info
 
     def _parent(self, key: str, item: LibraryItem, path: Path) -> tuple[str, str] | None:
         """The original a phone rework made this image from, recorded in the ledger as its lineage; named as the
@@ -542,8 +585,8 @@ class GatewayPublisher:
         self._deferred[key] = (version, failures, self._monotonic() + seconds)
 
     def withdraw_unpublishable(self, client: GatewayClient, cancel: Event) -> None:
-        """Once per ledger: ask the gateway to stop showing eval outputs, frames and un-smoothed clips published
-        earlier.
+        """Once per ledger: ask the gateway to stop showing eval outputs, frames, un-smoothed clips and working files
+        published earlier.
 
         Kept in steps, so a stop or an unreachable gateway resumes where it was.
         """
@@ -814,6 +857,7 @@ class GatewayPublisher:
                 source=source_of(item.path, item.kind) if "item_source" in client.features else "",
                 made_from=made_from,
                 made_from_missing=missing_input,
+                info=self._info(client, path, item),
             )
             # The file must still be the bytes the manifest names when the gateway records it.
             self._library.path_for(item)

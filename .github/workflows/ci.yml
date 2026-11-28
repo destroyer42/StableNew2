@@ -233,7 +233,7 @@ jobs:
         path: census-shard-results/
 
   full-suite:
-    needs: [required, full-suite-shard]
+    needs: [required, full-suite-shard, phone-e2e]
     if: ${{ always() && needs.required.result == 'success' && needs.required.outputs.full_census == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -268,6 +268,16 @@ jobs:
           census-results/
           census-summary.json
 
+    # The phone page's browser journeys (phone-e2e below) block the merge through this verdict, so branch protection
+    # needs no new check identity.
+    - name: Phone e2e verdict
+      if: always()
+      env:
+        PHONE_E2E: ${{ needs.phone-e2e.result }}
+      run: |
+        echo "phone-e2e: $PHONE_E2E"
+        test "$PHONE_E2E" = "success"
+
   # Windows platform contract (audit P1-3). StableNew is a Windows desktop application but the census runs on Linux, so
   # process containment, os.replace sharing violations, Windows paths, NTFS SQLite and a Tk construction smoke are
   # exercised here (tools/ci/run_windows_lane.py owns the target list). It is a separate job name, so branch protection
@@ -296,3 +306,32 @@ jobs:
     - name: Run the Windows platform-contract lane
       shell: bash
       run: python tools/ci/run_windows_lane.py
+
+  # The phone review page in a real browser (PHONE-CORE PC-0): headless Chromium with a phone's viewport and touch drives
+  # the real page against a real gateway on loopback, with the PC played through the real sync API. Its own hash-pinned
+  # lock; no secrets; nothing leaves the runner except Playwright's pinned browser download. `full-suite` waits for it.
+  phone-e2e:
+    needs: required
+    if: needs.required.outputs.full_census == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      with:
+        python-version: "3.14"
+
+    - name: Install the e2e lock and Chromium
+      run: |
+        python -m pip install --upgrade pip
+        pip install --require-hashes -r tests/phone_e2e/requirements-e2e.txt
+        python -m playwright install --with-deps chromium
+
+    - name: Run the phone journeys
+      env:
+        STABLENEW_PHONE_E2E: "1"
+      run: python -m pytest tests/phone_e2e --confcutdir=tests/phone_e2e -p no:cacheprovider -q --tb=short --timeout=120

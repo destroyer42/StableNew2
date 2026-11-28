@@ -88,6 +88,23 @@ def immich(tmp_path, clock):
     instance.close()
 
 
+def test_a_descriptive_file_name_is_the_name_in_immich(immich) -> None:
+    """NAME-INFO: the PC's descriptive name when the item has one; the run and digest otherwise."""
+
+    name = "20261127-1648_txt2img_photoMomentum_000-Style_p01v02_8f87e4a2.png"
+    manifest, blobs = immich.rig.manifest("named")
+    manifest["info"] = {"file_name": name}
+    response = immich.rig.sync.post("/sync/v1/items", json=manifest)
+    assert response.status_code == 200, response.text
+    for digest in response.json()["missing"]:
+        assert immich.rig.sync.put(f"/sync/v1/media/{digest}", content=blobs[digest]).is_success
+    immich.decide(manifest["item"])
+
+    immich.settle()
+
+    assert [sent["assetData.filename"] for sent in immich.fake.uploads] == [name]
+
+
 def original(name: str = "one") -> bytes:
     return f"original-{name}".encode() * 4
 

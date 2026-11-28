@@ -167,8 +167,10 @@ def assemble_runtime_stack(
 def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
     """RG-140 phone actions over the running application, or ``None`` when it has no job repository."""
 
-    from src.app.review_gateway_actions import AppActionCompiler, GatewayActions
+    from src.app.review_gateway_actions import AppActionCompiler, GatewayActions, admission_claim
+    from src.app.site_media_files import SiteOutputError
     from src.app.site_phone_admission import admit_phone_records
+    from src.app.site_phone_continue import phone_storyboard_service
     from src.app.site_phone_preview_host import PhonePreviewHost
     from src.app.site_phone_queue import PhoneQueueView, gateway_owner
     from src.controller.submission_policy_v26 import SubmissionPolicy
@@ -181,22 +183,66 @@ def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
 
     def admit(owner: str, receipt: str, compiled: Any, warnings: Any, runs_next: bool) -> list[str]:
         jobs = app.job_service  # read through: it may be replaced
-        return admit_phone_records(
-            jobs,
-            PhoneQueueView(repository, jobs),
-            owner,
-            receipt,
-            compiled.kind,
-            compiled.records,
-            warnings,
-            reprocess=compiled.reprocess,
-            # D8 first step: touch-ups run after the current job, ahead of NORMAL work (the existing priority).
-            policy=SubmissionPolicy(priority=JobPriority.HIGH if runs_next else JobPriority.NORMAL),
-            claim={"channel": "review_gateway"},
-        )
+        view = PhoneQueueView(repository, jobs)
 
-    compiler = AppActionCompiler(PhonePreviewHost(app, repository, records), repository, root)
-    return GatewayActions(ledger, compiler, admit, owner_of=gateway_owner)
+        def admit_records(records: Any) -> list[str]:
+            return admit_phone_records(
+                jobs,
+                view,
+                owner,
+                receipt,
+                compiled.kind,
+                tuple(records),
+                warnings,
+                reprocess=compiled.reprocess,
+                # D8 first step: touch-ups run after the current job, ahead of NORMAL work (the existing priority).
+                policy=SubmissionPolicy(
+                    priority=JobPriority.HIGH if runs_next else JobPriority.NORMAL
+                ),
+                claim=admission_claim(compiled),
+            )
+
+        if compiled.build is None:
+            return admit_records(compiled.records)
+        # V1-6: building a Storyboard take writes it, so a request already admitted is answered first.
+        existing = view.receipt(owner, receipt)
+        if existing["state"] == "admitted":
+            return list(existing["job_ids"])
+        if jobs.queue.is_dispatch_fenced():
+            raise SiteOutputError("app_shutting_down")
+        return list(compiled.build(admit_records))
+
+    def admitted(owner: str, receipt: str) -> list[str]:
+        found = PhoneQueueView(repository, app.job_service).receipt(owner, receipt)
+        return list(found["job_ids"]) if found["state"] == "admitted" else []
+
+    compiler = AppActionCompiler(
+        PhonePreviewHost(app, repository, records),
+        repository,
+        root,
+        storyboards=lambda: phone_storyboard_service(repository, root, lambda: app.job_service),
+    )
+    return GatewayActions(ledger, compiler, admit, owner_of=gateway_owner, admitted=admitted)
+
+
+def _gateway_catalog(app: Any, ledger: Any, records: Path) -> Any:
+    """RG-160: what the phone may choose, read from the running application (``None`` without a repository)."""
+
+    from src.app.review_gateway_catalog import ChoiceCatalog
+    from src.app.site_phone_preview_host import PhonePreviewHost
+    from src.app.site_phone_video import gateway_video_label
+    from src.image_backends.model_policy_warnings import shown_warning_for
+    from src.review.review_lineage import repository_of
+
+    repository = repository_of(app)
+    if repository is None:
+        return None
+    return ChoiceCatalog(
+        ledger,
+        models=PhonePreviewHost(app, repository, records).gateway_models,
+        warning_of=shown_warning_for,
+        video=gateway_video_label,
+    )
 
 
 def _gateway_batch_of_job(app: Any, identity: Any) -> Any:
@@ -230,7 +276,11 @@ def build_review_gateway_sync(
 
     from src.app.review_gateway_apply import RecordApplier
     from src.app.review_gateway_origin import job_input_reader
-    from src.app.review_gateway_publish import GatewayPublisher, job_batch_reader
+    from src.app.review_gateway_publish import (
+        GatewayPublisher,
+        job_batch_reader,
+        job_info_reader,
+    )
     from src.app.review_gateway_ratings import RatingTaskSync
     from src.app.review_gateway_store import GatewaySettingsStore, SyncLedger
     from src.app.review_gateway_sync import ReviewGatewaySync as Sync
@@ -289,7 +339,11 @@ def build_review_gateway_sync(
         batch_of = job_batch_reader(repository, batch_identity) if repository is not None else None
         # PHONE-FAST: and shows an output beside the input image its job started from.
         input_of = job_input_reader(repository) if repository is not None else None
-        return GatewayPublisher(library, ledger, batch_of=batch_of, input_of=input_of)
+        # NAME-INFO: and says how each output was made ("More info").
+        info_of = job_info_reader(repository, batch_identity)
+        return GatewayPublisher(
+            library, ledger, batch_of=batch_of, input_of=input_of, info_of=info_of
+        )
 
     extra = {"transport_factory": transport_factory} if transport_factory is not None else {}
     sync = Sync(
@@ -298,6 +352,7 @@ def build_review_gateway_sync(
         publisher_factory=publisher,
         applier=applier,
         busy=busy,
+        catalog=_gateway_catalog(app, ledger, records),
         **extra,
     )
     owner.append(sync)

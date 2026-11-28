@@ -238,8 +238,11 @@ class VideoSequenceExecutor:
         replay_reference: Mapping[str, Any] | None = None,
         smoothing: Mapping[str, Any] | None = None,
         interpolate: Callable[..., Any] | None = None,
+        assembly_stem: str = "",
     ) -> None:
         self._plan = plan
+        #: NAME-INFO: the assembled movie's file stem when the plan keeps the default name.
+        self._assembly_stem = assembly_stem
         #: VID-FRAME: the job's frozen ``cut_interpolation`` block; only the assembled cut is smoothed.
         self._smoothing = smoothing
         self._interpolate = interpolate or interpolate_cut_frames
@@ -656,12 +659,14 @@ class VideoSequenceExecutor:
                     "color_matched": transformed,
                 }
             )
+        named: dict[str, Any] = {"file_stem": self._assembly_stem} if self._assembly_stem else {}
         outcome = self._assemble(
             frames,
             self._plan,
             run_dir=self._run_dir,
             job_id=self._job_id,
             cancel_token=self._cancel_token,
+            **named,
         )
         self._ledger.assembly = {
             "output_path": str(outcome.output_path),
@@ -940,7 +945,14 @@ def run_sequence_stage(
         )
         return released
 
+    stem_of = getattr(runner, "_video_output_stem", None)
+    assembly_stem = (
+        stem_of(njr, stage_name, config_dict, current_stage_paths[0], run_dir=run_dir)
+        if callable(stem_of)
+        else ""
+    )
     executor = VideoSequenceExecutor(
+        assembly_stem=assembly_stem if isinstance(assembly_stem, str) else "",
         plan=plan,
         job_id=str(njr.job_id),
         run_dir=run_dir,

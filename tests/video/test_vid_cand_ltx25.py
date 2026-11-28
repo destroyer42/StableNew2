@@ -33,7 +33,11 @@ from src.video.workflow_catalog_ltx25 import (
     LTX25_STOCK_NODES,
     LTX25_VERSION,
 )
-from src.video.workflow_catalog_wan_a14b import WAN_A14B_ID, WAN_A14B_VERSION
+from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_ID,
+    WAN_A14B_ID,
+    WAN_A14B_VERSION,
+)
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import frame_count_projection, legal_frame_counts
 from src.video.workflow_picker import recommended_workflow_id
@@ -135,9 +139,12 @@ def test_the_approved_a14b_stays_the_default_and_the_candidates_are_never_presel
     listed = controller.list_workflow_specs()
     records = {r["workflow_id"]: r for r in listed}
 
-    assert recommended_workflow_id(listed) == WAN_A14B_ID
+    assert recommended_workflow_id(listed) == WAN_A14B_FULL_PICTURE_ID
     form = controller.build_default_form_state()
-    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
+    assert (form["workflow_id"], form["workflow_version"]) == (
+        WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_VERSION,
+    )
     for workflow_id in LTX25_IDS:
         assert records[workflow_id]["experimental"] is True
         assert records[workflow_id]["make_video_default"] is False

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
@@ -43,6 +44,7 @@ from src.pipeline.image_performance import (
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.njr_core_v26 import thaw_json
 from src.pipeline.no_output_reason import fallback_reason
+from src.pipeline.output_naming import JobOutputNames, original_source
 from src.pipeline.result_contract_v26 import (
     build_diagnostics_descriptor,
     build_replay_descriptor,
@@ -123,6 +125,8 @@ class PipelineRunner:
     # Cache for active pack folders keyed by route + canonical folder key.
     _pack_folder_cache: dict[str, Path] = {}
     _folder_cache_timeout_minutes = 30  # Reuse folder if same pack within 30 minutes
+    #: NAME-INFO: the current job's output names (set with its run folder, read by every writer).
+    _job_output_names: JobOutputNames | None = None
 
     @staticmethod
     def _selected_stage_model(
@@ -251,21 +255,6 @@ class PipelineRunner:
             if source_key in applied_overrides:
                 config_dict[target_key] = applied_overrides[source_key]
         return config_dict
-
-    @staticmethod
-    def _sanitize_output_component(name: str) -> str:
-        return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in str(name))
-
-    @staticmethod
-    def _shorten_model_name(name: str) -> str:
-        value = str(name or "")
-        for ext in [".safetensors", ".ckpt", ".pt"]:
-            if value.lower().endswith(ext):
-                value = value[: -len(ext)]
-                break
-        if len(value) <= 15:
-            return value
-        return value[:10] + value[-5:]
 
     @staticmethod
     def _extract_folder_timestamp(run_dir: Path) -> datetime | None:
@@ -495,6 +484,17 @@ class PipelineRunner:
                         request_context_metadata["source_descriptor"] = dict(source_descriptor)
             if context_extra:
                 request_context_metadata.update(context_extra)
+            output_stem = self._video_output_stem(
+                njr,
+                stage_name,
+                config_dict,
+                input_path,
+                run_dir=run_dir,
+                request_job_id=request_job_id,
+                position=img_idx if len(current_stage_paths) > 1 else None,
+            )
+            if output_stem:
+                request_context_metadata["output_stem"] = output_stem
             request = VideoExecutionRequest(
                 backend_id=backend.backend_id,
                 stage_name=stage_name,
@@ -616,6 +616,36 @@ class PipelineRunner:
                 video_backend_results[stage_name]["continuity"] = dict(continuity_link)
 
         return next_stage_paths
+
+    def _video_output_stem(
+        self,
+        njr: NormalizedJobRecord,
+        stage_name: str,
+        config_dict: Mapping[str, Any],
+        input_path: str,
+        *,
+        run_dir: Path,
+        request_job_id: str | None = None,
+        position: int | None = None,
+    ) -> str:
+        """NAME-INFO: the stem of one video file (``""`` outside a run, or for a Learning job)."""
+
+        names = self._job_output_names
+        if names is None or getattr(njr, "learning_context", None):
+            return ""
+        plan = self._stage_config_dict_for_video(njr, stage_name).get("sequence_metadata")
+        segment = re.search(r"_seg\d+$", str(request_job_id or ""))
+        suffix = segment.group(0) if segment else ""
+        if position is not None:
+            suffix += f"_i{position + 1:02d}"
+        return names.clip_stem(
+            workflow_id=config_dict.get("workflow_id") or stage_name,
+            # The picture the operator chose: not the prepared copy, nor a later segment's carried-over frame.
+            source_path=original_source(njr.config, input_path),
+            storyboard=bool(isinstance(plan, Mapping) and plan.get("storyboard")),
+            run_dir=run_dir,
+            suffix=suffix,
+        )
 
     def _execute_sequence(
         self,
@@ -920,6 +950,7 @@ class PipelineRunner:
             negative_prompt=getattr(njr, "negative_prompt", "") or "",
             adaptive_refinement_intent={},
             learning_context=dirs.learning_context,
+            names=self._job_output_names,
             client=getattr(self._pipeline, "client", None),
             metadata=metadata,
             image_performance=trace if image_backend_id else None,
@@ -964,6 +995,8 @@ class PipelineRunner:
             # PR-PIPE-001: Clear job ID from executor after execution
             self._pipeline._current_job_id = None
             self._pipeline._current_njr_sha256 = None
+            self._pipeline._current_pack_block = None
+            self._job_output_names = None
 
         if not success:
             error = self._with_backend_exit_cause(error, run_started_monotonic)
@@ -1211,34 +1244,13 @@ class PipelineRunner:
     # Remove legacy run() and _pipeline_config_from_njr from production path
 
     def _prepare_run_dir(self, njr: NormalizedJobRecord) -> _RunDirs:
-        """Resolve (and create) the output directory of this run: pack-model-vae naming, learning runs share one folder."""
+        """Resolve (and create) the output directory of this run: pack and model naming, learning runs share one folder."""
 
-        # Prepare output dir with pack-model-vae naming structure
-        # Format: output/{pack_12chars}-{model_10+5chars}-{vae_12chars}/
-        # Jobs from the same pack+model+vae share folder within cache timeout
-        # Learning experiments always share folder (by experiment_id)
-        pack_name = getattr(njr, "prompt_pack_name", "") or getattr(njr, "job_id", "unknown")
-
-        # Extract model and VAE from config
-        config = njr.config or {}
-        model_name = (
-            config.get("txt2img", {}).get("model")
-            or config.get("txt2img", {}).get("sd_model_checkpoint")
-            or njr.base_model
-            or "unknown"
-        )
-        vae_name = config.get("txt2img", {}).get("vae") or njr.vae or "none"
-
-        # Build folder name components
-        pack_part = self._sanitize_output_component(pack_name[:12])
-        model_part = self._sanitize_output_component(self._shorten_model_name(model_name))
-        vae_part = (
-            self._sanitize_output_component(vae_name[:12])
-            if vae_name.lower() not in ["none", "", "automatic"]
-            else "none"
-        )
-
-        # Determine cache key based on learning context or pack+model+vae
+        # NAME-INFO: output/{YYYYMMDD_HHMMSS}_{pack}_{model}[_{job}]/, named by src/pipeline/output_naming.py.
+        # Jobs of one pack and model share a folder within the cache timeout; learning experiments always share
+        # one folder (by experiment_id).
+        now = datetime.now()
+        self._job_output_names = JobOutputNames.for_job(njr, now)
         learning_context = getattr(njr, "learning_context", None)
 
         if learning_context:
@@ -1251,17 +1263,14 @@ class PipelineRunner:
             )
             logger.debug(f"Using learning experiment folder: {cache_key}")
         else:
-            # Regular jobs: folder name includes pack+model+vae for clarity
-            folder_name = f"{pack_part}-{model_part}-{vae_part}"
+            folder_name = self._job_output_names.folder_label(njr)
             cache_key = folder_name
-            logger.debug(f"Using pack-model-vae folder: {folder_name}")
 
         output_route = classify_njr_output_route(njr)
         base_output_dir = getattr(njr, "path_output_dir", None) or self._runs_base_dir
         route_root = get_output_route_root(base_output_dir, output_route, create=True)
         route_cache_key = f"{output_route}:{cache_key}"
 
-        now = datetime.now()
         run_dir = self._resolve_run_dir(
             route_root=route_root,
             route_cache_key=route_cache_key,
@@ -1299,6 +1308,9 @@ class PipelineRunner:
 
         # PR-PIPE-001: Set current job ID on executor for manifest tracking
         self._pipeline._current_job_id = njr.job_id
+        # NAME-INFO: pack, prompt and variant travel in each image, so a later reprocess or clip can name them.
+        names = self._job_output_names
+        self._pipeline._current_pack_block = names.pack_block() if names is not None else None
         self._pipeline._provenance_incomplete = []
         try:
             from src.utils.njr_identity import snapshot_envelope, snapshot_fingerprint

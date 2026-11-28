@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from src.pipeline.output_naming import DESCRIPTIVE_NAME
+
 SCHEMA_VERSION = "stablenew.review-gateway-sync.v1"
 #: PHONE-FAST: the phone's review sections (the schema's ``item_source``).
 ITEM_SOURCES = ("pipeline", "learning", "reprocess", "video", "testing", "other")
@@ -126,18 +128,23 @@ REASON_CODES = frozenset(
 
 #: RG-140 slice 1; the other actions stay reserved and are refused as ``invalid_record``.
 SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
-#: RG-140 slice 2. ``rerun_clip`` and ``continue_clip`` (N8) stay reserved: they will call V1's shared functions.
+#: RG-140 slice 2. ``rerun_clip`` (N8) stays reserved: it will call V1's shared functions.
 SLICE_TWO_ACTIONS = frozenset({"another_model", "aspect_ratio", "prompt_tweak", "make_video"})
-PHONE_ACTIONS = SLICE_ONE_ACTIONS | SLICE_TWO_ACTIONS
+#: V1-6: actions on a video item (all the others take an image). Never offline: no ``queue`` step (RG-160).
+CLIP_ACTIONS = frozenset({"continue_clip"})
+PHONE_ACTIONS = SLICE_ONE_ACTIONS | SLICE_TWO_ACTIONS | CLIP_ACTIONS
 #: Actions whose prepare names one of the PC's options (``params.choice``); without one the PC lists them.
 CHOICE_ACTIONS = frozenset({"another_model", "aspect_ratio"})
 #: Actions whose prepare carries one line of the owner's words (``params.text``): required for ``prompt_tweak``.
-TEXT_ACTIONS = frozenset({"prompt_tweak", "make_video"})
+TEXT_ACTIONS = frozenset({"prompt_tweak", "make_video", "continue_clip"})
 CHOICE_ID = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 _PLAIN_LINE = re.compile(r"[^\x00-\x1f\x7f]+")
 MAX_TEXT = 200
 MAX_CHOICES = 100
-STEPS = frozenset({"prepare", "confirm"})
+#: ``queue`` (RG-160) is the one step of a request made while the PC was away: compiled and admitted on arrival.
+STEPS = frozenset({"prepare", "confirm", "queue"})
+#: An answer that is not final yet: the record is neither recorded nor acknowledged and is asked again later.
+IN_PROGRESS = "in_progress"
 MAX_SEEDS = 8
 #: Why an action could not be prepared or admitted (``receipt.detail``): closed codes, never compiler text.
 DETAILS = frozenset(
@@ -291,14 +298,17 @@ class Decision:
 
 @dataclass(frozen=True)
 class ActionRequest:
-    """A phone action (RG-140): ``prepare`` asks for a summary, ``confirm`` admits what that summary showed."""
+    """A phone action (RG-140): ``prepare`` asks for a summary, ``confirm`` admits what that summary showed.
+
+    ``queue`` (RG-160) was made while the PC was away and is admitted on arrival.
+    """
 
     action: str
     step: str = "prepare"
     count: int | None = None
     prepared_record: str = ""
     summary_revision: str = ""
-    #: Slice 2, on prepare only: an option id the PC listed (``CHOICE_ACTIONS``), and the owner's words
+    #: Slice 2, on prepare or queue only: an option id the PC listed (``CHOICE_ACTIONS``), and the owner's words
     #: (``TEXT_ACTIONS``). Untrusted: the text is one bounded line of plain text, used only as prompt text.
     choice: str = ""
     text: str = ""
@@ -377,14 +387,19 @@ def _action_request(value: Any) -> ActionRequest:
         {"count", "prepared_record", "summary_revision", "choice", "text"},
     )
     step = _choice(params["step"], STEPS)
+    asks = step != "confirm"  # a confirm only names its prepare
     choice = params.get("choice")
     text = params.get("text")
-    if (choice is not None and (action not in CHOICE_ACTIONS or step != "prepare")) or (
-        text is not None and (action not in TEXT_ACTIONS or step != "prepare")
+    if (choice is not None and (action not in CHOICE_ACTIONS or not asks)) or (
+        text is not None and (action not in TEXT_ACTIONS or not asks)
     ):
         raise _fail()
-    if action == "prompt_tweak" and step == "prepare" and text is None:
+    if action == "prompt_tweak" and asks and text is None:
         raise _fail()
+    if step == "queue" and action in CLIP_ACTIONS:
+        raise _fail()  # V1-6: a continuation is always shown before it is queued
+    if step == "queue" and action in CHOICE_ACTIONS and choice is None:
+        raise _fail()  # nothing could list the options: the PC was away when it was made
     if text is not None and not (
         isinstance(text, str) and len(text) <= MAX_TEXT and _PLAIN_LINE.fullmatch(text)
     ):
@@ -392,7 +407,7 @@ def _action_request(value: Any) -> ActionRequest:
     count = params.get("count")
     if count is not None and (
         action != "more_like_this"
-        or step != "prepare"
+        or not asks
         or type(count) is not int
         or not 1 <= count <= MAX_SEEDS
     ):
@@ -574,6 +589,7 @@ def item_manifest(
     source: str = "",
     made_from: ItemRef | None = None,
     made_from_missing: bool = False,
+    info: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a manifest; refuses anything the contract does not allow rather than trimming silently.
 
@@ -618,6 +634,9 @@ def item_manifest(
     grouped = _batch(batch or {})
     if grouped:
         body["batch"] = grouped
+    described = _info(info or {})
+    if described:
+        body["info"] = described
     if parent is not None:
         _text(parent.library_id, LIBRARY_ID)
         _text(parent.sha256, SHA256)
@@ -650,6 +669,37 @@ def _batch(values: Mapping[str, Any]) -> dict[str, Any] | None:
         if shown:
             body["cell"] = shown
     return body
+
+
+#: NAME-INFO: the closed list of ``info`` text fields and their bounds (the schema's ``item_info``).
+_INFO_LIMITS = {"stage_path": 200, "model": 40, "model_name": 200, "pack": 120, "batch": 120}
+
+
+def _info(values: Mapping[str, Any]) -> dict[str, Any]:
+    """What "More info" shows: bounded text with paths reduced to their last part; anything else is left out."""
+
+    shown: dict[str, Any] = {}
+    for key, limit in _INFO_LIMITS.items():
+        value = values.get(key)
+        if isinstance(value, str) and (text := scrub_text(value, limit)):
+            shown[key] = text
+    for key in ("prompt_number", "variant"):
+        number = values.get(key)
+        if type(number) is int and 1 <= number <= 9999:
+            shown[key] = number
+    seed = values.get("seed")
+    if isinstance(seed, str) and re.fullmatch(r"[0-9]{1,19}", seed):
+        shown["seed"] = seed
+    name = values.get("file_name")
+    if isinstance(name, str) and DESCRIPTIVE_NAME.fullmatch(name):
+        shown["file_name"] = name
+    made = values.get("made_at")
+    if isinstance(made, str):
+        try:
+            shown["made_at"] = utc_text(parse_timestamp(made))
+        except ProtocolError:
+            pass
+    return shown
 
 
 _DISPLAY_LIMITS = {"model": 200, "prompt_excerpt": 512, "job_id": 64, "workflow": 120}

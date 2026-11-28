@@ -66,6 +66,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `optional_dependency_probes.py`: Report optional Comfy workflow and SVD postprocessing capabilities from dependency evidence
 - `review_gateway_actions.py`: Phone actions from the review gateway (RG-140 slices 1 and 2): prepare a summary, then admit what it showed
 - `review_gateway_apply.py`: Validate and apply review gateway outbox records on the PC (RG-120)
+- `review_gateway_catalog.py`: RG-160: what the phone may choose while this PC is away, as names only
 - `review_gateway_client.py`: Outbound HTTPS client for the review gateway's LAN sync port (RG-120)
 - `review_gateway_origin.py`: The image a job's output was made from, for the phone's compare view of desk reprocess work (PHONE-FAST)
 - `review_gateway_protocol.py`: Closed-list codec for the review gateway sync contract (RG-120, schema ``stablenew.review-gateway-sync.v1``)
@@ -90,6 +91,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `site_pairing_protocol.py`: One-use Windows protocol handoff for the private Site's loopback connection
 - `site_phone_admission.py`: Prepare and admit one explicitly reviewed phone Preview through the native services
 - `site_phone_connector.py`: App-owned outbound transport for a locally enrolled phone browser
+- `site_phone_continue.py`: The phone's ``continue_clip`` (V1-6): what continuing a published video would queue, compiled on the PC
 - `site_phone_credentials.py`: Windows-local persistence for a single Operator Site phone grant
 - `site_phone_eval.py`: Scoped access to the desktop's native video evaluation report builder
 - `site_phone_followup.py`: Deterministic, evidence-bound phone follow-ups
@@ -166,6 +168,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `batch_operations_service.py`: Unified Review / Video Workflow batch operations (PR-BATCH-OPS-201)
 - `batch_output_resolution.py`: Resolve a batch's recorded outputs against the file system (PR-BATCH-OPS-201)
 - `content_visibility_resolver.py`: Classify content from recorded metadata and filter or redact operator-facing projections
+- `continue_clip.py`: Continue a clip (V1-6, ``docs/work_packages/V1_motion_controls.md`` section 15): one facade for desktop and p…
 - `core_pipeline_controller.py`: Controller-owned base pipeline controller
 - `generation_profile_controller.py`: Controller adapter for model-aware generation profiles and startup defaults (PR-IMG-PROFILE-630)
 - `global_prompt_policy_service.py`: Controller-side projection of current global prompt intent
@@ -307,6 +310,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `model_policy_panel_projection.py`: Tk glue that shows the selected model's policy on the Base Generation panel (PR-IMG-130A; generalizes PR-IMG-…
 - `model_readiness_presenter.py`: Read-only model readiness line for the Base Generation panel (PR-IMG-MODELS-150)
 - `outpaint_dialog.py`: Review's Extend Canvas dialog
+- `output_info_dialog.py`: NAME-INFO: the desktop "More info" window, one column per image shown (both sides of a compare)
 - `output_settings_panel_v2.py`: Output settings panel for GUI V2
 - `pipeline_panel_v2.py`: Pipeline panel composed of modular stage cards and prompt pack summary
 - `presentation_actions.py`: Tk-owned dialogs, controller command bindings and workspace handoffs
@@ -503,6 +507,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
 - `video_workflow_alignment_host.py`: Owns the one Align Motion session, workspace window and status row of the Video Workflow tab (PR-VID-MOTION-4…
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
+- `video_workflow_continue_v2.py`: The "Continue a clip" rows of the Video Workflow tab and their off-Tk work (V1-6)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
 - `video_workflow_driver_host_v2.py`: The driver clip of the "Follow a driving video" task (V1-3): read it, fit the length, prepare it
 - `video_workflow_evaluate_view_v2.py`: Evaluate view container for the Video Workflow tab (VID-UX-384)
@@ -814,6 +819,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `no_output_reason.py`: Operator-readable reasons a stage produced no output (N11)
 - `openpose_compile.py`: PromptPack OpenPose conditioning compilation (PR-IMG-CNET-210)
 - `outpaint_canvas.py`: Toolkit-neutral outpainting canvas preparation and original-pixel preservation
+- `output_naming.py`: The one naming authority for outputs (NAME-INFO): short model names, stage paths and what a file says it was…
 - `pipeline_runner.py`: Production pipeline runner integration
 - `policy_warnings.py`: Policy warnings (N1 "warn, don't block"): typed, surface-neutral records of a policy status
 - `prompt_pack_job_builder.py`: Builder pipeline that converts PromptPack entries into NormalizedJobRecords
@@ -919,6 +925,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `findings.py`: Bounded, source-bound observations and advisory choices for guided Review
 - `improvement_evidence.py`: Verify Review comparison evidence and prepare bounded judgments for the existing feedback writer
 - `inspection.py`: Bounded inspection and explicit Smart Review imports for the guided finding workspace
+- `output_info.py`: NAME-INFO: what "More info" says about one output, for the phone and the desktop Review
 - `review_evidence.py`: Non-mutating, digest-bound Review evidence (PR-REVIEW-EVIDENCE-620)
 - `review_lineage.py`: Read-only lookup of the jobs derived from reviewed images (PR-REVIEW-LIFECYCLE-621)
 - `review_metadata_service.py`: Portable review metadata stamping for reviewed image artifacts
@@ -1078,6 +1085,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `storyboard_projection.py`: Read-only projection of a storyboard's takes from the repository (PR-VID-STORY-380, spec 7.7)
 - `storyboard_readiness.py`: Read-only source identity and workflow projections for editable Storyboards; admission stays authoritative
 - `storyboard_reconcile.py`: Adopt a repository job into a storyboard tree by the storyboard link its plan carries (PR-VID-STORY-380, spec…
+- `storyboard_requests.py`: The records of a Storyboard Continue: what is asked, previewed and queued (PR-VID-STORY-380)
 - `storyboard_root.py`: Storyboard root preparation (PR-VID-STORY-380, spec 7.3)
 - `storyboard_store.py`: Atomic Storyboard JSON storage with revision compare-and-swap; never stores executable jobs
 - `storyboard_tree.py`: Storyboard tree-of-takes authoring file (PR-VID-STORY-380)

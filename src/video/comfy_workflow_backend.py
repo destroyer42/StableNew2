@@ -123,6 +123,12 @@ def _keep_warm_seconds(spec: Any) -> float:
     return float(value)
 
 
+def _output_stem(request: VideoExecutionRequest) -> str:
+    """NAME-INFO: the file stem the runner chose for this clip (``""`` for a direct backend call)."""
+
+    return str((request.context_metadata or {}).get("output_stem") or "")
+
+
 def _is_generated_output(descriptor: Mapping[str, Any]) -> bool:
     """Only files a workflow *produced* are artifacts.  Comfy also reports previews of inputs
     (for example ``LoadVideo`` echoes its source clip as ``type: input``) and temp previews;
@@ -514,8 +520,10 @@ class ComfyWorkflowVideoBackend:
         self._transition = transition or RuntimeTransitionCoordinator()
         self._process_manager = process_manager
         self._managed_process_manager: ComfyProcessManager | None = None
-        #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one).
+        #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one),
+        #: and that segment's workflow id and version.
         self._sequence_warm_pid: int | None = None
+        self._sequence_warm_key: tuple[str, str] | None = None
         #: The process-wide idle hold between consecutive jobs of one workflow (VID-WARM-373).
         self._warm_hold = warm_hold or get_runtime_warm_hold()
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
@@ -622,6 +630,7 @@ class ComfyWorkflowVideoBackend:
                 # Remember which owned process now holds the model, so the next segment is judged warm only if
                 # it is still that very process.
                 self._sequence_warm_pid = self._owned_running_pid()
+                self._sequence_warm_key = warm_key
             return result
 
         # Declared runtime policy: once this job has touched the managed runtime, release the
@@ -756,11 +765,19 @@ class ComfyWorkflowVideoBackend:
                 and warm_claim.pid is not None
                 and self._owned_running_pid() == warm_claim.pid
             )
+            # The model the owned process already holds is not another program's memory (it counts almost none
+            # of it as PyTorch's), so a verified reuse for the same workflow skips the GPU check: a claimed hold
+            # (standalone job or a sequence's first segment) or the sequence's own previous segment.
             readiness = self._readiness.evaluate(
                 spec,
                 system_stats=system_stats,
                 warm_sequence=sequence_warm or held_warm,
-                owned_warm_reuse=held_warm and not request.hold_runtime,
+                owned_warm_reuse=held_warm
+                or (
+                    sequence_warm
+                    and self._sequence_warm_key
+                    == (str(spec.workflow_id), str(spec.workflow_version))
+                ),
             )
             # Record the measurements and RAM advisories even if allocation or dispatch later fails.
             logger.info(
@@ -814,6 +831,7 @@ class ComfyWorkflowVideoBackend:
         if str(spec.backend_defaults.get("output_transport") or "") == "comfy_view":
             history_entry = self._localize_comfy_outputs(
                 client, history_entry, Path(request.output_dir), cancel_token=token,
+                video_stem=_output_stem(request),
             )
         _raise_if_cancelled(token, "before finalizing workflow outputs")
         resolved_outputs = self._resolve_output_paths(
@@ -838,7 +856,7 @@ class ComfyWorkflowVideoBackend:
             frames_out_record = encode_frames_out(
                 frame_paths=playback_frames,
                 output_dir=request.output_dir,
-                stem=f"{spec.workflow_id}_{request.job_id or 'clip'}",
+                stem=_output_stem(request) or f"{spec.workflow_id}_{request.job_id or 'clip'}",
                 fps=frames_fps,
                 expected_frame_count=_expected_frame_count(stage_config),
                 cancel_token=request.cancel_token,
@@ -1144,6 +1162,7 @@ class ComfyWorkflowVideoBackend:
         did not launch and still own is never stopped, and a workflow with no such policy leaves it running."""
 
         self._sequence_warm_pid = None  # the sequence is over: nothing is warm any more
+        self._sequence_warm_key = None
         for workflow_id, version in dict.fromkeys(workflows):
             try:
                 spec = self._workflow_registry.get(workflow_id, version, allow_experimental=True)
@@ -1615,12 +1634,14 @@ class ComfyWorkflowVideoBackend:
     @staticmethod
     def _localize_comfy_outputs(
         client: ComfyApiClient, history_entry: Mapping[str, Any], output_dir: Path,
-        *, cancel_token: Any = None,
+        *, cancel_token: Any = None, video_stem: str = "",
     ) -> dict[str, Any]:
         """Fetch Comfy-side outputs into the StableNew run directory (which stays the artifact
-        authority) and point the history descriptors at the local copies."""
+        authority) and point the history descriptors at the local copies. A clip is saved under ``video_stem``
+        (NAME-INFO) when one is given; working frames keep Comfy's names."""
 
         localized = deepcopy(dict(history_entry))
+        clips: dict[str, int] = {}
         outputs = localized.get("outputs")
         if not isinstance(outputs, dict):
             return localized
@@ -1642,9 +1663,15 @@ class ComfyWorkflowVideoBackend:
                         {"check_cancelled": lambda: _raise_if_cancelled(cancel_token, "during output download")}
                         if cancel_token is not None and isinstance(client, ComfyApiClient) else {}
                     )
+                    target = Path(name).name
+                    kind = Path(name).suffix.lower()
+                    if video_stem and kind in {".mp4", ".webm", ".mov", ".mkv", ".gif"}:
+                        clips[kind] = clips.get(kind, 0) + 1
+                        extra = f"_{clips[kind]}" if clips[kind] > 1 else ""
+                        target = f"{video_stem}{extra}{kind}"
                     local = client.download_view(
                         name,
-                        output_dir / Path(name).name,
+                        output_dir / target,
                         subfolder=str(descriptor.get("subfolder") or ""),
                         file_type=str(descriptor.get("type") or "output"),
                         **options,

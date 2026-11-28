@@ -45,6 +45,9 @@
     },
     {
       "$ref": "#/$defs/item_sources"
+    },
+    {
+      "$ref": "#/$defs/choice_catalog"
     }
   ],
   "$defs": {
@@ -237,6 +240,55 @@
         }
       }
     },
+    "item_info": {
+      "description": "NAME-INFO: what the phone's More info shows, derived by the PC from the job's immutable record and the file's own metadata. Display only, never used for decisions; no path (RG-100 invariant 3). Sent only to a gateway that lists the item_info feature. seed is text because it can exceed JavaScript's exact integers.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stage_path": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "model_name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "pack": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "prompt_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "variant": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "made_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "seed": {
+          "type": "string",
+          "pattern": "^[0-9]{1,19}$"
+        },
+        "batch": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "file_name": {
+          "description": "The output's file name (no folder), only when it follows the descriptive scheme; Immich uploads under it.",
+          "type": "string",
+          "pattern": "^[0-9]{8}-[0-9]{4}_[A-Za-z0-9._+-]{1,120}\\.(png|jpe?g|webp|mp4|webm)$"
+        }
+      }
+    },
     "item_manifest": {
       "description": "PC to gateway: one publishable item. Media bodies are uploaded separately and addressed by their sha256. Idempotent by (library_id, sha256).",
       "type": "object",
@@ -317,6 +369,9 @@
         "batch": {
           "$ref": "#/$defs/item_batch"
         },
+        "info": {
+          "$ref": "#/$defs/item_info"
+        },
         "display": {
           "description": "Display-only text, rendered as text on the phone (S7). Never used for decisions.",
           "type": "object",
@@ -395,7 +450,7 @@
       ]
     },
     "action_request": {
-      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this, slice 2 another_model, aspect_ratio, prompt_tweak and make_video. rerun_clip and continue_clip stay reserved.",
+      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this, slice 2 another_model, aspect_ratio, prompt_tweak and make_video. 'queue' (RG-160) is the one step made while the PC is away: the PC compiles and admits it when it arrives, with no summary first, and it never expires. It takes what a prepare takes, and the picker actions must name a choice. Sent only by a phone whose gateway has this PC's choice_catalog. rerun_clip stays reserved. continue_clip (V1-6) is for video items, with optional text (what happens next), in prepare and confirm only: it is never queued while the PC is away.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -416,11 +471,12 @@
             "step": {
               "enum": [
                 "prepare",
-                "confirm"
+                "confirm",
+                "queue"
               ]
             },
             "count": {
-              "description": "more_like_this only, on prepare: how many new seeds.",
+              "description": "more_like_this only, on prepare or queue: how many new seeds.",
               "type": "integer",
               "minimum": 1,
               "maximum": 8
@@ -432,11 +488,11 @@
               "$ref": "#/$defs/sha256"
             },
             "choice": {
-              "description": "another_model and aspect_ratio only, on prepare: one id from the action_choices the PC listed. Without it the PC answers with the list.",
+              "description": "another_model and aspect_ratio only, on prepare or queue: one id from the action_choices the PC listed. Without it the PC answers with the list.",
               "$ref": "#/$defs/choice_id"
             },
             "text": {
-              "description": "prompt_tweak (required: words added to the prompt) and make_video (optional: the motion prompt) only, on prepare. One line of plain text; the PC scrubs anything it shows back.",
+              "description": "prompt_tweak (required: words added to the prompt), make_video (optional: the motion prompt) and continue_clip (optional: what happens next) only, on prepare or queue. One line of plain text; the PC scrubs anything it shows back.",
               "type": "string",
               "minLength": 1,
               "maxLength": 200,
@@ -552,7 +608,8 @@
                 "not": {
                   "enum": [
                     "prompt_tweak",
-                    "make_video"
+                    "make_video",
+                    "continue_clip"
                   ]
                 }
               }
@@ -579,7 +636,10 @@
               "params": {
                 "properties": {
                   "step": {
-                    "const": "prepare"
+                    "enum": [
+                      "prepare",
+                      "queue"
+                    ]
                   }
                 }
               }
@@ -591,6 +651,57 @@
                 "required": [
                   "text"
                 ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": [
+                  "another_model",
+                  "aspect_ratio"
+                ]
+              },
+              "params": {
+                "properties": {
+                  "step": {
+                    "const": "queue"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "required": [
+                  "choice"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "continue_clip"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "properties": {
+                  "step": {
+                    "enum": [
+                      "prepare",
+                      "confirm"
+                    ]
+                  }
+                }
               }
             }
           }
@@ -1988,6 +2099,153 @@
           "items": {
             "$ref": "#/$defs/rating_reveal_table"
           }
+        }
+      }
+    },
+    "choice_catalog": {
+      "description": "PC to gateway (RG-160): exactly what the phone may choose, so it can make a request while the PC is away. Names and warning text only: no paths. The gateway keeps the latest one, shows it only to a phone with the queue grant and decides nothing from it: the PC checks every choice again when the request arrives. Sent only to a gateway that lists the deferred_actions feature.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "type",
+        "published_at",
+        "models",
+        "warnings",
+        "ratios",
+        "video",
+        "image_backend_ready",
+        "truncated"
+      ],
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/schema_version"
+        },
+        "type": {
+          "const": "choice_catalog"
+        },
+        "published_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "models": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label",
+              "warnings"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/choice_id"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^[^\\\\/\\u0000-\\u001f\\u007f]+$"
+              },
+              "warnings": {
+                "description": "Indexes into the catalog's warnings.",
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 19
+                }
+              }
+            }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "title"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]{1,64}$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "pattern": "^[^\\\\\\u0000-\\u001f\\u007f]+$"
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "pattern": "^[^\\\\\\u0000-\\u001f\\u007f]+$"
+              },
+              "fix": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "pattern": "^[^\\\\\\u0000-\\u001f\\u007f]+$"
+              }
+            }
+          }
+        },
+        "ratios": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/choice_id"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^[^\\\\/\\u0000-\\u001f\\u007f]+$"
+              }
+            }
+          }
+        },
+        "video": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "available"
+          ],
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[^\\\\/\\u0000-\\u001f\\u007f]+$"
+            }
+          }
+        },
+        "models_as_of": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "image_backend_ready": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
         }
       }
     }

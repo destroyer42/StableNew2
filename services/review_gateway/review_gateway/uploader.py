@@ -137,9 +137,9 @@ class Uploader:
         if found is None:
             asset_id, created = client.upload(
                 path,
-                filename=(
-                    f"{claimed.run_id}_{claimed.sha256[:8]}.{_EXTENSIONS[claimed.content_type]}"
-                ),
+                # NAME-INFO: the schema's pattern admits only a plain, descriptive file name.
+                filename=claimed.file_name
+                or f"{claimed.run_id}_{claimed.sha256[:8]}.{_EXTENSIONS[claimed.content_type]}",
                 content_type=claimed.content_type,
                 sha1=sha1,
                 created_at=claimed.created_at,

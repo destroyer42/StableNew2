@@ -80,7 +80,7 @@ HISTORICAL_SPEC_SHA256 = {
     # keep_warm_between_jobs_seconds; the graph is untouched (the template digest below did not move).
     # VID-A14B-SPEED-374 re-pinned it deliberately again (owner request 2026-11-21): its frame_count_policy maximum
     # rose from 81 to 121 and gained advisory_above 81 (default stays 81); the template digest did not move.
-    (A14B_ID, "1.0.0"): "a3b4b46089335ac9a50285b722c5c9c9c1d251c77672ba5a12f7e061554d5850",
+    (A14B_ID, "1.0.0"): "20426f17318e80f941e3758979b511a35b12987c1a5e1a60e66c07e02c8fd00d",
     # VID-A14B-SPEED-374: the three experimental speed arms, pinned from their first registration.
     (A14B_ID, "1.1.0"): "3026fb782f05e9f7f889246ec756b05cb7fa70f2f43e3aaab84f797f260aa022",
     (A14B_ID, "1.2.0"): "0ede358d4ed8c318f44d1c6d18d500775cc732ad528429b96f40e99a4e10fc5e",

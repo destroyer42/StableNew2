@@ -19,6 +19,7 @@ from src.gui.help_text.workflow_guidance_v2 import (
     get_review_handoff_hint,
 )
 from src.gui.layout_v2 import configure_grid_columns
+from src.gui.output_info_dialog import OutputInfoDialog
 from src.gui.theme_v2 import (
     apply_toplevel_theme,
     style_canvas_widget,
@@ -212,6 +213,8 @@ class ReviewTabFrame(ttk.Frame):
         self._compare_window: tk.Toplevel | None = None
         self._compare_canvas: tk.Canvas | None = None
         self._compare_photo: Any = None
+        #: NAME-INFO: ``(label, path)`` of what the compare window shows, for its "More info".
+        self._compare_sides: tuple[tuple[str, Path], ...] = ()
         self._compare_mode = "single"
         self._history_import_window: tk.Toplevel | None = None
         self._inspection: tk.Toplevel | None = None
@@ -469,6 +472,14 @@ class ReviewTabFrame(ttk.Frame):
                 text="Inspect Metadata",
                 style="Dark.TButton",
                 command=self._open_metadata_inspector,
+            )
+        )
+        preview_actions.add(
+            ttk.Button(
+                preview_actions,
+                text="More info",
+                style="Dark.TButton",
+                command=self._open_more_info,
             )
         )
         self.send_video_button = ttk.Button(
@@ -1920,6 +1931,21 @@ class ReviewTabFrame(ttk.Frame):
         self._compare_mode = "single"
         self._render_compare_viewer(image_path)
 
+    def _open_more_info(self) -> None:
+        if self._selected_image_path is None:
+            messagebox.showinfo("More info", "Select an image first.")
+            return
+        self._show_info(self, (("", self._selected_image_path),))
+
+    def _show_info(self, master: tk.Misc, sides: tuple[tuple[str, Path], ...]) -> None:
+        if sides:
+            OutputInfoDialog(
+                master,
+                sides,
+                repository=self._review_repository(),
+                app_state=getattr(self.app_controller, "app_state", None),
+            )
+
     def _open_metadata_inspector(self) -> None:
         image_path = self._selected_image_path
         if image_path is None:
@@ -2070,6 +2096,11 @@ class ReviewTabFrame(ttk.Frame):
         if secondary_path is not None:
             compare_label += f"    {labels[1]}: {secondary_path.name}"
         status = tk.StringVar(master=self, value=f"{compare_label}    Loading...")
+        self._compare_sides = (
+            ((labels[0], image_path), (labels[1], secondary_path))
+            if secondary_path is not None
+            else (("", image_path),)
+        )
         viewer, canvas = self._build_compare_shell(f"{title_prefix} - {image_path.name}", status)
         self._work.submit(
             "review:compare",
@@ -2124,6 +2155,12 @@ class ReviewTabFrame(ttk.Frame):
         ).pack(side="left")
         ttk.Button(
             nav, text="Next", style="Dark.TButton", command=self._show_next_image_and_refresh_viewer
+        ).pack(side="left", padx=(6, 0))
+        ttk.Button(
+            nav,
+            text="More info",
+            style="Dark.TButton",
+            command=lambda: self._show_info(viewer, self._compare_sides),
         ).pack(side="left", padx=(6, 0))
         ttk.Label(
             nav,

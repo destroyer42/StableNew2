@@ -26,7 +26,7 @@ from src.gui.view_contracts.motion_library_contract import (
     MotionLibrarySession,
     visibility_subject,
 )
-from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
+from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui.widgets.media_inspector import MediaInspector
@@ -529,21 +529,37 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
     # ------------------------------------------------------------------ rendering
 
     def _thumb(self, path: str) -> ImageTk.PhotoImage | None:
-        if not path:
-            return None
-        cached = self._thumb_cache.get(path)
-        if cached is not None:
-            return cached
-        try:
-            with Image.open(path) as image:
-                image.thumbnail(_THUMB_EDGE)
-                photo = ImageTk.PhotoImage(image.copy())
-        except (OSError, ValueError):
-            return None
-        if len(self._thumb_cache) >= _MAX_CACHED_THUMBS:
+        return self._thumb_cache.get(path) if path else None
+
+    def _load_thumbnails(self, paths: tuple[str, ...]) -> None:
+        """Decode thumbnails on a worker (STARTUP-STALL: on Tk this froze the window); Tk only shows them."""
+        missing = tuple(dict.fromkeys(p for p in paths if p and p not in self._thumb_cache))
+        if not missing:
+            return
+
+        def work() -> WorkOutcome:
+            decoded: dict[str, Image.Image] = {}
+            for path in missing:
+                try:
+                    with Image.open(path) as image:
+                        image.thumbnail(_THUMB_EDGE)
+                        decoded[path] = image.copy()
+                except (OSError, ValueError):
+                    continue  # this row stays without a picture
+            return WorkOutcome(value=decoded)
+
+        self._work_runner().start("MotionLibraryThumbnails", work, self._show_thumbnails)
+
+    def _show_thumbnails(self, outcome: WorkOutcome) -> None:
+        decoded = outcome.value or {}
+        if len(self._thumb_cache) + len(decoded) > _MAX_CACHED_THUMBS:
             self._thumb_cache.clear()
-        self._thumb_cache[path] = photo
-        return photo
+        for path, image in decoded.items():
+            self._thumb_cache[path] = ImageTk.PhotoImage(image)
+        for row in self.session.view().rows:  # the rows shown now, not the ones that asked
+            photo = self._thumb(row.thumbnail_path)
+            if photo is not None and self.tree.exists(row.asset_id):
+                self.tree.item(row.asset_id, image=photo)
 
     def _render(self) -> None:
         if self._closed:
@@ -580,6 +596,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
                     "", "end", iid=row.asset_id, image=photo or "",
                     values=(row.name, row.length_text, row.source_label, row.review_label, row.file_label),
                 )  # fmt: skip
+            self._load_thumbnails(tuple(row.thumbnail_path for row in view.rows))
         if (
             view.selected_id
             and self.tree.exists(view.selected_id)

@@ -181,7 +181,7 @@ def test_a_warm_sequence_segment_is_not_refused_for_the_ram_its_resident_model_h
     assert warm.observations["warm_sequence"] is True
 
 
-def test_the_gpu_memory_floor_still_applies_to_a_warm_sequence_segment() -> None:
+def test_the_warm_sequence_context_alone_does_not_skip_the_gpu_memory_floor() -> None:
     crowded = _readiness(ram_gb=7.3, vram_free_mib=500.0).evaluate(
         _approved_spec(), system_stats=_stats(held_mib=1000), warm_sequence=True
     )  # another process took the GPU
@@ -218,13 +218,14 @@ def test_the_backend_asks_for_the_warm_floor_only_for_the_process_that_ran_the_l
 ) -> None:
     class Spy:
         calls: list[bool] = []
+        reuse: list[bool] = []
 
         def policy_for(self, spec):
             return {"policy": "spy"}
 
         def evaluate(self, spec, *, system_stats, warm_sequence=False, owned_warm_reuse=False):
-            assert not owned_warm_reuse
             Spy.calls.append(warm_sequence)
+            Spy.reuse.append(owned_warm_reuse)
             return SimpleNamespace(ready=True, message="", to_dict=lambda: {})
 
     backend = _backend(_FakeComfy(tmp_path))
@@ -241,3 +242,5 @@ def test_the_backend_asks_for_the_warm_floor_only_for_the_process_that_ran_the_l
     backend.execute(None, _request(tmp_path, hold=True))  # a new sequence starts cold
 
     assert Spy.calls == [False, True, False, False]
+    # One workflow throughout, so the warm segment is also a verified reuse.
+    assert Spy.reuse == Spy.calls

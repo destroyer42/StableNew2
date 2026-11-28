@@ -230,6 +230,7 @@ def test_only_the_owner_promoted_qualification_candidate_is_an_approved_workflow
             "1.0.0",
         ),  # 720p alternate, its own id, approved by VID-CLIP-372
         ("wan22_i2v_a14b_4step_v1", "1.0.0"),
+        ("wan22_i2v_a14b_4step_full_picture_v1", "1.0.0"),  # owner-approved default, VID-FRAME
     }
     approved = {
         (spec.workflow_id, spec.workflow_version)

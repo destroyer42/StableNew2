@@ -22,6 +22,7 @@ from src.gui.controllers.history_compare_service import (
     Comparison,
     HistoryCompareService,
 )
+from src.gui.output_info_dialog import OutputInfoDialog
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
 from src.gui.view_contracts.history_comparison_artifact import (
@@ -50,6 +51,7 @@ class HistoryCompareDialog(tk.Toplevel):
         self.minsize(760, 560)
         theme_mod.apply_toplevel_theme(self)
         self.app_state = app_state
+        self._repository = repository
         self._service = HistoryCompareService(repository)
         self._work = build_edit_work_runner(self)
         self._closed = False
@@ -163,7 +165,23 @@ class HistoryCompareDialog(tk.Toplevel):
             text="Read-only: nothing is queued and neither job nor image is changed.",
             style=theme_mod.MUTED_LABEL_STYLE,
         ).grid(row=1, column=0, sticky="w")
-        ttk.Button(footer, text="Close", command=self.destroy).grid(row=0, column=1, rowspan=2)
+        ttk.Button(footer, text="More info", command=self._open_more_info).grid(
+            row=0, column=1, rowspan=2, padx=(0, 6)
+        )
+        ttk.Button(footer, text="Close", command=self.destroy).grid(row=0, column=2, rowspan=2)
+
+    def _open_more_info(self) -> None:
+        """NAME-INFO: what made the parent and the child, side by side."""
+
+        comparison = self.comparison
+        if comparison is None:
+            return
+        OutputInfoDialog(
+            self,
+            (("Parent", comparison.parent.image.path), ("Child", comparison.child.image.path)),
+            repository=self._repository,
+            app_state=self.app_state,
+        )
 
     # --- loading ------------------------------------------------------------------------------
 
