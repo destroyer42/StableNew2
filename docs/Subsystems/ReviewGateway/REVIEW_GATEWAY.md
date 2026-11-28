@@ -308,6 +308,28 @@ dependencies are exact pins in `requirements-dev.txt` that a test holds equal to
 fake HTTP server on loopback (`fake_immich.py`) with the request and reply shapes read from Immich's v2.0.0 and v3.4.2
 sources; no real Immich has been used.
 
+**The phone page in a real browser** (PHONE-CORE PC-0, `tests/phone_e2e/`):
+
+- Headless Chromium (Playwright) with a Pixel-class viewport and real touch drives the page from `static/`, served by
+  the real phone app on loopback.
+- The PC is played through the real sync API: publish real PNG renditions, offer a pairing code, list the outbox,
+  answer action prepares and confirms, report `pc_status`, register a rating task.
+- The journeys cover:
+  - pairing and the HttpOnly cookie, and revocation back to pairing;
+  - swipes and tags, Undo, Keep the rest and Delete this run;
+  - rework compare;
+  - the two-step Fix face with its summary shown as text;
+  - Not saved;
+  - a decision made while unreachable, and a lost reply resent with the same key;
+  - To rate;
+  - the Update screen.
+- Each journey asserts what reached the gateway's outbox, not only the screen.
+- The suite runs only with `STABLENEW_PHONE_E2E=1` and its own hash-pinned lock (`tests/phone_e2e/requirements-e2e.txt`),
+  in the `phone-e2e` CI job. `full-suite` waits for that job and fails when it failed.
+- The suite has a cheap contract test in the census (`test_phone_e2e_contract.py`) that keeps the lock and the wiring
+  in step.
+- Run it locally with the commands in `tests/phone_e2e/conftest.py`.
+
 ## 7. Phone actions (RG-140 slices 1 and 2)
 
 **What.** On an image, a phone with the `queue` grant can ask for one of eight actions:
