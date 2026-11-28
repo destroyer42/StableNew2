@@ -163,3 +163,97 @@ def test_exclusion_reads_nothing_outside_the_output_root(env, tmp_path):
     assert SourceFilter(env.root).exclusion(outside) == ""
     assert not (tmp_path / "elsewhere").exists()
     assert Path(env.root).is_dir()
+
+
+# -- working files stay on the PC; finished outputs and the owner's own folders are published -------------------------
+
+WORKING_FILES = [
+    ("prepared_video_sources/0a1b2c3d_480x832_cover_resize_center_crop.png", "image/png"),
+    ("prepared_driving_videos/0a1b2c3d.mp4", "video/mp4"),
+    ("eval_plans/video/stage/motion/head_turn.mp4", "video/mp4"),
+    ("storyboards/abc123/root/frames/0001.png", "image/png"),
+    ("continue_frames/job-1/last.png", "image/png"),
+    ("PhotoOptimize/workspace/assets/photo_1/original/photo.png", "image/png"),
+    ("PhotoOptimize/workspace/staging_runs/s1/PhotoOptimize/run/draft.png", "image/png"),
+    ("SVD/run/_svd_temp/abc/postprocess/rife_output/0001.png", "image/png"),
+    ("Pipeline/run/conditioning/depth.png", "image/png"),
+    ("movie_clips/run/sequence/prefix/part.mp4", "video/mp4"),
+    ("movie_clips/run/.asm_x1/part.mp4", "video/mp4"),
+    (".work/stage/driver.mp4", "video/mp4"),
+]
+OWNER_FILES = [
+    ("Best Examples/Motion Candidates/copy.mp4", "video/mp4"),
+    ("Best Examples/20261114_134844_pack/final.png", "image/png"),
+    ("Second Best/20261114_150942_pack/final.png", "image/png"),
+    (
+        "Best Examples/sequence/clip.mp4",
+        "video/mp4",
+    ),  # an app folder name, but in the owner's folder
+    ("some_new_folder/thing.png", "image/png"),
+    ("loose.png", "image/png"),
+]
+FINAL_OUTPUTS = [
+    ("Pipeline/run/final.png", "image/png"),
+    ("Pipeline/run/upscaled/final.png", "image/png"),  # where the upscale stage writes
+    ("20261126_090000_before_routes/final.png", "image/png"),  # a run folder from before the routes
+    ("Reprocess/run/fixed.png", "image/png"),
+    ("PhotoOptimize/workspace/assets/photo_1/outputs/result.png", "image/png"),
+    ("movie_clips/run/clip_smooth.mp4", "video/mp4"),
+    ("SVD/run/svd_clip.mp4", "video/mp4"),
+]
+
+
+@pytest.mark.parametrize(("relative", "mime"), WORKING_FILES)
+def test_a_working_file_is_never_published(env, monkeypatch, relative, mime):
+    item = make_item(env, relative, mime=mime, provenance="unknown")
+    result = publish(env, monkeypatch, item)
+    assert result.published == 0 and not env.gateway.manifests
+    assert state(env, item) in {"working_file", "frame"}
+
+
+@pytest.mark.parametrize(("relative", "mime"), FINAL_OUTPUTS + OWNER_FILES)
+def test_a_final_output_or_a_file_in_the_owners_folder_is_published(
+    env, monkeypatch, relative, mime
+):
+    item = make_item(env, relative, mime=mime)
+    publish(env, monkeypatch, item)
+    assert state(env, item) == "published"
+
+
+def test_a_video_poster_image_is_never_published(env, monkeypatch):
+    run = "SVD/20261126_090000_svd"
+    poster = make_item(env, f"{run}/svd_clip_preview.png", provenance="unknown")
+    clip = make_item(env, f"{run}/svd_clip.mp4", mime="video/mp4")
+    write_manifest(
+        env,
+        run,
+        video_path=absolute(env, run, "svd_clip.mp4"),
+        thumbnail_path=absolute(env, run, "svd_clip_preview.png"),
+    )
+    publish(env, monkeypatch, poster, clip)
+    assert state(env, poster) == "frame"
+    assert state(env, clip) == "published"
+
+
+def test_every_working_folder_stablenew_writes_is_named(env):
+    """The names come from the code that writes them, so a renamed folder cannot start leaking again."""
+
+    from src.app.review_gateway_sources import WORKING, SourceFilter
+    from src.app.site_phone_continue import FRAMES_FOLDER
+    from src.state.eval_plans_paths import EVAL_PLANS_FOLDER
+    from src.video.motion_source_preparation import PREPARED_DIRNAME
+    from src.video.storyboard_root import STORYBOARDS_FOLDER
+    from src.video.workflow_source_preparation import prepared_source_destination
+
+    prepared = prepared_source_destination(env.root, "a" * 64, {"width": 480, "height": 832})
+    folders = [
+        prepared.parent.name,
+        PREPARED_DIRNAME,
+        EVAL_PLANS_FOLDER,
+        STORYBOARDS_FOLDER,
+        FRAMES_FOLDER,
+    ]
+    found = {
+        name: SourceFilter(env.root).exclusion_of(f"{name}/a.png", "image") for name in folders
+    }
+    assert found == dict.fromkeys(folders, WORKING)
