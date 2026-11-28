@@ -125,8 +125,8 @@ class WorkflowResourceReadiness:
         """Observe-only readiness.
 
         ``warm_sequence`` provides context for the RAM advisory when the same owned runtime is warm.
-        ``owned_warm_reuse`` skips the GPU check only for consecutive standalone jobs when the backend
-        verifies it is reusing the same StableNew-owned process for the same workflow and version."""
+        ``owned_warm_reuse`` skips the GPU check only when the backend verifies it is reusing the same
+        StableNew-owned process for the same workflow and version (a standalone job or a sequence segment)."""
 
         policy = self.policy_for(spec)
         if policy is None:
