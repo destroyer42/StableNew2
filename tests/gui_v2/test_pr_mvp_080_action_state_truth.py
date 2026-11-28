@@ -101,6 +101,9 @@ def test_queue_actions_require_capability_and_truthful_outcomes(tk_root) -> None
 
     panel.controller = _QueueController()
     panel.update_jobs([running, queued])
+    panel.job_listbox.selection_clear(
+        0, "end"
+    )  # the list is multi-select: selection_set adds to the old row
     panel.job_listbox.selection_set(0)
     panel._update_button_states()
     assert panel.remove_button.instate(["disabled"])

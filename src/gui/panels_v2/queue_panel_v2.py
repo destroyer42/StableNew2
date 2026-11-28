@@ -38,6 +38,10 @@ from src.pipeline.job_models_v2 import (
 logger = logging.getLogger(__name__)
 
 
+REMOVE_LABEL = "Remove"
+REMOVE_BUTTON_WIDTH = 18
+
+
 @dataclass(frozen=True)
 class QueueActionState:
     """The currently legal, callable actions for this queue projection."""
@@ -63,6 +67,8 @@ class QueuePanelV2(ttk.Frame):
     - Remove selected job
     - Clear all queued jobs
     """
+
+    _removal_in_progress = False  # a batched removal is running on the controller worker
 
     SLOW_REFRESH_THRESHOLD_MS = 20.0
 
@@ -189,7 +195,7 @@ class QueuePanelV2(ttk.Frame):
         self.job_listbox = tk.Listbox(
             list_frame,
             height=6,
-            selectmode=tk.SINGLE,
+            selectmode=tk.EXTENDED,
             exportselection=False,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -255,10 +261,10 @@ class QueuePanelV2(ttk.Frame):
 
         self.remove_button = ttk.Button(
             button_frame,
-            text="Remove",
+            text=REMOVE_LABEL,
             style=SECONDARY_BUTTON_STYLE,
             command=self._on_remove,
-            width=8,
+            width=REMOVE_BUTTON_WIDTH,
         )
         self.remove_button.grid(row=0, column=4, sticky="ew", padx=(2, 2))
 
@@ -282,7 +288,9 @@ class QueuePanelV2(ttk.Frame):
         )
         attach_tooltip(self.move_to_back_button, "Move the selected job to the end of the queue.")
         attach_tooltip(
-            self.remove_button, "Remove only the selected queued job before it starts running."
+            self.remove_button,
+            "Remove the selected queued jobs before they start running (Shift/Ctrl-click or Ctrl+A to select "
+            "several). Running jobs are skipped; cancel them instead.",
         )
         attach_tooltip(
             self.clear_button,
@@ -349,12 +357,23 @@ class QueuePanelV2(ttk.Frame):
             return int(selection[0])
         return None
 
+    def _get_selected_indices(self) -> list[int]:
+        """Every selected row index, ascending (the listbox is multi-select)."""
+        listbox = getattr(self, "job_listbox", None)
+        if listbox is None:
+            idx = self._get_selected_index()
+            return [] if idx is None else [idx]
+        return sorted(int(i) for i in listbox.curselection())
+
     def _get_selected_job(self) -> UnifiedJobSummary | None:
         """Get the currently selected job, or None if nothing selected."""
         idx = self._get_selected_index()
         if idx is not None and 0 <= idx < len(self._jobs):
             return self._jobs[idx]
         return None
+
+    def _selected_jobs(self) -> list[UnifiedJobSummary]:
+        return [self._jobs[i] for i in self._get_selected_indices() if 0 <= i < len(self._jobs)]
 
     @staticmethod
     def _job_status_value(job: Any | None) -> str:
@@ -449,8 +468,13 @@ class QueuePanelV2(ttk.Frame):
 
     def _queue_action_state(self) -> QueueActionState:
         """Calculate legality and controller capability for every queue action."""
-        idx = self._get_selected_index()
-        selected_job = self._get_selected_job()
+        selected_indices = self._get_selected_indices()
+        # Reordering is defined for one row only; a multi-selection can only be removed.
+        idx = selected_indices[0] if len(selected_indices) == 1 else None
+        selected_job = self._get_selected_job() if idx is not None else None
+        selected_queued_count = sum(
+            self._job_status_value(job) == "queued" for job in self._selected_jobs()
+        )
         has_selection = idx is not None
         has_queued_jobs = self._has_queued_jobs()
         selected_is_queued = self._job_status_value(selected_job) == "queued"
@@ -501,8 +525,16 @@ class QueuePanelV2(ttk.Frame):
                 selected_before_last
                 and self._controller_supports("move_queue_job_to_back", "on_queue_move_to_back_v2")
             ),
-            remove=(selected_is_queued and self._controller_supports("on_queue_remove_job_v2")),
-            clear=has_queued_jobs and self._controller_supports("on_queue_clear_v2"),
+            remove=(
+                selected_queued_count > 0
+                and not self._removal_in_progress
+                and self._controller_supports("on_queue_remove_job_v2")
+            ),
+            clear=(
+                has_queued_jobs
+                and not self._removal_in_progress
+                and self._controller_supports("on_queue_clear_v2")
+            ),
         )
 
     def _update_button_states(self) -> None:
@@ -516,7 +548,18 @@ class QueuePanelV2(ttk.Frame):
         self.move_down_button.state(["!disabled"] if actions.move_down else ["disabled"])
         self.move_to_back_button.state(["!disabled"] if actions.move_to_back else ["disabled"])
         self.remove_button.state(["!disabled"] if actions.remove else ["disabled"])
+        configure = getattr(self.remove_button, "configure", None)
+        if callable(configure):
+            configure(text=self._remove_button_text())
         self.clear_button.state(["!disabled"] if actions.clear else ["disabled"])
+
+    def _remove_button_text(self) -> str:
+        """ "Remove" for one row, "Remove selected (N)" (N = queued rows in it) for a multi-selection."""
+        selected = self._selected_jobs()
+        if len(selected) <= 1:
+            return REMOVE_LABEL
+        queued = sum(self._job_status_value(job) == "queued" for job in selected)
+        return f"Remove selected ({queued})"
 
     @staticmethod
     def _can_send_job(
@@ -662,7 +705,11 @@ class QueuePanelV2(ttk.Frame):
                     self.after(50, _apply_feedback)
 
     def _on_remove(self) -> None:
-        """Remove the selected job from the queue with feedback."""
+        """Remove the selected queued job(s) with feedback; several rows are removed in one batch off Tk."""
+        selected = self._selected_jobs()
+        if len(selected) > 1:
+            self._on_remove_selected(selected)
+            return
         job = self._get_selected_job()
         idx = self._get_selected_index()
 
@@ -695,10 +742,113 @@ class QueuePanelV2(ttk.Frame):
             if new_idx >= 0:
                 self.after(50, lambda: self._select_index(new_idx))
 
+    def _on_remove_selected(self, selected: list[UnifiedJobSummary]) -> None:
+        queued = [job for job in selected if self._job_status_value(job) == "queued"]
+        held_back = len(selected) - len(queued)
+        if not queued:
+            self._emit_status_message(
+                "Running jobs must be cancelled, not removed", level="warning"
+            )
+            self._update_button_states()
+            return
+        if not self._queue_action_state().remove:
+            self._update_button_states()
+            return
+        if callable(getattr(self.controller, "on_queue_remove_jobs_v2", None)):
+            self._start_removal([job.job_id for job in queued], held_back=held_back)
+        else:
+            self._remove_selected_synchronously(queued, held_back)
+
+    def _remove_selected_synchronously(
+        self, queued: list[UnifiedJobSummary], held_back: int
+    ) -> None:
+        """Fallback for a controller without the batched worker: remove one by one (never the app's own path)."""
+        remove_job: Any = getattr(self.controller, "on_queue_remove_job_v2", None)
+        removed = 0
+        for job in queued:
+            try:
+                removed += bool(remove_job(job.job_id))
+            except Exception:  # noqa: BLE001 - one refused row must not stop the rest
+                logger.warning("Removing queued job %s failed", job.job_id, exc_info=True)
+        note = f"; {held_back} running (must be cancelled)" if held_back else ""
+        self._emit_status_message(
+            f"Removed {removed} job{'s' if removed != 1 else ''}{note}",
+            level="info" if removed else "warning",
+        )
+        self._update_button_states()
+
+    def _start_removal(self, job_ids: list[str] | None, *, held_back: int = 0) -> bool:
+        """Run a batched removal on the controller's tracked worker; Tk only shows the progress and the result.
+
+        ``job_ids=None`` removes every queued job. The buttons stay disabled until the controller reports back.
+        """
+        starter = getattr(self.controller, "on_queue_remove_jobs_v2", None)
+        if not callable(starter):
+            return False
+        count = (
+            len(job_ids)
+            if job_ids is not None
+            else sum(self._job_status_value(job) == "queued" for job in self._jobs)
+        )
+        self._removal_in_progress = True
+        self._emit_status_message(f"Removing {count} job{'s' if count != 1 else ''}…")
+        self._update_button_states()
+
+        def done(outcome: Any | None) -> None:
+            self._removal_in_progress = False
+            try:
+                alive = bool(self.winfo_exists())
+            except tk.TclError:
+                alive = False
+            if not alive:
+                return
+            self.job_listbox.selection_clear(0, tk.END)
+            message, level = self._removal_result_message(
+                outcome, held_back=held_back, requested=count
+            )
+            self._emit_status_message(message, level=level)
+            self._update_button_states()
+
+        started = False
+        try:
+            started = bool(starter(job_ids, on_done=done))
+        finally:
+            if not started and self._removal_in_progress:
+                self._removal_in_progress = False
+                self._emit_status_message("Queued jobs could not be removed", level="warning")
+                self._update_button_states()
+        return started
+
+    @staticmethod
+    def _removal_result_message(
+        outcome: Any | None, *, held_back: int, requested: int
+    ) -> tuple[str, str]:
+        """(message, level) for a finished batch removal."""
+        if outcome is None:
+            return "Queued jobs could not be removed", "warning"
+        removed = len(getattr(outcome, "removed", ()))
+        running_now = len(getattr(outcome, "running", ()))
+        errors = len(getattr(outcome, "errors", ()))
+        running = running_now + held_back
+        parts = [f"Removed {removed} job{'s' if removed != 1 else ''}"]
+        if running:
+            parts.append(f"{running} running (must be cancelled)")
+        gone = requested - removed - running_now - errors
+        if gone > 0:
+            parts.append(f"{gone} already gone")
+        if errors:
+            parts.append(f"{errors} failed")
+        level = "warning" if (errors or removed == 0) else "info"
+        return "; ".join(parts), level
+
     def _on_clear(self) -> int:
         """Clear queued jobs and report success only when a count is returned."""
         if not self._queue_action_state().clear:
             self._update_button_states()
+            return 0
+        if callable(getattr(self.controller, "on_queue_remove_jobs_v2", None)):
+            # Clearing 1,000+ jobs froze the window; the batch runs on a worker and reports back.
+            self._start_removal(None)
             return 0
         clear_queue = getattr(self.controller, "on_queue_clear_v2", None)
         if not callable(clear_queue):
@@ -803,8 +953,16 @@ class QueuePanelV2(ttk.Frame):
         # Delete: Remove selected job
         self.job_listbox.bind("<Delete>", lambda e: self._on_remove())
 
+        # Ctrl+A: select every row (Remove selected then clears a whole pack in one batch)
+        self.job_listbox.bind("<Control-a>", self._on_select_all)
+
         # Ctrl+Delete: Clear all (with confirmation)
         self.job_listbox.bind("<Control-Delete>", lambda e: self._on_clear_with_confirm())
+
+    def _on_select_all(self, event: tk.Event[tk.Listbox] | None = None) -> str:
+        self.job_listbox.selection_set(0, tk.END)
+        self._update_button_states()
+        return "break"
 
     def _on_clear_with_confirm(self) -> None:
         """Clear all with confirmation dialog."""
@@ -840,6 +998,7 @@ class QueuePanelV2(ttk.Frame):
             if old_selection is not None and old_selection < len(self._jobs)
             else None
         )
+        old_selected_ids = [job.job_id for job in self._selected_jobs()]
 
         self._jobs = list(jobs)
 
@@ -910,7 +1069,14 @@ class QueuePanelV2(ttk.Frame):
         self._last_rendered_queue_eta_text = queue_eta_text
 
         # Restore selection if possible
-        if old_job_id:
+        if len(old_selected_ids) > 1:
+            # A multi-selection survives refreshes (the running job's progress re-renders the list) minus the
+            # rows that left the queue; it is never collapsed onto a neighbour.
+            wanted = set(old_selected_ids)
+            for i, job in enumerate(self._jobs):
+                if job.job_id in wanted:
+                    self.job_listbox.selection_set(i)
+        elif old_job_id:
             for i, job in enumerate(self._jobs):
                 if job.job_id == old_job_id:
                     self._select_index(i)

@@ -180,6 +180,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `job_service_auto_run.py`: Continuous-dispatch policy owned by the JobService boundary
 - `job_service_dispatch.py`: Request one queued dispatch with auto-run off or start the worker with auto-run on
 - `job_service_outage.py`: WebUI outage and GPU device-loss containment owned at the JobService boundary (PR-QUEUE-WEBUI-171, PR-QUEUE-G…
+- `job_service_queue_batch.py`: Batch behaviour of the JobService queue boundary (QUEUE-MULTI): one queue-updated event per batch, batched re…
 - `job_service_shutdown.py`: Shutdown admission fence and runner quiescence owned at the JobService boundary (PR-RUNTIME-SHUTDOWN-140)
 - `masked_edit_service.py`: Prepare one masked Review edit with the existing builder and reprocess admission boundary
 - `movie_clips_submission_service.py`: Movie Clips admission (PR-VID-ASM-332): the tab's request becomes one queued assembly job
@@ -226,6 +227,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `pack_model_batch_service.py`: N5: packs x models batch builder - plan, count, estimate and queue one named batch on the existing path
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
 - `queue_projection.py`: Build the queue projection, converting each job's immutable NJR into its summary only once (RUN-LEAN)
+- `queue_removal.py`: Batched queue removal on a tracked worker (QUEUE-MULTI), so Clear All and Remove selected never block Tk
 - `run_submission_service.py`: Bridge GUI run requests and witnessed previews to the queue submission worker
 - `runtime_projection_coordinator.py`: Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink
 - `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
