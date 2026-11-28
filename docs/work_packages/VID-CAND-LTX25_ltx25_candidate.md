@@ -2,7 +2,7 @@
 
 Status: **three-arm comparison run and ranked blind on 2026-11-28: by the rule fixed before the run, LTX-2.5 (silent)
 is "at least as good" as the A14B default and HunyuanVideo 1.5 8-step is "no clear case"** (section 7). Screening only.
-The 2026-11-27 run stopped after stage 0 because the frozen source images were not non-explicit; the comparison used
+**Adopted 2026-11-28 as an attested experimental option (section 10).** The 2026-11-27 run stopped after stage 0 because the frozen source images were not non-explicit; the comparison used
 new sources the owner labelled instead. The two workflows are `experimental`, never the Make Video default, never
 preselected and not QUALIFIED.
 
@@ -364,3 +364,22 @@ than the A14B default and no loss ranked on likeness or stability. It is worth k
 non-explicit work only (section 1). A14B stays the default; the licence keeps LTX-2.5 from replacing it for adult
 content. A speed run at matched size is the follow-up section 6 named, with its own plan, if the owner wants one. The
 two stage 0 clips are still kept, undecided.
+
+## 10. Adoption as an attested experimental option (2026-11-28)
+
+Owner decision, 2026-11-28: **"Add it as an option, let user attest to non-explicitness (no checks or blocks)."** Earlier
+the same day: warn only; explicit use may violate the LTX licence and the user takes the risk; no control, block or
+disallow.
+
+- Both ids stay `experimental`, in the picker's **Show experimental** tier, never the default or preselected. The 1.0.0
+  specs, graphs and VRAM readiness values are unchanged.
+- Every Queue asks for the confirmation and records it on the job and clip manifest (VIDEO_PIPELINE section 1.1.1).
+  Only a missing record refuses a job. This adds no content check, source-label check or classifier, so section 1's
+  restriction rests on the user's statement. The "open every source first" lesson of section 1 still applies to agents.
+- Section 1's "for non-explicit clips only" is now each user's own confirmation rather than a rule StableNew enforces.
+- The specs' description and notes still read as an eval candidate; changing them needs a new spec version.
+- Peak VRAM in section 7 was 11,925 MiB of 12,282 MiB. No preflight or stop rule was changed.
+- The audio workflow has never run. No physical run was made for this change.
+- Execution class: Standard. Model recommendation: Claude Code Sonnet 5.5 High; Codex GPT-6.1 Sol High. Controller
+  Surface Assessment: small pass-through arguments on existing video submit methods; no new controller responsibility.
+  Validation: `tests/video`, relevant `tests/gui_v2`, ruff ratchets, code map, PR gate, `tests/system tests/tools`.

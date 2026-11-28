@@ -10,14 +10,15 @@ ordinary jobs that replay, retry and appear in History like any other.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.utils.atomic_io import atomic_write_json
+from src.video.licence_attestation import with_attestation
 from src.video.video_eval_motion import (
     ALIGNMENT_ARM_KEY,
     ALIGNMENT_CASE,
@@ -298,6 +299,7 @@ class VideoEvalRunService:
         *,
         output_root: str | Path,
         require_active: Callable[[], None] | None = None,
+        attestation: Mapping[str, Any] | None = None,
     ) -> EvalAdmission:
         """Re-verify the source images, write the run manifest, then submit every job once."""
 
@@ -332,6 +334,13 @@ class VideoEvalRunService:
                         f"({Path(path).name}); it is not the input that was validated. Preview the suite "
                         "again. Nothing was queued."
                     )
+        # A licence confirmation is recorded on the jobs that need one, before the manifest describes them.
+        plan = replace(
+            plan,
+            jobs=tuple(
+                replace(job, njr=with_attestation(job.njr, attestation)) for job in plan.jobs
+            ),
+        )
         submit = getattr(job_service, "submit_njrs", None)
         if not callable(submit):
             raise EvalRunRefused("JobService.submit_njrs is unavailable; nothing was queued.")

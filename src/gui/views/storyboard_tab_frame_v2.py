@@ -19,6 +19,7 @@ from PIL import Image, ImageTk
 from src.controller.storyboard_submission_service import ContinueRequest, ContinueRow
 from src.gui import theme_v2
 from src.gui.design_system_v2 import Colors, Typography
+from src.gui.licence_attestation_dialog import NOT_CONFIRMED, ask_licence_attestation
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
 from src.gui.view_contracts.storyboard_import_contract import (
@@ -967,8 +968,19 @@ class StoryboardTabFrameV2(ttk.Frame):
         if self._busy:
             return
         request = self._build_request()
-        if request is None:
+        tree = self.tree
+        if request is None or tree is None:
             return
+        attestation = ask_licence_attestation(
+            self,
+            [tree.root.to_dict()["settings"].get("workflow_id")],
+            job_count=len(request.rows) if request.mode == "parallel" else 1,
+        )
+        if attestation is None:
+            self._say(NOT_CONFIRMED)
+            return
+        if attestation:
+            request = replace(request, licence_attestation=attestation)
         service = self._service()
         self._busy = True
         self._update_continue_panel()

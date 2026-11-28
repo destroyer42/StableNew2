@@ -17,6 +17,7 @@ from functools import partial
 from typing import Any
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.video.licence_attestation import ATTESTATION_KEY, with_attestation
 from src.video.sequence_history import read_ledger_progress
 from src.video.sequence_job_build import build_sequence_njr
 from src.video.sequence_locator import locate_ledger
@@ -121,7 +122,8 @@ class VideoSequenceControllerMixin:
             plan_origin=plan_origin,
             storyboard=storyboard,
         )
-        job_ids = self._job_service().submit_njrs([built.njr], SubmissionPolicy())
+        njr = with_attestation(built.njr, form_data.get(ATTESTATION_KEY))
+        job_ids = self._job_service().submit_njrs([njr], SubmissionPolicy())
         if not job_ids:
             raise RuntimeError("Failed to enqueue the video sequence job")
         return str(job_ids[0])

@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
+from src.gui.licence_attestation_dialog import NOT_CONFIRMED, ask_for_jobs
 from src.gui.theme_v2 import style_text_widget
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_batch_contract import (
@@ -428,6 +430,13 @@ class WorkflowBatchPanel(ttk.Frame):
         self.refresh()
         if work is None:
             return
+        attestation = ask_for_jobs(self, getattr(work.plan, "njrs", ()))
+        if attestation is None:
+            self._session.abandon_queue(NOT_CONFIRMED)
+            self.refresh()
+            return
+        if attestation:
+            work = replace(work, attestation=attestation)
         self._work_runner().start(
             f"VideoBatch-Queue-{id(self)}",
             lambda: self._session.run_queue(work),

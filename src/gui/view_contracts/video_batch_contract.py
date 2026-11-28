@@ -65,6 +65,8 @@ class BatchPreviewWork:
 @dataclass(frozen=True)
 class BatchQueueWork:
     plan: Any
+    #: The operator's licence confirmation for this one Queue, when the batch needs one.
+    attestation: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -225,7 +227,7 @@ class VideoBatchSession:
         self,
         *,
         build_preview: Callable[..., Any],
-        submit_plan: Callable[[Any], Any],
+        submit_plan: Callable[..., Any],
         select_sources: Callable[..., Any],
         scan_folder: Callable[..., Any],
         on_change: Callable[[], None] | None = None,
@@ -499,11 +501,18 @@ class VideoBatchSession:
         self._set_message("")
         return BatchQueueWork(plan=self._plan)
 
+    def abandon_queue(self, message: str) -> None:
+        """UI thread: release the busy state without queueing; the preview stays."""
+
+        self.busy = None
+        self._set_message(message)
+
     def run_queue(self, work: BatchQueueWork) -> WorkOutcome:
         """Worker thread: re-verify every frozen file and admit once."""
 
         try:
-            return WorkOutcome(value=self._submit_plan(work.plan))
+            given = {"attestation": work.attestation} if work.attestation else {}
+            return WorkOutcome(value=self._submit_plan(work.plan, **given))
         except Exception as exc:
             return WorkOutcome(error=str(exc) or type(exc).__name__)
 

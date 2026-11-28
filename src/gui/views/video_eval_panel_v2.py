@@ -15,6 +15,7 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
+from src.gui.licence_attestation_dialog import NOT_CONFIRMED, ask_for_jobs
 from src.gui.theme_v2 import (
     DARK_COMBOBOX_STYLE,
     MUTED_LABEL_STYLE,
@@ -378,9 +379,14 @@ class VideoEvalPanel(ttk.LabelFrame):
         if not accepted:
             self.status_var.set("Eval suite preview discarded; nothing was queued.")
             return
+        attestation = ask_for_jobs(self, [getattr(job, "njr", None) for job in plan.jobs])
+        if attestation is None:
+            self.status_var.set(f"Eval suite not queued. {NOT_CONFIRMED}")
+            return
+        given = {"attestation": attestation} if attestation else {}
         self._start(
             "VideoEval-Queue",
-            lambda: WorkOutcome(value=self._controller().submit_eval_run(plan)),
+            lambda: WorkOutcome(value=self._controller().submit_eval_run(plan, **given)),
             self._finish_queue,
             f"Queueing {len(plan.jobs)} eval jobs...",
         )
