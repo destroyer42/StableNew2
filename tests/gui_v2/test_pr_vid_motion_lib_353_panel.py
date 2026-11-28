@@ -343,7 +343,8 @@ def test_the_panel_lists_thumbnails_previews_and_hands_off_a_selected_clip(panel
     assert _pump_until(root, lambda: len(panel.tree.get_children()) == 3)
     first = panel.tree.get_children()[0]
     assert panel.tree.item(first, "values")[0] == "dance"
-    assert panel.tree.item(first, "image")  # the cached thumbnail is shown in the row
+    # Thumbnails decode on a worker (STARTUP-STALL), so the picture arrives after the rows.
+    assert _pump_until(root, lambda: bool(panel.tree.item(first, "image")))
     assert str(panel.use_button.cget("state")) == "disabled"
 
     panel.tree.selection_set(panel_env.ids["walk forward"])
