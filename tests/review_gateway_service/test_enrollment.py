@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 
 import pytest
 from review_gateway.contract import Contract
@@ -226,3 +227,25 @@ def test_a_decision_still_in_flight_when_the_device_is_revoked_is_not_recorded(r
 
     assert refused.value.status == 401
     assert rig.outbox()["records"] == []
+
+
+def test_the_pc_is_told_when_a_phone_was_last_seen_only_when_it_asks(rig) -> None:
+    """PHONE-CORE PP-1: additive, and opt-in because an older PC refuses a field it does not know."""
+
+    offer(rig)
+    enter(rig.phone, "K7QF2M9D")
+    asking = "?device_fields=last_seen_at"
+    [never] = rig.outbox(asking)["enrolled_devices"]
+    assert "last_seen_at" not in never  # paired, and nothing asked for since
+
+    assert rig.phone.get("/api/session").status_code == 200
+    first = rig.clock()
+    rig.clock.advance(hours=2)
+    page = rig.outbox(asking)
+    Contract(SCHEMA_PATH).validate("outbox_page", page)
+    assert datetime.fromisoformat(page["enrolled_devices"][0]["last_seen_at"]) == first
+    assert "last_seen_at" not in rig.outbox()["enrolled_devices"][0]  # an older PC
+
+    assert rig.phone.get("/api/session").status_code == 200
+    [device] = rig.outbox(asking)["enrolled_devices"]
+    assert datetime.fromisoformat(device["last_seen_at"]) == rig.clock()

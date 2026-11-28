@@ -110,7 +110,10 @@ Rules:
 6. A record the PC has never listed is withdrawn when the user re-decides. After listing, a new decision is a new record;
    apply in page order.
 7. `enrolled_devices` lists all active devices on every page (a superset of "since the last acknowledgement"): upsert by
-   `device_id`.
+   `device_id`. With the query `device_fields=last_seen_at` (PHONE-CORE PP-1) each device also carries `last_seen_at`,
+   when it last made an authenticated request (to the hour; absent if it never has). Only a PC that asks gets the
+   field, because an older PC refuses an unknown one and with it the page; an older gateway ignores the query. So
+   the gateway and the app can be updated in either order.
 8. Decision records never pair `delete` with `favorite` or `needs_fix`; the PC still checks.
 9. Authenticated uploads are read to the end before they are answered. A wrong secret is refused at once, so a client
    sending a large body may see a reset connection instead of the 401: check `health` first.
@@ -285,6 +288,24 @@ to a gateway that lists `item_info`. Short names come from `src/pipeline/output_
 date); items already on the phone are not published again for it. The page's code is `static/features/info/moreinfo.js`.
 A file named by the descriptive scheme (NAME-INFO slice 2) also sends its name (only to a gateway that lists
 `item_file_name`), and Immich uploads under it; no other file name and no folder leaves the PC.
+
+### 3.8 Pairing again from a QR code (PHONE-CORE PP-1)
+
+- **PC.** The pairing dialog shows the code as text, as before. Once **Phone app address** is entered (the `https://`
+  address phones open; only `https://host[:port]` is accepted, and nothing is built in), it also draws a QR of
+  `<address>/#/pair/<code>`. The QR is drawn on screen only, goes with the code when it is used or expires, and is
+  never saved or logged. Both pairing buttons show it. The address is kept in the PC's sync ledger and is removed by
+  **Forget**.
+- **Phone.** `#/pair/<code>` fills the code into the pairing form and at once rewrites that history entry to
+  `#/pair`. Nothing pairs until **Pair this phone** is pressed. A phone that is already paired can pair again this way
+  or go back.
+- **Typing the code** works as before, with or without an address or a camera.
+- **The code** keeps every property of section 2, rule 4: single use, five minutes, attempt limits. It travels in the
+  URL fragment, which a browser sends to no server and in no `Referer`. The browser's own history may still hold the
+  scanned address; by then the code is used, or dies within five minutes.
+- **Device list.** The desktop shows **Last seen** for each phone, so a phone that lost its pairing can be told from
+  the one in use and revoked. "not reported" means the gateway has not said (an older gateway, or a phone that has
+  asked for nothing since it paired).
 
 ## 4. Retention (D4)
 

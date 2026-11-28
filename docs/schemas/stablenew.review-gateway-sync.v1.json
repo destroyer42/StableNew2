@@ -1041,6 +1041,10 @@
               },
               "enrolled_at": {
                 "$ref": "#/$defs/timestamp"
+              },
+              "last_seen_at": {
+                "description": "When the phone last made an authenticated request, to the hour. Sent only to a PC that asks with ?device_fields=last_seen_at; absent when the phone has made none.",
+                "$ref": "#/$defs/timestamp"
               }
             }
           }

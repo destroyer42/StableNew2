@@ -353,6 +353,8 @@ class EnrolledDevice:
     offer_id: str
     label: str
     enrolled_at: datetime
+    #: PHONE-CORE PP-1: ``None`` from a gateway that does not report it, or a phone that has asked for nothing yet.
+    last_seen_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -486,12 +488,14 @@ def parse_record(value: Any) -> OutboxRecord | AdminRecord:
 
 
 def _enrolled_device(value: Any) -> EnrolledDevice:
-    body = _object(value, {"device_id", "offer_id", "enrolled_at"}, {"label"})
+    body = _object(value, {"device_id", "offer_id", "enrolled_at"}, {"label", "last_seen_at"})
+    seen = parse_timestamp(body["last_seen_at"]) if "last_seen_at" in body else None
     return EnrolledDevice(
         _text(body["device_id"], DEVICE_ID),
         parse_uuid(body["offer_id"]),
         _bounded_text(body.get("label", ""), 64),
         parse_timestamp(body["enrolled_at"]),
+        seen,
     )
 
 

@@ -1003,7 +1003,10 @@ class Store:
             )
         return record["record_id"], "pending"
 
-    def outbox_page(self, after: int, limit: int) -> dict[str, Any]:
+    def outbox_page(self, after: int, limit: int, *, last_seen: bool = False) -> dict[str, Any]:
+        """``last_seen`` adds ``last_seen_at`` to each device (PHONE-CORE PP-1). Only a PC that asks gets it: an
+        older one refuses an unknown field, and with it the whole page."""
+
         with self.write() as db:
             now = self.clock()
             deferred.pc_seen(db, now, stamp(now))
@@ -1018,8 +1021,8 @@ class Store:
                 [(stamp(self.clock()), row["seq"]) for row in page],
             )
             devices = db.execute(
-                "SELECT device_id, offer_id, label, enrolled_at FROM device WHERE revoked_at IS NULL"
-                " ORDER BY enrolled_at DESC LIMIT ?",
+                "SELECT device_id, offer_id, label, enrolled_at, seen_at AS last_seen_at FROM device"
+                " WHERE revoked_at IS NULL ORDER BY enrolled_at DESC LIMIT ?",
                 (MAXIMUM_DEVICES,),
             ).fetchall()
         return {
@@ -1028,7 +1031,12 @@ class Store:
             "records": [json.loads(row["record"]) for row in page],
             "next_cursor": str(page[-1]["seq"]) if len(rows) > limit else None,
             "enrolled_devices": [
-                {key: row[key] for key in row.keys() if row[key] is not None} for row in devices
+                {
+                    key: row[key]
+                    for key in row.keys()
+                    if row[key] is not None and (last_seen or key != "last_seen_at")
+                }
+                for row in devices
             ],
         }
 

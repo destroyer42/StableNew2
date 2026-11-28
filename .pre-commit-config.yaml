@@ -7,9 +7,9 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^(archive|ARCHIVE)/
+        exclude: ^(archive|ARCHIVE|src/utils/vendor)/
       - id: end-of-file-fixer
-        exclude: ^(archive|ARCHIVE)/
+        exclude: ^(archive|ARCHIVE|src/utils/vendor)/
       - id: check-yaml
       - id: check-json
       - id: check-toml
@@ -19,21 +19,21 @@ repos:
       - id: check-case-conflict
       - id: mixed-line-ending
         args: ['--fix=lf']
-        exclude: ^(archive|ARCHIVE)/
+        exclude: ^(archive|ARCHIVE|src/utils/vendor)/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.9
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
-        exclude: ^(archive|ARCHIVE)/
+        exclude: ^(archive|ARCHIVE|src/utils/vendor)/
       - id: ruff-format
-        exclude: ^(archive|ARCHIVE)/
+        exclude: ^(archive|ARCHIVE|src/utils/vendor)/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.4.0
     hooks:
       - id: mypy
         additional_dependencies: [types-requests]
-        exclude: ^(tests|archive|ARCHIVE)/
+        exclude: ^(tests|archive|ARCHIVE|src/utils/vendor)/
         args: [--ignore-missing-imports, --show-error-codes]

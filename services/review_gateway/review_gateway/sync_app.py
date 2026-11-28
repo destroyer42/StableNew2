@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import logging
 from collections.abc import AsyncIterator
+from functools import partial
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
@@ -150,7 +151,10 @@ def build_sync_app(
             raise GatewayError(400, "invalid_cursor") from None
         if not (0 <= after < 2**62 and 1 <= limit <= PAGE_LIMIT):
             raise GatewayError(400, "invalid_cursor")
-        return JSONResponse(await run_in_threadpool(store.outbox_page, after, limit))
+        # PHONE-CORE PP-1: optional device fields the PC says it understands.
+        last_seen = request.query_params.get("device_fields") == "last_seen_at"
+        page = partial(store.outbox_page, after, limit, last_seen=last_seen)
+        return JSONResponse(await run_in_threadpool(page))
 
     async def acknowledgements(request: Request) -> Response:
         body = await payload(request, "acknowledgement")
