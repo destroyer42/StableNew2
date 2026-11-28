@@ -1,6 +1,7 @@
 # VID-FINISH: optional loop, trim and SeedVR2 upscale for finished clips
 
-Status: built 2026-11-28 with deterministic tests. No GPU run, no download. Built on `origin/main` 841f9b49, then
+Status: built 2026-11-28 with deterministic tests. First GPU trial the same day, stopped after one before/after pair
+(section 7). Built on `origin/main` 841f9b49, then
 merged with 71e2a4a0; branch
 `claude/vid-finish-eceb88`. Finishes slice (d) of the 2026-11-27 Value Assessment's VID-FRAME item (owner pick
 2026-11-28).
@@ -44,15 +45,16 @@ is refused, never silently ignored.
 - The managed ComfyUI is 0.38.0 (`config/managed_comfy_runtime.json`), and its install has the stock SeedVR2 nodes
   (`comfy_extras/nodes_seedvr.py`; 0.37.0 has them too) and the blueprint *Upscale Video (SeedVR2 3B Int8)*. No custom
   node is needed.
-- **Weights are not installed.** Needed, from `Comfy-Org/SeedVR2` on Hugging Face (apache-2.0):
+- **Weights** (installed on the owner's PC 2026-11-28, section 7; not part of any installer), from `Comfy-Org/SeedVR2`
+  on Hugging Face (apache-2.0):
 
   | File | Folder | Bytes |
   |---|---|---|
   | `seedvr2_3b_int8_convrot.safetensors` | `models/diffusion_models` | 3,458,259,704 |
   | `seedvr2_ema_vae_fp16.safetensors` | `models/vae` | 501,324,814 |
 
-  Downloading them (3.96 GB) needs the owner's OK. Preflight checks presence and size; no SHA-256 is pinned because no
-  copy has been verified.
+  Downloading them (3.96 GB) needs the owner's OK. Preflight checks presence and size; the code pins no SHA-256 (the
+  verified values are in section 7).
 - The pass is `seedvr2_3b_int8_upscale_2x` 1.0.0 (`src/video/seedvr2_upscale.py`), pinned by a digest of its graph and
   file list. It is not a catalog workflow, so the picker never offers it. It follows the blueprint with two changes:
   fixed temporal chunks (5 frames, 1 latent frame of overlap) instead of `auto`, which sizes chunks from whatever
@@ -104,16 +106,16 @@ job fails; the native clip and frames stay on disk.
   the clip as generated, not from a trimmed end or a loop point, and not at the upscaled size.
 - **Send to Movie Clips** prefers a clip's frames, so it assembles the native frames. Smoothed clips already behave
   this way.
-- Nothing was run on a GPU. The graph's input names come from the installed node sources and have not been accepted by a
-  running ComfyUI. The A14B Make Video default now runs Comfy Kitchen attention with dynamic VRAM (1.1.0); the
-  upscale would run in that same process, which is also untested.
+- Only the smallest case has run on a GPU (section 7): the graph was accepted by ComfyUI 0.38.0, in the same process as
+  the CK A14B default. Longer clips, other sizes and TI2V-5B input are unmeasured.
+- The Queue warning still says the pass has never been run on this PC; changing that text is a code change.
 - The lossless clip uploaded for the upscale is H.264 RGB (`libx264rgb -qp 0`); ComfyUI decoding it pixel-exactly is
   unverified.
 - The loop and trim tests that run real FFmpeg skip where FFmpeg is absent.
 
-## 6. GPU timing and rating plan (draft; not authorized, not run)
+## 6. GPU timing and rating plan (run in part 2026-11-28, section 7)
 
-Needs the owner's OK for the download and, separately, for the run.
+The owner approved the trial and, separately, the download. The text below is the plan as written before the run.
 
 **Before the GPU.** Download the two files, record their SHA-256, confirm their sizes. Close other GPU programs and the
 StableNew app (or run the clips through the app and queue nothing else). Check free VRAM and host RAM.
@@ -145,3 +147,35 @@ the pair is better and whether it is worth the time. Whether an eval suite accep
 untested; if it does not, rate a blind pair folder as VID-FRAME's attention sitting did.
 
 **Decision after rating:** promote, keep experimental, or remove.
+
+## 7. First GPU trial (2026-11-28): one pair, then a VRAM stop
+
+**Download.** `Comfy-Org/SeedVR2` at `df48879708206a403d2a61acd55578c2e80fd233`; sizes and SHA-256 verified:
+`seedvr2_3b_int8_convrot.safetensors` `c3dec8bcc5916843a8a858572970597462e1f2dc598d6dfd818f6cd40f53a157`,
+`seedvr2_ema_vae_fp16.safetensors` `20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1`.
+
+**Run.** Eval harness at `85a59f91`, StableNew closed, seed 374, smoothing on in both arms, SFW subject pictures. Four
+cases were planned (the three of section 6 plus 720x544, 81 frames); 3 of 8 jobs ran. Stop line: 11,500 MiB.
+
+| Case | Arm | Result | Wall s | Upscale pass s | Smoothing s | Peak VRAM MiB (of 12,282) | Free RAM low GiB |
+|---|---|---|---:|---:|---:|---:|---:|
+| U1 A14B 1.1.0, 624x624, 33 f | before | completed | 142.9 | - | 6.7 | 11,189 | 6.38 |
+| U1 | after | completed, 1248x1248 | 207.6 | 180.6 | 21.1 | 6,773 (6,111 during the pass) | 5.71 |
+| U2 TI2V-5B 1.3.0, 480x832, 81 f | before | stopped and cancelled | 57.2 | - | - | 11,740 | 14.07 |
+| U2 after, U3, U4 | | not run | | | | | |
+
+- The upscale pass took about 5.5 s per source frame at 624x624. Longer clips are unmeasured.
+- Its readiness check passed with 10,406 MiB available after unload, 406 MiB above the 10,000 floor.
+- U1's "after" job reused ComfyUI's cached generation, so its wall time excludes generation. The two native clips are
+  frame-for-frame identical, so the pair differs only by the upscale.
+- The stop was U2's **plain TI2V-5B generation, with no upscale**, at its first sampling step. Earlier clean TI2V-5B
+  runs on this card peaked at 11,386 to 11,820 MiB, so the 11,500 line was below its normal peak; the case should not
+  have been run under it. It says nothing about SeedVR2.
+- An `nvlddmkm` event 153 was logged in the same second as the interrupt and ComfyUI stop. Its cause is not established
+  (a 153 on forced termination has been seen before). `nvidia-smi` and device status were normal afterwards; no further
+  GPU work tested it. Nothing was retried.
+- **Not measured:** 81 and 121 frames, 544x720 and 720x544, host RAM under a long upscale.
+- **Rating:** sitting `vid-finish-seedvr2-upscale` has the one completed pair, blind; not yet rated. The pass stays
+  experimental.
+
+Evidence: `%USERPROFILE%\Videos\StableNewAcceptance\GPU-CHECKS\seedvr2\`.
