@@ -60,3 +60,19 @@ def test_full_suite_waits_for_phone_e2e_and_fails_when_it_failed() -> None:
     assert 'STABLENEW_PHONE_E2E: "1"' in job
     assert "--confcutdir=tests/phone_e2e" in job
     assert "secrets." not in job
+
+
+def test_the_census_and_plain_pytest_leave_the_browser_suite_to_its_job() -> None:
+    import sys
+
+    sys.path.insert(0, str(ROOT / "tools" / "ci"))
+    import census_shards
+    import run_collection_gate
+
+    assert "tests/phone_e2e" in run_collection_gate.DEFAULT_COLLECTION_EXCLUDES
+    assert '"--ignore=tests/phone_e2e"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    active = census_shards.active_test_files()
+    assert active and not [path for path in active if path.startswith("tests/phone_e2e/")]
+    # The job names the directory, which pytest collects despite --ignore.
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "python -m pytest tests/phone_e2e " in workflow[workflow.index("  phone-e2e:") :]

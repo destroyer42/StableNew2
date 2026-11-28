@@ -58,14 +58,21 @@ def test_a_lost_reply_is_resent_with_the_same_key_and_recorded_once(phone, gatew
     keys: list[str] = []
 
     def reply_lost(route) -> None:
-        keys.append(route.request.post_data_json["idempotency_key"])
+        # Only the first send loses its reply; a resend goes to the gateway untouched. The key is recorded once the
+        # route is finished, so the test never unroutes while this handler still owns it (Playwright would then
+        # continue the route itself and the abort below would find it already handled).
+        if keys:
+            route.fallback()
+            return
+        key = route.request.post_data_json["idempotency_key"]
         route.fetch()  # the gateway records it...
         route.abort("connectionreset")  # ...and the phone never hears back
+        keys.append(key)
 
     phone.context.route("**/api/decisions", reply_lost)
     phone.get_by_role("button", name="Keep", exact=True).click()
     release_held(phone)
-    wait_for(lambda: keys, what="the first send", page=phone)
+    wait_for(lambda: keys, what="the first send to finish", page=phone)
     phone.context.unroute("**/api/decisions")
     phone.evaluate("window.dispatchEvent(new Event('online'))")
     expect(phone.locator("#unsent")).to_be_hidden()
