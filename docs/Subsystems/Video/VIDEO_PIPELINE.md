@@ -212,7 +212,7 @@ Both launch profiles retain `--disable-pinned-memory` and require dynamic VRAM. 
 
 **Live observation (2026-11-21, owner's app, A14B 1.0.0, 81 frames, RIFE x2).** This is a demonstration, not a ledger qualification. Before PR #371, 17 of the first 40 A14B jobs that day failed. The job after each success hit the GPU-memory check against the held process ("in use by other processes"), and the job after that started ComfyUI cold. After PR #371, 94 A14B jobs (19:35 to 23:27 UTC) reused a warm owned process, two pids in all, with `runtime_reuse.status == "warm"` and `vram_check: skipped_owned_warm_reuse`; no A14B job failed.
 
-Sequence segments joined this rule after the first V1-6 physical run (2026-11-28, eval harness): a Storyboard continuation started 7 s after its A14B 1.0.0 clip was refused (5,717 MiB counted available, needs 8,600) while the held process was the user of that memory. Verified with fakes since; not yet rerun on the GPU.
+Sequence segments joined this rule after the first V1-6 physical run (2026-11-28, eval harness): a Storyboard continuation started 7 s after its A14B 1.0.0 clip was refused (5,717 MiB counted available, needs 8,600) while the held process was the user of that memory. With the rule in place, a harness rerun the same day (code `5b91600a`, A14B 1.0.0) completed that continuation: `vram_check: skipped_owned_warm_reuse` with 6,267 MiB in use at job start (`docs/work_packages/V1_motion_controls.md` section 15). One case on one machine, not run from the app.
 
 | | ComfyUI "Prompt executed" | Job wall time (including RIFE and encoding) |
 | --- | ---: | ---: |
