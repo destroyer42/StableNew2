@@ -135,22 +135,32 @@ class GatewaySettings:
 
 
 class GatewaySettingsStore:
-    """DPAPI-protected settings file; ``protect``/``unprotect`` are injectable for hermetic tests."""
+    """DPAPI-protected settings file; ``protect``/``unprotect`` are injectable for hermetic tests.
+
+    ``name`` picks the file from a closed set. The application only ever uses the unnamed one (production). The
+    ``staging`` file (PHONE-CORE PS-1) is read by the operator tools alone, so StableNew can never sync to staging.
+    """
+
+    FILES = {"": "settings.dpapi", "staging": "settings-staging.dpapi"}
 
     def __init__(
         self,
         path: Path | None = None,
         *,
+        name: str = "",
         protect: Callable[[bytes], bytes] = protect_for_current_user,
         unprotect: Callable[[bytes], bytes] = unprotect_for_current_user,
     ) -> None:
+        if name not in self.FILES:
+            raise ValueError("Unknown review gateway settings name")
         self._path = path
+        self._file = self.FILES[name]
         self._protect = protect
         self._unprotect = unprotect
 
     @property
     def path(self) -> Path:
-        return self._path if self._path is not None else _local_state_dir() / "settings.dpapi"
+        return self._path if self._path is not None else _local_state_dir() / self._file
 
     def load(self) -> GatewaySettings | None:
         try:

@@ -44,6 +44,10 @@ Immich after an explicit Keep (RG-100 invariant 5).
 
 The gateway never compiles, admits or decides anything. It has no job, lifecycle, review-evidence or file-path concept.
 
+A second, staging gateway tries each merge before production (PHONE-CORE PS-1): its `environment_label` setting shows in
+the phone header, and only the operator tools hold its settings; StableNew never syncs to it
+([runbook](../../runbooks/review_gateway.md#staging-gateway-and-promotion)).
+
 **The page's files** (PHONE-CORE PC-1a and PC-1b; design
 `docs/work_packages/PHONE-CORE_installable_offline_phone_app.md`):
 

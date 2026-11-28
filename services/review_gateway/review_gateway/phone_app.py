@@ -99,10 +99,14 @@ class _Guard:
 
 
 def build_phone_app(
-    store: Store, clock: Clock, ratings: RatingStore, release_dir: Path | None = None
+    store: Store,
+    clock: Clock,
+    ratings: RatingStore,
+    release_dir: Path | None = None,
+    environment_label: str = "",
 ) -> Starlette:
     failures: deque = deque()
-    site = load_static()
+    site = load_static(environment_label=environment_label)
     commit = (deployed_commit(release_dir) if release_dir else None) or "dev"
 
     async def session(request: Request, *, review: bool = True) -> Device:

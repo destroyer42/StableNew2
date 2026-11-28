@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import os
+import re
 import secrets
 import ssl
 import stat
@@ -22,6 +23,7 @@ _TAILNET = (
     ipaddress.ip_network("fd7a:115c:a1e0::/48"),
 )
 _MINIMUM_SECRET = 32
+_LABEL = re.compile(r"[A-Za-z0-9 _.-]{0,24}")
 _PATH_SETTINGS = (
     "data_dir",
     "media_dir",
@@ -74,6 +76,8 @@ class Settings:
     deploy_dir: Path = Path("/var/lib/review-gateway-deploy")
     #: The release this code runs from (its ``source.json`` names the commit); None for the one around this package.
     release_dir: Path | None = None
+    #: PHONE-CORE PS-1. Shown in the phone page's header ("Staging"); empty on production.
+    environment_label: str = ""
 
     @property
     def immich_key_path(self) -> Path:
@@ -133,6 +137,11 @@ def load_settings(path: Path) -> Settings:
         value = getattr(settings, name)
         if type(value) is not int or not 0 <= value <= 100_000:
             raise ConfigError(f"{name} must be a whole number from 0 to 100000")
+    label = settings.environment_label
+    if not isinstance(label, str) or not _LABEL.fullmatch(label):
+        raise ConfigError(
+            "environment_label must be up to 24 letters, digits, spaces, '.', '_' or '-'"
+        )
     if settings.immich_url != "":
         try:
             check_url(str(settings.immich_url))

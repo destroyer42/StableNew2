@@ -1,13 +1,18 @@
 """Deploy a commit of ``main`` to the phone review gateway from the PC, over the authenticated sync channel (DEPLOY-2).
 
-    python -m tools.review_gateway_deploy request <merge sha> [--no-wait] [--timeout SECONDS]
-    python -m tools.review_gateway_deploy status
+    python -m tools.review_gateway_deploy [--target production|staging] request <merge sha> [--no-wait] [--timeout S]
+    python -m tools.review_gateway_deploy [--target production|staging] status
+    python -m tools.review_gateway_deploy --target staging configure
 
 It reads the gateway address, pinned certificate and sync secret that StableNew's Phone review gateway dialog stored for
 this Windows user (DPAPI), and nothing else: not the live checkout, the sync ledger or the running app. It sends one
 request holding only the commit id; the gateway hands it to its root deployer, which checks with GitHub that the commit
 is a signed merge on ``main`` and newer than the deployed one, installs it, health-checks it and rolls back by itself.
 The console switch on the gateway (``review-gateway-deploy remote on|off``) decides whether the request is taken.
+
+``--target`` (PHONE-CORE PS-1) is ``production`` (the default, described above) or ``staging``. ``configure`` asks for
+the staging gateway's address, certificate fingerprint, sync secret and phone address and stores them in a separate
+DPAPI file that only the tools read; the secret is never an argument, so it reaches no shell history.
 
 Exit codes: 0 deployed or already current; 1 refused, failed or rolled back; 2 usage or no gateway settings; 3 still
 running after the time limit; 4 the gateway is unreachable. Design: ``docs/work_packages/DEPLOY-PROXMOX_containers.md``.
@@ -16,6 +21,7 @@ running after the time limit; 4 the gateway is unreachable. Design: ``docs/work_
 from __future__ import annotations
 
 import argparse
+import getpass
 import re
 import sys
 import time
@@ -32,7 +38,8 @@ from src.app.review_gateway_client import (
     PinnedHttpsTransport,
 )
 from src.app.review_gateway_protocol import SCHEMA_VERSION
-from src.app.review_gateway_store import GatewaySettingsStore
+from src.app.review_gateway_store import GatewaySettings, GatewaySettingsStore
+from tools import review_gateway_targets as targets
 
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -51,15 +58,38 @@ _REFUSALS = {
 }
 
 
-class _NoSettings(Exception):
-    pass
-
-
-def default_client() -> GatewayClient:
+def default_client(target: str = targets.PRODUCTION) -> GatewayClient:
+    if target == targets.STAGING:
+        return targets.staging_client()
     settings = GatewaySettingsStore().load()
     if settings is None:
-        raise _NoSettings
+        raise targets.NoSettings
     return GatewayClient(PinnedHttpsTransport(settings), settings.secret)
+
+
+def _configure(prompt: Callable[[str], str], secret_prompt: Callable[[str], str]) -> int:
+    """Ask for the staging gateway's values and save them where only the tools read. Nothing is echoed back."""
+
+    try:
+        address = prompt("Staging sync address (host:port): ")
+        fingerprint = prompt("Staging certificate SHA-256 fingerprint: ")
+        secret = secret_prompt("Staging sync secret (hidden): ")
+        phone_url = targets.parse_phone_url(prompt("Staging phone address (https://...): "))
+        settings = GatewaySettings.build(address, fingerprint, secret)
+        targets.check_separate(settings, GatewaySettingsStore())
+        GatewaySettingsStore(name=targets.STAGING).save(settings)
+        targets.StagingPhoneStore().save(phone_url)
+    except targets.TargetMixup as error:
+        print(error, file=sys.stderr)
+        return EXIT_USAGE
+    except (EOFError, KeyboardInterrupt):
+        print("Nothing was saved.", file=sys.stderr)
+        return EXIT_USAGE
+    except (OSError, ValueError) as error:
+        print(f"Nothing was saved: {error}", file=sys.stderr)
+        return EXIT_USAGE
+    print("Saved the staging gateway settings for this Windows user. StableNew does not use them.")
+    return EXIT_OK
 
 
 def _short(value: object) -> str:
@@ -158,9 +188,14 @@ def main(
     client: GatewayClient | None = None,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    prompt: Callable[[str], str] = input,
+    secret_prompt: Callable[[str], str] = getpass.getpass,
 ) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m tools.review_gateway_deploy", description=__doc__.split("\n\n")[0]
+    )
+    parser.add_argument(
+        "--target", choices=targets.TARGETS, default=targets.PRODUCTION, help="which gateway"
     )
     commands = parser.add_subparsers(dest="command", required=True)
     request = commands.add_parser("request", help="deploy a merge commit of main to the gateway")
@@ -172,6 +207,7 @@ def main(
         "--timeout", type=float, default=DEFAULT_TIMEOUT, help="seconds to wait for the result"
     )
     commands.add_parser("status", help="the switch, the deployed commit and the last result")
+    commands.add_parser("configure", help="save the staging gateway's settings (--target staging)")
     try:
         args = parser.parse_args(argv)
     except SystemExit as exit_:
@@ -182,17 +218,34 @@ def main(
             file=sys.stderr,
         )
         return EXIT_USAGE
-    try:
-        client = client or default_client()
-    except _NoSettings:
+    staging = args.target == targets.STAGING
+    if args.command == "configure":
+        if staging:
+            return _configure(prompt, secret_prompt)
         print(
-            "No gateway settings for this Windows user: enter them in StableNew's Phone review gateway dialog.",
+            "configure is for --target staging only: production's settings are entered in StableNew's Phone review"
+            " gateway dialog.",
             file=sys.stderr,
         )
+        return EXIT_USAGE
+    try:
+        client = client or default_client(args.target)
+    except targets.NoSettings:
+        print(
+            f"No staging gateway settings for this Windows user: {targets.CONFIGURE_HINT}"
+            if staging
+            else "No gateway settings for this Windows user: enter them in StableNew's Phone review gateway dialog.",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+    except targets.TargetMixup as error:
+        print(error, file=sys.stderr)
         return EXIT_USAGE
     except (OSError, ValueError) as error:
         print(f"The gateway settings cannot be read: {error}", file=sys.stderr)
         return EXIT_USAGE
+    if staging:
+        print("target: staging")
     try:
         if args.command == "status":
             return _status(client)
@@ -205,7 +258,11 @@ def main(
             sleep=sleep,
         )
     except GatewayUnauthorized:
-        print("The gateway refused the sync secret: check the Phone review gateway settings.")
+        print(
+            f"The gateway refused the sync secret: run {targets.CONFIGURE_HINT} again."
+            if staging
+            else "The gateway refused the sync secret: check the Phone review gateway settings."
+        )
         return EXIT_REFUSED
     except GatewayUnavailable:
         print("The gateway is unreachable from this PC.")
