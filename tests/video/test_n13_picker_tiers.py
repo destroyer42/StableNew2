@@ -71,7 +71,10 @@ def test_every_hidden_entry_says_why(records) -> None:
     assert "31 of 31" in retired.reason
     for workflow_id in ARMS:
         tier = picker.picker_tier(by_id[workflow_id])
-        why = "superseded" if workflow_id == "wan22_i2v_a14b_4step_ck_v1" else "unrated"
+        why = {
+            "wan22_i2v_a14b_4step_ck_v1": "superseded",
+            "ltx25_distilled_i2v_v1": "experimental option",  # owner, 2026-11-28
+        }.get(workflow_id, "unrated")
         assert tier.tier == picker.TIER_EXPERIMENTAL_ONLY and why in tier.reason.lower()
     for workflow_id in ALWAYS:
         assert picker.picker_tier(by_id[workflow_id]).tier == picker.TIER_DEFAULT

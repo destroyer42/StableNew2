@@ -39,7 +39,10 @@ from src.video.workflow_contracts import (
 LTX25_ID = "ltx25_distilled_i2v_v1"
 LTX25_AUDIO_ID = "ltx25_distilled_i2v_audio_v1"
 LTX25_IDS = (LTX25_ID, LTX25_AUDIO_ID)
-LTX25_VERSION = "1.0.0"
+# 1.0.1 (owner, 2026-11-28) rewords the licence warning only; 1.0.0 stays registered for jobs that recorded it.
+LTX25_FIRST_VERSION = "1.0.0"
+LTX25_VERSION = "1.0.1"
+LTX25_VERSIONS = (LTX25_FIRST_VERSION, LTX25_VERSION)
 
 # Gated repository (the owner accepts its terms, never an agent); revision read from the Hub API on 2026-11-27.
 LTX25_REPO = "Lightricks/LTX-2.5"
@@ -169,13 +172,21 @@ LTX25_LICENSE = (
 )
 
 
-LTX25_LICENCE_WARNING = {
+_LICENCE_WARNING_1_0_0 = {
     "title": "LTX-2.5's licence forbids sexually explicit content.",
     "why": (
         "The LTX-2.x Community License incorporates Lightricks' Acceptable Use Policy (updated 3 Nov 2026), which "
         "forbids generating sexually explicit content with the model."
     ),
     "fix": "Use LTX-2.5 only for non-explicit clips; for anything else choose another engine.",
+}
+LTX25_LICENCE_WARNING = {
+    "title": "LTX-2.5: explicit content may violate its license.",
+    "why": "Its license includes a Lightricks use policy that bans sexually explicit content.",
+    "fix": (
+        "StableNew does not check or block this. You are responsible for following the license, and you use it at "
+        "your own risk."
+    ),
 }
 
 
@@ -351,9 +362,12 @@ _NOT_QUALIFIED = (
 )
 
 
-def build_ltx25_spec(workflow_id: str = LTX25_ID) -> WorkflowSpec:
+def build_ltx25_spec(workflow_id: str = LTX25_ID, version: str = LTX25_VERSION) -> WorkflowSpec:
     audio = {LTX25_ID: False, LTX25_AUDIO_ID: True}[workflow_id]
-    version = LTX25_VERSION
+    licence_warning = {
+        LTX25_FIRST_VERSION: _LICENCE_WARNING_1_0_0,
+        LTX25_VERSION: LTX25_LICENCE_WARNING,
+    }[version]
     output_text = (
         "Video with generated audio, encoded by ComfyUI"
         if audio
@@ -388,7 +402,7 @@ def build_ltx25_spec(workflow_id: str = LTX25_ID) -> WorkflowSpec:
         },
         "resource_readiness": dict(LTX25_RESOURCE_READINESS),
         # Shown beside Queue and recorded on the job (src/video/workflow_warnings.py); a warning, never a block.
-        "licence_warning": dict(LTX25_LICENCE_WARNING),
+        "licence_warning": dict(licence_warning),
         "source_preparation": {
             "resize_policy": "cover_resize_center_crop",
             "portrait_target": dict(LTX25_PORTRAIT_TARGET),
@@ -506,12 +520,17 @@ def build_ltx25_spec(workflow_id: str = LTX25_ID) -> WorkflowSpec:
 
 
 def build_ltx25_specs() -> tuple[WorkflowSpec, ...]:
-    return tuple(build_ltx25_spec(workflow_id) for workflow_id in LTX25_IDS)
+    return tuple(
+        build_ltx25_spec(workflow_id, version)
+        for workflow_id in LTX25_IDS
+        for version in LTX25_VERSIONS
+    )
 
 
 __all__ = [
     "LTX25_AUDIO_ID",
     "LTX25_AUDIO_STOCK_NODES",
+    "LTX25_FIRST_VERSION",
     "LTX25_FRAME_COUNT_POLICY",
     "LTX25_ID",
     "LTX25_IDS",
@@ -521,6 +540,7 @@ __all__ = [
     "LTX25_REVISION",
     "LTX25_STOCK_NODES",
     "LTX25_VERSION",
+    "LTX25_VERSIONS",
     "build_ltx25_spec",
     "build_ltx25_specs",
 ]

@@ -300,6 +300,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `klein_lora_selection_dialog.py`: One batch review of ordered verified candidates, on the Tk thread only
 - `layout_v2.py`: Apply shared Tk grid rules and reversible compact layout adjustments to workspace widgets
 - `learning_state.py`: Define serializable Learning experiment, variant, and image-reference state
+- `licence_attestation_dialog.py`: The desktop's per-job licence confirmation (VID-CAND-LTX25), asked at Queue and never saved
 - `live_update_dialog.py`: Desktop control for the live update (LAUNCH-UPDATE-1): Update and restart, the remote-update switch, the rece…
 - `log_trace_panel_v2.py`: Trace and operator log panel for GUI V2
 - `main_window.py`: Expose the GUI entrypoint wrapper used by existing callers and tests
@@ -1057,6 +1058,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `frame_retention.py`: Move a clip's retained PNG frames to the Recycle Bin 7 days after the clip exists
 - `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
 - `history_media_projection.py`: Read-only media-selection decisions over existing Job History entries
+- `licence_attestation.py`: The per-job licence attestation (owner decision 2026-11-28, VID-CAND-LTX25)
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
 - `managed_comfy_runtime.py`: Read-only production view of the StableNew-managed ComfyUI runtime contract
 - `motion_alignment.py`: Typed spatial alignment of a driving clip to a source image (PR-VID-MOTION-420)
