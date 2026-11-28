@@ -18,7 +18,11 @@ from src.services.runtime_transition_service import RuntimeTransitionCoordinator
 from src.services.runtime_warm_hold import RuntimeWarmHold
 from src.video.comfy_process_manager import ComfyStartupError
 from src.video.comfy_workflow_backend import _keep_warm_seconds
-from src.video.workflow_catalog_wan_a14b import WAN_A14B_ID, WAN_A14B_VERSION
+from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_ID,
+    WAN_A14B_ID,
+    WAN_A14B_VERSION,
+)
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import build_default_workflow_registry
 from tests.video.test_vid_clip_370_candidate_specs import (
@@ -216,6 +220,64 @@ def test_warm_hold_does_not_exempt_a_replacement_process_from_the_vram_check(
     with pytest.raises(RuntimeError, match="only 8135 MiB"):
         _run(second, tmp_path, "job-2")
     assert len(client.queued) == 1
+
+
+def _segment(backend: Any, tmp_path: Path, job: str, **identity: Any) -> Any:
+    """One segment of a sequence job (a Storyboard continuation is one): ``hold_runtime`` keeps ComfyUI up."""
+
+    request = _a14b_request(tmp_path, **identity)
+    request.job_id = job
+    request.output_dir = tmp_path / f"run-{job}"
+    request.hold_runtime = True
+    return backend.execute(None, request)
+
+
+def _held_model(client: _FramesFake) -> None:
+    """ComfyUI now holds its model and PyTorch reports almost none of it: 8,135 MiB counts as available."""
+
+    client.stats["devices"][0].update(_driver_free_mib=8071.0, torch_vram_total=64 * 1024 * 1024)
+
+
+@pytest.mark.parametrize("before", ["a standalone job", "an earlier segment"])
+def test_a_sequence_segment_on_the_same_warm_process_skips_the_vram_check(
+    tmp_path: Path, _no_encode, before: str
+) -> None:
+    slot, _, _ = _slot()
+    client = _client(tmp_path)
+    backend = _a14b_backend(client, tmp_path, warm_hold=slot)
+    (_run if before == "a standalone job" else _segment)(backend, tmp_path, "job-1")
+    _held_model(client)
+
+    result = _segment(backend, tmp_path, "job-2")
+
+    assert len(client.queued) == 2 and backend.fake_manager.starts == 1
+    observations = result.diagnostic_payload["resource_readiness"]["observations"]
+    assert observations["vram_check"] == "skipped_owned_warm_reuse"
+
+
+@pytest.mark.parametrize("change", ["nothing ran before", "another process", "another workflow"])
+def test_the_vram_check_still_refuses_a_segment_that_is_not_a_verified_reuse(
+    tmp_path: Path, _no_encode, change: str
+) -> None:
+    slot, _, _ = _slot()
+    client = _client(tmp_path)
+    backend = _a14b_backend(client, tmp_path, warm_hold=slot)
+    manager = backend.fake_manager
+    identity: dict[str, Any] = {}
+    if change != "nothing ran before":
+        _segment(backend, tmp_path, "job-1")
+    if change == "another process":
+        manager.stop()
+        manager.ensure_running()
+    if change == "another workflow":
+        identity = {"workflow_id": WAN_A14B_FULL_PICTURE_ID}
+    queued = len(client.queued)
+    _held_model(client)
+
+    with pytest.raises(RuntimeError, match="only 8135 MiB"):
+        _segment(backend, tmp_path, "job-2", **identity)
+
+    assert len(client.queued) == queued
 
 
 def test_a_warm_claim_whose_launch_check_fails_releases_the_claimed_process(

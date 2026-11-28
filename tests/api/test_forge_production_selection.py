@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -206,7 +207,8 @@ def test_the_default_forge_path_builds_its_profile_from_the_managed_contract_wit
     expected = mfr.build_launch_profile(manifest, install_dir=install, model_home=home, port=7871)
     assert config.command == expected["command"] and config.working_dir == expected["working_dir"]
     assert config.env_overrides == expected["env_overrides"]
-    assert config.base_url == "http://127.0.0.1:7871" and config.startup_timeout_seconds == 180
+    assert config.base_url == "http://127.0.0.1:7871"
+    assert config.startup_timeout_seconds == mfr.STARTUP_TIMEOUT_SECONDS
     assert config.launch_profile_commands is None
     assert "webui-user.bat" not in " ".join(config.command)
     assert mfr.check_launch_command(config.command, manifest) == []  # required flags present, nothing tuned or exposed
@@ -347,3 +349,38 @@ def test_there_is_no_cross_backend_fallback_in_the_selection_code():
     assert not [n for n in ast.walk(forge_builder) if isinstance(n, ast.Try)]  # a setup error propagates, never A1111
     called = {n.func.id for n in ast.walk(forge_builder) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
     assert not called & {"_load_webui_cache", "_save_webui_cache", "detect_default_webui_workdir"}
+
+
+def test_the_managed_forge_startup_window_covers_a_slow_cold_boot_and_stays_bounded(
+    monkeypatch, tmp_path
+):
+    """STARTUP-STALL: the slowest observed boot took 176 s of the old 180 s window."""
+
+    manifest, install, home = _managed_install(tmp_path, monkeypatch)
+    window = mfr.build_launch_profile(
+        manifest, install_dir=install, model_home=home, port=7871
+    )["startup_timeout_seconds"]
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(manager_module.time, "monotonic", lambda: clock["now"])
+    manager = mock.Mock(deliberate_stop_count=0)
+    manager.exit_diagnostics.return_value = None
+
+    def probe_ready_after(seconds):
+        def probe(_url, timeout, poll_interval):
+            clock["now"] += timeout
+            if clock["now"] - 1000.0 < seconds:
+                raise TimeoutError("loading")
+
+        return probe
+
+    manager_module.wait_for_managed_startup(
+        manager, "http://127.0.0.1:7871", timeout_s=window, probe=probe_ready_after(250.0)
+    )
+    manager.mark_ready.assert_called_once()
+
+    clock["now"] = 1000.0
+    with pytest.raises(TimeoutError):
+        manager_module.wait_for_managed_startup(
+            manager, "http://127.0.0.1:7871", timeout_s=window, probe=probe_ready_after(10**9)
+        )
+    assert clock["now"] - 1000.0 <= 305.0  # bounded: a hung but live process is still reported
