@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import tkinter as tk
 import tkinter.ttk
 from pathlib import Path
@@ -410,6 +411,17 @@ def test_child_widget_events_do_no_window_geometry_work() -> None:
     assert window.root.deiconified == 0
 
 
+def _pump_until(root: tk.Tk, ready, timeout: float = 5.0) -> None:
+    """Map events arrive from the window server, not necessarily within one ``update()``."""
+    end = time.monotonic() + timeout
+    while True:
+        root.update()
+        if ready():
+            return
+        assert time.monotonic() < end, "the window event never arrived"
+        time.sleep(0.01)
+
+
 def test_root_bindings_ignore_descendants_and_still_see_the_root() -> None:
     root = create_root()
     try:
@@ -425,17 +437,16 @@ def test_root_bindings_ignore_descendants_and_still_see_the_root() -> None:
             tk.ttk.Label(root, text=str(index)).pack()
         root.geometry("640x900+10+10")
         root.deiconify()
-        root.update()
-
-        assert "restore" in calls and "capture" in calls  # the root's own events still arrive
+        _pump_until(root, lambda: "restore" in calls and "capture" in calls)  # the root's own events
         assert calls.count("restore") == 1
         assert calls.count("capture") <= 6  # was one per descendant (40+)
 
         calls.clear()
-        root.iconify()
-        root.update()
+        # ``withdraw`` unmaps with or without a window manager; ``iconify`` does not on a bare X server (CI's Xvfb),
+        # so nothing would be mapped again there.
+        root.withdraw()
+        _pump_until(root, lambda: not root.winfo_ismapped())
         root.deiconify()
-        root.update()
-        assert "restore" in calls  # restoring from minimise still re-checks visibility
+        _pump_until(root, lambda: "restore" in calls)  # showing the window again still re-checks visibility
     finally:
         root.destroy()
