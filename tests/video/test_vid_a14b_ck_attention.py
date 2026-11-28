@@ -27,6 +27,7 @@ from src.video.managed_comfy_runtime import CK_ATTENTION_FLAG, PINNED_MEMORY_FLA
 from src.video.video_execution_resolver import VideoExecutionResolver
 from src.video.workflow_catalog_wan_a14b import (
     WAN_A14B_CK_LAUNCH_ID,
+    WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_ID,
     WAN_A14B_VERSION,
     build_wan_a14b_specs,
@@ -262,11 +263,14 @@ def test_picker_submission_snapshot_and_history_replay(tmp_path: Path, workflow_
     source = tmp_path / "reference.png"
     Image.new("RGB", (160, 90), "navy").save(source)
     form = controller.build_default_form_state()
-    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
+    assert (form["workflow_id"], form["workflow_version"]) == (
+        WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_VERSION,
+    )
     choices = {
         choice.workflow_id: choice for choice in workflow_choices(controller.list_workflow_specs())
     }
-    assert choices[WAN_A14B_ID].recommended
+    assert choices[WAN_A14B_FULL_PICTURE_ID].recommended
     assert choices[WAN_A14B_CK_LAUNCH_ID].experimental
     assert "CK attention (Experimental)" in choices[WAN_A14B_CK_LAUNCH_ID].label
     form.update(workflow_id=workflow_id, prompt="turn toward the camera", seed=9, frame_count=17)

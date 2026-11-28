@@ -33,6 +33,8 @@ APPROVED = (WAN_ID, WAN22_RUNTIME_VERSION)
 APPROVED_FRAMES_OUT = (WAN_ID, "1.3.0")
 # VID-CLIP-372: the owner's 2026-11-18 GO promoted the A14B 4-step workflow (governance only).
 A14B_APPROVED = ("wan22_i2v_a14b_4step_v1", "1.0.0")
+# VID-FRAME: the owner's 2026-11-27 decision made the full-picture sizes the approved default.
+FULL_PICTURE_APPROVED = ("wan22_i2v_a14b_4step_full_picture_v1", "1.0.0")
 # ...and the 720p TI2V-5B alternate, approved under its own workflow id so 480p stays selectable.
 TI2V_720P_APPROVED = ("wan22_ti2v_5b_i2v_720p_v1", "1.0.0")
 OLDER_TI2V = ((WAN_ID, "1.0.0"), (WAN_ID, "1.1.0"))
@@ -46,7 +48,7 @@ def _spec(workflow_id: str, version: str):
 # ---------------------------------------------------------------------------- catalog governance
 
 
-def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_and_the_a14b() -> (
+def test_exactly_five_catalog_versions_are_approved_two_ti2v_the_720p_alternate_and_two_a14b() -> (
     None
 ):
     states = {
@@ -60,6 +62,7 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
         APPROVED_FRAMES_OUT,
         TI2V_720P_APPROVED,
         A14B_APPROVED,
+        FULL_PICTURE_APPROVED,
     ]
     assert (
         {key for key, state in states.items() if state == "experimental"}
@@ -77,7 +80,6 @@ def test_exactly_four_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
             ("wan22_i2v_a14b_4step_v1", "1.1.0"),
             ("wan22_i2v_a14b_4step_v1", "1.2.0"),
             ("wan22_i2v_a14b_4step_v1", "1.3.0"),
-            ("wan22_i2v_a14b_4step_full_picture_v1", "1.0.0"),  # VID-FRAME full-picture sizes
             # VID-CAND-382 HunyuanVideo 1.5 eval candidates.
             ("hunyuan_video15_i2v_480p_8step_v1", "1.0.0"),
             ("hunyuan_video15_i2v_480p_12step_v1", "1.0.0"),
@@ -105,7 +107,13 @@ def test_only_approved_versions_are_runnable_without_opt_in() -> None:
 
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
-    ] == [A14B_APPROVED, TI2V_720P_APPROVED, APPROVED, APPROVED_FRAMES_OUT]
+    ] == [
+        FULL_PICTURE_APPROVED,
+        A14B_APPROVED,
+        TI2V_720P_APPROVED,
+        APPROVED,
+        APPROVED_FRAMES_OUT,
+    ]
     assert len(registry.list_offerable_specs("comfy")) == 29
 
 

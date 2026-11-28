@@ -32,6 +32,12 @@ frames on the 12 GB card, cold and warm: peak VRAM, host RAM, wall time, no out-
 maximum) for 544x720; then an owner-rated motion and identity comparison against A14B 1.0.0 on the same 768x1024 and
 1024x1024 sources, prompts and seeds. Readiness floors stay 1.0.0's and are unmeasured at these sizes.
 
+**Result and promotion (2026-11-27).** The size test ran through the eval harness: 18/18 clips at their declared sizes; peak
+VRAM 10,320 of 12,282 MiB at 81 frames; the 121-frame 544x720 clip left 3.76 GiB host RAM free. Owner blind rating of the
+six pairs against 1.0.0: likeness 6 same, stability 6 same, motion 1 full picture, 1 current, 4 same (one seed per case;
+the pairs were trimmed to the 1.0.0 view, so the added picture was not judged). Promoted: full picture `approved` and
+`make_video_default`; 1.0.0 stays approved, no longer the default; both spec digests re-pinned, graphs unchanged.
+
 ## b. Blind CK rating sitting (prepared, not rated)
 
 Nine pairs from clips that already existed, copied (originals untouched) to
