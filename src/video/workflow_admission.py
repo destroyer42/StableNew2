@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from src.video.clip_finishing import FINISHING_KEY
+from src.video.licence_attestation import attestation_problem
 from src.video.seedvr2_upscale import require_frozen_upscale
 from src.video.video_execution_resolver import effective_workflow_identity
 from src.video.workflow_frame_count import interpolation_requested, interpolation_source_fps
@@ -36,6 +37,9 @@ def require_workflow_admission(record: Any) -> None:
             f"'{spec.display_name}' is experimental and this job has no recorded experimental opt-in. Queue it from a summary "
             "that shows its warning to record the opt-in. Nothing was queued."
         )
+    if problem := attestation_problem(record):
+        # VID-CAND-LTX25: the licence confirmation is the operator's own statement; only its absence refuses.
+        raise ValueError(f"{problem} Nothing was queued.")
     _require_interpolation_rate(record, spec, stage)
     upscale = (stage.get(FINISHING_KEY) or {}).get("upscale")
     if upscale is not None:

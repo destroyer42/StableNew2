@@ -108,9 +108,11 @@ def build_phone_app(
     timings: TimingStore,
     release_dir: Path | None = None,
     static_root: Path = STATIC_DIR,
+    *,
+    environment_label: str = "",
 ) -> Starlette:
     failures: deque = deque()
-    site = load_static(static_root)
+    site = load_static(static_root, environment_label=environment_label)
     commit = (deployed_commit(release_dir) if release_dir else None) or "dev"
     # PHONE-CORE 2.3: one line in front, so the worker's bytes change with every deploy and the browser sees it. The
     # version is hexadecimal and the commit is validated hexadecimal or "dev", so neither can end the string.

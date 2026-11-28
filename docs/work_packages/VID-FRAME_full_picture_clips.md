@@ -161,7 +161,11 @@ coherent; the clips were not rated.
 - This closes section e's "CK has not been run at the other full-picture sizes" for these five sizes at 81 frames. Wall
   time includes encoding; other sessions ran CPU-heavy tests on both days, so times are indicative.
 - The host RAM low point was 1 to 2 GiB under the standard-attention run's; the cause was not isolated.
-- Still unmeasured with CK: 832x480 and 121 frames. Likeness, motion and stability with CK are rated at 480x832 only.
+- 121 frames with CK ran once later the same day (544x720, with smoothing, in VID-FINISH section 8): completed, peak
+  8,851 MiB, free host RAM no lower than 11.14 GiB, 245 s cold. The same runs saw single-sample VRAM peaks of 11,065 MiB
+  (720x544, 81 frames, cold) and 11,189 MiB (624x624, 33 frames, cold), above this table's figures: the one-second
+  sampling catches the short decode peak unevenly, so treat about 11.2 GiB as the observed worst case.
+- Still unmeasured with CK: 832x480. Likeness, motion and stability with CK are rated at 480x832 only.
 - The catalog's 1.1.0 text still says CK is unmeasured at these sizes; changing it is a code change (pinned spec digest).
 - The harness failed once reading its own record after the first clip had completed. That clip's figures come from its
   manifest and telemetry; it was not run again, so the other five ran as a second suite (hence two cold starts).

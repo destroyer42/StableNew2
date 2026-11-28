@@ -18,6 +18,12 @@ from src.controller.job_service import JobService
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.policy_warnings import SURFACE_PHONE
+from src.video.licence_attestation import (
+    ATTESTATION_KEY,
+    attestation_record,
+    declared_attestation,
+    with_attestation,
+)
 from src.video.video_eval_run import (
     EVAL_OUTPUT_FOLDER,
     BuiltEvalJob,
@@ -52,6 +58,7 @@ _MAX_ARMS = 4
 def _public_workflow(spec: WorkflowSpec) -> dict[str, Any]:
     frames = frame_count_policy(spec)
     assert frames is not None
+    attestation = declared_attestation(spec.workflow_id)
     return {
         "workflow_id": spec.workflow_id,
         "workflow_version": spec.workflow_version,
@@ -66,6 +73,12 @@ def _public_workflow(spec: WorkflowSpec) -> dict[str, Any]:
         "default_frames": frames["default"],
         "frame_counts": legal_frame_counts(spec),
         "fps": frames["fps"],
+        # The sentence the phone must show and have confirmed before it sends this engine.
+        **(
+            {}
+            if attestation is None
+            else {ATTESTATION_KEY: {"version": attestation.version, "text": attestation.text}}
+        ),
     }
 
 
@@ -344,6 +357,12 @@ class PhoneVideo:
             built = builder.build_job(
                 form, frozen, lineage={"source_artifact_id": f"sha256:{case.image_sha256}"}
             )
+            attestation = declared_attestation(spec.workflow_id)
+            njr = (
+                built.njr
+                if attestation is None
+                else with_attestation(built.njr, attestation_record(attestation))
+            )
             frozen_inputs.append(frozen)
             details.append(
                 {
@@ -357,7 +376,7 @@ class PhoneVideo:
                     "negative_prompt": builder.resolved_negative_prompt(spec, form),
                 }
             )
-            return BuiltEvalJob(built.njr, built.seed, built.frame_count)
+            return BuiltEvalJob(njr, built.seed, built.frame_count)
 
         def require_current() -> None:
             for frozen in frozen_inputs:
@@ -442,7 +461,8 @@ class PhoneVideo:
         for number, arm in enumerate(arms, 1):
             if not (
                 isinstance(arm, dict)
-                and set(arm) == {"workflow_id", "workflow_version", "experimental_opt_in"}
+                and set(arm) - {ATTESTATION_KEY}
+                == {"workflow_id", "workflow_version", "experimental_opt_in"}
                 and isinstance(arm["workflow_id"], str)
                 and isinstance(arm["workflow_version"], str)
                 and type(arm["experimental_opt_in"]) is bool
@@ -454,6 +474,13 @@ class PhoneVideo:
                 raise SiteOutputError("incompatible_video_workflow")
             if spec.is_experimental != arm["experimental_opt_in"]:
                 raise SiteOutputError("experimental_opt_in_required")
+            # The phone sends the version of the sentence its operator confirmed; only such engines take the field.
+            attestation = declared_attestation(spec.workflow_id)
+            if attestation is None:
+                if ATTESTATION_KEY in arm:
+                    raise SiteOutputError("invalid_video_preview")
+            elif arm.get(ATTESTATION_KEY) != attestation.version:
+                raise SiteOutputError("licence_attestation_required")
             try:
                 parse_frame_count(spec, frames)
             except ValueError as exc:

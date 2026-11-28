@@ -78,11 +78,15 @@ class VideoEvalControllerMixin:
 
         return self._eval_service(MotionPreparationCache()).plan(load_eval_suite(suite_path))
 
-    def submit_eval_run(self, plan: EvalRunPlan) -> EvalAdmission:
+    def submit_eval_run(
+        self, plan: EvalRunPlan, *, attestation: Mapping[str, Any] | None = None
+    ) -> EvalAdmission:
         """Admit a previewed eval run through ONE ``JobService.submit_njrs`` call."""
 
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
-        return self._eval_service().admit(plan, self._job_service(), output_root=output_dir)
+        return self._eval_service().admit(
+            plan, self._job_service(), output_root=output_dir, attestation=attestation
+        )
 
     def build_eval_report(
         self, run_dir: str | Path, *, cancel: Any = None, show_prompts: bool = True

@@ -53,6 +53,19 @@ class QueuedCancelOutcome:
     detail: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class RemoveManyOutcome:
+    """What ``JobQueue.remove_many`` did: every requested id lands in exactly one list."""
+
+    removed: tuple[str, ...] = ()
+    #: Left alone because the job is RUNNING (or was claimed by the worker before the batch committed).
+    running: tuple[str, ...] = ()
+    #: Not in the runnable projection (already finished, already removed, or never known).
+    missing: tuple[str, ...] = ()
+    #: The repository refused the transition for another reason (job id -> detail).
+    errors: tuple[tuple[str, str], ...] = ()
+
+
 class JobQueue:
     """Thread-safe runnable projection of one authoritative repository."""
 
@@ -1107,6 +1120,76 @@ class JobQueue:
                 return None
         return self.mark_cancelled(job_id, "removed from queue")
 
+    def remove_many(
+        self, job_ids: Iterable[str], reason: str = "removed from queue"
+    ) -> RemoveManyOutcome:
+        """Remove many jobs as ``remove`` does each of them, but in one durable transaction.
+
+        Every removed job gets the same CANCELLED row, history entry, status callback and heap cleanup a single
+        ``remove`` gives it (``reason`` is its error message); only the cost is shared: one repository COMMIT, one
+        pass over the heap and one coalesced state notification instead of one of each per job. RUNNING jobs are
+        never touched: they are reported in ``running`` (they must be cancelled instead). The durable status is
+        re-checked in the transaction, so a job the worker claimed after the decision is reported as ``running``
+        rather than cancelled. Duplicate ids count once.
+        """
+
+        requested = list(dict.fromkeys(job_ids))
+        removed: list[str] = []
+        running: list[str] = []
+        missing: list[str] = []
+        errors: list[tuple[str, str]] = []
+        if not requested:
+            return RemoveManyOutcome()
+        with self.coalesce_state_notifications():
+            changed: list[Job] = []
+            with self._repository.defer_emissions(), self._transition_lock:
+                targets: list[tuple[Job, Job]] = []
+                with self._lock:
+                    for job_id in requested:
+                        live = self._jobs.get(job_id)
+                        if live is None:
+                            missing.append(job_id)
+                        elif live.status == JobStatus.RUNNING:
+                            running.append(job_id)
+                        else:
+                            targets.append((live, self._candidate(live)))
+                if targets:
+                    expected = {live.job_id: live.status for live, _ in targets}
+                    outcomes = []
+                    # The guard is per row, so rows are grouped by the status they were decided in.
+                    for status in dict.fromkeys(expected.values()):
+                        group = [cand for live, cand in targets if expected[live.job_id] is status]
+                        outcomes.extend(
+                            self._repository.transition_jobs(
+                                group,
+                                JobStatus.CANCELLED,
+                                error_message=reason,
+                                expected_status=status,
+                            )
+                        )
+                    live_by_id = {live.job_id: live for live, _ in targets}
+                    with self._lock:
+                        for candidate, outcome in outcomes:
+                            job_id = candidate.job_id
+                            if isinstance(outcome, JobStatusChanged):
+                                (
+                                    running if outcome.actual is JobStatus.RUNNING else missing
+                                ).append(job_id)
+                            elif isinstance(outcome, Exception):
+                                errors.append((job_id, f"{type(outcome).__name__}: {outcome}"))
+                            else:
+                                live = live_by_id[job_id]
+                                self._copy_persisted_state(live, outcome)
+                                self._add_finalized_job(job_id, live)
+                                removed.append(job_id)
+                                changed.append(live)
+                        self._prune_jobs(removed)
+            for job in changed:
+                self._notify_status(job, JobStatus.CANCELLED)
+            if changed:
+                self._notify_state_listeners()
+        return RemoveManyOutcome(tuple(removed), tuple(running), tuple(missing), tuple(errors))
+
     def clear(self) -> int:
         """Clear all queued jobs (not running or completed).
 
@@ -1115,10 +1198,7 @@ class JobQueue:
         """
         with self._lock:
             queued_ids = [jid for jid, job in self._jobs.items() if job.status == JobStatus.QUEUED]
-        with self.coalesce_state_notifications():
-            for job_id in queued_ids:
-                self.mark_cancelled(job_id, "queue cleared")
-        return len(queued_ids)
+        return len(self.remove_many(queued_ids, "queue cleared").removed)
 
     def _get_ordered_queued_jobs(self) -> list[tuple[int, int, str]]:
         """Get queued jobs in priority order (internal, must hold lock)."""
@@ -1147,6 +1227,18 @@ class JobQueue:
         self._queue = new_queue
         heapq.heapify(self._queue)
 
+    def _prune_jobs(self, job_ids: Iterable[str]) -> None:
+        """``_prune_job`` for many terminal jobs with one pass over the heap (the caller holds ``_lock``)."""
+        gone = set(job_ids)
+        if not gone:
+            return
+        for job_id in gone:
+            self._jobs.pop(job_id, None)
+            self._dependency_cache.pop(job_id, None)
+            self._claimed_counters.pop(job_id, None)
+        self._queue = [entry for entry in self._queue if entry[2] not in gone]
+        heapq.heapify(self._queue)
+
     def _prune_job(self, job_id: str) -> None:
         """Remove a terminal job from the queue heap."""
         self._jobs.pop(job_id, None)
@@ -1162,6 +1254,11 @@ class JobQueue:
 
     def coalesce_state_notifications(self) -> _QueueStateNotificationBatch:
         return _QueueStateNotificationBatch(self)
+
+    def is_coalescing_state_notifications(self) -> bool:
+        """True while a ``coalesce_state_notifications`` batch is open (listeners run once, when it closes)."""
+        with self._lock:
+            return self._state_notifications_suppressed > 0
 
     def wake_worker(self) -> None:
         """Wake an idle runner (state changed, or the runner must re-check its stop condition)."""

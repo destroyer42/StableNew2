@@ -180,6 +180,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `job_service_auto_run.py`: Continuous-dispatch policy owned by the JobService boundary
 - `job_service_dispatch.py`: Request one queued dispatch with auto-run off or start the worker with auto-run on
 - `job_service_outage.py`: WebUI outage and GPU device-loss containment owned at the JobService boundary (PR-QUEUE-WEBUI-171, PR-QUEUE-G…
+- `job_service_queue_batch.py`: Batch behaviour of the JobService queue boundary (QUEUE-MULTI): one queue-updated event per batch, batched re…
 - `job_service_shutdown.py`: Shutdown admission fence and runner quiescence owned at the JobService boundary (PR-RUNTIME-SHUTDOWN-140)
 - `masked_edit_service.py`: Prepare one masked Review edit with the existing builder and reprocess admission boundary
 - `movie_clips_submission_service.py`: Movie Clips admission (PR-VID-ASM-332): the tab's request becomes one queued assembly job
@@ -226,6 +227,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `pack_model_batch_service.py`: N5: packs x models batch builder - plan, count, estimate and queue one named batch on the existing path
 - `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
 - `queue_projection.py`: Build the queue projection, converting each job's immutable NJR into its summary only once (RUN-LEAN)
+- `queue_removal.py`: Batched queue removal on a tracked worker (QUEUE-MULTI), so Clear All and Remove selected never block Tk
 - `run_submission_service.py`: Bridge GUI run requests and witnessed previews to the queue submission worker
 - `runtime_projection_coordinator.py`: Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink
 - `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
@@ -300,6 +302,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `klein_lora_selection_dialog.py`: One batch review of ordered verified candidates, on the Tk thread only
 - `layout_v2.py`: Apply shared Tk grid rules and reversible compact layout adjustments to workspace widgets
 - `learning_state.py`: Define serializable Learning experiment, variant, and image-reference state
+- `licence_attestation_dialog.py`: The desktop's per-job licence confirmation (VID-CAND-LTX25), asked at Queue and never saved
 - `live_update_dialog.py`: Desktop control for the live update (LAUNCH-UPDATE-1): Update and restart, the remote-update switch, the rece…
 - `log_trace_panel_v2.py`: Trace and operator log panel for GUI V2
 - `main_window.py`: Expose the GUI entrypoint wrapper used by existing callers and tests
@@ -1057,6 +1060,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `frame_retention.py`: Move a clip's retained PNG frames to the Recycle Bin 7 days after the clip exists
 - `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
 - `history_media_projection.py`: Read-only media-selection decisions over existing Job History entries
+- `licence_attestation.py`: The per-job licence attestation (owner decision 2026-11-28, VID-CAND-LTX25)
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
 - `managed_comfy_runtime.py`: Read-only production view of the StableNew-managed ComfyUI runtime contract
 - `motion_alignment.py`: Typed spatial alignment of a driving clip to a source image (PR-VID-MOTION-420)

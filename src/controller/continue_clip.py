@@ -181,6 +181,7 @@ def continue_clip(
     experimental_opt_in: bool = False,
     motion_intent: Mapping[str, Any] | None = None,
     admit: Callable[[list[Any]], Sequence[str]] | None = None,
+    licence_attestation: Mapping[str, Any] | None = None,
 ) -> ContinueResult:
     """Queue one take that continues ``clip`` from its last frame (or ``frame_index``, 0-based).
 
@@ -219,6 +220,7 @@ def continue_clip(
             experimental_opt_in=experimental_opt_in,
             frame_count=frame_count,
             motion_intent=motion_intent,
+            licence_attestation=licence_attestation,
         ),
         admit=admit,
     )

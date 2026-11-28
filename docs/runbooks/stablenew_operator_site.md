@@ -111,7 +111,9 @@ Use the native Windows Review workspace to archive or restore images.
 With matching Site and desktop builds, open a verified Library image or album and choose **Make Video or evaluate**.
 Select up to 16 images. **Make Video** uses one compatible image-to-video workflow. **Controlled evaluation** uses
 one baseline and up to three candidates on the same images, motion prompt, seed and frame count. Enter a shared
-negative prompt if the selected workflows have different defaults. Each experimental arm needs its own opt-in.
+negative prompt if the selected workflows have different defaults. Each experimental arm needs its own opt-in. An LTX-2.5 arm also needs the user's licence confirmation: the desktop sends
+the sentence and its version in `video-options` and refuses an arm that does not send that version back
+(`licence_attestation_required`). A Site build that does not do this cannot queue LTX-2.5.
 Review the exact count, generation dimensions, catalog model files, graph revision, frame count and FPS before
 queueing. The phone uses the same queue receipt for these jobs. Prepared sources and run manifests live in shared
 Output. Workflow dependencies and runtime readiness are checked through the normal Windows execution path.

@@ -25,6 +25,7 @@ from src.controller.continue_clip import (
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.controller.storyboard_submission_service import StoryboardSubmissionService
 from src.pipeline.policy_warnings import PolicyWarning
+from src.video.licence_attestation import attestation_record, declared_attestation
 from src.video.motion_intent import compose_prompt
 from src.video.rife_runtime import find_rife_executable
 from src.video.storyboard_import import resolve_known_clip
@@ -118,6 +119,8 @@ def compile_continuation(
     if not clip.takes_storyboard:
         return _from_last_frame(service, root, clip, prompt, seed, video=video)
     spec = service.registry.get(clip.workflow_id, clip.workflow_version or None)
+    # VID-CAND-LTX25: the phone's confirm of a summary that states the sentence is the operator's attestation.
+    attestation = declared_attestation(clip.workflow_id)
 
     def build(admit: AdmitRecords) -> list[str]:
         result = continue_clip(
@@ -127,6 +130,7 @@ def compile_continuation(
             seed=str(seed),
             experimental_opt_in=clip.experimental,
             admit=admit,
+            licence_attestation=None if attestation is None else attestation_record(attestation),
         )
         return list(result.job_ids)
 
@@ -136,6 +140,7 @@ def compile_continuation(
             f"Continues from the clip's last frame, in {where}.",
             " · ".join(part for part in (clip.workflow_label, _length(clip), "new seed") if part),
             f"Prompt: {_shown(prompt)}",
+            *(() if attestation is None else (attestation.text,)),
         ),
         warnings=accepted_workflow_warnings(spec, opted_in=clip.experimental),
         identity=(
@@ -146,6 +151,7 @@ def compile_continuation(
             str(clip.frame_count),
             prompt,
             digest,
+            *(() if attestation is None else (attestation.version,)),
         ),
         build=build,
     )

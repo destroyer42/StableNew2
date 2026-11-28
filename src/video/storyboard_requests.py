@@ -33,6 +33,8 @@ class ContinueRequest:
     mode: Mode
     rows: tuple[ContinueRow, ...]
     experimental_opt_in: bool = False
+    #: The operator's licence confirmation for this Continue (``src/video/licence_attestation.py``); never saved.
+    licence_attestation: Mapping[str, Any] | None = None
     #: V1-6: each take's length; ``None`` inherits the root's.
     frame_count: int | None = None
     #: V1-6: the provenance-only motion intent record of the takes (D5); admission never reads it.

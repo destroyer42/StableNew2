@@ -37,6 +37,7 @@ from PIL import Image, ImageOps
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.njr_core_v26 import thaw_json
+from src.video.licence_attestation import with_attestation
 from src.video.seedvr2_upscale import upscale_warning
 from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
 from src.video.video_workflow_intent import (
@@ -754,7 +755,13 @@ class VideoWorkflowBatchService:
 
     # ------------------------------------------------------------------ admission
 
-    def admit(self, plan: BatchPlan, job_service: Any) -> BatchAdmissionResult:
+    def admit(
+        self,
+        plan: BatchPlan,
+        job_service: Any,
+        *,
+        attestation: Mapping[str, Any] | None = None,
+    ) -> BatchAdmissionResult:
         """Re-verify frozen inputs, then cross ``JobService.submit_njrs`` exactly once."""
 
         if not plan.eligible:
@@ -783,7 +790,8 @@ class VideoWorkflowBatchService:
                     "A job from this batch already exists in the queue; nothing new was queued."
                 )
             try:
-                submitted = submit(list(plan.njrs), SubmissionPolicy())
+                njrs = [with_attestation(njr, attestation) for njr in plan.njrs]
+                submitted = submit(njrs, SubmissionPolicy())
             except Exception as exc:
                 present = _durable_ids(job_service, ids)
                 if present and len(present) == len(ids):

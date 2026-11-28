@@ -19,8 +19,8 @@ handoff keeps it:
 
 * ``default``: always offered (every approved workflow, and the experimental engines that are the only kind
   for a task, such as the driving-clip engines);
-* ``experimental_only``: unrated speed arms and superseded alternative arms, offered only with Show
-  experimental;
+* ``experimental_only``: unrated speed arms, superseded alternative arms and experimental options (LTX-2.5,
+  which also needs the per-job confirmation in ``licence_attestation.py``), offered only with Show experimental;
 * ``retired``: never offered (Wan-Animate-2 prompt mode failed every run).  It stays registered.
 """
 
@@ -67,10 +67,13 @@ _PICKER_TIERS: Mapping[str, PickerTier] = {
         TIER_EXPERIMENTAL_ONLY, "Unrated candidate arm (HunyuanVideo 1.5, 12 steps)."
     ),
     "ltx25_distilled_i2v_v1": PickerTier(
-        TIER_EXPERIMENTAL_ONLY, "Unrated candidate (LTX-2.5 distilled, silent)."
+        TIER_EXPERIMENTAL_ONLY,
+        "Experimental option (owner, 2026-11-28): LTX-2.5 distilled, silent; screened once, not qualified. "
+        "Queueing needs the licence confirmation.",
     ),
     "ltx25_distilled_i2v_audio_v1": PickerTier(
-        TIER_EXPERIMENTAL_ONLY, "Unrated candidate (LTX-2.5 distilled, with audio)."
+        TIER_EXPERIMENTAL_ONLY,
+        "Unrated candidate (LTX-2.5 distilled, with audio). Queueing needs the licence confirmation.",
     ),
 }
 
