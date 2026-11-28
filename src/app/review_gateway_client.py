@@ -14,6 +14,7 @@ import http.client
 import ssl
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, BinaryIO, Protocol
 from urllib.parse import urlencode
 
@@ -52,6 +53,7 @@ ROUTES = {
     "withdrawals": "/sync/v1/withdrawals",
     "item_sources": "/sync/v1/item-sources",
     "choice_catalog": "/sync/v1/choice-catalog",
+    "open_timings": "/sync/v1/open-timings",
 }
 #: The gateway's refusal codes for a deploy request (DEPLOY-2) that the operator tool explains.
 DEPLOY_REFUSALS = frozenset({"remote_deploy_disabled", "deploy_pending"})
@@ -59,6 +61,10 @@ CONNECT_TIMEOUT = 5.0
 IO_TIMEOUT = 15.0
 UPLOAD_TIMEOUT = 120.0
 _SMALL_RESPONSE = 64 * 1024
+#: Where a phone image's bytes came from (PHONE-FAST gate).
+OPEN_SOURCES = ("network", "cache", "prefetch", "unknown")
+#: Twice what the gateway keeps: a reply that never ends is not followed forever.
+_MAXIMUM_OPEN_TIMINGS = 200_000
 
 
 class GatewayError(Exception):
@@ -86,6 +92,20 @@ class GatewayRejected(GatewayError):
 
 
 ITEM_STATES = frozenset({"ready", "incomplete", "purged"})
+
+
+def _open_timing(row: object) -> bool:
+    if not isinstance(row, dict) or set(row) != {"at", "ms", "source", "bytes"}:
+        return False
+    at, ms, size = row["at"], row["ms"], row["bytes"]
+    if not (type(ms) is int and ms >= 0 and row["source"] in OPEN_SOURCES):
+        return False
+    if not (size is None or (type(size) is int and size >= 0)) or not isinstance(at, str):
+        return False
+    try:
+        return datetime.fromisoformat(at).tzinfo is not None
+    except ValueError:
+        return False
 
 
 @dataclass(frozen=True)
@@ -384,6 +404,38 @@ class GatewayClient:
             return False
         self._require(response, 200, 201)
         return True
+
+    # -- measurements (PHONE-FAST gate, tools/gate_report.py only; the sync worker never calls this) --------------
+
+    def open_timings(self) -> list[dict[str, Any]] | None:
+        """Every phone image open time the gateway holds, oldest first; ``None`` while it does not offer them."""
+
+        rows: list[dict[str, Any]] = []
+        cursor = 0
+        while True:
+            path = f"{ROUTES['open_timings']}?cursor={cursor}"
+            response = self._call("GET", path, limit=MAX_PAGE_BYTES)
+            if response.status == 404:
+                return None
+            reply = self._json(self._require(response, 200))
+            if (
+                not isinstance(reply, dict)
+                or "next_cursor" not in reply
+                or not isinstance(reply.get("rows"), list)
+                or not all(_open_timing(row) for row in reply["rows"])
+            ):
+                raise GatewayError("invalid_gateway_response")
+            rows.extend(reply["rows"])
+            following = reply["next_cursor"]
+            if following is None:
+                return rows
+            if (
+                type(following) is not int
+                or following <= cursor
+                or len(rows) > _MAXIMUM_OPEN_TIMINGS
+            ):
+                raise GatewayError("invalid_gateway_response")
+            cursor = following
 
     # -- rating (RG-170) -------------------------------------------------------------------------------------------
 

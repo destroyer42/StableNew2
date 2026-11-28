@@ -21,6 +21,8 @@ from .media import is_digest
 from .rating_routes import sync_rating_routes
 from .rating_store import RatingStore
 from .store import Store
+from .timing_routes import sync_timing_routes
+from .timing_store import TimingStore
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
 PAGE_DEFAULT = 200
@@ -82,6 +84,7 @@ def build_sync_app(
     secret: bytes,
     deploys: DeployInbox | None,
     ratings: RatingStore,
+    timings: TimingStore,
 ) -> Starlette:
     async def payload(request: Request, name: str) -> dict:
         body = await read_json(request)
@@ -218,6 +221,7 @@ def build_sync_app(
             Route("/sync/v1/deploy-status", deploy_status, methods=["GET"]),
             Route("/sync/v1/pc-status", pc_status, methods=["PUT"]),
             *sync_rating_routes(ratings),
+            *sync_timing_routes(timings),
             Route("/sync/v1/withdrawals", withdrawals, methods=["POST"]),
             Route("/sync/v1/item-sources", item_sources, methods=["POST"]),
             Route("/sync/v1/choice-catalog", choice_catalog, methods=["PUT"]),
