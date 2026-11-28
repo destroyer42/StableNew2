@@ -397,18 +397,25 @@ def test_on_window_map_restores_visible_geometry_after_minimize() -> None:
     assert window.root.geometry() == visible_geometry
 
 
-def test_child_widget_events_do_no_window_geometry_work() -> None:
+def test_many_widget_events_cost_one_visibility_check_per_idle_turn() -> None:
     """Tk delivers every descendant's <Configure>/<Map> to a binding on the toplevel (STARTUP-STALL-2)."""
     window = MainWindowV2.__new__(MainWindowV2)
     window.root = _StubRoot("1984x1110+-32000+-32000")
-    window._last_visible_window_geometry = f"{DEFAULT_GEOMETRY}+140+90"
+    visible_geometry = f"{DEFAULT_GEOMETRY}+140+90"
+    window._last_visible_window_geometry = visible_geometry
+    scheduled: list = []
+    window.root.after_idle = scheduled.append  # type: ignore[attr-defined]
     child_event = SimpleNamespace(widget=object())
 
-    window._on_window_configure(child_event)
-    window._on_window_map(child_event)
+    for _ in range(40):
+        window._on_window_configure(child_event)  # a child cannot move the root: nothing to capture
+        window._on_window_map(child_event)
 
-    assert window.root.geometry() == "1984x1110+-32000+-32000"
-    assert window.root.deiconified == 0
+    assert len(scheduled) == 1 and window.root.deiconified == 0
+    scheduled.pop()()
+    assert window.root.geometry() == visible_geometry  # the check still happens
+    window._on_window_map(child_event)
+    assert len(scheduled) == 1  # and the next batch gets its own
 
 
 def _pump_until(root: tk.Tk, ready, timeout: float = 5.0) -> None:
@@ -422,7 +429,7 @@ def _pump_until(root: tk.Tk, ready, timeout: float = 5.0) -> None:
         time.sleep(0.01)
 
 
-def test_root_bindings_ignore_descendants_and_still_see_the_root() -> None:
+def test_root_bindings_do_not_work_once_per_descendant() -> None:
     root = create_root()
     try:
         window = MainWindowV2.__new__(MainWindowV2)
@@ -438,8 +445,8 @@ def test_root_bindings_ignore_descendants_and_still_see_the_root() -> None:
         root.geometry("640x900+10+10")
         root.deiconify()
         _pump_until(root, lambda: "restore" in calls and "capture" in calls)  # the root's own events
-        assert calls.count("restore") == 1
-        assert calls.count("capture") <= 6  # was one per descendant (40+)
+        assert 1 <= calls.count("restore") <= 10  # was one per descendant (41)
+        assert calls.count("capture") <= 6
 
         calls.clear()
         # ``withdraw`` unmaps with or without a window manager; ``iconify`` does not on a bare X server (CI's Xvfb),

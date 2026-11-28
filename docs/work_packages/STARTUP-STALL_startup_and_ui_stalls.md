@@ -92,19 +92,28 @@ calling, not because it is slow by itself.
 
 ### Changes
 
-1. **Window-geometry handlers run for the root only** (`main_window_v2.py`). A binding on the Tk root also receives
-   every descendant's `<Configure>` and `<Map>`, so each widget re-checked the window's visibility. This also ran on
-   every later resize, tab switch and queue row change (samples in groups D, G and J show `wm_state`, `deletecommand`
-   and `winfo_screenwidth` under these handlers or their `after_idle`; the group D link is inference).
+1. **Window-geometry handlers no longer work once per widget** (`main_window_v2.py`). A binding on the Tk root also
+   receives every descendant's `<Configure>` and `<Map>`. A descendant's `<Configure>` cannot move the window, so only
+   the root's own is captured. A descendant's `<Map>` still re-checks that the window is on screen, as before (a tab
+   switch pulls an off-screen window back), but once per idle turn instead of once per widget. This also runs on later
+   resizes, tab switches and queue row changes (samples in groups D, G and J show `wm_state`, `deletecommand` and
+   `winfo_screenwidth` under these handlers or their `after_idle`; the group D link is inference).
 
-   Test harness (3,003 widgets, isolated state, three runs each, other startup threads not controlled):
+   Test harness (3,003 widgets, isolated state), only `main_window_v2.py` swapped between before and after:
 
    | | Before | After |
    |---|---|---|
-   | Visibility handler calls, build + first update | 3,900 configure checks, 1,121 map checks | 4 and 1 |
-   | Tcl `call` + `createcommand`, build + first update | 41,700 | 19,800 |
-   | First `update()` wall, median | 2.33 s | 2.01 s |
-   | Visit every tab once, median wall | 6.87 s | 3.81 s |
+   | Visibility checks, build + first update | 1,121 | 16 |
+   | Geometry captures, build + first update | 3,900 | 18 |
+   | Tcl `call` + `createcommand`, build + first update | 41,646 | 19,868 |
+   | First `update()` wall, three runs | 1.38, 1.62, 1.63 s | 1.50, 1.28, 1.36 s |
+   | Visit every tab once, three runs | 3.08, 4.26, 3.61 s | 3.87, 3.27, 3.72 s |
+
+   With no competing thread the wall times show no reliable difference. The gain expected is in Tk calls made while
+   other startup threads run, and that is not measured.
+
+   Noticed, unchanged: the on-screen check uses the primary monitor's size, so a window on a second monitor counts as
+   off screen and is pulled back on a tab switch or restore.
 
 2. **Generation profile strip** (group I): working values are read on Tk; the profile store, evidence catalog and asset
    registry reads run on a tracked worker, one at a time, newest result only. Behaviour change: the strip redraws a
