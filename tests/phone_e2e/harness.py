@@ -161,7 +161,12 @@ class TestGateway:
         release.mkdir(exist_ok=True)
         (release / "source.json").write_text(json.dumps({"commit": commit}), encoding="utf-8")
         app = build_phone_app(
-            self.store, self.clock, self.gateway.ratings, release, static_root=static_root
+            self.store,
+            self.clock,
+            self.gateway.ratings,
+            self.gateway.timings,
+            release,
+            static_root=static_root,
         )
         self.stop()
         self._app = app if corrupt is None else _corrupting(app, corrupt)

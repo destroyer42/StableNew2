@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import logging
 from collections.abc import AsyncIterator
+from functools import partial
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
@@ -21,6 +22,8 @@ from .media import is_digest
 from .rating_routes import sync_rating_routes
 from .rating_store import RatingStore
 from .store import Store
+from .timing_routes import sync_timing_routes
+from .timing_store import TimingStore
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
 PAGE_DEFAULT = 200
@@ -82,6 +85,7 @@ def build_sync_app(
     secret: bytes,
     deploys: DeployInbox | None,
     ratings: RatingStore,
+    timings: TimingStore,
 ) -> Starlette:
     async def payload(request: Request, name: str) -> dict:
         body = await read_json(request)
@@ -150,7 +154,10 @@ def build_sync_app(
             raise GatewayError(400, "invalid_cursor") from None
         if not (0 <= after < 2**62 and 1 <= limit <= PAGE_LIMIT):
             raise GatewayError(400, "invalid_cursor")
-        return JSONResponse(await run_in_threadpool(store.outbox_page, after, limit))
+        # PHONE-CORE PP-1: optional device fields the PC says it understands.
+        last_seen = request.query_params.get("device_fields") == "last_seen_at"
+        page = partial(store.outbox_page, after, limit, last_seen=last_seen)
+        return JSONResponse(await run_in_threadpool(page))
 
     async def acknowledgements(request: Request) -> Response:
         body = await payload(request, "acknowledgement")
@@ -218,6 +225,7 @@ def build_sync_app(
             Route("/sync/v1/deploy-status", deploy_status, methods=["GET"]),
             Route("/sync/v1/pc-status", pc_status, methods=["PUT"]),
             *sync_rating_routes(ratings),
+            *sync_timing_routes(timings),
             Route("/sync/v1/withdrawals", withdrawals, methods=["POST"]),
             Route("/sync/v1/item-sources", item_sources, methods=["POST"]),
             Route("/sync/v1/choice-catalog", choice_catalog, methods=["PUT"]),

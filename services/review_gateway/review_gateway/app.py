@@ -12,6 +12,7 @@ from .phone_app import build_phone_app
 from .rating_store import RatingStore
 from .store import Clock, Store, utc_now
 from .sync_app import build_sync_app
+from .timing_store import TimingStore
 from .uploader import Uploader
 
 
@@ -29,12 +30,17 @@ class Gateway:
             cache_warn_bytes=settings.cache_warn_gib * 1024**3,
         )
         self.ratings = RatingStore(self.store)
+        self.timings = TimingStore(settings.data_dir / "timing.sqlite3", clock)
 
     def phone_app(self) -> Starlette:
         release = self.settings.release_dir or running_release()
-        label = self.settings.environment_label
         return build_phone_app(
-            self.store, self.clock, self.ratings, release, environment_label=label
+            self.store,
+            self.clock,
+            self.ratings,
+            self.timings,
+            release,
+            environment_label=self.settings.environment_label,
         )
 
     def sync_app(self) -> Starlette:
@@ -49,10 +55,11 @@ class Gateway:
             read_secret(self.settings.secret_file),
             deploys,
             self.ratings,
+            self.timings,
         )
 
     def uploader(self) -> Uploader:
         return Uploader(self.store, self.settings.immich_url, self.settings.immich_key_path)
 
     def retention(self) -> dict[str, int]:
-        return {**self.store.retention(), **self.ratings.retention()}
+        return {**self.store.retention(), **self.ratings.retention(), **self.timings.retention()}

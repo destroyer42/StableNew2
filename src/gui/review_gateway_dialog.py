@@ -12,9 +12,17 @@ from collections.abc import Callable
 from tkinter import messagebox, ttk
 from typing import Any
 
+from src.app.review_gateway_store import pairing_link
 from src.app.review_gateway_sync import ReviewGatewaySync, SyncStatus
+from src.utils.qr_code import qr_modules
 
 _REFRESH_MS = 1000
+#: PHONE-CORE PP-1: the QR is drawn in black on white whatever the theme, with the four-module quiet zone.
+_QR_QUIET = 4
+_QR_PIXELS = 220
+_NO_PHONE_ADDRESS = (
+    "Enter the phone app address to show a QR code as well. The typed code works without it."
+)
 _REASONS = {
     "digest_mismatch": "file changed since it was published",
     "unknown_item": "item not found",
@@ -52,6 +60,9 @@ class ReviewGatewayDialog:
         self._allow_queue: tk.BooleanVar | None = None
         self._pairing_scope = "review and queueing"
         self._devices: ttk.Treeview | None = None
+        self._qr: tk.Canvas | None = None
+        #: The link the canvas shows now. It holds the pairing code: never log or save it.
+        self._qr_link = ""
 
     def open(self) -> None:
         if self._dialog is not None and self._dialog.winfo_exists():
@@ -64,8 +75,19 @@ class ReviewGatewayDialog:
         panel.pack(fill="both", expand=True)
         self._vars = {
             name: tk.StringVar(master=dialog)
-            for name in ("address", "fingerprint", "secret", "status", "counts", "code", "refusals")
+            for name in (
+                "address",
+                "fingerprint",
+                "secret",
+                "status",
+                "counts",
+                "code",
+                "refusals",
+                "phone_address",
+                "qr_note",
+            )
         }
+        self._vars["phone_address"].set(self._sync.phone_address())
         settings = ttk.LabelFrame(panel, text="Gateway (from its install output)", padding=8)
         settings.pack(fill="x")
         for row, (label, name, hidden) in enumerate(
@@ -95,6 +117,13 @@ class ReviewGatewayDialog:
 
         pairing = ttk.LabelFrame(panel, text="Phones", padding=8)
         pairing.pack(fill="both", expand=True, pady=(12, 0))
+        where = ttk.Frame(pairing)
+        where.pack(fill="x", pady=(0, 6))
+        ttk.Label(where, text="Phone app address (https://…)").pack(side="left")
+        ttk.Entry(where, textvariable=self._vars["phone_address"]).pack(
+            side="left", fill="x", expand=True, padx=8
+        )
+        ttk.Button(where, text="Save address", command=self.save_phone_address).pack(side="left")
         top = ttk.Frame(pairing)
         top.pack(fill="x")
         ttk.Button(top, text="Pair a phone", command=self.pair).pack(side="left")
@@ -110,14 +139,24 @@ class ReviewGatewayDialog:
             text="Allow queueing on phone (fix face or hands, more like this)",
             variable=self._allow_queue,
         ).pack(anchor="w", pady=(6, 0))
+        # The QR sits here, only while there is a live code and an address to point it at.
+        qr = ttk.Frame(pairing)
+        qr.pack(fill="x")
+        self._qr = tk.Canvas(qr, background="white", highlightthickness=0, borderwidth=0)
+        self._qr_link = ""
+        ttk.Label(qr, textvariable=self._vars["qr_note"], wraplength=460).pack(anchor="w")
         devices = self._devices = ttk.Treeview(
-            pairing, columns=("label", "enrolled", "access", "state"), show="headings", height=5
+            pairing,
+            columns=("label", "enrolled", "access", "state", "seen"),
+            show="headings",
+            height=5,
         )
         for column, heading, width in (
             ("label", "Phone", 160),
             ("enrolled", "Paired", 160),
             ("access", "Access", 150),
             ("state", "State", 80),
+            ("seen", "Last seen", 160),
         ):
             devices.heading(column, text=heading)
             devices.column(column, width=width, anchor="w")
@@ -145,7 +184,54 @@ class ReviewGatewayDialog:
             self._timer = None
         if self._dialog is not None:
             self._dialog.destroy()
-        self._dialog = self._devices = None
+        self._dialog = self._devices = self._qr = None
+        self._qr_link = ""
+
+    def save_phone_address(self) -> None:
+        try:
+            self._sync.set_phone_address(self._vars["phone_address"].get())
+        except ValueError as error:
+            messagebox.showerror("Phone review gateway", str(error), parent=self._parent())
+            return
+        except OSError:
+            messagebox.showerror(
+                "Phone review gateway", "The address could not be saved.", parent=self._parent()
+            )
+            return
+        self._vars["phone_address"].set(self._sync.phone_address())
+        self.render(self._sync.status())
+
+    def _show_qr(self, code: str) -> None:
+        """Draw the pairing link's QR, or remove it. It is drawn on screen only: never a file or a log line."""
+
+        canvas = self._qr
+        if canvas is None:
+            return
+        address = self._sync.phone_address() if code else ""
+        link = pairing_link(address, code) if address else ""
+        self._vars["qr_note"].set(_NO_PHONE_ADDRESS if code and not address else "")
+        if link == self._qr_link:
+            return
+        self._qr_link = link
+        canvas.delete("all")
+        canvas.pack_forget()
+        if not link:
+            return
+        modules = qr_modules(
+            link
+        )  # always fits: a checked address is far inside a symbol's capacity
+        side = len(modules) + 2 * _QR_QUIET
+        unit = max(2, _QR_PIXELS // side)
+        canvas.configure(width=side * unit, height=side * unit)
+        for row, cells in enumerate(modules):
+            top = (row + _QR_QUIET) * unit
+            for column, dark in enumerate(cells):
+                if dark:
+                    left = (column + _QR_QUIET) * unit
+                    canvas.create_rectangle(
+                        left, top, left + unit, top + unit, fill="black", width=0, tags="dark"
+                    )
+        canvas.pack(anchor="w", pady=(8, 0), before=canvas.master.pack_slaves()[0])
 
     def save(self) -> None:
         values = {name: self._vars[name].get() for name in ("address", "fingerprint", "secret")}
@@ -168,7 +254,8 @@ class ReviewGatewayDialog:
         if self._dialog is None or not self.confirm(
             self._dialog,
             "Phone review gateway",
-            "Forget the gateway address and sync secret? Paired phones stay paired on the gateway.",
+            "Forget the gateway and phone app addresses and the sync secret? Paired phones stay paired on "
+            "the gateway.",
         ):
             return
         try:
@@ -179,6 +266,7 @@ class ReviewGatewayDialog:
                 "Windows could not remove the settings.",
                 parent=self._parent(),
             )
+        self._vars["phone_address"].set(self._sync.phone_address())
         self.refresh()
 
     def pair(self) -> None:
@@ -212,6 +300,7 @@ class ReviewGatewayDialog:
             )
             return
         self._vars["code"].set(f"Code: {code}  (5 minutes, {self._pairing_scope})")
+        self._show_qr(code)
 
     def toggle_queue_selected(self) -> None:
         devices = self._devices
@@ -278,6 +367,7 @@ class ReviewGatewayDialog:
             )
         elif self._vars["code"].get():
             self._vars["code"].set("")
+        self._show_qr(status.pairing_code)
         devices = self._devices
         if devices is None:
             return
@@ -295,6 +385,7 @@ class ReviewGatewayDialog:
                     if scope in device.scopes
                 ),
                 "revoked" if device.revoked else "active",
+                device.last_seen_at or "not reported",
             )
             if devices.exists(device.device_id):
                 devices.item(device.device_id, values=values)

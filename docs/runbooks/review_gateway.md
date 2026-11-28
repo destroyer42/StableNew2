@@ -270,7 +270,9 @@ Deleting a phone Keep afterwards does not remove it from Immich: delete it there
 ## Pair and revoke phones
 
 Pairing starts on the desktop (RG-120): it shows a single-use code that lasts five minutes. Open the phone app and enter
-it. Revoke from the desktop, or on the gateway while the PC is off:
+it, or scan the QR code. The QR appears once **Phone app address** (the `https://` address phones open) has been saved
+in the same dialog; a scan opens the pairing screen with the code filled in, and you still press **Pair this phone**.
+**Last seen** in the phone list helps pick out old entries to revoke. Revoke from the desktop, or on the gateway while the PC is off:
 
 ```bash
 review-gateway-admin devices

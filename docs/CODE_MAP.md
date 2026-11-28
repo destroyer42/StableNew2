@@ -1016,6 +1016,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `prompt_packs.py`: Prompt pack discovery and descriptors for Architecture_v2
 - `prompt_templates.py`: Load and cache prompt templates and compose text from named placeholder values
 - `prompt_txt_parser.py`: Utilities for parsing prompt pack TXT files into structured components
+- `qr_code.py`: QR symbols for the application (PHONE-CORE PP-1): the vendored encoder behind one function
 - `randomizer.py`: Prompt randomization utilities for txt2img pipeline
 - `recycle_bin.py`: Move files to the Windows Recycle Bin, and say beforehand when it cannot take them (KEEP-SPACE)
 - `retry_policy_v2.py`: Retry policy definitions for StableNew WebUI interactions
@@ -1028,6 +1029,11 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `webui_discovery.py`: One-shot WebUI API health summary used by ``SDWebUIClient.check_api_ready``
 - `webui_resource_names.py`: Normalize WebUI resource suffixes and VAE display values for lookup and comparison
 - `win_jobobject.py`: Bind Windows Job Object APIs for child process containment, limits, observation, and teardown
+
+## src/utils/vendor/
+
+- `__init__.py`: Third-party files vendored unchanged; see README.md in this directory
+- `qrcodegen.py`: (no docstring)
 
 ## src/video/
 

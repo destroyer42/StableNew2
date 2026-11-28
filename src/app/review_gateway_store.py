@@ -64,7 +64,7 @@ def read_published_image_digests(path: Path | None = None) -> set[str] | None:
     return {str(row[0]).lower() for row in rows}
 
 
-def parse_address(text: str) -> tuple[str, int]:
+def parse_address(text: str, default_port: int = DEFAULT_PORT) -> tuple[str, int]:
     """``host`` or ``host:port`` (an IPv6 literal in brackets), optionally written as the ``https://host:port`` sync
     URL the gateway installer prints (one trailing ``/`` allowed). No other scheme, no path, user or query."""
 
@@ -75,7 +75,7 @@ def parse_address(text: str) -> tuple[str, int]:
             value = value[:-1]
     if not value or len(value) > 255 or any(char in value for char in "/\\@?#% \t"):
         raise ValueError("Enter the gateway address as host:port or https://host:port.")
-    port = DEFAULT_PORT
+    port = default_port
     if value.startswith("["):
         host, _, rest = value[1:].partition("]")
         if rest:
@@ -96,6 +96,32 @@ def parse_address(text: str) -> tuple[str, int]:
     if not all(_HOST_LABEL.fullmatch(label) for label in labels):
         raise ValueError("Enter the gateway address as host:port or https://host:port.")
     return value.rstrip(".").lower(), port
+
+
+def normalize_phone_address(text: str) -> str:
+    """``https://host[:port]`` of the phone app, or "" for none (PHONE-CORE PP-1).
+
+    Only https, with no path, user, query or fragment: the pairing code is appended to it and shown as a QR.
+    """
+
+    value = text.strip().removesuffix("/")
+    if not value:
+        return ""
+    try:
+        host, port = parse_address(value, default_port=443)
+    except ValueError:
+        raise ValueError(
+            "Enter the phone app address as https://host or https://host:port."
+        ) from None
+    if ":" in host:
+        host = f"[{host}]"
+    return f"https://{host}" if port == 443 else f"https://{host}:{port}"
+
+
+def pairing_link(phone_address: str, code: str) -> str:
+    """What the QR holds. The code is in the fragment, which a browser never sends to a server."""
+
+    return f"{phone_address}/#/pair/{code}"
 
 
 def _port(text: str) -> int:
@@ -234,6 +260,7 @@ CREATE TABLE IF NOT EXISTS devices (
     device_id TEXT PRIMARY KEY, offer_id TEXT NOT NULL, scopes TEXT NOT NULL, label TEXT NOT NULL,
     enrolled_at TEXT NOT NULL, revoked_at TEXT, revocation_sent INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS device_seen (device_id TEXT PRIMARY KEY, last_seen_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS discards (
     library_id TEXT NOT NULL, sha256 TEXT NOT NULL, rel_path TEXT NOT NULL, record_id TEXT NOT NULL,
     PRIMARY KEY (library_id, sha256)
@@ -268,6 +295,8 @@ class Device:
     enrolled_at: str
     revoked_at: str | None
     revocation_sent: bool
+    #: PHONE-CORE PP-1: as the gateway reported it; empty until it has.
+    last_seen_at: str = ""
 
     @property
     def revoked(self) -> bool:
@@ -693,14 +722,29 @@ class SyncLedger:
             )
             return True
 
+    # Last-seen times have their own table, so an app from before PP-1 can still write ``devices``.
+    _DEVICE_ROWS = (
+        "SELECT devices.*, device_seen.last_seen_at FROM devices"
+        " LEFT JOIN device_seen USING (device_id)"
+    )
+
     def device(self, device_id: str) -> Device | None:
-        rows = self._read("SELECT * FROM devices WHERE device_id = ?", (device_id,))
+        rows = self._read(f"{self._DEVICE_ROWS} WHERE devices.device_id = ?", (device_id,))
         return self._device(rows[0]) if rows else None
 
     def devices(self) -> list[Device]:
         return [
-            self._device(row) for row in self._read("SELECT * FROM devices ORDER BY enrolled_at")
+            self._device(row)
+            for row in self._read(f"{self._DEVICE_ROWS} ORDER BY devices.enrolled_at")
         ]
+
+    def note_device_seen(self, device_id: str, at: str) -> None:
+        with self._transaction() as db:
+            db.execute(
+                "INSERT INTO device_seen VALUES (?, ?)"
+                " ON CONFLICT(device_id) DO UPDATE SET last_seen_at = excluded.last_seen_at",
+                (device_id, at),
+            )
 
     @staticmethod
     def _device(row: sqlite3.Row) -> Device:
@@ -712,6 +756,7 @@ class SyncLedger:
             str(row["enrolled_at"]),
             None if row["revoked_at"] is None else str(row["revoked_at"]),
             bool(row["revocation_sent"]),
+            str(row["last_seen_at"] or ""),
         )
 
     def set_device_queue(self, device_id: str, allowed: bool) -> bool:

@@ -767,6 +767,11 @@ and `rating.js` are on the cap exception list for PC-2 to split. The core pieces
   the "could not reach" screen, not from the header.
 - The 401 wipe of 4.3 has nothing to wipe yet: nothing authenticated is stored until PW-2.
 
+**As built, PP-1:** the QR's address is the desktop's own **Phone app address** setting, which the owner enters once
+(the PC knows only the gateway's LAN sync address). `last_seen_at` is sent only to a PC that asks for it
+(`device_fields=last_seen_at`), so neither side has to be updated first. `core/` was not edited. Behaviour:
+`REVIEW_GATEWAY.md` section 3.8.
+
 Order on the critical path:
 
 ```

@@ -519,3 +519,30 @@ def test_immich_receipts_are_parsed_strictly():
     assert parse_immich_receipt(receipt).favorite is True
     with pytest.raises(ProtocolError):
         parse_immich_receipt({**receipt, "status": "deleted"})
+
+
+def test_an_enrolled_device_may_carry_when_it_was_last_seen():
+    """PHONE-CORE PP-1: optional, so a gateway from before it is still understood."""
+
+    device = {
+        "device_id": "device-0001",
+        "offer_id": "11111111-2222-4333-8444-555555555555",
+        "enrolled_at": "2026-11-25T21:30:00Z",
+    }
+    page = {
+        "schema_version": protocol.SCHEMA_VERSION,
+        "type": "outbox_page",
+        "records": [],
+        "next_cursor": None,
+        "enrolled_devices": [device],
+    }
+    assert parse_outbox_page(page).enrolled_devices[0].last_seen_at is None
+
+    page["enrolled_devices"] = [{**device, "last_seen_at": "2026-11-28T08:15:00+00:00"}]
+    seen = parse_outbox_page(page).enrolled_devices[0].last_seen_at
+    assert seen == datetime(2026, 11, 28, 8, 15, tzinfo=UTC)
+    validate_def(page, "outbox_page")
+
+    page["enrolled_devices"] = [{**device, "last_seen_at": "yesterday"}]
+    with pytest.raises(ProtocolError):
+        parse_outbox_page(page)
