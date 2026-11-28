@@ -115,16 +115,13 @@ def run_check(local: Local, sha: str = SHA, tree=served_tree) -> int:
 def test_a_healthy_staging_gateway_passes_and_leaves_no_phone_or_pending_record(
     local, capsys
 ) -> None:
-    from review_gateway.static_files import STATIC_DIR
-
     assert run_check(local) == promote.EXIT_PASS
 
     out = capsys.readouterr().out.rstrip().splitlines()
     assert out[-1] == "PASS"
     assert any("labelled 'Staging'" in line for line in out)
     assert "ok: a seeded item round-trips a decision" in out
-    if not (STATIC_DIR / "sw.js").is_file():
-        assert any(line.startswith("skipped:") and "sw.js" in line for line in out)
+    assert "ok: /sw.js is served" in out
     assert local.active_devices() == []
     page = local.sync.outbox(None)
     assert page["records"] == []
@@ -159,21 +156,28 @@ def test_a_gateway_without_a_label_fails(tmp_path, capsys) -> None:
 
 
 def test_a_missing_service_worker_fails_and_the_temporary_phone_is_still_revoked(
-    local, capsys
+    local, capsys, monkeypatch
 ) -> None:
-    from review_gateway.static_files import STATIC_DIR
+    served = promote.Phone.get
 
-    if (STATIC_DIR / "sw.js").is_file():
-        pytest.skip("this gateway serves a worker; the passing check covers it")
-    expected = promote.expected_page(SHA, "Staging", served_tree)[0]
-    original = promote.expected_page
-    try:
-        promote.expected_page = lambda *_args: (expected, True)  # the commit has sw.js
-        assert run_check(local) == promote.EXIT_FAIL
-    finally:
-        promote.expected_page = original
-    assert "FAIL: /sw.js answered 404" in capsys.readouterr().out
+    def no_worker(phone, path: str, content_type: str) -> bytes:
+        return served(phone, "/gone.js" if path == "/sw.js" else path, content_type)
+
+    monkeypatch.setattr(promote.Phone, "get", no_worker)
+
+    assert run_check(local) == promote.EXIT_FAIL
+    assert "FAIL: /gone.js answered 404" in capsys.readouterr().out
     assert len(local.store.devices()) == 1 and local.active_devices() == []
+
+
+def test_a_commit_without_a_service_worker_says_the_check_was_skipped(
+    local, capsys, monkeypatch
+) -> None:
+    version = promote.expected_page(SHA, "Staging", served_tree)[0]
+    monkeypatch.setattr(promote, "expected_page", lambda *_args: (version, False))
+
+    assert run_check(local) == promote.EXIT_PASS
+    assert "skipped: this commit has no service worker (/sw.js)" in capsys.readouterr().out
 
 
 def test_an_unreachable_phone_page_fails(local, capsys) -> None:

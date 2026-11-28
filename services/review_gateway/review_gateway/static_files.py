@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-#: Only these are published. ``index.html`` is a template and is served at ``/`` instead.
+#: Only these are published under ``/s/<version>/``.
 MEDIA_TYPES = {
     ".js": "text/javascript",
     ".css": "text/css",
@@ -23,6 +23,9 @@ MEDIA_TYPES = {
     ".webmanifest": "application/manifest+json",
 }
 TEMPLATE = "index.html"
+#: PHONE-CORE 2.3: each is served at its own fixed address only, never under ``/s/<version>/``.
+MANIFEST = "manifest.webmanifest"
+WORKER = "sw.js"
 VERSION_MARK = "{{V}}"
 FEATURES_MARK = "{{FEATURES}}"
 STYLES_MARK = "{{STYLES}}"
@@ -41,12 +44,22 @@ class StaticFile:
 
 @dataclass(frozen=True)
 class StaticSite:
-    #: 12 hex digits that change exactly when a published byte, the template or the environment label changes.
+    #: 12 hex digits that change exactly when a byte of the page's files, or the environment label, changes.
     version: str
     #: Published path ("core/main.js") to file.
     files: Mapping[str, StaticFile]
     #: ``index.html`` with the version, the features and their stylesheets written into it.
     index: bytes
+    #: The web app manifest with the version written into its icon addresses; empty when there is none.
+    manifest: bytes
+    #: ``sw.js`` as written; the server puts the version and the commit in front of it. Empty when there is none.
+    worker: bytes
+
+    def shell_digests(self) -> dict[str, str]:
+        """What the service worker stores besides the versioned files, by address, to check it against."""
+
+        pages = {"/": self.index, f"/{MANIFEST}": self.manifest}
+        return {path: hashlib.sha256(body).hexdigest() for path, body in pages.items()}
 
 
 def feature_ids(files: Mapping[str, StaticFile]) -> list[str]:
@@ -63,17 +76,21 @@ def feature_ids(files: Mapping[str, StaticFile]) -> list[str]:
 
 def load_static(root: Path = STATIC_DIR, *, environment_label: str = "") -> StaticSite:
     files = {}
+    fixed = {}
     for path in root.rglob("*"):
         media_type = MEDIA_TYPES.get(path.suffix)
         if media_type is None or path.is_symlink() or not path.is_file():
             continue
         body = path.read_bytes()
-        files[path.relative_to(root).as_posix()] = StaticFile(
-            body, media_type, hashlib.sha256(body).hexdigest()
-        )
+        name = path.relative_to(root).as_posix()
+        if name in (MANIFEST, WORKER):
+            fixed[name] = body
+            continue
+        files[name] = StaticFile(body, media_type, hashlib.sha256(body).hexdigest())
     template = (root / TEMPLATE).read_bytes()
     named = {name: file.sha256 for name, file in files.items()}
-    named[TEMPLATE] = hashlib.sha256(template).hexdigest()
+    for name, body in {TEMPLATE: template, **fixed}.items():
+        named[name] = hashlib.sha256(body).hexdigest()
     badge = ""
     if environment_label:
         badge = f'<span id="environment">{html.escape(environment_label)}</span>'
@@ -92,4 +109,5 @@ def load_static(root: Path = STATIC_DIR, *, environment_label: str = "") -> Stat
         .replace(STYLES_MARK.encode(), styles.encode())
         .replace(ENVIRONMENT_MARK.encode(), badge.encode("utf-8"))
     )
-    return StaticSite(version, files, index)
+    manifest = fixed.get(MANIFEST, b"").replace(VERSION_MARK.encode(), version.encode())
+    return StaticSite(version, files, index, manifest, fixed.get(WORKER, b""))
