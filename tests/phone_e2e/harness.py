@@ -134,6 +134,7 @@ class TestGateway:
         source: str = "pipeline",
         parent: dict[str, str] | None = None,
         colour: int = 0,
+        info: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """Publish one image item with real thumb, preview and original PNGs; return its ``item_ref``."""
 
@@ -160,6 +161,8 @@ class TestGateway:
         }
         if parent is not None:
             manifest["parent"] = parent
+        if info is not None:
+            manifest["info"] = info
         response = self.sync.post("/sync/v1/items", json=manifest)
         assert response.status_code == 200, response.text
         by_digest = {sha(data): data for data in blobs.values()}
