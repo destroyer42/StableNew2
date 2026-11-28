@@ -443,7 +443,8 @@ def test_the_page_has_no_inline_script_or_style_and_loads_only_bundled_files(rig
 
 def test_the_script_renders_metadata_only_as_text_and_calls_no_other_host() -> None:
     script = "".join(
-        (STATIC / name).read_text(encoding="utf-8") for name in ("app.js", "rating.js", "queued.js")
+        (STATIC / name).read_text(encoding="utf-8")
+        for name in ("app.js", "moreinfo.js", "rating.js", "queued.js")
     )
 
     for forbidden in (
@@ -455,7 +456,7 @@ def test_the_script_renders_metadata_only_as_text_and_calls_no_other_host() -> N
         "Function(",
     ):
         assert forbidden not in script, forbidden
-    for name in ("app.js", "queued.js", "app.css", "index.html"):
+    for name in ("app.js", "moreinfo.js", "queued.js", "app.css", "index.html"):
         text = (STATIC / name).read_text(encoding="utf-8")
         assert not re.search(r"(https?:)?//[a-z0-9-]+\.[a-z]", text, re.IGNORECASE), name
 

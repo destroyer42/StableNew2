@@ -105,7 +105,7 @@ Rules:
     (section 3.1); `item_parent`, the manifest's `parent`; `item_withdraw`, the withdrawals route (section 3.0).
     `item_source`, the manifest's `source` and the item-sources route (section 3.4);
     `item_input`, the manifest's `input` and `input_missing` (section 3.6); `deferred_actions`, the choice catalog
-    (section 10).
+    (section 10); `item_info`, the manifest's `info` (section 3.7).
 
 13. Admin requests (LAUNCH-UPDATE-2) are outbox records of kind `admin_request` with no `target`, listed in the same
     pages. The PC leaves one unanswered while its update runs (it can take an hour to drain, then the app restarts),
@@ -244,6 +244,18 @@ The phone shows the same compare views, with "Keep both" beside the two picks. U
 not regrouped: it stays in its own folder. A result whose input the gateway does not hold (never sent, deleted or
 already purged) is shown alone and says "original not found". Retention keeps an original while a result made from it
 is still to be judged.
+
+### 3.7 More info (NAME-INFO)
+
+Every item, and each side of a compare, has **More info**: the stage path (`txt2img → ADetailer`, `img2img`,
+`clip (A14B) from <source model>`, `storyboard take (...)`), the short and full model or workflow name, prompt pack,
+prompt number and variant, date and time, seed and batch name. The PC derives them when it publishes
+(`src/review/output_info.py`) from the file's embedded metadata, its run manifest and the job's immutable snapshot,
+all read only; a reprocess or clip job takes pack and prompt from the job of its input, at most four hops back. They
+travel as the manifest's optional `info`, a closed list of bounded fields with paths reduced to their last part, only
+to a gateway that lists `item_info`. Short names come from `src/pipeline/output_naming.py` and
+`config/output_model_names.json`. An item published without `info` shows what it already has (model, batch, seed,
+date); items already on the phone are not published again for it. The page's code is `static/moreinfo.js`.
 
 ## 4. Retention (D4)
 

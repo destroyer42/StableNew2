@@ -276,7 +276,11 @@ def build_review_gateway_sync(
 
     from src.app.review_gateway_apply import RecordApplier
     from src.app.review_gateway_origin import job_input_reader
-    from src.app.review_gateway_publish import GatewayPublisher, job_batch_reader
+    from src.app.review_gateway_publish import (
+        GatewayPublisher,
+        job_batch_reader,
+        job_info_reader,
+    )
     from src.app.review_gateway_ratings import RatingTaskSync
     from src.app.review_gateway_store import GatewaySettingsStore, SyncLedger
     from src.app.review_gateway_sync import ReviewGatewaySync as Sync
@@ -335,7 +339,11 @@ def build_review_gateway_sync(
         batch_of = job_batch_reader(repository, batch_identity) if repository is not None else None
         # PHONE-FAST: and shows an output beside the input image its job started from.
         input_of = job_input_reader(repository) if repository is not None else None
-        return GatewayPublisher(library, ledger, batch_of=batch_of, input_of=input_of)
+        # NAME-INFO: and says how each output was made ("More info").
+        info_of = job_info_reader(repository, batch_identity)
+        return GatewayPublisher(
+            library, ledger, batch_of=batch_of, input_of=input_of, info_of=info_of
+        )
 
     extra = {"transport_factory": transport_factory} if transport_factory is not None else {}
     sync = Sync(

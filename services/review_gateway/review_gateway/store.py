@@ -283,6 +283,13 @@ class Store:
                     ),
                 )
             db.execute("DELETE FROM item_media WHERE library_id = ? AND sha256 = ?", key)
+            if info := manifest.get(
+                "info"
+            ):  # NAME-INFO; a PC that does not send it keeps what is there
+                db.execute(
+                    "UPDATE item SET info = ? WHERE library_id = ? AND sha256 = ?",
+                    (json.dumps(info), *key),
+                )
             missing: list[str] = []
             for variant, entry in media.items():
                 digest, size = entry["sha256"], int(entry["bytes"])
@@ -537,8 +544,7 @@ class Store:
                     "kind": row["kind"],
                     "created_at": row["created_at"],
                     "duration_s": row["duration_s"],
-                    "display": json.loads(row["display"]),
-                    "batch": json.loads(row["batch"]) if row["batch_id"] else None,
+                    **_described(row),
                     "variants": sorted(available.get((row["library_id"], row["sha256"]), [])),
                     "state": state,
                     "decision": decision,
@@ -614,6 +620,9 @@ class Store:
             "library_id": library_id,
             "sha256": sha256,
             "kind": row["kind"],
+            "created_at": row["created_at"],
+            "duration_s": row["duration_s"],
+            **_described(row),
             "variants": sorted(self._available(variants).get(key, [])),
             "state": state,
             "decision": decision,
@@ -1302,6 +1311,16 @@ def _stream(items: list[dict[str, Any]], rows: list[sqlite3.Row]) -> list[dict[s
     return todo
 
 
+def _described(row: sqlite3.Row) -> dict[str, Any]:
+    """An item's display text: what the PC said about it (``info`` is ``None`` for items published without it)."""
+
+    return {
+        "display": json.loads(row["display"]),
+        "batch": json.loads(row["batch"]) if row["batch_id"] else None,
+        "info": json.loads(row["info"]) if row["info"] else None,
+    }
+
+
 def _cached_bytes(db: sqlite3.Connection) -> int:
     """The size of the media the items still use, from their manifests (shared files counted once)."""
 
@@ -1329,8 +1348,11 @@ def _migrate(db: sqlite3.Connection) -> None:
     if "created_at" not in columns:
         db.execute("ALTER TABLE outbox ADD COLUMN created_at TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS outbox_device_kind ON outbox (device_id, kind, seq)")
-    # The batch an item was queued in (N5), for grouping the inbox; items published before it have none.
     item_columns = {row[1] for row in db.execute("PRAGMA table_info(item)")}
+    # NAME-INFO: what "More info" shows; items published before it have none.
+    if "info" not in item_columns:
+        db.execute("ALTER TABLE item ADD COLUMN info TEXT")
+    # The batch an item was queued in (N5), for grouping the inbox; items published before it have none.
     for column in ("batch_id", "batch"):
         if column not in item_columns:
             db.execute(f"ALTER TABLE item ADD COLUMN {column} TEXT")

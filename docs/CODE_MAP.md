@@ -310,6 +310,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `model_policy_panel_projection.py`: Tk glue that shows the selected model's policy on the Base Generation panel (PR-IMG-130A; generalizes PR-IMG-…
 - `model_readiness_presenter.py`: Read-only model readiness line for the Base Generation panel (PR-IMG-MODELS-150)
 - `outpaint_dialog.py`: Review's Extend Canvas dialog
+- `output_info_dialog.py`: NAME-INFO: the desktop "More info" window, one column per image shown (both sides of a compare)
 - `output_settings_panel_v2.py`: Output settings panel for GUI V2
 - `pipeline_panel_v2.py`: Pipeline panel composed of modular stage cards and prompt pack summary
 - `presentation_actions.py`: Tk-owned dialogs, controller command bindings and workspace handoffs
@@ -818,6 +819,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `no_output_reason.py`: Operator-readable reasons a stage produced no output (N11)
 - `openpose_compile.py`: PromptPack OpenPose conditioning compilation (PR-IMG-CNET-210)
 - `outpaint_canvas.py`: Toolkit-neutral outpainting canvas preparation and original-pixel preservation
+- `output_naming.py`: The one naming authority for outputs (NAME-INFO): short model names, stage paths and what a file says it was…
 - `pipeline_runner.py`: Production pipeline runner integration
 - `policy_warnings.py`: Policy warnings (N1 "warn, don't block"): typed, surface-neutral records of a policy status
 - `prompt_pack_job_builder.py`: Builder pipeline that converts PromptPack entries into NormalizedJobRecords
@@ -923,6 +925,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `findings.py`: Bounded, source-bound observations and advisory choices for guided Review
 - `improvement_evidence.py`: Verify Review comparison evidence and prepare bounded judgments for the existing feedback writer
 - `inspection.py`: Bounded inspection and explicit Smart Review imports for the guided finding workspace
+- `output_info.py`: NAME-INFO: what "More info" says about one output, for the phone and the desktop Review
 - `review_evidence.py`: Non-mutating, digest-bound Review evidence (PR-REVIEW-EVIDENCE-620)
 - `review_lineage.py`: Read-only lookup of the jobs derived from reviewed images (PR-REVIEW-LIFECYCLE-621)
 - `review_metadata_service.py`: Portable review metadata stamping for reviewed image artifacts

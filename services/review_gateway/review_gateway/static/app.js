@@ -951,21 +951,21 @@ function mediaElement(item) {
   return el("img", { src: mediaUrl(item, variant), alt: "", draggable: "false" });
 }
 
-function infoPanel(item) {
-  const display = item.display;
-  const line = (name, value) => (value ? el("p", { text: `${name}: ${value}` }) : null);
-  const batch = item.batch;
-  const cell = batch && batch.cell ? [batch.cell.pack, batch.cell.model].filter(Boolean).join(" · ") : "";
+// NAME-INFO: "More info" for one item, or for both sides of a compare (the lines come from moreinfo.js).
+function infoPanel(item, other) {
+  const sides = other ? [["Original", other], [other.desk ? "Reprocess" : "Rework", item]] : [["", item]];
+  const about = ([heading, side]) => {
+    const prompt = side.display && side.display.prompt_excerpt;
+    return [
+      heading ? el("h2", { text: heading }) : null,
+      ...MoreInfo.lines(side).map(([name, value]) => el("p", { text: `${name}: ${value}` })),
+      prompt ? el("p", { text: `Prompt text: ${prompt}` }) : null,
+      el("a", { href: mediaUrl(side, "original"), target: "_blank", rel: "noopener", text: "Open full size" }),
+    ];
+  };
   return el("div", { class: "info", hidden: "" }, [
-    line("Batch", batch ? batch.name : ""),
-    line("Cell", cell),
-    line("Model", display.model),
-    line("Workflow", display.workflow),
-    line("Seed", display.seed),
-    line("Duration", item.duration_s ? `${item.duration_s} s` : ""),
-    line("Prompt", display.prompt_excerpt),
+    ...sides.flatMap(about),
     item.kind === "image" ? el("p", { class: "muted", text: "Double-tap the picture for full resolution." }) : null,
-    el("a", { href: mediaUrl(item, "original"), target: "_blank", rel: "noopener", text: "Open full size" }),
   ]);
 }
 
@@ -1092,7 +1092,7 @@ function renderItem() {
     el("div", { class: "triage" }, [
       el("div", { class: "status" }, [
         el("span", { id: "state", role: "status" }),
-        el("button", { type: "button", text: `${index + 1} / ${list.length} · info`, onclick: () => (info.hidden = !info.hidden) }),
+        el("button", { type: "button", text: `${index + 1} / ${list.length} · More info`, onclick: () => (info.hidden = !info.hidden) }),
       ]),
       stage,
       tags,
@@ -1241,7 +1241,7 @@ function renderCompare(item) {
       { once: true },
     );
   }
-  const info = infoPanel(item);
+  const info = infoPanel(item, original);
   stage.append(info);
   const previous = button("", "‹", () => step(-1));
   previous.disabled = index === 0;
@@ -1253,7 +1253,7 @@ function renderCompare(item) {
     el("div", { class: "triage" }, [
       el("div", { class: "status" }, [
         el("span", { id: "state", role: "status" }),
-        el("button", { type: "button", text: `${index + 1} / ${list.length} · info`, onclick: () => (info.hidden = !info.hidden) }),
+        el("button", { type: "button", text: `${index + 1} / ${list.length} · More info`, onclick: () => (info.hidden = !info.hidden) }),
       ]),
       el("div", { class: "modes", role: "group", "aria-label": "Compare view" }, toggles),
       stage,

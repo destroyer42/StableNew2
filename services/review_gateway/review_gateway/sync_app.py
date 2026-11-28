@@ -32,6 +32,7 @@ PAGE_LIMIT = 500
 #: ``item_input``: the manifest's ``input`` and ``input_missing`` (the image a desk job started from).
 #: ``rating_tasks``: the RG-170 rating routes.
 #: ``deferred_actions``: the choice catalog route (RG-160 requests made while the PC is away).
+#: ``item_info``: the manifest's ``info`` (NAME-INFO "More info").
 FEATURES = (
     "item_batch",
     "item_parent",
@@ -40,6 +41,7 @@ FEATURES = (
     "item_input",
     "rating_tasks",
     "deferred_actions",
+    "item_info",
 )
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")

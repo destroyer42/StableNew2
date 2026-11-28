@@ -229,6 +229,7 @@ def test_health_names_the_contract_version_and_its_features(rig) -> None:
             "item_input",
             "rating_tasks",
             "deferred_actions",
+            "item_info",
         ],
     }
 
