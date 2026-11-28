@@ -141,3 +141,29 @@ at those sizes is unmeasured, and no job of 1.1.0 itself has run on the GPU. Not
   a different, still unrated, eval arm.
 - Known limit: a multi-segment job that names workflows with different attention profiles per segment (only possible
   from an eval suite or code) is refused at the first segment whose profile does not match the warm process.
+
+## f. CK attention at the other full-picture sizes (GPU run 2026-11-28, owner approval)
+
+Full picture 1.1.0, 81 frames, no smoothing, seed 374, through the eval harness at `85a59f91`, with the cases, prompts and
+sources of section a's size test (SFW `subject_a` crops) plus a 480x832 control. **6 of 6 completed at their declared
+sizes with a verified CK launch; no out-of-memory, device loss, `nvlddmkm` event or retry.** Frames from each clip look
+coherent; the clips were not rated.
+
+| Size | Start | Wall s | Peak VRAM MiB (of 12,282) | Free host RAM low GiB | Standard attention, 2026-11-27: wall s / peak / RAM low |
+|---|---|---:|---:|---:|---|
+| 544x720 | cold | 162 | 10,018 | 4.94 | cold 204 / 9,410 / 7.03 |
+| 624x624 | cold | 151 | 9,332 | 5.38 | warm 108 / 9,630 / 7.05 |
+| 720x544 | warm | 102 | 9,428 | 5.13 | warm 124 / 9,438 / 6.45 |
+| 512x768 | warm | 100 | 9,467 | 5.93 | warm 126 / 9,567 / 7.55 |
+| 768x512 | warm | 97 | 9,871 | 5.39 | warm 127 / 9,763 / 6.92 |
+| 480x832 (control) | warm | 98 | 10,188 | 5.29 | not in that run |
+
+- This closes section e's "CK has not been run at the other full-picture sizes" for these five sizes at 81 frames. Wall
+  time includes encoding; other sessions ran CPU-heavy tests on both days, so times are indicative.
+- The host RAM low point was 1 to 2 GiB under the standard-attention run's; the cause was not isolated.
+- Still unmeasured with CK: 832x480 and 121 frames. Likeness, motion and stability with CK are rated at 480x832 only.
+- The catalog's 1.1.0 text still says CK is unmeasured at these sizes; changing it is a code change (pinned spec digest).
+- The harness failed once reading its own record after the first clip had completed. That clip's figures come from its
+  manifest and telemetry; it was not run again, so the other five ran as a second suite (hence two cold starts).
+
+Evidence: `%USERPROFILE%\Videos\StableNewAcceptance\GPU-CHECKS\ck_sizes\`.
