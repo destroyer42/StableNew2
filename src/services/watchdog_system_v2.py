@@ -297,10 +297,8 @@ class SystemWatchdogV2:
             episode.peak_age_s = max(episode.peak_age_s, ui_age)
             episode.sample_count += 1
             for hold in held_locks(_HELD_LOCK_S):
-                key = (str(hold["lock"]), str(hold["thread"]), str(hold["site"]))
-                episode.held_locks[key] = max(
-                    episode.held_locks.get(key, 0.0), float(hold["held_s"])
-                )
+                key = (hold["lock"], hold["thread"], hold["site"])
+                episode.held_locks[key] = max(episode.held_locks.get(key, 0.0), hold["held_s"])
             frames = self._capture_ui_stack()
             if frames:
                 sample = episode.stacks.get(frames)

@@ -18,6 +18,7 @@ import time
 import weakref
 from dataclasses import dataclass
 from types import FrameType
+from typing import TypedDict
 
 from src.utils.logger import LogContext, log_with_ctx
 from src.utils.stack_sites import describe_frame
@@ -42,12 +43,23 @@ class _Holder:
     cpu_since: float = 0.0
 
 
-def held_locks(min_held_s: float) -> list[dict[str, object]]:
+class HeldLock(TypedDict):
+    lock: str
+    thread: str
+    site: str
+    held_s: float
+
+
+def held_locks(min_held_s: float) -> list[HeldLock]:
     """Locks held for at least ``min_held_s`` right now (read racily, for attribution only)."""
 
+    try:
+        locks = list(_LOCKS)
+    except RuntimeError:  # another thread built a lock while the set was being copied
+        return []
     now = time.perf_counter()
-    found: list[dict[str, object]] = []
-    for lock in list(_LOCKS):
+    found: list[HeldLock] = []
+    for lock in locks:
         holder = lock._holder
         if holder is not None and now - holder.since >= min_held_s:
             found.append(
