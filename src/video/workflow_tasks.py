@@ -22,6 +22,7 @@ from src.video.workflow_picker import approved_in_preference_order
 TASK_ANIMATE = "animate"
 TASK_FOLLOW_CLIP = "follow_clip"
 TASK_BETWEEN = "between_images"
+TASK_CONTINUE = "continue_clip"
 TASK_SEQUENCE = "sequence"
 TASK_BATCH = "batch"
 
@@ -50,6 +51,11 @@ TASKS: tuple[VideoTask, ...] = (
         TASK_BETWEEN,
         "Start and end image",
         "Make the clip that goes from one image to another.",
+    ),
+    VideoTask(
+        TASK_CONTINUE,
+        "Continue a clip",
+        "Take a finished clip further from its last frame; the result joins the clip's Storyboard.",
     ),
     VideoTask(
         TASK_SEQUENCE,
@@ -182,6 +188,7 @@ __all__ = [
     "TASK_ANIMATE",
     "TASK_BETWEEN",
     "TASK_BATCH",
+    "TASK_CONTINUE",
     "TASK_FOLLOW_CLIP",
     "TASK_SEQUENCE",
     "EngineChoice",

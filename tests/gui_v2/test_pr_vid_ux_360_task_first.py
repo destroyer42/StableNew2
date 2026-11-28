@@ -65,7 +65,14 @@ def test_selector_lists_the_tasks_and_reverts_on_refusal(tk_root):
         return task_id != "batch"
 
     sel = WorkflowTaskSelector(tk_root, on_select=on_select)
-    assert list(sel.buttons) == ["animate", "follow_clip", "between_images", "sequence", "batch"]
+    assert list(sel.buttons) == [
+        "animate",
+        "follow_clip",
+        "between_images",
+        "continue_clip",
+        "sequence",
+        "batch",
+    ]
     sel.set_task("animate")
     sel.buttons["batch"].invoke()
     assert calls == ["batch"]

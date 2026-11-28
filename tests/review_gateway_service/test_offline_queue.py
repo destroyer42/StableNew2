@@ -217,6 +217,7 @@ def test_a_deferred_request_waits_in_the_outbox(world, action, params) -> None:
         ("fix_face", {"summary_revision": "ab" * 32}),
         ("fix_face", {"prepared_record": str(uuid.uuid4())}),
         ("rerun_clip", {}),
+        ("continue_clip", {}),
     ],
 )
 def test_a_deferred_request_is_a_closed_list(world, action, params) -> None:

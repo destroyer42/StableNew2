@@ -356,8 +356,14 @@ sources; no real Immich has been used.
   I2V-A14B 4-step) at its default length. The motion prompt is the owner's optional words, or else the image's own
   prompt.
 
-`rerun_clip` and `continue_clip` (N8) stay reserved and are refused (`invalid_record`). They will call V1's shared
-functions.
+- **Continue clip** (V1-6, video items only, the one action a video has): the desktop's *Continue a clip*, from the
+  clip's last generated frame, with the owner's optional words (else the clip's own prompt), its own length and a new
+  seed. The PC finds the job by its recorded output path and queues one take in the clip's Storyboard, creating it when
+  needed; preparing writes and queues nothing. A clip whose engine cannot make takes is offered as a Make Video of its
+  last frame, and the summary says so. It is never left waiting for an away PC (no `queue` step). Update the gateway
+  before the phone offers it. Code: `src/app/site_phone_continue.py`.
+
+`rerun_clip` (N8) stays reserved and is refused (`invalid_record`). It will call V1's shared functions.
 
 **Picking a checkpoint or a ratio (slice 2).** A prepare of `another_model` or `aspect_ratio` without
 `params.choice` is answered `applied` with `receipt.choices`: up to 100 items of `id`, `label` and `current` (the

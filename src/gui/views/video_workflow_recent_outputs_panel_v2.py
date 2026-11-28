@@ -42,6 +42,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         harvest_motion: Callable[[RecentVideoOutput], None] | None = None,
         continue_in_storyboard: Callable[[RecentVideoOutput], None] | None = None,
         rerun_with_tweaks: Callable[[RecentVideoOutput], None] | None = None,
+        continue_clip: Callable[[RecentVideoOutput], None] | None = None,
         ask_library_details: Callable[[RecentVideoOutput], Mapping[str, Any] | None] | None = None,
         decode: Any = None,
         shown_var: tk.BooleanVar | None = None,
@@ -54,6 +55,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         self._harvest_motion = harvest_motion
         self._continue_in_storyboard = continue_in_storyboard
         self._rerun_with_tweaks = rerun_with_tweaks
+        self._continue_clip = continue_clip
         self._runner: BackgroundWorkRunner | None = None
         self._previewed: str = ""
         self.status_var = tk.StringVar(value="")
@@ -91,6 +93,13 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             command=self._on_harvest,
             state="disabled",
         )
+        self.continue_button = ttk.Button(
+            actions,
+            text="Continue this clip",
+            style="Dark.TButton",
+            command=self._on_continue_clip,
+            state="disabled",
+        )
         self.storyboard_button = ttk.Button(
             actions,
             text="Continue in Storyboard",
@@ -112,6 +121,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             self.movie_button,
             self.library_button,
             self.harvest_button,
+            self.continue_button,
             self.storyboard_button,
             self.rerun_button,
         ):
@@ -223,6 +233,11 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
                 if selected is not None and self._continue_in_storyboard is not None
                 else "disabled"
             )
+            self.continue_button.configure(
+                state="normal"
+                if selected is not None and self._continue_clip is not None
+                else "disabled"
+            )
             self.rerun_button.configure(
                 state="normal"
                 if selected is not None and self._rerun_with_tweaks is not None
@@ -297,6 +312,17 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             self._continue_in_storyboard(output)
         except (RuntimeError, OSError, ValueError) as exc:
             self.status_var.set(f"Continue in Storyboard failed: {exc}")
+
+    def _on_continue_clip(self) -> None:
+        """Continue the selected clip from its last frame (opens the form; nothing is queued here)."""
+
+        output = self.session.selected
+        if output is None or self._continue_clip is None:
+            return
+        try:
+            self._continue_clip(output)
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.status_var.set(f"Continue this clip failed: {exc}")
 
     def _on_rerun_with_tweaks(self) -> None:
         """Open the selected clip's job in the form to change and queue again (nothing is queued here)."""

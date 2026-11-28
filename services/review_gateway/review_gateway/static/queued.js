@@ -10,6 +10,8 @@ const Queued = (() => {
   // A PC that is there answers a summary within seconds; after this long the phone offers not to wait for it.
   const OFFER_AFTER_MS = 10000;
   const NOT_READY = new Set(["adetailer_unavailable", "model_unavailable"]);
+  // V1-6: never left waiting for an away PC; the PC refuses a `queue` step for these.
+  const NOT_DEFERRABLE = new Set(["continue_clip"]);
   const AWAY_SAVE = "The PC checks this when it is back and queues it with any warnings.";
 
   const kept = new Map(); // used when storage is unusable
@@ -272,7 +274,7 @@ const Queued = (() => {
   // Called before asking the PC: with the PC away, the request is made to wait instead.
   function offer(item, action, extra = {}) {
     asked = extra;
-    if (!usable() || !away()) return false;
+    if (NOT_DEFERRABLE.has(action) || !usable() || !away()) return false;
     sheetFor(item, action, extra);
     return true;
   }
@@ -280,14 +282,14 @@ const Queued = (() => {
   // A prepare refused only because the image backend is not connected can still wait for it.
   function notReady(item, action, answer) {
     const detail = answer.receipt && answer.receipt.detail;
-    if (answer.step !== "prepare" || !NOT_READY.has(detail) || !usable()) return false;
+    if (NOT_DEFERRABLE.has(action) || answer.step !== "prepare" || !NOT_READY.has(detail) || !usable()) return false;
     sheetFor(item, action, asked, "Forge is not connected on the PC.");
     return true;
   }
 
   // The gateway could not be reached at all.
   function unreachable(item, action) {
-    if (!usable()) return false;
+    if (NOT_DEFERRABLE.has(action) || !usable()) return false;
     offline = true;
     sheetFor(item, action, asked, "The request is saved on this phone and sent when the gateway is reachable.");
     return true;
@@ -295,6 +297,7 @@ const Queued = (() => {
 
   // After a while with no answer, offer to leave the request waiting instead. ``step`` is what the PC was asked.
   function watch(node, item, action, recordId, step) {
+    if (NOT_DEFERRABLE.has(action)) return;
     const extra = asked;
     setTimeout(() => {
       if (document.getElementById("sheet") !== node || !usable()) return;

@@ -15,6 +15,7 @@ from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
+from src.gui.views.video_workflow_continue_v2 import ContinueClipPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_motion_intent_v2 import MotionIntentPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
@@ -65,6 +66,7 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
     reasons_label.grid_remove()
     tab.reasons_label = reasons_label
     _build_driver_row(tab, visible, row=2)
+    _build_continue_rows(tab, visible, row=2)  # never shown with the driver row: one task at a time
     _build_end_image_row(tab, visible, row=4)
     tab.motion_intent_panel = MotionIntentPanel(
         visible,
@@ -235,6 +237,20 @@ def _build_driver_row(tab: Any, parent: ttk.Frame, *, row: int) -> None:
     tab._attach_setting_help(
         "pose_video", VIDEO_WORKFLOW_SETTING_HELP["pose_video"], label, tab.pose_video_entry
     )
+
+
+def _build_continue_rows(tab: Any, parent: ttk.Frame, *, row: int) -> None:
+    """V1-6: the clip, the frame to continue from and the fallbacks, for the "Continue a clip" task only."""
+
+    panel = ContinueClipPanel(
+        parent,
+        on_frame=tab._on_continue_frame,
+        on_prompt_only=tab._continue_as_prompt_only,
+        on_end_picture=tab._continue_to_picture,
+    )
+    panel.grid(row=row, column=0, columnspan=4, sticky="ew")
+    panel.grid_remove()
+    tab.continue_panel = panel
 
 
 def _build_end_image_row(tab: Any, parent: ttk.Frame, *, row: int) -> None:

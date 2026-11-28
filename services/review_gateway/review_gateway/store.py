@@ -56,6 +56,7 @@ PHONE_ACTIONS = frozenset(
         "aspect_ratio",
         "prompt_tweak",
         "make_video",
+        "continue_clip",
     }
 )
 #: RG-140: not a quota (the owner set none, 2026-11-26). A technical bound on one phone's *unanswered* action requests,
@@ -804,7 +805,11 @@ class Store:
             ).fetchone()
             if item is None:
                 raise GatewayError(404, "unknown_item")
-            if item["kind"] != "image":
+            # V1-6: continuing a clip is the one action on a video, and it takes nothing else.
+            if action_request["action"] == "continue_clip":
+                if item["kind"] != "video":
+                    raise GatewayError(422, "invalid_record")
+            elif item["kind"] != "image":
                 raise GatewayError(422, "not_an_image")
             pending = db.execute(
                 "SELECT count(*) FROM outbox WHERE device_id = ? AND kind = 'action_request'"
