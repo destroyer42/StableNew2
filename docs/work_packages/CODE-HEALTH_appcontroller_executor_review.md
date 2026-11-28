@@ -1,7 +1,8 @@
 # CODE-HEALTH: AppController and executor design review
 
-Status: read-only design review (2026-11-28). It ends in a staged plan that needs owner approval. Nothing here is
-implemented, and no slice starts until the owner approves it.
+Status: design review merged (PR #516, 2026-11-28). The owner approved slices 1-6 now and 7-8 later, and decided
+roadmap decisions 12 and 14 (section 12). The section 8 defects are fixed by the CODE-HEALTH bug-fix package
+(section 13). No refactor slice is implemented yet.
 
 Execution class: Architectural assessment (read-only). Model: Claude Code, Opus 5.5, high effort, with two read-only
 search subagents for caller and test mapping. This is a single-model assessment with explicit self-critique
@@ -86,7 +87,7 @@ files import the executor, 14 of them `tests/pipeline/test_executor_*.py`.
 | E8 | Cancel, stage events, recovery, WebUI readiness and health | 1926-2296 | `_ensure_not_cancelled` is reimplemented in `pipeline_runner.py:1771`, `svd_runner.py:512`, `svd_service.py:218` | 13-20 | `reset_stage_events` / `get_stage_events` have no `src` caller (test-only, verified). `_record_stage_event` appends on every stage and nothing clears it, so `_stage_events` grows for the life of the process (verified). WebUI restarts come from here (the poll thread) and from `webui_outage_coordinator`: two restart authorities |
 | E9 | Generation dispatch, recovery and progress polling | 2297-3061 (`_poll_progress_loop` 2544-2940, about 400 lines) | none | 19-22 | The most thread-heavy code; see section 5. Belongs in a `GenerationDispatcher` class in `src/pipeline` once characterization tests are in place |
 | E10 | Aesthetic, sampler, ETA helpers | 3062-3204 | none | 1-3 | **`_format_eta` (3182) is dead (verified).** The live copy is `running_job_panel_v2.py:258` |
-| E11 | Stage bodies: `run_adetailer` 3205-4020 (+ **unreachable 4021-4122, verified: a stray "Run upscaling" body after `return None`**); `run_txt2img_stage` 4124-4888; `run_img2img_stage` 4889-5239; `run_svd_native_stage` 5240-5375; `run_upscale_stage` 5376-5933; `run_adetailer_stage` 5933-6004 | the WebUI and SVD backends | 6-33 each | Each body repeats cancel -> status -> model/VAE -> preflight -> payload -> dispatch -> cancel -> artifact write. **Family branches inside generic txt2img:** Z-Image 4211-4231, 4523-4527, 4590-4592; SDXL refiner 4257-4320, 4465-4492; Flux1 wire projection 4523; Forge ControlNet/OpenPose 4531-4537. These are lazy imports from `src/image_backends`, so the dependency runs both ways. **Upscale "single" mode calls `self.client.upscale_image` directly (5705, verified)** and skips payload validation, the true-ready gate, recovery, stall polling and the dispatch cancel check |
+| E11 | Stage bodies: `run_adetailer` 3205-4020 (+ **unreachable 4021-4122, verified: a stray "Run upscaling" body after `return None`**); `run_txt2img_stage` 4124-4888; `run_img2img_stage` 4889-5239; `run_svd_native_stage` 5240-5375; `run_upscale_stage` 5376-5933; `run_adetailer_stage` 5933-6004 | the WebUI and SVD backends | 6-33 each | Each body repeats cancel -> status -> model/VAE -> preflight -> payload -> dispatch -> cancel -> artifact write. **Family branches inside generic txt2img:** Z-Image 4211-4231, 4523-4527, 4590-4592; SDXL refiner 4257-4320, 4465-4492; Flux1 wire projection 4523; Forge ControlNet/OpenPose 4531-4537. These are lazy imports from `src/image_backends`, so the dependency runs both ways. **Upscale "single" mode calls `self.client.upscale_image` directly (5705, verified)**, outside `_generate_images_with_progress`; the bug-fix package found this deliberate (section 13) |
 
 Counts at `85a59f91`: `zimage` appears 12 times, `refiner` 45, `sdxl` 8, `svd` 21, `flux` 2, `klein` 1; `.get(` appears
 463 times (P4-4's typed-settings target is to halve it).
@@ -188,7 +189,8 @@ These change behaviour, so they are kept out of the refactor slices. Each needs 
 2. **The global prompt policy fallback never runs** (3653, `config_manager` vs `_config_manager`).
 3. **Movie clips ignore the configured output folder** (4426).
 4. **img2img has no pressure/admission/drift preamble**, and **upscale single mode skips the generation gate** (5705).
-   Either may be deliberate; neither is documented.
+   Either may be deliberate; neither is documented. (Resolved in section 13: img2img was an omission and is fixed;
+   upscale single mode is deliberate and now says why.)
 5. **`_stage_events` grows for the life of the process** (slice 1 deletes it with its test-only readers; if the owner
    prefers to keep it, it needs clearing in `_begin_run_metrics`).
 6. **Two WebUI restart authorities** (the poll thread and `webui_outage_coordinator`).
@@ -256,6 +258,10 @@ hooks.**
 
 ## 12. Owner decisions
 
+Decided 2026-11-28, as relayed by the orchestrator session: "PRs 1–6 now, 7–8 later"; decision 12 "No; show
+"Stopping...""; decision 14 "Later"; the top-bar Stop "Cancel the running job". Item 4 (an executor line ceiling) is
+not yet decided. The recommendations as they were put:
+
 1. Approve this plan, or a subset (recommended: slices 1-6 now; 7 and 8 after 1-6 land and their characterization
    tests prove cheap).
 2. Decision 12: no durable CANCELLING; do the "Stopping..." projection as a small separate package (recommended).
@@ -264,6 +270,44 @@ hooks.**
    (recommended).
 5. The section 8 defects: open one bug package for items 1-3 (Stop button, prompt-policy fallback, movie clips output
    folder) (recommended), and ask whether img2img and upscale single mode skip admission deliberately.
+
+## 13. Bug-fix package (CODE-HEALTH bug fixes, 2026-11-28)
+
+Branch `fix/code-health-bugfixes` from `origin/main` `7de95a26`. Each fix has a regression test that failed first
+(`tests/controller/test_code_health_bugfixes_ch1.py`, `tests/pipeline/test_img2img_runtime_admission_ch1.py`).
+
+- **(a) Top-bar Stop.** `on_stop_clicked` now calls `on_cancel_current_job`, the running-job panel's own method, when
+  the runner holds a job or the queue has a RUNNING one, and only logs otherwise. There is no second cancel path. The
+  old lifecycle-gated body (reachable only in tests that forced `LifecycleState.RUNNING`) and the now-unused
+  `_set_lifecycle` are gone; the rest of the `LifecycleState` leftovers stay for slice 1.
+- **(b) "Stopping..." row (decision 12).** `src/controller/app_controller_services/stopping_display.py`. On an operator
+  cancel (panel Cancel, Cancel and Return, top-bar Stop) the running row keeps the job, labelled `Stopping...`, until a
+  UI-loop check every 250 ms sees the runner's `current_job` change; the queue's CANCELLED announcement no longer clears
+  the row while the GPU is busy. Display only: no job status, database, history or sync change. Without a UI loop
+  (headless, or a main window whose "later" falls back to running the check at once) the row clears on the
+  announcement, as before; `docs/Subsystems/Runtime/QUEUE_AND_RUNTIME.md` B10 records the decision.
+- **(c) Global prompt-policy fallback.** `get_current_global_prompt_policy` passes `_config_manager` (the attribute
+  that exists), so the saved policy applies when the sidebar has none. The wrong log variable (`field`) is fixed too.
+  Now that the fallback is reachable, `global_prompt_policy_service.read_current_policy` treats a settings object
+  without the saved-policy getters (the partial stand-ins several controller tests pass) as having no saved policy.
+- **(d) Output folder.** The root cause was wider than Movie Clips: `AppController.output_dir` was never defined, and
+  Movie Clips, SVD, Video Workflow and the other video submissions all read it, so all of them ignored the saved
+  folder. `output_dir` is now a property that returns the saved application-wide `output_dir` (the same rule image jobs
+  use, `ConfigManager._apply_application_defaults`) and `None` when none is set, so each caller keeps its default. The
+  owner's live setting is `output`, so nothing moves on his install.
+- **(e) GPU-ready checks.**
+  - img2img: **an omission**, not a design. `IMAGE_PIPELINE.md` already described admission as common to every stage,
+    the pressure model has no img2img entry, and no document gives a reason. A reprocess, photo-optimize or Klein-edit
+    job that starts with img2img reached Forge with no admission. img2img now runs pressure assessment, pressure
+    mitigation and runtime admission before model sync, and records `pressure_assessment`, `runtime_admission` and any
+    runtime warning in its manifest like txt2img. The workload launch policy is deliberately not applied: it has no
+    img2img profile and a profile restart needs GPU qualification. An unhealthy-but-not-poisoned runtime still runs
+    img2img (it is not in the unsafe-pressure refusal set), so only a poisoned runtime that recovery cannot fix, or a
+    duplicate process, refuses it.
+  - Upscale single mode: **deliberate**. It already runs the full admission preamble and drift check; it bypasses
+    `_generate_images_with_progress` only because the extras endpoint is not a sampler generation (no payload
+    validator, no `/progress` stall polling), and the client applies `UPSCALE_RETRY_POLICY`. A code comment now says so.
+- Not verified on the live app or a GPU.
 
 ## Model and effort for the slices
 

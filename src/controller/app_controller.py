@@ -105,6 +105,11 @@ from src.controller.app_controller_services.run_submission_service import (
 from src.controller.app_controller_services.runtime_projection_coordinator import (
     RuntimeProjectionCoordinator,
 )
+from src.controller.app_controller_services.stopping_display import (
+    STOPPING_LABEL,
+    StoppingDisplay,
+    defer_on_ui_loop,
+)
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.generation_profile_controller import GenerationProfileController
 from src.controller.global_prompt_policy_service import read_current_policy
@@ -321,6 +326,7 @@ class CancelToken:
 
 class AppController:
     _queue_submit_in_progress: bool = False
+    _stopping_display: StoppingDisplay | None = None  # set in __init__; None on half-built test controllers
 
     def _spawn_tracked_thread(
         self,
@@ -448,6 +454,11 @@ class AppController:
             summarize_running_job=self._build_running_job_summary,
             describe_dispatch_hold=lambda: describe_dispatch_hold(getattr(self.job_service, "job_queue", None)),
             logger=logger,
+        )
+        self._stopping_display = StoppingDisplay(
+            current_runner_job=lambda: getattr(getattr(self.job_service, "runner", None), "current_job", None),
+            publish_running_job=self._runtime_projection_coordinator.publish_running_job,
+            schedule_later=lambda ms, fn: defer_on_ui_loop(getattr(self, "main_window", None), ms, fn, self._dispatch_via_root_after),
         )
         self._diagnostics_coordinator = DiagnosticsCoordinator()
         self._application_runtime_coordinator: ApplicationRuntimeCoordinator | None = None
@@ -2482,16 +2493,24 @@ class AppController:
         self._runtime_projection_coordinator.publish_running_job(job)
         self._runtime_projection_coordinator.publish_queue_refresh()
 
+    def _begin_stopping_row(self) -> None:
+        if self._stopping_display is not None:
+            self._stopping_display.begin()
+
+    def _clear_running_row(self, job: Job) -> None:  # a cancelled job's row waits for the runner to release it
+        if not (self._stopping_display and self._stopping_display.keeps_row(job)):
+            self._runtime_projection_coordinator.publish_running_job(None)
+
     def _on_job_finished(self, job: Job) -> None:
         self._clear_runtime_status_cache()
-        self._runtime_projection_coordinator.publish_running_job(None)
+        self._clear_running_row(job)
         self._runtime_projection_coordinator.publish_runtime_status(None)
         self._runtime_projection_coordinator.publish_history_refresh()
         self._runtime_projection_coordinator.publish_queue_refresh()
 
     def _on_job_failed(self, job: Job) -> None:
         self._clear_runtime_status_cache()
-        self._runtime_projection_coordinator.publish_running_job(None)
+        self._clear_running_row(job)
         self._runtime_projection_coordinator.publish_runtime_status(None)
         self._runtime_projection_coordinator.publish_history_refresh()
         self._runtime_projection_coordinator.publish_queue_refresh()
@@ -2617,6 +2636,8 @@ class AppController:
                 ).strip()
                 if status_text:
                     summary = replace(summary, status=status_text.upper())
+                if self._stopping_display and self._stopping_display.holds(job):
+                    summary = replace(summary, status=STOPPING_LABEL)  # display only, see stopping_display
                 return summary
             except Exception as exc:
                 logger.warning(
@@ -2791,6 +2812,7 @@ class AppController:
     def on_cancel_job_v2(self) -> None:
         """Cancel the currently running job."""
         if self.job_service:
+            self._begin_stopping_row()
             self.job_service.cancel_current()
             # Also trigger the cancel token if available
             cancel_token = getattr(self, "_cancel_token", None)
@@ -2804,6 +2826,7 @@ class AppController:
         PR-GUI-F3: Allows user to cancel a job but keep it for retry later.
         """
         if self.job_service:
+            self._begin_stopping_row()
             self.job_service.cancel_current(return_to_queue=True)
             # Also trigger the cancel token if available
             cancel_token = getattr(self, "_cancel_token", None)
@@ -2882,19 +2905,6 @@ class AppController:
     # ------------------------------------------------------------------
     # Internal helpers (state & logging)
     # ------------------------------------------------------------------
-
-    def _set_lifecycle(self, new_state: LifecycleState, error: str | None = None) -> None:
-        self.state.lifecycle = new_state
-        self.state.last_error = error
-
-        if new_state == LifecycleState.IDLE:
-            self._update_status("Idle")
-        elif new_state == LifecycleState.RUNNING:
-            self._update_status("Running...")
-        elif new_state == LifecycleState.STOPPING:
-            self._update_status("Stopping...")
-        elif new_state == LifecycleState.ERROR:
-            self._update_status(f"Error: {error or 'Unknown error'}")
 
     def _update_status(self, text: str) -> None:
         """Update application status through AppState."""
@@ -3333,31 +3343,12 @@ class AppController:
                 pass
 
     def on_stop_clicked(self) -> None:
-        """
-        Called when the user presses STOP.
-
-        Sets lifecycle to STOPPING, triggers CancelToken, and lets the
-        pipeline exit cooperatively. In synchronous mode, we immediately
-        return to IDLE after marking cancel.
-        """
-        if self.state.lifecycle != LifecycleState.RUNNING:
-            self._append_log("[controller] Stop requested, but pipeline is not running.")
+        """Top-bar Stop: cancel the running job through the running-job panel's own cancel path."""
+        runner = getattr(getattr(self, "job_service", None), "runner", None)
+        if getattr(runner, "current_job", None) is None and not self.has_running_jobs():
+            self._append_log("[controller] Stop requested, but no job is running.")
             return
-
-        self._append_log("[controller] Stop requested.")
-        self._set_lifecycle(LifecycleState.STOPPING)
-
-        if self._cancel_token is not None:
-            self._cancel_token.cancel()
-            self._cancel_token.clear_stop_requirement()
-
-        worker_alive = self._worker_thread is not None and self._worker_thread.is_alive()
-        if self.job_service is not None:
-            self.job_service.cancel_current()
-        if not worker_alive:
-            self._set_lifecycle(LifecycleState.IDLE)
-        # In threaded mode, lifecycle will transition to IDLE in _run_pipeline_thread
-        # once the worker exits.
+        self.on_cancel_current_job()
 
     # ------------------------------------------------------------------
     # Settings / Help
@@ -3634,13 +3625,13 @@ class AppController:
 
             for cfg in targets:
                 setattr(cfg, attr, value)
-            self._append_log(f"[controller] Config updated: {field}={value}")
+            self._append_log(f"[controller] Config updated: {field_name}={value}")
 
     def get_current_global_prompt_policy(self) -> dict[str, Any]:
         """Read live policy on the GUI thread; compilation workers use its latest projection."""
         if threading.get_ident() == getattr(self, "_ui_thread_id", threading.get_ident()):
             self._global_prompt_policy = read_current_policy(
-                self._get_sidebar_panel(), getattr(self, "config_manager", None), self._append_log
+                self._get_sidebar_panel(), getattr(self, "_config_manager", None), self._append_log
             )
         return dict(self._global_prompt_policy)
 
@@ -4377,6 +4368,7 @@ class AppController:
         """Cancel the currently running job."""
         if not self.job_service:
             return
+        self._begin_stopping_row()
         self.job_service.cancel_current()
         self._append_log("[controller] Cancelled current job")
 
@@ -4398,6 +4390,13 @@ class AppController:
     # Movie Clips: a queued assembly job (PR-VID-ASM-332)
     # ------------------------------------------------------------------
 
+    @property
+    def output_dir(self) -> str | None:
+        """The saved output folder image jobs use, read by every video submission; None when unset (caller default)."""
+        get_setting = getattr(getattr(self, "_config_manager", None), "get_setting", None)
+        stored = get_setting("output_dir") if callable(get_setting) else None
+        return stored.strip() if isinstance(stored, str) and stored.strip() else None
+
     def on_build_movie_clip(
         self,
         image_paths: list,
@@ -4413,7 +4412,7 @@ class AppController:
 
         MovieClipsSubmissionService(
             job_service=getattr(self, "job_service", None),
-            output_dir=getattr(self, "output_dir", None) or "output",
+            output_dir=self.output_dir or "output",
             spawn=self._spawn_tracked_thread,
             dispatch=self._run_in_gui_thread,
         ).submit_in_background(

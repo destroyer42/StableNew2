@@ -3,8 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from src.pipeline.executor import Pipeline
 from src.utils import StructuredLogger
+
+pytestmark = pytest.mark.usefixtures(
+    "healthy_runtime_admission"
+)  # img2img now passes runtime admission
 
 
 class _Client:

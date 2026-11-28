@@ -66,7 +66,10 @@ def test_gp6_svd_native_path_creates_video_artifact(tmp_path: Path, monkeypatch)
 
     job_service = _RecordingJobService()
     app_controller = AppController.__new__(AppController)
-    app_controller.output_dir = str(output_dir)
+    # output_dir is a read-only property over the saved setting (CODE-HEALTH fix d); give it that setting.
+    app_controller._config_manager = SimpleNamespace(
+        get_setting=lambda key, default=None: str(output_dir) if key == "output_dir" else default
+    )
     app_controller.job_service = job_service
     app_controller._append_log = lambda *_args, **_kwargs: None
 

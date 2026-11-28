@@ -28,6 +28,10 @@ from src.pipeline.replay_input_verification import frozen_input_checks, verify_i
 from src.utils import StructuredLogger
 from tests.pipeline.test_img2img_masked_edit_runtime import _Client
 
+pytestmark = pytest.mark.usefixtures(
+    "healthy_runtime_admission"
+)  # img2img now passes runtime admission
+
 W, H = 128, 96
 EXTENTS = Extents(left=16, right=8, top=24, bottom=0)
 

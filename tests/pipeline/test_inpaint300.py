@@ -27,6 +27,10 @@ from src.pipeline.replay_input_verification import frozen_input_checks, verify_i
 from src.utils import StructuredLogger
 from tests.pipeline.test_img2img_masked_edit_runtime import _Client, _fake_save_image
 
+pytestmark = pytest.mark.usefixtures(
+    "healthy_runtime_admission"
+)  # img2img now passes runtime admission
+
 
 def png(size=(128, 128), *, mask=False):
     image = Image.new("L" if mask else "RGB", size, 0 if mask else "blue")

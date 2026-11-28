@@ -231,6 +231,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `run_submission_service.py`: Bridge GUI run requests and witnessed previews to the queue submission worker
 - `runtime_projection_coordinator.py`: Serialize revisioned runtime, queue, History, Preview, and WebUI projections through one sink
 - `shutdown_coordinator.py`: Coordinate application shutdown across the existing lifecycle owners
+- `stopping_display.py`: Display-only "Stopping..." row for an operator cancel (owner decision 12, 2026-11-28)
 
 ## src/controller/pipeline_controller_services/
 
