@@ -55,8 +55,8 @@ The gateway never compiles, admits or decides anything. It has no job, lifecycle
   slots (`core/slots.js`: render, ask, claim), notifications (`core/bus.js`, no return values) and the route table
   (`core/router.js`). Slot contributions run in feature `order`. Adding a slot or a topic is a core change.
 - Shared state is read and changed through functions (`core/store.js`, `core/router.js`, `core/session.js`).
-- Caps: 300 lines a core file, 400 a feature file; `queued.js` and `rating.js` are listed exceptions that may only
-  shrink.
+- Caps: 300 lines a core file, 400 a feature file, checked by `test_static_rules.py`. No file is over its cap; an
+  exception listed there may only shrink.
 - At start the phone app reads `static/` once. Only `.js`, `.css`, `.png`, `.svg` and `.webmanifest` files are
   published. The version is 12 hex digits of a SHA-256 over their paths and digests and the `index.html` template.
 - `GET /` is `index.html` with that version, the feature names and each feature's `<id>.css` written in, in feature
