@@ -298,7 +298,9 @@ class SystemWatchdogV2:
             episode.sample_count += 1
             for hold in held_locks(_HELD_LOCK_S):
                 key = (str(hold["lock"]), str(hold["thread"]), str(hold["site"]))
-                episode.held_locks[key] = max(episode.held_locks.get(key, 0.0), float(hold["held_s"]))
+                episode.held_locks[key] = max(
+                    episode.held_locks.get(key, 0.0), float(hold["held_s"])
+                )
             frames = self._capture_ui_stack()
             if frames:
                 sample = episode.stacks.get(frames)
@@ -390,7 +392,9 @@ class SystemWatchdogV2:
         # Disk activity while sampling: a stall with little CPU and a busy disk is a wait on storage.
         io = None
         if episode.io_start is not None and io_end is not None:
-            written, busy_ms, own = (end - start for start, end in zip(episode.io_start, io_end, strict=True))
+            written, busy_ms, own = (
+                end - start for start, end in zip(episode.io_start, io_end, strict=True)
+            )
             io = {
                 "disk_write_mb": round(written, 1),
                 "disk_write_ms": round(busy_ms, 1),

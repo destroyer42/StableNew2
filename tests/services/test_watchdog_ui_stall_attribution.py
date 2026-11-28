@@ -331,7 +331,11 @@ def test_a_stall_records_long_lock_holds_and_the_io_done_while_it_lasted(
     payload = record.json_payload
     (hold,) = [h for h in payload["held_locks"] if h["lock"] == "job_repository"]
     assert hold["thread"] == "progress_poll_0" and "commit_progress" in hold["site"]
-    assert payload["io"] == {"disk_write_mb": 64.0, "disk_write_ms": 4500.0, "process_write_mb": 2.5}
+    assert payload["io"] == {
+        "disk_write_mb": 64.0,
+        "disk_write_ms": 4500.0,
+        "process_write_mb": 2.5,
+    }
 
 
 def test_io_counters_can_be_read_on_this_machine() -> None:
