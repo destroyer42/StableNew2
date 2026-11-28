@@ -51,6 +51,7 @@ _STATIC = Path(__file__).resolve().parent / "static"
 _PAGES = {
     "/": ("index.html", "text/html"),
     "/static/app.js": ("app.js", "text/javascript"),
+    "/static/queued.js": ("queued.js", "text/javascript"),
     "/static/app.css": ("app.css", "text/css"),
     "/static/rating.js": ("rating.js", "text/javascript"),
     "/static/moreinfo.js": ("moreinfo.js", "text/javascript"),
@@ -188,8 +189,8 @@ def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlet
         )
 
     async def status(request: Request) -> Response:
-        await session(request)
-        return JSONResponse(await run_in_threadpool(store.phone_status))
+        device = await session(request)
+        return JSONResponse(await run_in_threadpool(store.phone_status, device.device_id))
 
     async def decisions(request: Request) -> Response:
         device = await session(request)
@@ -250,6 +251,25 @@ def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlet
         if found is None:
             raise GatewayError(404, "not_found")
         return JSONResponse(found)
+
+    # RG-160: what the phone may choose while the PC is away, its waiting requests, and cancel.
+    async def catalog(request: Request) -> Response:
+        await queue_session(request)
+        return JSONResponse(await run_in_threadpool(store.choice_catalog))
+
+    async def waiting_requests(request: Request) -> Response:
+        device = await queue_session(request)
+        return JSONResponse(await run_in_threadpool(store.deferred_requests, device.device_id))
+
+    async def cancel_action(request: Request) -> Response:
+        device = await queue_session(request)
+        record_id = request.path_params["record_id"]
+        if not _UUID.fullmatch(record_id):
+            raise GatewayError(404, "not_found")
+        state = await run_in_threadpool(store.cancel_action, device.device_id, record_id)
+        if state is None:
+            raise GatewayError(404, "not_found")
+        return JSONResponse({"record_id": record_id, "state": state})
 
     # LAUNCH-UPDATE-2: remote update, only for a phone paired from the desktop's dedicated offer (D2).
     async def admin_session(request: Request) -> Device:
@@ -312,6 +332,9 @@ def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlet
             Route("/api/actions", actions, methods=["POST"]),
             Route("/api/actions", item_actions, methods=["GET"]),
             Route("/api/actions/{record_id}", action, methods=["GET"]),
+            Route("/api/actions/{record_id}/cancel", cancel_action, methods=["POST"]),
+            Route("/api/catalog", catalog, methods=["GET"]),
+            Route("/api/requests", waiting_requests, methods=["GET"]),
             Route("/api/admin", admin, methods=["GET"]),
             Route("/api/admin/updates", update_requests, methods=["POST"]),
             Route("/api/admin/updates/{record_id}", update_request, methods=["GET"]),

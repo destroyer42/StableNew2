@@ -79,6 +79,8 @@ const NOT_SAVED = {
   unknown_item: "the gateway does not have this item",
   not_granted: "this phone is not allowed to review",
   idempotency_conflict: "it clashed with an earlier request",
+  not_an_image: "only images can be fixed",
+  too_many_pending: "too many requests from this phone are waiting",
 };
 
 const view = document.getElementById("view");
@@ -250,7 +252,7 @@ function queueDecision(item, verdict, favorite, tags, heldUntil = 0) {
     idempotency_key: idempotencyKey(),
     ...(heldUntil ? { held_until: heldUntil } : {}),
   };
-  changeList(REJECTED_KEY, (list) => list.filter((e) => key(e) !== key(item)));
+  changeList(REJECTED_KEY, (list) => list.filter((e) => e.action || key(e) !== key(item)));
   changeList(QUEUE_KEY, (list) => [...list, entry]);
   item.decision = { verdict, favorite, tags };
   item.state = "unsent";
@@ -340,9 +342,11 @@ function confirmDeleteRun(runId, items) {
   const reworked = items.filter((item) => item.state === "rework").length;
   const stay = [kept ? `${kept} kept` : "", reworked ? `${reworked} in rework` : ""].filter(Boolean).join(" and ");
   const targets = items.filter(deletable);
+  const requests = targets.filter(Queued.waitingOn).length;
   sheet(
     el("h2", { text: `Delete ${targets.length}?` }),
     el("p", { text: `The files go to the PC's archive.${stay ? ` ${stay} stay.` : ""}` }),
+    requests ? el("p", { text: `${requests} have a request waiting. Deleting cancels it.` }) : null,
     el("div", { class: "sheet-actions" }, [
       el("button", { type: "button", text: "Cancel", onclick: closeSheet }),
       el("button", {
@@ -367,8 +371,9 @@ function findItem(wanted) {
 
 async function send(entry) {
   const { reason, held_until, ...body } = entry;
-  const { state } = await api("/api/decisions", body);
-  if (!ANSWERS.has(state)) throw new Error("unreadable reply"); // keep it and try again
+  const { state } = await api(entry.action ? "/api/actions" : "/api/decisions", body);
+  const known = ANSWERS.has(state) || (entry.action && state === "cancelled"); // RG-160
+  if (!known) throw new Error("unreadable reply"); // keep it and try again
   return state;
 }
 
@@ -393,7 +398,9 @@ async function flush() {
           showPairing();
           return;
         }
-        if (!(error instanceof ApiError) || error.status >= 500 || error.status === 429) {
+        // RG-160: "too many waiting" lasts until the PC answers them, so it is set aside rather than holding up the list.
+        const busy = error.status === 429 && error.code !== "too_many_pending";
+        if (!(error instanceof ApiError) || error.status >= 500 || busy) {
           retryTimer = setTimeout(flush, retryDelay);
           retryDelay = Math.min(retryDelay * 2, 30000);
           return;
@@ -402,13 +409,15 @@ async function flush() {
         reason = error.code;
         const lost = { ...entry, reason };
         changeList(REJECTED_KEY, (list) => [...without(lost.idempotency_key)(list), lost]);
-        toast("A decision was not saved");
+        toast(entry.action ? "A request was not saved" : "A decision was not saved");
       }
       const sent = entry.idempotency_key;
       changeList(QUEUE_KEY, without(sent));
       retryDelay = 2000;
       const target = key(entry);
-      if (!readList(QUEUE_KEY).some((e) => key(e) === target)) {
+      if (entry.action) {
+        Queued.sent(entry, state); // RG-160: it says nothing about the item's decision
+      } else if (!readList(QUEUE_KEY).some((e) => !e.action && key(e) === target)) {
         for (const item of findItem(target)) {
           item.state = state;
           item.reason_code = reason;
@@ -423,21 +432,21 @@ async function flush() {
 
 function overlayUnsent(items) {
   const decisionOf = (e) => ({ verdict: e.verdict, favorite: e.favorite, tags: e.tags });
-  for (const entry of readList(REJECTED_KEY)) {
+  for (const entry of readList(REJECTED_KEY).filter((e) => !e.action)) {
     for (const item of items.filter((i) => key(i) === key(entry) && i.state === "undecided")) {
       item.decision = decisionOf(entry);
       item.state = "rejected";
       item.reason_code = entry.reason;
     }
   }
-  for (const entry of readList(QUEUE_KEY)) {
+  for (const entry of readList(QUEUE_KEY).filter((e) => !e.action)) {
     for (const item of items.filter((i) => key(i) === key(entry))) {
       item.decision = decisionOf(entry);
       item.state = "unsent";
       item.reason_code = null;
     }
   }
-  return items;
+  return Queued.overlay(items);
 }
 
 function showRejected() {
@@ -453,7 +462,9 @@ function showRejected() {
     showRejected();
   };
   const rows = readList(REJECTED_KEY).map((entry) => {
-    const choice = entry.favorite ? "Favorite" : entry.verdict === "keep" ? "Keep" : "Delete";
+    const choice = entry.action
+      ? actionLabel(entry.action)
+      : entry.favorite ? "Favorite" : entry.verdict === "keep" ? "Keep" : "Delete";
     return el("section", { class: "run" }, [
       el("h2", { text: `${choice} was not saved` }),
       el("p", { class: "muted", text: NOT_SAVED[entry.reason] || "the gateway did not accept it" }),
@@ -651,6 +662,7 @@ async function showHome(serial) {
   const { sections } = await api(`/api/sections${query ? `?${query}` : ""}`);
   await loadScopes();
   const status = await api("/api/status").catch(() => null); // extra: the home screen shows without it
+  await Queued.sync();
   if (serial !== renderSerial) return;
   const countNew = readSetting(COUNT_KEY, "todo") === "new";
   const counting = (value, text) =>
@@ -675,7 +687,7 @@ async function showHome(serial) {
     : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
   // RG-170: ratings sit above the folders. Eval clips are rated there and are never a folder here.
   const rate = Rating.entry(() => rate.remove());
-  show("Review", false, ...[...statusLines(status), rate, reviewAllButton(waiting, "all"), ...content, update].filter(Boolean));
+  show("Review", false, ...[...statusLines(status), Queued.line(status), rate, reviewAllButton(waiting, "all"), ...content, update].filter(Boolean));
 }
 
 async function showSection(name, serial) {
@@ -712,6 +724,7 @@ function tile(runId, item) {
       STATE_BADGES[item.state]
         ? el("span", { class: `badge state ${item.state}`, text: STATE_BADGES[item.state] })
         : null,
+      Queued.mark(item),
     ],
   );
 }
@@ -918,7 +931,7 @@ function updateTriageStatus() {
   const node = document.getElementById("state");
   if (!triage || !node) return;
   const item = triage.list[triage.index];
-  node.textContent = statusText(item);
+  node.textContent = statusText(item) + Queued.suffix(item);
   node.className = item.state === "refused" || item.state === "rejected" ? "refused" : "";
 }
 
@@ -1249,11 +1262,14 @@ function renderCompare(item) {
   prefetch(list.slice(index + 1, index + 1 + PREFETCH));
 }
 
-function pick(winner, loser, both = false) {
+function pick(winner, loser, both = false, confirmed = false) {
   if (!triage || Date.now() < triage.lockedUntil) return;
   if (!triage.ready) {
     toast("Still loading");
     return;
+  }
+  if (!both && !confirmed && Queued.waitingOn(loser)) {
+    return Queued.confirmDelete(() => pick(winner, loser, false, true));
   }
   decideUndoably(
     [
@@ -1349,6 +1365,7 @@ function actionRow(item) {
         text,
         onclick: () => {
           if (FIX_TAGS[action]) addTags(item, FIX_TAGS[action]);
+          if (Queued.offer(item, action)) return; // RG-160: the PC is away
           if (WORDS[action]) askWords(item, action);
           else openAction(item, action);
         },
@@ -1481,6 +1498,7 @@ async function sendAction(body) {
 }
 
 async function openAction(item, action, extra = {}) {
+  if (Queued.offer(item, action, extra)) return;
   const label = actionLabel(action);
   const asking = PICKERS[action] && !extra.choice ? "Asking the PC for its options…" : "Asking the PC for a summary…";
   const node = sheet(el("h2", { text: label }), el("p", { class: "muted", text: asking }));
@@ -1501,9 +1519,11 @@ async function openAction(item, action, extra = {}) {
   };
   try {
     const { record_id: recordId } = await sendAction(body);
+    if (alive()) Queued.watch(node, item, action, recordId, "prepare");
     const answer = await waitFor(recordId, alive);
     if (answer) showAnswer(item, action, recordId, answer, cancel, fail);
   } catch (error) {
+    if (!error.status && alive() && Queued.unreachable(item, action)) return;
     fail(error.status === 429 ? "Too many requests from this phone for now." : `Not sent: ${error.code || "no connection"}.`);
   }
 }
@@ -1515,6 +1535,7 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
   const choices = answer.receipt && answer.receipt.choices;
   if (answer.state === "applied" && choices && !summary) return showChoices(item, action, choices);
   if (answer.state === "refused" && REWORK.has(action)) markRework(item, false);
+  if (answer.state === "refused" && Queued.notReady(item, action, answer)) return;
   if (answer.state === "refused" && !(answer.reason_code === "summary_changed" && summary)) {
     return fail(`Not possible: ${refusalText(answer)}`);
   }
@@ -1563,6 +1584,7 @@ function showAnswer(item, action, recordId, answer, cancel, fail) {
               el("p", { class: "muted", text: "Waiting for the PC…" }),
               el("button", { type: "button", text: "Close", onclick: () => closeAfterRework(item) }),
             );
+            Queued.watch(node, item, action, sent.record_id, "confirm");
             const result = await waitFor(sent.record_id, alive);
             if (result) showAnswer(item, action, sent.record_id, result, cancel, failHere);
           } catch (error) {
@@ -1642,7 +1664,7 @@ function statusLines(status) {
   const pc = status.pc;
   if (pc) {
     const age = Date.parse(status.now) - Date.parse(pc.received_at);
-    const seen = age > STATUS_STALE_MS ? `PC last seen ${ago(age)} ago. ` : "";
+    const seen = age > STATUS_STALE_MS ? `PC last seen ${duration(age)} ago. ` : "";
     lines.push(el("p", { class: "muted", text: `${seen}${queueText(pc)}` }));
   }
   if (status.cache.over) {
@@ -1654,7 +1676,7 @@ function statusLines(status) {
   return lines;
 }
 
-function ago(milliseconds) {
+function duration(milliseconds) {
   const minutes = Math.round(milliseconds / 60000);
   if (minutes < 120) return `${minutes} min`;
   const hours = Math.round(minutes / 60);
@@ -1800,13 +1822,16 @@ function step(direction) {
   renderItem();
 }
 
-function decide(verdict, favorite) {
+function decide(verdict, favorite, confirmed = false) {
   if (!triage || Date.now() < triage.lockedUntil) return;
   if (!triage.ready) {
     toast("Still loading");
     return;
   }
   const item = triage.list[triage.index];
+  if (verdict === "delete" && !confirmed && Queued.waitingOn(item)) {
+    return Queued.confirmDelete(() => decide(verdict, favorite, true));
+  }
   const tags = [...triage.tags].filter((tag) => !(verdict === "delete" && tag === "needs_fix"));
   decideUndoably([[item, verdict, favorite, tags]]);
   if (navigator.vibrate) navigator.vibrate(15);
@@ -1848,6 +1873,7 @@ async function route() {
     else if (page === "run" && run) await showRun(decodeURIComponent(run), serial);
     else if (page === "rejected") showRejected();
     else if (page === "update") await showUpdate(serial);
+    else if (page === "requests") await Queued.show(serial);
     else if (page === "rate") await Rating.route(run, libraryId, serial);
     else if (page === "section" && SECTIONS[run]) await showSection(run, serial);
     else await showHome(serial);
@@ -1871,6 +1897,7 @@ async function refresh() {
   if (document.hidden) return;
   flush();
   if (view.querySelector(".pair")) return;
+  Queued.sync();
   const [, page, run] = location.hash.split("/");
   const serial = renderSerial;
   const scroll = window.scrollY;
@@ -1886,6 +1913,9 @@ async function refresh() {
       updateTriageStatus();
     } else if (page === "run" && run) {
       await showRun(decodeURIComponent(run), serial);
+      window.scrollTo(0, scroll);
+    } else if (page === "requests") {
+      if (!document.getElementById("sheet")) await Queued.show(serial);
       window.scrollTo(0, scroll);
     } else if (page === "update") {
       await showUpdate(serial);
@@ -1913,6 +1943,7 @@ window.addEventListener("storage", () => {
   flush();
 });
 document.getElementById("rejected").addEventListener("click", () => (location.hash = "#/rejected"));
+document.getElementById("waiting").addEventListener("click", () => (location.hash = "#/requests"));
 document.addEventListener("visibilitychange", refresh);
 document.addEventListener("visibilitychange", () => document.hidden && releaseHeld());
 window.addEventListener("pagehide", releaseHeld);
@@ -1922,3 +1953,4 @@ if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 showBadges();
 flush();
 route();
+Queued.sync();
