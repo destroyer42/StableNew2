@@ -109,6 +109,13 @@ def make_video_spec(specs: dict[tuple[str, str], WorkflowSpec]) -> WorkflowSpec 
     )
 
 
+def gateway_video_label(registry: DefaultWorkflowRegistryPort | None = None) -> str:
+    """The name of the workflow a phone Make Video would run now, or ``""`` when none is approved."""
+
+    spec = make_video_spec(_phone_specs(registry or DefaultWorkflowRegistryPort()))
+    return spec.display_name if spec else ""
+
+
 def gateway_make_video(
     root: Path,
     path: Path,

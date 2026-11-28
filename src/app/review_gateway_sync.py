@@ -15,6 +15,7 @@ immutable snapshot the dialog renders.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -23,7 +24,7 @@ from datetime import UTC, datetime
 from threading import Event, Lock, Thread
 from typing import Any
 
-from src.app.review_gateway_apply import IN_PROGRESS, ApplyDeferred, RecordApplier
+from src.app.review_gateway_apply import ApplyDeferred, RecordApplier
 from src.app.review_gateway_client import (
     GatewayClient,
     GatewayError,
@@ -34,6 +35,7 @@ from src.app.review_gateway_client import (
     Transport,
 )
 from src.app.review_gateway_protocol import (
+    IN_PROGRESS,
     SCHEMA_VERSION,
     PairingOffer,
     ProtocolError,
@@ -70,6 +72,13 @@ FRESH_SECONDS = 30.0
 FRESH_OUTPUT_S = 15 * 60
 MAX_PAGES_PER_CYCLE = 10
 PAGE_SIZE = 100
+#: The outbox is read to its end, so requests waiting for the image backend (RG-160) never hide what follows them.
+#: This only bounds a gateway whose cursor never ends.
+MAX_OUTBOX_PAGES = 200
+#: RG-160: the choice catalog is rebuilt this often, sent when it changed, and sent again this often so that a
+#: rebuilt gateway gets it back.
+CATALOG_BUILD_SECONDS = 15.0
+CATALOG_RESEND_SECONDS = 600.0
 #: After the PC answers a phone action, the phone is usually about to send the next step ("Queue" after the summary),
 #: so for a short window only the outbox is read, every second, instead of every ``SYNC_INTERVAL``.
 ACTION_FOLLOW_INTERVAL = 1.0
@@ -121,6 +130,7 @@ class ReviewGatewaySync:
         transport_factory: Callable[[GatewaySettings], Transport] = PinnedHttpsTransport,
         interval: float = SYNC_INTERVAL,
         monotonic: Callable[[], float] = time.monotonic,
+        catalog: Any = None,
     ) -> None:
         self._store = settings_store
         self._ledger = ledger
@@ -150,6 +160,8 @@ class ReviewGatewaySync:
         self._last_status: dict[str, Any] | None = None
         self._last_status_at = 0.0
         self._status_retry_at = 0.0
+        self._catalog = catalog
+        self._forget_catalog()
 
     # -- Tk-thread API (records intent only) -----------------------------------------------------------------------
 
@@ -334,6 +346,7 @@ class ReviewGatewaySync:
             self._pull(client)
             self._pull_immich(client)
             self._send_status(client)
+            self._send_catalog(client)
             self._publish(client)
             if self._ratings is not None:
                 self._ratings.step(client, busy=self._busy(), cancel=self._stop)
@@ -361,6 +374,7 @@ class ReviewGatewaySync:
     def _fail(self, state: str) -> float:
         self._backoff = min(MAX_BACKOFF, max(self._interval, self._backoff * 2 or self._interval))
         log.info("Review gateway sync paused: %s", state)
+        self._forget_catalog()  # sent again once the gateway is back
         self._set_state(state)
         self._refresh_status()
         return self._backoff
@@ -387,7 +401,7 @@ class ReviewGatewaySync:
 
     def _pull(self, client: GatewayClient) -> None:
         cursor: str | None = None
-        for _ in range(MAX_PAGES_PER_CYCLE):
+        for _ in range(MAX_OUTBOX_PAGES):
             if self._stop.is_set():
                 return
             page = parse_outbox_page(client.outbox(cursor, PAGE_SIZE))
@@ -411,7 +425,7 @@ class ReviewGatewaySync:
                     unacknowledgeable += 1
                     continue
                 if result.outcome == IN_PROGRESS:
-                    continue  # a remote update under way: asked again next cycle, answered once it has a receipt
+                    continue  # a remote update under way, or a deferred action: asked again next cycle
                 if (
                     isinstance(raw, dict)
                     and raw.get("kind") == "action_request"
@@ -459,6 +473,36 @@ class ReviewGatewaySync:
             )
             return
         self._last_status, self._last_status_at = comparable, now
+
+    def _forget_catalog(self) -> None:
+        self._catalog_sent = ""
+        self._catalog_sent_at = self._catalog_built_at = float("-inf")
+
+    def _send_catalog(self, client: GatewayClient) -> None:
+        """RG-160: tell the gateway what the phone may choose, when it takes it and something changed."""
+
+        now = self._monotonic()
+        if (
+            self._catalog is None
+            or "deferred_actions" not in client.features
+            or now - self._catalog_built_at < CATALOG_BUILD_SECONDS
+        ):
+            return
+        self._catalog_built_at = now
+        try:
+            payload = self._catalog.payload()
+        except Exception as error:  # noqa: BLE001 - the phone's choices never stop its decisions
+            log.warning("The phone choice list could not be built (%s)", type(error).__name__)
+            return
+        timeless = {k: v for k, v in payload.items() if k not in ("published_at", "models_as_of")}
+        comparable = json.dumps(timeless, sort_keys=True)
+        if (
+            comparable == self._catalog_sent
+            and now - self._catalog_sent_at < CATALOG_RESEND_SECONDS
+        ):
+            return
+        if client.send_choice_catalog(payload):
+            self._catalog_sent, self._catalog_sent_at = comparable, now
 
     def _pull_immich(self, client: GatewayClient) -> None:
         """Read the receipts added since last time; the cursor is kept once a page is stored."""
