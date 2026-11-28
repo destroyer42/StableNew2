@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.output_naming import short_id
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.state.output_routing import OUTPUT_ROUTE_ANIMATEDIFF, OUTPUT_ROUTE_PIPELINE
 from tests.helpers.njr_factory import make_pipeline_njr
@@ -261,8 +262,8 @@ class TestOutputFolderStructure:
         output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_folder = None
         for folder in output_folders:
-            # Should contain sanitized pack name
-            if "My_Pack" in folder.name or "Chars" in folder.name:
+            # Should contain sanitized pack name ("_" separates the parts, so a pack's own spaces become "-")
+            if "My-Pack-Name" in folder.name:
                 pack_folder = folder
                 break
 
@@ -279,7 +280,7 @@ class TestOutputFolderStructure:
 
     def test_fallback_to_job_id_when_no_pack_name(self, pipeline_runner, temp_output_dir):
         """
-        Test that job_id is used when prompt_pack_name is empty.
+        Test that a job without a pack keeps a folder to itself, ending in its short id (NAME-INFO).
         """
         njr = _make_njr(
             job_id="my_unique_job_123",
@@ -321,7 +322,7 @@ class TestOutputFolderStructure:
         output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_folder = None
         for folder in output_folders:
-            if "my_unique_jo" in folder.name:
+            if folder.name.endswith(f"_SDXL-base_{short_id('my_unique_job_123')}"):
                 pack_folder = folder
                 break
 

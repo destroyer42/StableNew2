@@ -281,6 +281,11 @@
         "batch": {
           "type": "string",
           "maxLength": 120
+        },
+        "file_name": {
+          "description": "The output's file name (no folder), only when it follows the descriptive scheme; Immich uploads under it.",
+          "type": "string",
+          "pattern": "^[0-9]{8}-[0-9]{4}_[A-Za-z0-9._+-]{1,120}\\.(png|jpe?g|webp|mp4|webm)$"
         }
       }
     },

@@ -314,7 +314,7 @@ def job_info_reader(repository: Any, identity: Callable[[Any], Mapping[str, Any]
     describer = OutputDescriber(repository, batch_identity=identity)
 
     def read(path: Path, item: LibraryItem) -> Mapping[str, Any]:
-        return describer.describe(
+        info = describer.describe(
             path,
             kind=item.kind,
             made_at=datetime.fromtimestamp(item.effective_time / 1_000_000, UTC),
@@ -322,6 +322,8 @@ def job_info_reader(repository: Any, identity: Callable[[Any], Mapping[str, Any]
             workflow=item.workflow or "",
             seed=item.seed,
         )
+        # The name only, for Immich; the manifest keeps it only when it follows the descriptive scheme.
+        return {**info, "file_name": path.name}
 
     return read
 
@@ -411,10 +413,14 @@ class GatewayPublisher:
         if self._info_of is None or "item_info" not in client.features:
             return None
         try:
-            return self._info_of(path, item)
+            info = dict(self._info_of(path, item))
         except Exception:  # noqa: BLE001 - display only; it must never hold publishing back
             log.debug("Review gateway publish could not describe an item")
             return None
+        # A gateway that knows ``info`` but not the file name would refuse the whole manifest.
+        if "item_file_name" not in client.features:
+            info.pop("file_name", None)
+        return info
 
     def _parent(self, key: str, item: LibraryItem, path: Path) -> tuple[str, str] | None:
         """The original a phone rework made this image from, recorded in the ledger as its lineage; named as the

@@ -354,7 +354,18 @@ performs no network lookup or download.
 | Run metadata, replay and diagnostics descriptors | `write_run_metadata` (`src/learning/run_metadata.py`), `build_replay_descriptor` / `build_diagnostics_descriptor` | `src/pipeline/result_contract_v26.py` |
 | Failure evidence | `build_failure_evidence` attached by the runner on failure (`dispatch_certainty`, category) | `src/api/webui_failure_evidence.py` |
 
-Output folders are `output/<route>/<pack>-<model>-<vae>` (or the Learning experiment label), resolved by `PipelineRunner._resolve_run_dir` with `classify_njr_output_route`. `output/_archive/` is not a route: Review's Discard moves an image there reversibly (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.7.1); nothing is generated into it, `iter_output_run_dirs`, the Learning scan and the Review folder scan skip it, and `resolve_output_artifact_path` never resolves into it. Replay inputs are verified by SHA-256 (`src/pipeline/replay_input_verification.py`); `ReplayEngine` re-enters `run_njr`.
+Output folders are `output/<route>/<YYYYMMDD_HHMMSS>_<pack>_<model>` (or the Learning experiment label), resolved by `PipelineRunner._resolve_run_dir` with `classify_njr_output_route`. `output/_archive/` is not a route: Review's Discard moves an image there reversibly (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.7.1); nothing is generated into it, `iter_output_run_dirs`, the Learning scan and the Review folder scan skip it, and `resolve_output_artifact_path` never resolves into it. Replay inputs are verified by SHA-256 (`src/pipeline/replay_input_verification.py`); `ReplayEngine` re-enters `run_njr`.
+
+**Names (NAME-INFO).** New files are `{YYYYMMDD-HHMM}_{stage path}_{model}_{pack}_p{NN}v{NN}_{short id}.{ext}`, for
+example `20261127-1648_txt2img+adetailer_photoMomentum_000-Style_p01v02_8f87e4a2.png`; clips are
+`..._clip-A14B_from-photoMomentum_000-Style_p01_969e487e.mp4` (`storyboard-...` for a take). Unknown parts are left
+out. The short id is the job's; batch images add `_batchN`, a second input `_iNN`, a sequence segment `_segNN`. The
+one authority is `src/pipeline/output_naming.py` (`JobOutputNames`, built from the frozen NJR, the input image's
+record and the run's start time); short model names also come from `config/output_model_names.json`, with an
+untracked `config/output_model_names.local.json` over it. A job without a pack of its own keeps a folder to itself,
+ending in the short id. Each image carries a `prompt_pack` block so a later reprocess or clip can name it. Existing
+files are never renamed. Learning runs keep their earlier file and folder names. `OutputPlan.filename_template` is
+stored but no writer reads it.
 
 Provenance is best-effort but no longer silent (audit B9, fixed in P3-5) [V]: when the image metadata builder fails the PNG is still saved without embedded provenance, but the failure is logged at WARNING and recorded in `Pipeline._provenance_incomplete` (stage, image, reason, error); `PipelineRunner` copies the list into `result.metadata["provenance_incomplete"]` (absent when nothing was lost). An NJR identity failure and a `write_run_metadata` failure are logged the same way (the first is also recorded). The embedded `stablenew:njr_sha256` is the repository fingerprint (`jobs.njr_fingerprint`): both come from `src/utils/njr_identity.py` (the `{schema_version, job_id, normalized_job}` envelope, canonical ASCII-escaped JSON, SHA-256), so a PNG matches its SQLite row. Images written before P3-5 carry the older hash of the bare record and are not rewritten. `decode_payload` gunzips embedded payloads without a size bound (audit B11) [V]. Do not add code that depends on every image carrying a payload.
 

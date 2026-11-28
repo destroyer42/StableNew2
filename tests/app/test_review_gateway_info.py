@@ -36,7 +36,8 @@ def test_info_goes_with_the_manifest_to_a_gateway_that_takes_it(env):
     manifests = publish(env, ["item_info"], job_info_reader(None, lambda _job: None))
     assert len(manifests) == 2
     for manifest in manifests:
-        assert set(manifest["info"]) == {"made_at"}  # these two files carry no StableNew record
+        # These two files carry no StableNew record, and their names are not descriptive ones (so not sent).
+        assert set(manifest["info"]) == {"made_at"}
         validate_def(manifest, "item_manifest")
         assert str(env.root) not in json.dumps(manifest)
 
@@ -83,3 +84,17 @@ def test_the_manifest_keeps_only_bounded_known_fields_without_paths():
         "batch": "night",
     }
     validate_def(manifest, "item_manifest")
+
+
+@pytest.mark.parametrize(
+    ("features", "sent"),
+    [(["item_info"], False), (["item_info", "item_file_name"], True)],
+)
+def test_the_file_name_goes_only_to_a_gateway_that_takes_it(env, features, sent):
+    name = "20261127-1648_txt2img_photoMomentum_000-Style_p01v02_8f87e4a2.png"
+
+    manifests = publish(env, features, lambda _path, _item: {"seed": "7", "file_name": name})
+
+    assert [manifest["info"].get("file_name") == name for manifest in manifests] == [sent, sent]
+    for manifest in manifests:
+        validate_def(manifest, "item_manifest")

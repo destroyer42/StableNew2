@@ -295,6 +295,15 @@ class OutputDescriber:
             info = self._image(job, recorded, model)
         if pack := self._lineage_pack(job, source):
             info["pack"], info["prompt_number"], info["variant"] = pack
+        else:
+            carried = (
+                recorded
+                if recorded.pack or source is None
+                else recorded_naming(_image_payload(source))
+            )
+            if carried.pack:
+                info["pack"] = carried.pack
+                info["prompt_number"], info["variant"] = carried.prompt_number, carried.variant
         if made_at is not None:
             info["made_at"] = (
                 made_at.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")

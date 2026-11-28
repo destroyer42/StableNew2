@@ -33,6 +33,7 @@ PAGE_LIMIT = 500
 #: ``rating_tasks``: the RG-170 rating routes.
 #: ``deferred_actions``: the choice catalog route (RG-160 requests made while the PC is away).
 #: ``item_info``: the manifest's ``info`` (NAME-INFO "More info").
+#: ``item_file_name``: ``info.file_name``, the descriptive name Immich uploads under.
 FEATURES = (
     "item_batch",
     "item_parent",
@@ -42,6 +43,7 @@ FEATURES = (
     "rating_tasks",
     "deferred_actions",
     "item_info",
+    "item_file_name",
 )
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")

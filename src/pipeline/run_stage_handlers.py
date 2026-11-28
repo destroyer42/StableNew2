@@ -62,6 +62,8 @@ class StageRunContext:
     #: The stage being (or last) started, for error reporting.
     current_stage_name: str = ""
     image_performance: ImagePerformanceTrace | None = None
+    #: NAME-INFO: the job's output names (``src/pipeline/output_naming.py``); ``None`` outside ``run_njr``.
+    names: Any = None
     final_image_stage: str | None = None
     final_image_paths: set[str] = field(default_factory=set)
     image_stage_executions: int = 0
@@ -114,14 +116,19 @@ class Txt2ImgHandler(StageHandler):
             )
         else:
             base_prefix = f"{stage.stage_name}_p{prompt_row + 1:02d}_v{njr.variant_index + 1:02d}"
-        seed = (njr.config or {}).get("seed") or getattr(njr, "extra_metadata", {}).get("seed")
-        image_name = build_safe_image_name(
-            base_prefix=base_prefix,
-            matrix_values=_matrix_values(njr),
-            seed=seed,
-            pack_name=_pack_name(njr),
-            max_length=_MAX_NAME_LENGTH,
-        )
+        if ctx.names is not None and not learning_context:
+            image_name = ctx.names.image_stem(
+                "txt2img", stage_model=config_dict.get("model"), run_dir=ctx.run_dir
+            )
+        else:
+            seed = (njr.config or {}).get("seed") or getattr(njr, "extra_metadata", {}).get("seed")
+            image_name = build_safe_image_name(
+                base_prefix=base_prefix,
+                matrix_values=_matrix_values(njr),
+                seed=seed,
+                pack_name=_pack_name(njr),
+                max_length=_MAX_NAME_LENGTH,
+            )
 
         ctx.image_stage_executions += 1
         result = runner._execute_image_backend(
@@ -246,19 +253,28 @@ class PerImageStageHandler(StageHandler):
             if spec.free_vram_before and use_original_name and img_idx > 0:
                 self._free_vram(ctx, name, img_idx, settle=True)
 
-            if use_original_name and img_idx < len(original_inputs):
-                input_stem = Path(original_inputs[img_idx]).stem[:_ORIGINAL_STEM_CHARS]
-                unique_prefix = f"{base_prefix}_{input_stem}"
+            if ctx.names is not None and not ctx.learning_context:
+                image_name = ctx.names.image_stem(
+                    name,
+                    input_path=input_path,
+                    stage_model=config_dict.get("model"),
+                    run_dir=ctx.run_dir,
+                    suffix=f"_i{img_idx + 1:02d}" if len(paths) > 1 else "",
+                )
             else:
-                unique_prefix = base_prefix
-            image_name = build_safe_image_name(
-                base_prefix=unique_prefix,
-                matrix_values=matrix_values,
-                seed=None,
-                batch_index=img_idx,
-                pack_name=pack_name,
-                max_length=_MAX_NAME_LENGTH,
-            )
+                if use_original_name and img_idx < len(original_inputs):
+                    input_stem = Path(original_inputs[img_idx]).stem[:_ORIGINAL_STEM_CHARS]
+                    unique_prefix = f"{base_prefix}_{input_stem}"
+                else:
+                    unique_prefix = base_prefix
+                image_name = build_safe_image_name(
+                    base_prefix=unique_prefix,
+                    matrix_values=matrix_values,
+                    seed=None,
+                    batch_index=img_idx,
+                    pack_name=pack_name,
+                    max_length=_MAX_NAME_LENGTH,
+                )
 
             stage_config = config_dict
             image_refinement_payload: dict[str, Any] | None = None
