@@ -1,9 +1,9 @@
 # VID-CAND-LTX25: LTX-2.5 distilled image-to-video candidate and three-way comparison
 
-Status: researched, built offline and the model files downloaded and verified on 2026-11-27. **No LTX-2.5 clip has been
-generated and neither graph has been validated by the real ComfyUI.** The two workflows are `experimental`, never the
-Make Video default, never preselected and not QUALIFIED. The owner has approved the download and the section 7 run for
-non-explicit clips only; every rating is the owner's (sections 1, 5 and 7).
+Status: **stopped after stage 0 on 2026-11-27 because the frozen source images are not non-explicit** (section 7). Two
+silent-workflow smoke clips were generated; stage 1, stage 2 and the audio stage were not run, there is no comparison,
+and whether to delete the two clips and whether to go on at all are open owner decisions. The two workflows are
+`experimental`, never the Make Video default, never preselected and not QUALIFIED.
 
 Owner's words (2026-11-27): "Let's do both and compare. Still do the ltx-2.5 as well." The comparison is LTX-2.5
 against HunyuanVideo 1.5 (VID-CAND-382) and the current default, Wan2.2 I2V-A14B 4-step 1.0.0.
@@ -37,8 +37,12 @@ official model card links `https://github.com/Lightricks/LTX-2/blob/main/LICENSE
 - **Owner confirmation of the sources, 2026-11-27 (relayed by the orchestrator session):** all 16 source images in
   VID-CAND-382's stage 1 and stage 2 suites come from the output library. Asked to choose between a new safe-for-work set
   and reusing them, the owner chose "I'll vouch for the 16", confirming they are non-explicit and allowing them for
-  LTX-2.5. They are reused exactly as frozen (same paths and hashes). No agent opened them to check. This covers these 16
-  files only; every prompt must still be non-explicit.
+  LTX-2.5. They are reused exactly as frozen (same paths and hashes). No agent opened them before the run. This covers
+  these 16 files only; every prompt must still be non-explicit.
+- **Source check, 2026-11-27, after stage 0: that confirmation does not match the files.** An agent opened all 16
+  (hashes matching the suites): all but one contain nudity and several are sexually explicit. They must not be used
+  with LTX-2.5, whatever was confirmed. **Lesson for any restricted-use model: open every source before the first
+  generation; a statement about the files is not a check of them.**
 - **Download, 2026-11-27:** the owner accepted the gate and the five files of section 5 were downloaded at the pinned
   revision (13:22-13:30 UTC), each matching its size and SHA-256, and placed as section 5 says.
 
@@ -194,7 +198,34 @@ Rules, thresholds, stop rules and budget are in `tools/qualification/vid_cand_lt
 - **Audio:** reported, not gated (present, usable, in step with the motion, extra time and memory).
 - **Recorded per job:** cold and warm wall time, VRAM, host commit and available RAM peaks, and failures.
 
-## 7. Physical run plan (approved by the owner for non-explicit clips; not yet run)
+## 7. Physical run plan (stage 0 run; stopped on the source condition)
+
+### Result, 2026-11-27 (code `7b5c0a9e`, plan digest `81ab7ed14043`, run `20261128_001904_vidcandltx25-stage0_29babf76`)
+
+Preflight passed (ComfyUI port free, 11.5 GiB VRAM and 23.4 GiB RAM free, PCIe x16). Both stage 0 jobs completed, with
+no allocation failure, device loss or stop rule. The read-only verifier's identity checks all passed.
+
+| Measure (silent workflow, 768x1344, 121 frames, 24 fps) | Value |
+|---|---|
+| Wall time, cold / warm (one job each) | 192.9 s / 123.9 s |
+| Peak VRAM | 11,794 MiB of 12,282 MiB |
+| Peak host commit fraction | 0.70 |
+| Lowest available host RAM | 12.5 GiB |
+| Peak GPU temperature | 75 °C |
+| Output | both clips decode fully (H.264, 121 frames) with the diffusion video decoder |
+
+Other sessions' test suites were using the CPU at launch, so the times may be a little high. Quality was not assessed
+and nothing was rated.
+
+**Both stage 0 sources contain nudity and one is sexually explicit.** Generating from them broke the owner's condition
+and, for the explicit one, the licence's use policy. The run stopped there. The two clips and their frames remain on the
+host until the owner decides; deleting them is recommended.
+
+**To go on** needs the owner's decision and a new, opened-and-checked non-explicit source set, with VID-CAND-382's arms
+re-run on the same sources so the comparison still joins. A new plan and a new approval; the suites built for this run
+must not be reused.
+
+### The plan as approved (kept for the record)
 
 Before any of it: the section 5 files present with matching SHA-256; VID-CAND-382 reports the GPU free; VID-FRAME's GPU
 test, which is queued first, has finished; StableNew, Forge and ComfyUI closed; and a one-line go/no-go check to the
@@ -238,10 +269,13 @@ three-way sheet can be built only after it does.
 |---|---|
 | Implementation | Spec module and registration, picker tier, the upscaler folder in the missing-model check, `tools/qualification/vid_cand_ltx25`, this record, VIDEO_PIPELINE, CODEX_MAP, CODE_MAP and tools README entries |
 | Demonstration | `tests/video/test_vid_cand_ltx25.py` and `tests/tools/test_vid_cand_ltx25_eval.py`: registry, opt-in, pins, graphs, probe, fake-Comfy runs, eval-kit admission, three-way sheet, all on synthetic data. Graph inputs were checked by reading the installed node sources; **the real ComfyUI has not validated either graph** |
+| Physical | Stage 0 only: the silent graph was accepted by the real ComfyUI and ran twice (section 7). Not qualification evidence |
 | Qualification | None. No ledger entry |
-| Held or unverified | All physical stages, ratings, and every value marked unmeasured |
+| Held or unverified | Stages 1 and 2, the audio workflow (never run), all quality ratings and the comparison |
 
 ## 9. Recommendation and smallest next step
 
-LTX-2.5 stays a candidate for non-explicit work only, whatever its quality (section 1). The smallest next step that can
-change the decision is stage 0: two jobs that show whether it loads and decodes on 12 GB, and how long it takes.
+LTX-2.5 loads and decodes on 12 GB at 768x1344x121 in about two minutes warm. **Recommendation: drop it as a candidate
+for this host's work.** The frozen evaluation sources, which stand for that work, are outside what its licence allows
+(section 1). The alternative, if the owner wants it for non-explicit work only, is the new source set described in
+section 7. The smallest next step that can change the decision is the owner's answer.
