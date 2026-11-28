@@ -92,7 +92,7 @@ button {
 .pair .code { font-size: 1.6rem; letter-spacing: 0.2em; text-align: center; text-transform: uppercase; }
 .primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
 
-/* inbox */
+/* cards, chips and covers: shared */
 .run {
   background: var(--card);
   border: 1px solid var(--line);
@@ -108,43 +108,13 @@ button {
 .chip.refused { background: var(--delete); }
 .covers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; }
 .covers img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 0.4rem; background: var(--line); }
-.run .open { width: 100%; margin-top: 0.6rem; }
 
-/* PHONE-FAST: one row per source of outputs */
-.folder {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-  min-height: 3.4rem;
-  margin-bottom: 0.5rem;
-  text-align: left;
-}
-.folder-icon { font-size: 1.4rem; }
-.folder-name { flex: 1; }
-.folder .chip { font-size: 0.85rem; font-weight: 600; }
 .wide { width: 100%; min-height: 3rem; margin-bottom: 0.75rem; }
-.counting button { font-size: 0.85rem; }
 
-/* grid */
+/* toolbars and badges: shared */
 .tools { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 .tools .grow { flex: 1; }
 .tools button[aria-pressed="true"] { border-color: var(--accent); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: 0.3rem; }
-.tile {
-  position: relative;
-  padding: 0;
-  aspect-ratio: 1;
-  overflow: hidden;
-  border: 3px solid transparent;
-  border-radius: 0.4rem;
-  content-visibility: auto;
-}
-.tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.tile.keep { border-color: var(--keep); }
-.tile.delete { border-color: var(--delete); }
-.tile.delete img { opacity: 0.45; }
-.tile.favorite { border-color: var(--favorite); }
 .badge {
   position: absolute;
   padding: 0 0.3rem;
@@ -152,9 +122,6 @@ button {
   background: rgb(0 0 0 / 0.7);
   border-radius: 0.3rem;
 }
-.badge.play { top: 0.2rem; left: 0.2rem; }
-.badge.state { bottom: 0.2rem; right: 0.2rem; }
-.badge.state.refused, .badge.state.rejected { background: var(--delete); }
 
 /* triage */
 .triage {
@@ -213,7 +180,6 @@ button {
   pointer-events: none;
 }
 .actions.compare-actions { grid-template-columns: 3rem 1fr 1fr 1fr 3rem; }
-.badge.state.rework { background: var(--accent); }
 .hint {
   position: absolute;
   top: 1rem;
