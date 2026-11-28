@@ -35,6 +35,7 @@ Immich after an explicit Keep (RG-100 invariant 5).
 | `media.py` | Content-addressed cache; a stored file is always complete and digest-verified |
 | `deferred.py` | RG-160: waiting requests, cancel, the PC's last-seen time and the choice catalog |
 | `upload_queue.py` | What Immich is still owed and the receipts for the PC, in the same SQLite file |
+| `timing_store.py`, `timing_routes.py` | Image open times, in a SQLite file of their own (section 11) |
 | `uploader.py`, `immich.py` | The upload worker (its own thread) and the only calls made to Immich |
 | `phone_app.py` | Phone web app and API, loopback `:8443`, published by `tailscale serve` |
 | `sync_app.py` | PC-facing API, one LAN address `:9443`, TLS, bearer sync secret |
@@ -114,7 +115,7 @@ section 9). Errors are `{"error": "<code>"}`.
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
 | `PUT /sync/v1/choice-catalog` | `choice_catalog` | `{"status":"stored"}` (section 10) |
 
-The rating routes are in section 9.
+The rating routes are in section 9, the open-times route in section 11.
 
 Rules:
 
@@ -399,6 +400,8 @@ sources; no real Immich has been used.
 
 `test_static_serving.py` covers the page-file table, its version, traversal refusal, the session fields, `/sw.js`,
 the manifest and its icons, and the Trusted Types directive.
+`test_open_timing.py` covers the open-times routes, their caps and refusals; `tests/phone_e2e/test_open_timing.py`
+what the page sends and drops; `tests/tools/test_gate_report.py` the PC report.
 `test_static_rules.py` reads the page's files: no markup sinks or inline handlers, every import resolves inside
 `static/` to a name its target exports, no module exports a binding that changes, the import boundary, a `feature.js`
 per feature and the size caps.
@@ -720,3 +723,35 @@ A request refused as `too_many_pending` moves to the "not saved" list so it does
 
 **Rollout.** Deploy the gateway first, then update the PC. The first catalog needs one session with Forge connected to
 list checkpoints. A gateway database gains `outbox.cancelled_at` and a `pc_note` table when opened.
+
+## 11. Image open times (PHONE-FAST gate)
+
+Built and tested hermetically only: not deployed, and no time from a real phone yet. It measures the gate "median image
+open time on the phone". There is no figure from before PHONE-FAST; only sizes are known for then.
+
+**What is timed.** From an item becoming current in triage or compare to its `preview` rendition's `load` event. Where
+the bytes came from is read from the browser's resource timing: `network` (asked for at this view), `prefetch` (fetched
+ahead), `cache` (seen before, or answered by the browser's cache) or `unknown`. Not timed: videos, items without a
+rendition, the grid and the full-resolution viewer, a load that fails, a page that goes hidden while loading, and a view
+left before its image loaded (so the figures lean slightly towards faster views).
+
+**What is sent.** `features/timing/` only watches: it is asked first on the `item.view` slot and never claims it. It
+sends `POST /api/timings` (same session, `review` scope and header as every phone API):
+`{"idempotency_key": <16-128 of A-Za-z0-9_->, "samples": [{"ms": 0-600000, "source": ..., "bytes": 0-104857600 or
+null}]}`, 1 to 100 samples, body at most 16 KiB. Any other field or value refuses the whole batch (422
+`invalid_record`). The answer is `{"state": "stored"|"duplicate"}`. A batch goes 45 seconds after the first time waiting
+for it, and when the page is left (`pagehide`, a `keepalive` request). Offline, it is dropped; a network or server error
+is retried once with the same key. There is no outbox, and nothing is kept on the phone.
+
+**What is stored.** `timing.sqlite3` in the data directory, one row per view: when the gateway received it, the device
+id, `ms`, `source`, `bytes`, and the batch key (so a resent batch is stored once). No item id, path, prompt, address or
+device name. Rows older than 30 days or beyond the newest 100,000 are removed (on insert and by the hourly retention).
+It is not part of `gateway.sqlite3`, which this adds nothing to.
+
+**PC read.** `GET /sync/v1/open-timings?cursor=` behind the sync secret:
+`{"rows": [{"at", "ms", "source", "bytes"}], "next_cursor": n|null}`, oldest first, 5,000 a page, without device ids.
+400 `invalid_cursor`. It is not part of the sync schema file; a PC treats 404 as "not offered yet".
+
+**Report.** `python -m tools.gate_report` (`--json`) on the PC, read only: per local day and overall, the views, median
+and p90 milliseconds, the cache-hit share (`cache` and `prefetch`, of the views whose source is known), the count of each
+source and the median rendition size. It uses the gateway settings of this Windows user and no running app.

@@ -26,6 +26,8 @@ from .rating_routes import phone_rating_routes
 from .rating_store import RatingStore
 from .static_files import STATIC_DIR, load_static
 from .store import SOURCES, Clock, Device, Store
+from .timing_routes import phone_timing_routes
+from .timing_store import TimingStore
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
 COOKIE = "rg_session"
@@ -103,6 +105,7 @@ def build_phone_app(
     store: Store,
     clock: Clock,
     ratings: RatingStore,
+    timings: TimingStore,
     release_dir: Path | None = None,
     static_root: Path = STATIC_DIR,
 ) -> Starlette:
@@ -382,6 +385,7 @@ def build_phone_app(
             Route("/api/admin/updates/{record_id}", update_request, methods=["GET"]),
             Route("/media/{library_id}/{sha256}/{variant}", media, methods=["GET"]),
             *phone_rating_routes(ratings, session),
+            *phone_timing_routes(timings, session),
         ],
         middleware=[Middleware(_Guard)],
         exception_handlers=EXCEPTION_HANDLERS,
