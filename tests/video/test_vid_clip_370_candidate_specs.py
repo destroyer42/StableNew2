@@ -32,6 +32,7 @@ from src.video.workflow_catalog import (
     WAN22_FRAMES_VERSION,
 )
 from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_ID,
     WAN_A14B_MODEL_FILES,
     WAN_A14B_REQUIRED_LAUNCH_FLAGS,
@@ -124,18 +125,22 @@ def test_the_picker_keeps_offering_the_approved_ti2v_1_3_0_and_recommends_the_pr
         WAN_A14B_VERSION,
         "approved",
     )
-    assert a14b["experimental"] is False and a14b["make_video_default"] is True
+    assert a14b["experimental"] is False and a14b["make_video_default"] is False
 
     listed = controller.list_workflow_specs()
-    assert recommended_workflow_id(listed) == WAN_A14B_ID
+    assert recommended_workflow_id(listed) == WAN_A14B_FULL_PICTURE_ID
     labels = {c.workflow_id: c for c in workflow_choices(listed)}
-    assert labels[WAN_A14B_ID].recommended and not labels[WAN_A14B_ID].experimental
+    assert labels[WAN_A14B_FULL_PICTURE_ID].recommended and not labels[WAN_A14B_ID].recommended
+    assert not labels[WAN_A14B_ID].experimental
     assert not labels[WAN_ID].recommended and not labels[WAN_ID].experimental
     # The 720p alternate is its own approved entry beside 480p (VID-CLIP-372), never recommended.
     assert records[WAN22_720P_WORKFLOW_ID]["governance_state"] == "approved"
     assert not labels[WAN22_720P_WORKFLOW_ID].recommended
     form = controller.build_default_form_state()
-    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
+    assert (form["workflow_id"], form["workflow_version"]) == (
+        WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_VERSION,
+    )
 
 
 def test_a_newer_experimental_version_never_displaces_the_newest_approved_one() -> None:

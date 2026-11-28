@@ -97,7 +97,7 @@ def _phone_specs(registry: DefaultWorkflowRegistryPort) -> dict[tuple[str, str],
 
 
 def make_video_spec(specs: dict[tuple[str, str], WorkflowSpec]) -> WorkflowSpec | None:
-    """The recommended Make Video workflow (the approved ``make_video_default``, today Wan2.2 I2V-A14B 4-step)."""
+    """The recommended Make Video workflow (the approved ``make_video_default``, today A14B full picture)."""
 
     return next(
         (

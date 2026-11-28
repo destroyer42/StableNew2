@@ -109,6 +109,7 @@ def test_the_startup_snapshot_lists_the_approved_ti2v_workflow_without_starting_
     capabilities = build_optional_dependency_snapshot().to_dict()["capabilities"]
 
     assert sorted(capabilities) == [
+        "workflow:wan22_i2v_a14b_4step_full_picture_v1@1.0.0",  # the default since VID-FRAME
         "workflow:wan22_i2v_a14b_4step_v1@1.0.0",  # approved by VID-CLIP-372
         "workflow:wan22_ti2v_5b_i2v_720p_v1@1.0.0",  # 720p alternate, approved by VID-CLIP-372
         "workflow:wan22_ti2v_5b_i2v_v1@1.2.0",
@@ -131,6 +132,7 @@ def test_a_snapshot_with_comfy_object_info_probes_only_the_approved_workflow_ver
     workflows = {key for key in capabilities if key.startswith("workflow:")}
 
     assert workflows == {
+        "workflow:wan22_i2v_a14b_4step_full_picture_v1@1.0.0",
         "workflow:wan22_i2v_a14b_4step_v1@1.0.0",
         "workflow:wan22_ti2v_5b_i2v_720p_v1@1.0.0",
         "workflow:wan22_ti2v_5b_i2v_v1@1.2.0",

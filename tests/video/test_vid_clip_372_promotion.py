@@ -38,6 +38,7 @@ from src.video.workflow_catalog import (
     WAN22_FRAMES_VERSION,
 )
 from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_ID,
     WAN_A14B_REQUIRED_LAUNCH_FLAGS,
     WAN_A14B_VERSION,
@@ -86,7 +87,7 @@ def _spec(workflow_id: str, version: str):
 # --- governance and the Make Video default ------------------------------------------------------
 
 
-def test_a14b_is_approved_the_declared_make_video_default_and_runs_without_an_opt_in() -> None:
+def test_a14b_is_approved_and_runs_without_an_opt_in() -> None:
     spec = build_default_workflow_registry().get(
         WAN_A14B_ID, WAN_A14B_VERSION
     )  # no allow_experimental
@@ -97,7 +98,7 @@ def test_a14b_is_approved_the_declared_make_video_default_and_runs_without_an_op
     assert (
         "not qualified" in spec.governance_notes.lower()
     )  # approval is not a ledger qualification
-    assert spec.backend_defaults["make_video_default"] is True
+    assert spec.backend_defaults["make_video_default"] is False  # moved by VID-FRAME
     # Approval changed governance only: the pinned graph is the 321F graph (digest pinned in
     # test_pr_comfy_runtime_100_workflow_versions) and the launch requirement is unchanged.
     assert tuple(spec.backend_defaults["runtime_policy"]["required_launch_flags"]) == (
@@ -111,11 +112,18 @@ def test_the_make_video_default_is_a14b_through_every_chooser() -> None:
     )
     records = controller.list_workflow_specs()
 
-    assert recommended_workflow_id(records) == WAN_A14B_ID
+    assert recommended_workflow_id(records) == WAN_A14B_FULL_PICTURE_ID
     form = controller.build_default_form_state()
-    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
+    assert (form["workflow_id"], form["workflow_version"]) == (
+        WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_VERSION,
+    )
     choice = choose_workflow(TASK_ANIMATE, records)
-    assert choice is not None and choice.workflow_id == WAN_A14B_ID and not choice.needs_opt_in
+    assert (
+        choice is not None
+        and choice.workflow_id == WAN_A14B_FULL_PICTURE_ID
+        and not choice.needs_opt_in
+    )
     # The operator's own pick still wins over the default.
     kept = choose_workflow(TASK_ANIMATE, records, pinned_workflow_id=WAN_ID)
     assert kept is not None and kept.workflow_id == WAN_ID
@@ -177,9 +185,14 @@ def test_720p_is_its_own_approved_workflow_id_so_both_resolutions_are_picker_ent
         records[WAN22_720P_WORKFLOW_ID]["governance_state"],
     ) == (WAN22_720P_WORKFLOW_VERSION, "approved")
     assert records[WAN22_720P_WORKFLOW_ID]["experimental"] is False
-    assert recommended_workflow_id(listed) == WAN_A14B_ID  # 720p never displaces the default
+    assert (
+        recommended_workflow_id(listed) == WAN_A14B_FULL_PICTURE_ID
+    )  # 720p never displaces the default
     form = _controller().build_default_form_state()
-    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
+    assert (form["workflow_id"], form["workflow_version"]) == (
+        WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_VERSION,
+    )
 
 
 def test_the_720p_workflow_is_the_1_3_0_graph_at_720p_targets_with_the_longer_timeout() -> None:

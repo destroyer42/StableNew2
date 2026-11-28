@@ -33,6 +33,7 @@ from src.video.video_eval_report import EvalReport, render_html
 from src.video.video_eval_rubric import CATEGORY_KEYS
 from src.video.video_eval_suite import EvalSuiteError, load_eval_suite
 from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_HIGH_LORA,
     WAN_A14B_ID,
     WAN_A14B_LOW_LORA,
@@ -175,9 +176,12 @@ def test_the_approved_a14b_stays_the_picker_default_and_its_versions_are_unchang
     controller = VideoWorkflowController(
         app_controller=SimpleNamespace(job_service=SimpleNamespace(), output_dir="out")
     )
-    assert recommended_workflow_id(controller.list_workflow_specs()) == WAN_A14B_ID
+    assert recommended_workflow_id(controller.list_workflow_specs()) == WAN_A14B_FULL_PICTURE_ID
     form = controller.build_default_form_state()
-    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
+    assert (form["workflow_id"], form["workflow_version"]) == (
+        WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_VERSION,
+    )
     svi = [s for s in registry.list_offerable_specs("comfy") if s.workflow_id == WAN_A14B_SVI_ID]
     assert [s.workflow_version for s in latest_spec_per_workflow(svi)] == [CFG1]
 

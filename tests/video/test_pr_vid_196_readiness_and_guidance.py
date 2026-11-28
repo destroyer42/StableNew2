@@ -606,13 +606,13 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
         "wan22_i2v_a14b_4step_ck_v1@1.0.0": "a8fa85df6368981879c65153deb740b3bb4ec606193723e45b276d4b529fc50a",
         # VID-WARM-373 changed the runtime policy only; VID-A14B-SPEED-374 raised the frame-count maximum to 121 and
         # added advisory_above 81. The graph digest is pinned separately and did not move.
-        "wan22_i2v_a14b_4step_v1@1.0.0": "32c6662c8b74dc86d06256d1a3dcf57d3ef251fb2b6979fa9f678f4e82d573ed",
+        "wan22_i2v_a14b_4step_v1@1.0.0": "32bc46097860820580a48dc31ecb22963deb8a3982b5a9992b1b0cc667913bdb",
         # VID-A14B-SPEED-374 experimental speed arms, pinned from their first registration.
         "wan22_i2v_a14b_4step_v1@1.1.0": "8237d6b3a8dde7e24ae3c139451ad1484157b6c118ec3cb148b609141b037c84",
         "wan22_i2v_a14b_4step_v1@1.2.0": "defa17ec3d6b8b29b79e0f8146c652d36d8539e0e92cd8a714bc3d896c2d4b27",
         "wan22_i2v_a14b_4step_v1@1.3.0": "1a21bfa93c2d6b51d45df50f363fe3d540f47cbbc3d891532f1704d2a8847982",
-        # VID-FRAME: full-picture sizes on the 1.0.0 graph, pinned from its first registration.
-        "wan22_i2v_a14b_4step_full_picture_v1@1.0.0": "2ffecce2d669e273c6867d8d10b5b1d336d761ebd7b3a629c7d81a7a3ff3da35",
+        # VID-FRAME: full-picture sizes on the 1.0.0 graph; re-pinned with A14B 1.0.0 when the default moved (2026-11-27).
+        "wan22_i2v_a14b_4step_full_picture_v1@1.0.0": "3d792330076f24520746a8ccd5ac357f3c01f3be5976ad4eace3f44d54b43090",
         # V1 end frame: the start-and-end-image workflow, pinned from its first registration.
         "wan22_i2v_a14b_flf_v1@1.0.0": "e8b526579e251eea38921ac86ae8e5fd7d66d4aca32da48a21dd10328bfc502e",
         # VID-A14B-SVI-375: the three experimental SVI 2.0 versions.

@@ -363,7 +363,7 @@ def build_wan_a14b_spec() -> WorkflowSpec:
             "Prompt-directed image-to-video with the Wan2.2 I2V-A14B high-noise and low-noise "
             "experts and the lightx2v 4-step LoRAs, on stock ComfyUI nodes. One source image and "
             "a prompt; no anchors, control video or pose video. Native 16 fps. The owner-promoted "
-            "engine for human motion and the Make Video default; it needs a managed ComfyUI "
+            "engine for human motion at 480x832 / 832x480; it needs a managed ComfyUI "
             "launched with --disable-pinned-memory and a host with RAM headroom for its two experts."
         ),
         capability_tags=(WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,),
@@ -450,7 +450,8 @@ def build_wan_a14b_spec() -> WorkflowSpec:
         governance_notes=(
             "APPROVED by the owner's decision of 2026-11-18 (VID-CLIP-371 eval record: 80-generation "
             "human-motion evaluation, 8/8 action achieved in both stages, no identity breaks, owner "
-            "means 5/5) as the promoted engine and the Make Video default (VID-CLIP-372). Governance "
+            "means 5/5) as the promoted engine (VID-CLIP-372); the full-picture workflow took over as the "
+            "Make Video default (VID-FRAME). Governance "
             "only: the graph is the PR-VID-WAN-321F frozen stock-node graph, unchanged. Not QUALIFIED "
             "by the qualification ledger (321F verdict INCONCLUSIVE; eval ratings are the owner's, "
             "saturated, with no host-commit telemetry). Runs only on a StableNew-managed ComfyUI "
@@ -468,8 +469,8 @@ def build_wan_a14b_spec() -> WorkflowSpec:
             # wall (cold load of two experts included); 1200 s keeps about 7x headroom for a slow load
             # on a 32 GB host without abandoning a clip Comfy is still producing.
             "history_timeout_seconds": 1200,
-            # The owner's decision (2026-11-18): the engine Make Video preselects among approved ones.
-            "make_video_default": True,
+            # VID-FRAME: the full-picture workflow is what Make Video preselects.
+            "make_video_default": False,
             "frame_count_policy": dict(WAN_A14B_FRAME_COUNT_POLICY),
             "output_policy": {"mode": "frames", "fps": WAN_A14B_FRAME_COUNT_POLICY["fps"]},
             "runtime_policy": {
@@ -724,30 +725,38 @@ def build_wan_a14b_full_picture_spec() -> WorkflowSpec:
 
     base = build_wan_a14b_spec()
     defaults = deepcopy(base.backend_defaults)
-    defaults["make_video_default"] = False
+    # The owner's decision after the blind size rating (2026-11-27): what Make Video preselects.
+    defaults["make_video_default"] = True
     sizes = ", ".join(f"{width}x{height}" for width, height in WAN_A14B_ASPECT_TARGETS)
     defaults["source_preparation"]["aspect_targets"] = [
         {"width": width, "height": height} for width, height in WAN_A14B_ASPECT_TARGETS
     ]
     defaults["provenance"]["qualification"] = (
-        "NOT QUALIFIED: VID-FRAME sizes on the approved 1.0.0 graph; offline tests only"
+        "VID-FRAME size test (18 clips) and the owner's blind rating of six pairs (2026-11-27); "
+        "not QUALIFIED by the ledger"
     )
     fixed = defaults["operator_projection"]["fixed_settings"]
     fixed["geometry"] = f"from the source's shape: {sizes}"
-    fixed["hardware"] = "NOT QUALIFIED at these sizes; readiness floors are 1.0.0's (321F)"
+    fixed["hardware"] = (
+        "RTX 4070 Ti 12 GB, 32 GB RAM; peak 10.3 GB VRAM at 81 frames. A 121-frame clip left only 3.8 GiB of "
+        "host RAM free: close other programs for long clips. Not QUALIFIED by the ledger"
+    )
     return replace(
         base,
         workflow_id=WAN_A14B_FULL_PICTURE_ID,
-        display_name="Wan2.2 I2V-A14B 4-step full picture (Experimental)",
+        display_name="Wan2.2 I2V-A14B 4-step full picture",
         description=(
             "The approved Wan2.2 I2V-A14B 4-step graph with portrait, 2:3, 3:4, square, 4:3, 3:2 and landscape sizes "
-            "at about the same pixel count, so common source shapes are not cropped."
+            "at about the same pixel count, chosen from the source's shape, so common shapes are not cropped. "
+            "The Make Video default."
         ),
-        governance_state=WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+        governance_state=WORKFLOW_GOVERNANCE_APPROVED,
         pinned_revision=f"catalog:{WAN_A14B_FULL_PICTURE_ID}@{WAN_A14B_VERSION}",
         governance_notes=(
-            "EXPERIMENTAL, per-job opt-in only (VID-FRAME). Memory and motion quality at 512x768, 544x720, 624x624, "
-            "720x544 and 768x512 are unmeasured. NOT QUALIFIED."
+            "APPROVED by the owner's decision of 2026-11-27 (VID-FRAME) as the Make Video default. All 18 test "
+            "clips completed at their sizes; in a blind rating of six pairs against 1.0.0, likeness and stability "
+            "were the same in all six and motion split 1, 1 and 4 same. One seed per case. A 121-frame clip left "
+            "only 3.8 GiB of host RAM free. Not QUALIFIED by the ledger."
         ),
         backend_defaults=defaults,
     )

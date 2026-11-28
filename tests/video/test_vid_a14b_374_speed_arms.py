@@ -24,6 +24,7 @@ from src.video.workflow_catalog_wan_a14b import (
     WAN_A14B_ATTENTION_NODE,
     WAN_A14B_CK_ATTENTION,
     WAN_A14B_CK_ATTENTION_VERSION,
+    WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_GPU_TEXT_ENCODER_VERSION,
     WAN_A14B_ID,
     WAN_A14B_MERGED_FILE_BYTES,
@@ -111,7 +112,7 @@ def test_the_arms_are_registered_beside_the_approved_1_0_0_as_experimental_versi
     assert not runnable & {(WAN_A14B_ID, version) for version in WAN_A14B_SPEED_ARM_VERSIONS}
 
 
-def test_the_approved_1_0_0_stays_the_picker_entry_and_the_make_video_default() -> None:
+def test_the_approved_1_0_0_stays_the_picker_entry_for_its_id() -> None:
     registry = build_default_workflow_registry()
     a14b = [s for s in registry.list_offerable_specs("comfy") if s.workflow_id == WAN_A14B_ID]
 
@@ -121,9 +122,12 @@ def test_the_approved_1_0_0_stays_the_picker_entry_and_the_make_video_default() 
     )
     records = {r["workflow_id"]: r for r in controller.list_workflow_specs()}
     assert records[WAN_A14B_ID]["workflow_version"] == WAN_A14B_VERSION
-    assert recommended_workflow_id(controller.list_workflow_specs()) == WAN_A14B_ID
+    assert recommended_workflow_id(controller.list_workflow_specs()) == WAN_A14B_FULL_PICTURE_ID
     form = controller.build_default_form_state()
-    assert (form["workflow_id"], form["workflow_version"]) == (WAN_A14B_ID, WAN_A14B_VERSION)
+    assert (form["workflow_id"], form["workflow_version"]) == (
+        WAN_A14B_FULL_PICTURE_ID,
+        WAN_A14B_VERSION,
+    )
 
 
 @pytest.mark.parametrize("version", WAN_A14B_SPEED_ARM_VERSIONS)
