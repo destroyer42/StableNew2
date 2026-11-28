@@ -1,21 +1,9 @@
 // RG-160: requests that wait for the PC, and everywhere the page shows them.
 
 import { el } from "../../core/dom.js";
-import {
-  confirmDelete,
-  line,
-  mark,
-  notReady,
-  offer,
-  overlay,
-  sent,
-  show,
-  suffix,
-  sync,
-  unreachable,
-  waitingOn,
-  watch,
-} from "./queued.js";
+import { line, mark, overlay, suffix, sync, waitingOn } from "./queued.js";
+import { notReady, offer, sent, unreachable, watch } from "./request.js";
+import { confirmDelete, show } from "./waiting.js";
 
 // The header's "N waiting for PC" button; its count and visibility are kept by queued.js.
 const headerButton = () =>
