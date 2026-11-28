@@ -838,7 +838,7 @@ OD-8 to OD-11 adjudicated by the orchestrator with the recommended defaults.
 - Qualification claim: N/A.
 - Not demonstrated: no browser, no phone, no deployed gateway, nothing run.
 
-### 13.1 PC-0 owner phone check (partial, 2026-11-27)
+### 13.1 PC-0 owner phone check (2026-11-27)
 
 The owner's answers, read from his screenshots and relayed by the orchestrator. Identifiers are left out.
 
@@ -846,14 +846,34 @@ The owner's answers, read from his screenshots and relayed by the orchestrator. 
 |---|---|---|
 | 1 | Phone, Android, free storage | Samsung Galaxy S23+, Android 16, about 33 GB free (8 GB RAM). The 1 GB rendition cap (OD-2) is about 3 % of the free space. |
 | 2 | Chrome version | Chrome 158 |
-| 3 | Chrome on the gateway: Install app, or only Add to Home screen | Not answered yet |
-| 4 | DuckDuckGo on the gateway: an Install item? Fireproofed? | The gateway site **is Fireproofed**. The DuckDuckGo main menu he showed has no Install item, but it was not opened on the gateway page, so whether the page itself offers one is still unchecked. |
-| 5 | DuckDuckGo automatic data clearing | Not answered yet |
-| 6 | Tailscale Always-on VPN | Not answered yet. The Tailscale app does not show it; it is in Android's own VPN settings (Settings › Connections › More connection settings › VPN on Samsung). |
+| 3 | Chrome on the gateway: Install app, or only Add to Home screen | Chrome's ⋮ menu offers **Install and create shortcut** on the review page, so it installs today, before any manifest exists. |
+| 4 | DuckDuckGo on the gateway: an Install item? Fireproofed? | Only **Add to Home screen** (a shortcut with the DuckDuckGo icon), no install. The gateway site **is Fireproofed**. |
+| 5 | DuckDuckGo automatic data clearing | **On**: tabs, cookies and site data, on app exit only. Two Fireproofed sites are excluded, the review gateway among them. |
+| 6 | Tailscale Always-on VPN | **On**, with Block connections without VPN off (the setting is in Android's VPN settings, not in the Tailscale app). |
 
-**What it changes so far.** Nothing in the plan. Answer 4 means a Fireproofed site is still the setup that lost the
-pairing on 2026-11-27, unless it was Fireproofed only afterwards. Answer 5 decides which. OD-1 (Chrome app for review)
-stands either way.
+**What it changes.**
+
+- **The pairing losses** of 2026-11-27 most likely happened before the gateway was Fireproofed. DuckDuckGo clears
+  cookies and site data on every app exit for every site that is not. While the site stays Fireproofed, DuckDuckGo
+  should keep the pairing. The design's reasons for Chrome still hold: install, Background Sync, persistent storage
+  (OD-1).
+- **Chrome installs today.** With no manifest, Chrome's install makes a standalone app from the page as it is. The
+  owner can install now and get Chrome's storage (never cleared on a schedule) before PW-1.
+  - PW-1's manifest sets `id: "/"`. An app installed before then is identified by its start URL. If that URL is not
+    `/`, Chrome may treat the PW-1 app as a different one, and the owner reinstalls once.
+  - PW-1 acceptance adds a check: after deploy, the installed app updates in place, or the reinstall is stated.
+- **Background Sync** (3.3) is more useful than the design assumed. With Tailscale's Always-on VPN, the phone's
+  connectivity usually means the gateway is reachable. The page fallback stays, for the times Tailscale is down.
+- **Storage.** The 1 GB rendition cap is about 3 % of the free space.
+
+Seen on the same screenshots: the home screen shows To rate (4), Review all (2237), and the sections Pipeline runs,
+Reprocess and rework, Movie clips, Test runs and Other.
+
+- "Test runs" is the operator's `output/Testing` route (`src/app/review_gateway_publish.py` `_SECTION_OF_FOLDER`), and
+  holds images only. Any video goes to Movie clips.
+- Eval outputs are excluded before publishing wherever they are written: anything under `video_eval/`, and any output
+  whose run manifest names a job an eval's `run.json` lists (`src/app/review_gateway_sources.py` `is_eval_output`).
+  By the code, excluded eval outputs do not land in Test runs. The live gateway's contents were not inspected.
 
 ## 14. Token-efficient validation plan (for the slices)
 
