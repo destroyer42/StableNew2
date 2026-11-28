@@ -32,8 +32,9 @@ class Gateway:
 
     def phone_app(self) -> Starlette:
         release = self.settings.release_dir or running_release()
+        label = self.settings.environment_label
         return build_phone_app(
-            self.store, self.clock, self.ratings, release, self.settings.environment_label
+            self.store, self.clock, self.ratings, release, environment_label=label
         )
 
     def sync_app(self) -> Starlette:

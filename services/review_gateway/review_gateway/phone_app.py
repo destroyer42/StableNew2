@@ -103,6 +103,7 @@ def build_phone_app(
     clock: Clock,
     ratings: RatingStore,
     release_dir: Path | None = None,
+    *,
     environment_label: str = "",
 ) -> Starlette:
     failures: deque = deque()
