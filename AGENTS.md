@@ -50,7 +50,10 @@ The canonical outer path is:
   (`src/pipeline/policy_warnings.py`: why it is shown and what makes it work)
   that every surface, the phone included, shows the same way. Selecting Queue
   on that summary is the job's recorded opt-in: the accepted warnings are
-  frozen in the NJR provenance. `JobService.submit_njrs` refuses an
+  frozen in the NJR provenance. For a phone request made while the PC is away
+  (RG-160), the one tap on "Queue when the PC is back" is that opt-in, warnings
+  the compile finds included, and the receipt lists them (owner decision
+  2026-11-27). `JobService.submit_njrs` refuses an
   experimental workflow that has no recorded opt-in; no other warning refuses a
   job, and dispatch never refuses for policy. Real blocks stay refusals:
   missing, unreadable or changed files and inputs; an operation the backend

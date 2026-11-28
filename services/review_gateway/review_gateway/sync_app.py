@@ -31,6 +31,7 @@ PAGE_LIMIT = 500
 #: ``item_source``: the manifest's ``source`` and the item-sources route (PHONE-FAST review sections).
 #: ``item_input``: the manifest's ``input`` and ``input_missing`` (the image a desk job started from).
 #: ``rating_tasks``: the RG-170 rating routes.
+#: ``deferred_actions``: the choice catalog route (RG-160 requests made while the PC is away).
 FEATURES = (
     "item_batch",
     "item_parent",
@@ -38,6 +39,7 @@ FEATURES = (
     "item_source",
     "item_input",
     "rating_tasks",
+    "deferred_actions",
 )
 _WRITE_BUFFER = 1024 * 1024
 _LOG = logging.getLogger("review_gateway")
@@ -168,6 +170,10 @@ def build_sync_app(
         count = await run_in_threadpool(store.withdraw, body["library_ids"])
         return JSONResponse({"withdrawn": count})
 
+    async def choice_catalog(request: Request) -> Response:
+        await run_in_threadpool(store.set_choice_catalog, await payload(request, "choice_catalog"))
+        return JSONResponse({"status": "stored"})
+
     async def item_sources(request: Request) -> Response:
         body = await payload(request, "item_sources")
         pairs = [(entry["library_id"], entry["source"]) for entry in body["items"]]
@@ -210,6 +216,7 @@ def build_sync_app(
             *sync_rating_routes(ratings),
             Route("/sync/v1/withdrawals", withdrawals, methods=["POST"]),
             Route("/sync/v1/item-sources", item_sources, methods=["POST"]),
+            Route("/sync/v1/choice-catalog", choice_catalog, methods=["PUT"]),
         ],
         middleware=[Middleware(_SyncSecret, secret=secret)],
         exception_handlers=EXCEPTION_HANDLERS,
