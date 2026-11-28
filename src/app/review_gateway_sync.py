@@ -52,7 +52,13 @@ from src.app.review_gateway_protocol import (
     utc_text,
 )
 from src.app.review_gateway_publish import GatewayPublisher
-from src.app.review_gateway_store import Device, GatewaySettings, GatewaySettingsStore, SyncLedger
+from src.app.review_gateway_store import (
+    Device,
+    GatewaySettings,
+    GatewaySettingsStore,
+    SyncLedger,
+    normalize_phone_address,
+)
 from src.app.site_media_files import SiteOutputError
 from src.utils.thread_registry import get_thread_registry
 
@@ -83,6 +89,9 @@ CATALOG_RESEND_SECONDS = 600.0
 #: so for a short window only the outbox is read, every second, instead of every ``SYNC_INTERVAL``.
 ACTION_FOLLOW_INTERVAL = 1.0
 ACTION_FOLLOW_WINDOW = 60.0
+
+#: PHONE-CORE PP-1: the ledger's note of where phones open the phone app.
+_PHONE_ADDRESS_KEY = "phone_address"
 
 _MESSAGES = {
     "not_configured": "Not set up. Enter the gateway address, certificate fingerprint and sync secret.",
@@ -217,9 +226,22 @@ class ReviewGatewaySync:
 
     def forget(self) -> None:
         self._store.clear()
+        self._ledger.set_meta({_PHONE_ADDRESS_KEY: ""})
         with self._lock:
             self._settings, self._settings_loaded = None, True
             self._status = replace(self._status, state="not_configured", address="")
+
+    def phone_address(self) -> str:
+        """Where phones open the phone app (``https://host[:port]``), or "" until it is entered."""
+
+        return self._ledger.get_meta(_PHONE_ADDRESS_KEY)
+
+    def set_phone_address(self, text: str) -> str:
+        """Check and keep it (raises ``ValueError`` with display text)."""
+
+        address = normalize_phone_address(text)
+        self._ledger.set_meta({_PHONE_ADDRESS_KEY: address})
+        return address
 
     def attach_remote_update(self, remote: Any) -> None:
         """LAUNCH-UPDATE-2: answer ``admin_request`` records through ``remote`` and publish its ``pc_status``.
@@ -418,6 +440,8 @@ class ReviewGatewaySync:
                     log.warning(
                         "Review gateway reported an enrollment for an offer this PC did not issue"
                     )
+                elif device.last_seen_at is not None:
+                    self._ledger.note_device_seen(device.device_id, utc_text(device.last_seen_at))
             unacknowledgeable = 0
             for raw in page.records:
                 result = self._applier.handle(raw)

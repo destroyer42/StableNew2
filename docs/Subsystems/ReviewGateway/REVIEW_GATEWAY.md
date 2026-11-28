@@ -35,6 +35,7 @@ Immich after an explicit Keep (RG-100 invariant 5).
 | `media.py` | Content-addressed cache; a stored file is always complete and digest-verified |
 | `deferred.py` | RG-160: waiting requests, cancel, the PC's last-seen time and the choice catalog |
 | `upload_queue.py` | What Immich is still owed and the receipts for the PC, in the same SQLite file |
+| `timing_store.py`, `timing_routes.py` | Image open times, in a SQLite file of their own (section 11) |
 | `uploader.py`, `immich.py` | The upload worker (its own thread) and the only calls made to Immich |
 | `phone_app.py` | Phone web app and API, loopback `:8443`, published by `tailscale serve` |
 | `sync_app.py` | PC-facing API, one LAN address `:9443`, TLS, bearer sync secret |
@@ -58,14 +59,35 @@ The gateway never compiles, admits or decides anything. It has no job, lifecycle
 - Caps: 300 lines a core file, 400 a feature file, checked by `test_static_rules.py`. No file is over its cap; an
   exception listed there may only shrink.
 - At start the phone app reads `static/` once. Only `.js`, `.css`, `.png`, `.svg` and `.webmanifest` files are
-  published. The version is 12 hex digits of a SHA-256 over their paths and digests and the `index.html` template.
+  published. The version is 12 hex digits of a SHA-256 over their paths and digests, the `index.html` template,
+  `sw.js` and the manifest.
 - `GET /` is `index.html` with that version, the feature names and each feature's `<id>.css` written in, in feature
   `order` (`no-cache`).
 - `GET /s/<version>/<path>` answers from the table only, `public, max-age=31536000, immutable`; any other version or
-  path is 404. `GET /s/<version>/files.json` lists each path with its SHA-256. The old `/static/...` addresses are
-  gone.
+  path is 404. `sw.js` and the manifest are not in that table: each has one fixed address. `GET /s/<version>/files.json`
+  lists each path with its SHA-256, and under `shell` the SHA-256 of `/` and of the manifest. The old `/static/...`
+  addresses are gone.
 - `GET /api/session` also returns `static_version` and `commit` (the release's `source.json`, or `dev`).
 - `install.sh` copies the whole `static/` tree.
+
+**The installable app** (PHONE-CORE PW-1):
+
+- `GET /manifest.webmanifest`: start URL, scope and id are all `/` (an app already installed from this origin stays the
+  same app), standalone, portrait; icons in `static/icons/`.
+- `GET /sw.js` (`no-cache`) is `static/sw.js` behind one line, `const VERSION = "<v>", COMMIT = "<sha12>";`, so every
+  deploy changes its bytes. Like the page, it needs no pairing.
+- The worker stores the shell only, in `rg-shell-<v>`: every listed file, `/` and the manifest, each checked against
+  its SHA-256 before any is stored. It answers those from that cache and leaves every other request alone: `/api/`,
+  `/rating-media/`, `/media/` (originals included) are never answered by it or stored. With no gateway the app opens and
+  says it is offline; nothing else works offline yet.
+- `core/sw-client.js` registers it through the one Trusted Types policy, `rg-sw`, which accepts only `/sw.js`; the CSP
+  adds `trusted-types rg-sw`. It asks for a new worker when the app comes back into view and every 30 minutes, and
+  requests persistent storage.
+- A new worker waits. The page shows "Update available · <commit>" with Reload, which sends any held decision, lets the
+  worker in and reloads. Ignored, the new version starts after the app is fully closed. Nothing is forced.
+- **Settings** (a button at the end of the home screen and of the "could not reach" screen; `#/settings`) shows the
+  version and commit and offers **Repair this app**: unregister the worker, delete `rg-shell-*` and `rg-media-*`,
+  reload. The pairing cookie, unsent work and settings stay. Without the gateway it asks first.
 
 ## 2. Sync HTTP binding (v1)
 
@@ -93,7 +115,7 @@ section 9). Errors are `{"error": "<code>"}`.
 | `PUT /sync/v1/pc-status` | `pc_status` | `{"status":"stored"}` (section 8). A PC treats 404 as "not offered yet". |
 | `PUT /sync/v1/choice-catalog` | `choice_catalog` | `{"status":"stored"}` (section 10) |
 
-The rating routes are in section 9.
+The rating routes are in section 9, the open-times route in section 11.
 
 Rules:
 
@@ -110,7 +132,10 @@ Rules:
 6. A record the PC has never listed is withdrawn when the user re-decides. After listing, a new decision is a new record;
    apply in page order.
 7. `enrolled_devices` lists all active devices on every page (a superset of "since the last acknowledgement"): upsert by
-   `device_id`.
+   `device_id`. With the query `device_fields=last_seen_at` (PHONE-CORE PP-1) each device also carries `last_seen_at`,
+   when it last made an authenticated request (to the hour; absent if it never has). Only a PC that asks gets the
+   field, because an older PC refuses an unknown one and with it the page; an older gateway ignores the query. So
+   the gateway and the app can be updated in either order.
 8. Decision records never pair `delete` with `favorite` or `needs_fix`; the PC still checks.
 9. Authenticated uploads are read to the end before they are answered. A wrong secret is refused at once, so a client
    sending a large body may see a reset connection instead of the 401: check `health` first.
@@ -142,8 +167,8 @@ Rules:
 - Enrollment sets `rg_session` (`HttpOnly; Secure; SameSite=Lax`, so links from other apps arrive paired; JSON APIs still require the custom header); only its SHA-256 is stored. Every request reads the
   device row, so revocation applies to the next request. Every data and media route needs an enrolled device with the
   `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
-- JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata
-  is put on screen with `textContent` only. Originals are `private, no-store`; thumbnails and image renditions `private, max-age=604800, immutable`; other
+- JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types (one
+  policy name, `rg-sw`, section 1); metadata is put on screen with `textContent` only. Originals are `private, no-store`; thumbnails and image renditions `private, max-age=604800, immutable`; other
   derivatives `private, max-age=3600`.
 - Inbox grouped by named batch, else by run folder, with counts (section 3.1); a group's grid; triage with Keep,
   Favorite, Delete buttons and swipes (right, up, left) and the six reason tags. A refused item counts as "to review"
@@ -286,6 +311,24 @@ date); items already on the phone are not published again for it. The page's cod
 A file named by the descriptive scheme (NAME-INFO slice 2) also sends its name (only to a gateway that lists
 `item_file_name`), and Immich uploads under it; no other file name and no folder leaves the PC.
 
+### 3.8 Pairing again from a QR code (PHONE-CORE PP-1)
+
+- **PC.** The pairing dialog shows the code as text, as before. Once **Phone app address** is entered (the `https://`
+  address phones open; only `https://host[:port]` is accepted, and nothing is built in), it also draws a QR of
+  `<address>/#/pair/<code>`. The QR is drawn on screen only, goes with the code when it is used or expires, and is
+  never saved or logged. Both pairing buttons show it. The address is kept in the PC's sync ledger and is removed by
+  **Forget**.
+- **Phone.** `#/pair/<code>` fills the code into the pairing form and at once rewrites that history entry to
+  `#/pair`. Nothing pairs until **Pair this phone** is pressed. A phone that is already paired can pair again this way
+  or go back.
+- **Typing the code** works as before, with or without an address or a camera.
+- **The code** keeps every property of section 2, rule 4: single use, five minutes, attempt limits. It travels in the
+  URL fragment, which a browser sends to no server and in no `Referer`. The browser's own history may still hold the
+  scanned address; by then the code is used, or dies within five minutes.
+- **Device list.** The desktop shows **Last seen** for each phone, so a phone that lost its pairing can be told from
+  the one in use and revoked. "not reported" means the gateway has not said (an older gateway, or a phone that has
+  asked for nothing since it paired).
+
 ## 4. Retention (D4)
 
 Hourly, and by `review-gateway-admin purge`. An item is purged only when it has no unanswered record and its latest
@@ -355,7 +398,10 @@ dependencies are exact pins in `requirements-dev.txt` that a test holds equal to
 fake HTTP server on loopback (`fake_immich.py`) with the request and reply shapes read from Immich's v2.0.0 and v3.4.2
 sources; no real Immich has been used.
 
-`test_static_serving.py` covers the page-file table, its version, traversal refusal and the session fields.
+`test_static_serving.py` covers the page-file table, its version, traversal refusal, the session fields, `/sw.js`,
+the manifest and its icons, and the Trusted Types directive.
+`test_open_timing.py` covers the open-times routes, their caps and refusals; `tests/phone_e2e/test_open_timing.py`
+what the page sends and drops; `tests/tools/test_gate_report.py` the PC report.
 `test_static_rules.py` reads the page's files: no markup sinks or inline handlers, every import resolves inside
 `static/` to a name its target exports, no module exports a binding that changes, the import boundary, a `feature.js`
 per feature and the size caps.
@@ -374,8 +420,11 @@ per feature and the size caps.
   - Not saved;
   - a decision made while unreachable, and a lost reply resent with the same key;
   - To rate;
-  - the Update screen.
-- Each journey asserts what reached the gateway's outbox, not only the screen.
+  - the Update screen;
+  - the installable shell (`test_installable.py`): the manifest and the controlling worker, opening with no gateway,
+    a new version offered then taken by Reload, a damaged download refused, nothing but the shell ever stored, Repair
+    and the Trusted Types limit. Headless Chromium gives no installability verdict, so that is checked on the phone.
+- Journeys that send decisions assert what reached the gateway's outbox, not only the screen.
 - The suite runs only with `STABLENEW_PHONE_E2E=1` and its own hash-pinned lock (`tests/phone_e2e/requirements-e2e.txt`),
   in the `phone-e2e` CI job. `full-suite` waits for that job and fails when it failed.
 - The suite has a cheap contract test in the census (`test_phone_e2e_contract.py`) that keeps the lock and the wiring
@@ -674,3 +723,35 @@ A request refused as `too_many_pending` moves to the "not saved" list so it does
 
 **Rollout.** Deploy the gateway first, then update the PC. The first catalog needs one session with Forge connected to
 list checkpoints. A gateway database gains `outbox.cancelled_at` and a `pc_note` table when opened.
+
+## 11. Image open times (PHONE-FAST gate)
+
+Built and tested hermetically only: not deployed, and no time from a real phone yet. It measures the gate "median image
+open time on the phone". There is no figure from before PHONE-FAST; only sizes are known for then.
+
+**What is timed.** From an item becoming current in triage or compare to its `preview` rendition's `load` event. Where
+the bytes came from is read from the browser's resource timing: `network` (asked for at this view), `prefetch` (fetched
+ahead), `cache` (seen before, or answered by the browser's cache) or `unknown`. Not timed: videos, items without a
+rendition, the grid and the full-resolution viewer, a load that fails, a page that goes hidden while loading, and a view
+left before its image loaded (so the figures lean slightly towards faster views).
+
+**What is sent.** `features/timing/` only watches: it is asked first on the `item.view` slot and never claims it. It
+sends `POST /api/timings` (same session, `review` scope and header as every phone API):
+`{"idempotency_key": <16-128 of A-Za-z0-9_->, "samples": [{"ms": 0-600000, "source": ..., "bytes": 0-104857600 or
+null}]}`, 1 to 100 samples, body at most 16 KiB. Any other field or value refuses the whole batch (422
+`invalid_record`). The answer is `{"state": "stored"|"duplicate"}`. A batch goes 45 seconds after the first time waiting
+for it, and when the page is left (`pagehide`, a `keepalive` request). Offline, it is dropped; a network or server error
+is retried once with the same key. There is no outbox, and nothing is kept on the phone.
+
+**What is stored.** `timing.sqlite3` in the data directory, one row per view: when the gateway received it, the device
+id, `ms`, `source`, `bytes`, and the batch key (so a resent batch is stored once). No item id, path, prompt, address or
+device name. Rows older than 30 days or beyond the newest 100,000 are removed (on insert and by the hourly retention).
+It is not part of `gateway.sqlite3`, which this adds nothing to.
+
+**PC read.** `GET /sync/v1/open-timings?cursor=` behind the sync secret:
+`{"rows": [{"at", "ms", "source", "bytes"}], "next_cursor": n|null}`, oldest first, 5,000 a page, without device ids.
+400 `invalid_cursor`. It is not part of the sync schema file; a PC treats 404 as "not offered yet".
+
+**Report.** `python -m tools.gate_report` (`--json`) on the PC, read only: per local day and overall, the views, median
+and p90 milliseconds, the cache-hit share (`cache` and `prefetch`, of the views whose source is known), the count of each
+source and the median rendition size. It uses the gateway settings of this Windows user and no running app.

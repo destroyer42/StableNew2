@@ -439,8 +439,9 @@ def test_the_page_has_no_inline_script_or_style_and_loads_only_bundled_files(rig
     assert page.problems == []
     assert page.sources
     for source in page.sources:
-        assert source.startswith(("/s/", "#")), source
-        if source.startswith("/s/"):
+        # PHONE-CORE PW-1: the manifest is the one link with a fixed address; it is served by the gateway too.
+        assert source.startswith(("/s/", "#")) or source == "/manifest.webmanifest", source
+        if source.startswith("/"):
             assert rig.phone.get(source).status_code == 200
 
 
