@@ -12,6 +12,9 @@ class FakeSync:
         self.pairings: list[dict] = []
         self.devices: tuple[Device, ...] = ()
 
+    def phone_address(self) -> str:
+        return ""
+
     def create_pairing(self, label: str = "", **flags) -> str:
         self.pairings.append(flags)
         return "ABCD-EFGH"

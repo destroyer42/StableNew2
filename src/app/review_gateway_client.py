@@ -304,7 +304,11 @@ class GatewayClient:
     # -- pull ------------------------------------------------------------------------------------------------------
 
     def outbox(self, cursor: str | None, limit: int = 100) -> Any:
-        query = {"limit": str(max(1, min(MAX_PAGE_RECORDS, limit)))}
+        # PHONE-CORE PP-1: ask for each device's last-seen time; an older gateway ignores the question.
+        query = {
+            "limit": str(max(1, min(MAX_PAGE_RECORDS, limit))),
+            "device_fields": "last_seen_at",
+        }
         if cursor:
             query["cursor"] = cursor
         response = self._call("GET", f"{ROUTES['outbox']}?{urlencode(query)}", limit=MAX_PAGE_BYTES)

@@ -1056,3 +1056,45 @@ def test_an_answered_phone_action_makes_the_next_pulls_quick(tmp_path, monkeypat
 
     clock[0] += ACTION_FOLLOW_WINDOW
     assert env.sync.run_cycle() == SYNC_INTERVAL
+
+
+def test_the_pc_asks_for_and_keeps_when_each_phone_was_last_seen(env):
+    """PHONE-CORE PP-1: the device list shows it, so phones that lost their pairing can be told apart and revoked."""
+
+    device = env.pair()
+    assert any(
+        method == "GET" and "device_fields=last_seen_at" in path
+        for method, path in env.gateway.calls
+    )
+    assert env.sync.status().devices[0].last_seen_at == ""  # a gateway that reports none
+
+    env.gateway.enrolled[0]["last_seen_at"] = "2026-11-28T08:15:00+00:00"
+    env.sync.run_cycle()
+    assert env.sync.status().devices[0].last_seen_at == "2026-11-28T08:15:00.000Z"
+
+    env.gateway.enrolled[0].pop("last_seen_at")  # an older gateway again: what is known is kept
+    env.sync.run_cycle()
+    assert env.sync.status().devices[0].last_seen_at == "2026-11-28T08:15:00.000Z"
+    assert env.ledger.device(device).last_seen_at == "2026-11-28T08:15:00.000Z"
+
+
+def test_the_phone_app_address_is_checked_kept_and_forgotten(env):
+    assert env.sync.phone_address() == ""
+    env.sync.set_phone_address(" Review.Example.test/ ")
+    assert env.sync.phone_address() == "https://review.example.test"
+    env.sync.set_phone_address("https://review.example.test:8443")
+    assert env.sync.phone_address() == "https://review.example.test:8443"
+    for bad in (
+        "http://review.example.test",
+        "https://review.example.test/path",
+        "https://user@review.example.test",
+        "https://review.example.test?x=1",
+        "https://review.example.test/#/pair/ABCD",
+        "two words",
+    ):
+        with pytest.raises(ValueError):
+            env.sync.set_phone_address(bad)
+    assert env.sync.phone_address() == "https://review.example.test:8443"
+
+    env.sync.forget()
+    assert env.sync.phone_address() == ""
