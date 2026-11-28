@@ -908,9 +908,10 @@ class AssetRegistry:
     def _load(self) -> None:
         if self._loaded:
             return
-        self._loaded = True
         self._cache_state, _version, self._entries = self._read_cache_file()
         self._snapshot = self._make_snapshot()
+        # Set last: a registry shared with a worker thread is never seen half-loaded.
+        self._loaded = True
 
     @staticmethod
     def _retry_os(action: Callable[[], Any]) -> None:

@@ -3,7 +3,9 @@
 One combobox ("Profile") and one status line are always visible; Restore, Save as Custom, Update Custom, Favorite and the
 per-setting evidence sit behind a "Details" toggle. Every sentence comes from ``generation_profile_projection`` and every
 action goes to the controller adapter, so this view holds no profile logic and no persistence. Selecting a profile or
-pressing Restore changes the editable working settings only: nothing is queued, dispatched or rewritten.
+pressing Restore changes the editable working settings only: nothing is queued, dispatched or rewritten. Redrawing
+reads the profile store and asset evidence on a tracked worker (STARTUP-STALL-2): working values are read on the Tk
+thread, one read runs at a time, and only the newest result is shown.
 """
 
 from __future__ import annotations
@@ -17,7 +19,10 @@ from typing import Any
 from src.generation_profiles.contract import ProfileRef
 from src.gui.theme_v2 import MUTED_LABEL_STYLE
 from src.gui.tooltip import attach_tooltip
+from src.gui.ui_dispatcher import tk_dispatcher_for
+from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui_v2.generation_profile_projection import NO_MODEL_TEXT, StripView
+from src.utils.thread_registry import get_thread_registry
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +58,9 @@ class GenerationProfileStrip(ttk.Frame):
         self._pending: str | None = None
         self._details_open = False
         self._suppress_select = False
+        self._reading = False
+        self._read_again = False
+        self._runner: BackgroundWorkRunner | None = None
         self.columnconfigure(1, weight=1)
 
         ttk.Label(self, text="Profile").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 2))
@@ -148,14 +156,51 @@ class GenerationProfileStrip(ttk.Frame):
     # ------------------------------------------------------------------ view
 
     def refresh(self) -> None:
+        """Redraw from the current working values; the profile files are read off the Tk thread."""
+
         controller = self._controller()
         if controller is None:
             return
+        if self._reading:
+            self._read_again = True  # newest wins: read once more when the running one reports
+            return
         try:
-            view: StripView = controller.strip_view()
-            self._render(view)
+            job = controller.strip_view_job()
+            self._reading = True
+            self._work_runner().start(
+                "GenerationProfileStrip", lambda: WorkOutcome(value=job()), self._publish
+            )
         except Exception:  # noqa: BLE001 - an unreadable profile state leaves the last good view in place
+            self._reading = False
             logger.debug("generation profile strip could not refresh", exc_info=True)
+
+    def _work_runner(self) -> BackgroundWorkRunner:
+        if self._runner is None:
+            self._runner = BackgroundWorkRunner(
+                spawn=lambda name, target: get_thread_registry().spawn(
+                    target=target,
+                    name=name,
+                    daemon=False,
+                    purpose="Read generation profiles without blocking Tk",
+                ),
+                dispatch=tk_dispatcher_for(self).invoke,
+            )
+        return self._runner
+
+    def _publish(self, outcome: WorkOutcome) -> None:
+        self._reading = False
+        try:
+            if not self.winfo_exists():
+                return
+            if self._read_again:
+                self._read_again = False
+                self.refresh()
+            elif outcome.error:
+                logger.debug("generation profile strip could not refresh")
+            else:
+                self._render(outcome.value)
+        except tk.TclError:  # the window closed while the files were being read
+            return
 
     def _render(self, view: StripView) -> None:
         self._refs = view.refs

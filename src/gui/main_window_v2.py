@@ -1341,14 +1341,26 @@ class MainWindowV2:
             pass
         self._last_visible_window_geometry = fallback_geometry
 
-    def _on_window_configure(self, _event: Any | None = None) -> None:
-        self._capture_visible_window_geometry()
+    # Tk delivers every descendant's <Configure>/<Map> to these two bindings on the root as well.
+
+    def _on_window_configure(self, event: Any | None = None) -> None:
+        # Only the root's own <Configure> can change the root's geometry.
+        if event is None or getattr(event, "widget", self.root) is self.root:
+            self._capture_visible_window_geometry()
 
     def _on_window_map(self, _event: Any | None = None) -> None:
+        # A widget mapping (a tab switch, say) also re-checks the window: once per idle turn, not once per widget.
+        if getattr(self, "_visibility_check_pending", False):
+            return
+        self._visibility_check_pending = True
         try:
-            self.root.after_idle(self._ensure_window_visible_after_restore)
+            self.root.after_idle(self._run_visibility_check)
         except Exception:
-            self._ensure_window_visible_after_restore()
+            self._run_visibility_check()
+
+    def _run_visibility_check(self) -> None:
+        self._visibility_check_pending = False
+        self._ensure_window_visible_after_restore()
 
     def update_pack_list(self, packs: list[str]) -> None:
         left = getattr(self, "left_zone", None)

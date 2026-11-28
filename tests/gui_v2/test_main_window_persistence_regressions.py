@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import time
+import tkinter as tk
+import tkinter.ttk
 from pathlib import Path
+from types import SimpleNamespace
 
 from src.gui.main_window_v2 import MainWindowV2
 from src.gui.view_contracts.window_layout_contract import compute_window_layout
 from src.services.ui_state_store import UIStateStore
+from tests.helpers.tk_root_factory import create_root
 
 # The stub roots have no screen; MainWindowV2 falls back to a 1920x1080 display for its layout.
 DEFAULT_GEOMETRY = compute_window_layout(1920, 1080).default_geometry
@@ -390,3 +395,65 @@ def test_on_window_map_restores_visible_geometry_after_minimize() -> None:
     window._on_window_map()
 
     assert window.root.geometry() == visible_geometry
+
+
+def test_many_widget_events_cost_one_visibility_check_per_idle_turn() -> None:
+    """Tk delivers every descendant's <Configure>/<Map> to a binding on the toplevel (STARTUP-STALL-2)."""
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot("1984x1110+-32000+-32000")
+    visible_geometry = f"{DEFAULT_GEOMETRY}+140+90"
+    window._last_visible_window_geometry = visible_geometry
+    scheduled: list = []
+    window.root.after_idle = scheduled.append  # type: ignore[attr-defined]
+    child_event = SimpleNamespace(widget=object())
+
+    for _ in range(40):
+        window._on_window_configure(child_event)  # a child cannot move the root: nothing to capture
+        window._on_window_map(child_event)
+
+    assert len(scheduled) == 1 and window.root.deiconified == 0
+    scheduled.pop()()
+    assert window.root.geometry() == visible_geometry  # the check still happens
+    window._on_window_map(child_event)
+    assert len(scheduled) == 1  # and the next batch gets its own
+
+
+def _pump_until(root: tk.Tk, ready, timeout: float = 5.0) -> None:
+    """Map events arrive from the window server, not necessarily within one ``update()``."""
+    end = time.monotonic() + timeout
+    while True:
+        root.update()
+        if ready():
+            return
+        assert time.monotonic() < end, "the window event never arrived"
+        time.sleep(0.01)
+
+
+def test_root_bindings_do_not_work_once_per_descendant() -> None:
+    root = create_root()
+    try:
+        window = MainWindowV2.__new__(MainWindowV2)
+        window.root = root
+        window._last_visible_window_geometry = None
+        calls: list[str] = []
+        window._capture_visible_window_geometry = lambda: calls.append("capture")  # type: ignore[method-assign]
+        window._ensure_window_visible_after_restore = lambda: calls.append("restore")  # type: ignore[method-assign]
+        root.bind("<Configure>", window._on_window_configure, add="+")
+        root.bind("<Map>", window._on_window_map, add="+")
+        for index in range(40):
+            tk.ttk.Label(root, text=str(index)).pack()
+        root.geometry("640x900+10+10")
+        root.deiconify()
+        _pump_until(root, lambda: "restore" in calls and "capture" in calls)  # the root's own events
+        assert 1 <= calls.count("restore") <= 10  # was one per descendant (41)
+        assert calls.count("capture") <= 6
+
+        calls.clear()
+        # ``withdraw`` unmaps with or without a window manager; ``iconify`` does not on a bare X server (CI's Xvfb),
+        # so nothing would be mapped again there.
+        root.withdraw()
+        _pump_until(root, lambda: not root.winfo_ismapped())
+        root.deiconify()
+        _pump_until(root, lambda: "restore" in calls)  # showing the window again still re-checks visibility
+    finally:
+        root.destroy()

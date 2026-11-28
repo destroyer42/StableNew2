@@ -19,6 +19,7 @@ import pytest
 
 from src.services import watchdog_system_v2
 from src.services.watchdog_system_v2 import SystemWatchdogV2
+from src.utils.contention_lock import ContentionLock
 
 
 def _app(*, ui_age_s: float) -> SimpleNamespace:
@@ -296,3 +297,50 @@ def test_a_late_thread_is_not_cut_from_the_list_of_a_process_with_many_threads(
 
     (record,) = stall_records()
     assert "late-worker: busy" in [item["site"] for item in record.json_payload["other_threads"]]
+
+
+def test_a_stall_records_long_lock_holds_and_the_io_done_while_it_lasted(
+    parked, stall_records
+) -> None:
+    """STARTUP-STALL-2: two completion stalls coincided with a 4.5 s commit and showed only ``mainloop``."""
+    app = _app(ui_age_s=3.0)
+    watchdog = SystemWatchdogV2(app, None, ui_thread_ident=parked.ident)
+    readings = iter([(100.0, 900.0, 5.0), (164.0, 5400.0, 7.5)])
+    watchdog._io_counters = lambda: next(readings)
+    lock = ContentionLock("job_repository", hold_warn_s=30.0)
+    held, release = threading.Event(), threading.Event()
+
+    def commit_progress() -> None:
+        with lock:
+            held.set()
+            release.wait(5.0)
+
+    holder = threading.Thread(target=commit_progress, name="progress_poll_0")
+    holder.start()
+    try:
+        assert held.wait(5.0)
+        time.sleep(0.6)
+        watchdog._check()
+    finally:
+        release.set()
+        holder.join(5.0)
+    app.last_ui_heartbeat_ts = time.monotonic()
+    watchdog._check()
+
+    (record,) = stall_records()
+    payload = record.json_payload
+    (hold,) = [h for h in payload["held_locks"] if h["lock"] == "job_repository"]
+    assert hold["thread"] == "progress_poll_0" and "commit_progress" in hold["site"]
+    assert payload["io"] == {
+        "disk_write_mb": 64.0,
+        "disk_write_ms": 4500.0,
+        "process_write_mb": 2.5,
+    }
+
+
+def test_io_counters_can_be_read_on_this_machine() -> None:
+    watchdog = SystemWatchdogV2(_app(ui_age_s=0.0), None)
+
+    reading = watchdog._io_counters()
+
+    assert reading is None or len(reading) == 3
