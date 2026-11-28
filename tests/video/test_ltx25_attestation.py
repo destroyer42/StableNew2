@@ -37,14 +37,21 @@ from src.video.licence_attestation import (
     workflow_ids_of,
 )
 from src.video.workflow_admission import require_workflow_admission
-from src.video.workflow_catalog_ltx25 import LTX25_AUDIO_ID, LTX25_ID, LTX25_IDS
+from src.video.workflow_catalog_ltx25 import (
+    LTX25_AUDIO_ID,
+    LTX25_ID,
+    LTX25_IDS,
+    LTX25_LICENCE_WARNING,
+    LTX25_VERSION,
+    LTX25_VERSIONS,
+)
 from src.video.workflow_catalog_wan_a14b import WAN_A14B_ID, WAN_A14B_VERSION
 from tests.video.test_vid_cand_ltx25 import FRAMES, SAVE_FRAMES_NODE, _info, _request
 from tests.video.test_vid_clip_370_candidate_specs import _a14b_backend, _FramesFake
 
 AT = datetime(2026, 11, 28, 12, 30, tzinfo=UTC)
 OWNER_TEXT = (
-    "LTX-2.5's licence forbids sexually explicit content. I confirm this source and prompt are not "
+    "LTX-2.5: explicit content may violate its license. I confirm this source and prompt are not "
     "sexually explicit."
 )
 
@@ -65,7 +72,7 @@ def _form(workflow_id: str = LTX25_ID, **extra: Any) -> dict[str, Any]:
     ltx = workflow_id in LTX25_IDS
     return {
         "workflow_id": workflow_id,
-        "workflow_version": "1.0.0" if ltx else WAN_A14B_VERSION,
+        "workflow_version": LTX25_VERSION if ltx else WAN_A14B_VERSION,
         "prompt": "she waves",
         "seed": "7",
         "frame_count": 25 if ltx else 81,
@@ -112,6 +119,20 @@ def test_both_ltx_ids_declare_the_owners_wording_and_nothing_else_does() -> None
     } - set(LTX25_IDS)
     assert WAN_A14B_ID in others
     assert all(declared_attestation(workflow_id) is None for workflow_id in others)
+
+
+def test_the_sentence_and_the_licence_warning_are_one_statement() -> None:
+    assert LTX25_ATTESTATION_TEXT.startswith(LTX25_LICENCE_WARNING["title"])
+
+
+@pytest.mark.parametrize("version", LTX25_VERSIONS)
+def test_every_registered_version_needs_it(tmp_path, version: str) -> None:
+    builder = _controller(tmp_path, _Jobs())._njr_builder
+    form = _form(workflow_version=version)
+    njr = builder.build_job(form, builder.freeze_inputs(_source(tmp_path), form)).njr
+
+    with pytest.raises(ValueError, match="not sexually explicit"):
+        require_workflow_admission(njr)
 
 
 def test_ltx_is_offered_only_with_show_experimental_and_is_never_the_default(tmp_path) -> None:

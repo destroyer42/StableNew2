@@ -24,7 +24,7 @@ from src.video.licence_attestation import (
     LTX25_ATTESTATION_VERSION,
     recorded_attestation,
 )
-from src.video.workflow_catalog_ltx25 import LTX25_ID
+from src.video.workflow_catalog_ltx25 import LTX25_ID, LTX25_VERSION
 from tests.helpers.make_video_313 import RECOMMENDED_ID, make_app, make_image, make_window
 
 pytestmark = pytest.mark.gui
@@ -85,7 +85,7 @@ def tab_env(tk_root, tmp_path):
     tab.workflow_var.set(LTX25_ID)
     tab.source_image_var.set(make_image(tmp_path / "source.png", (576, 1024)))
     state = tab.get_video_workflow_state()
-    state.update(prompt="she waves", workflow_id=LTX25_ID, workflow_version="1.0.0")
+    state.update(prompt="she waves", workflow_id=LTX25_ID, workflow_version=LTX25_VERSION)
     tab.restore_video_workflow_state(state)
     return tab, service
 

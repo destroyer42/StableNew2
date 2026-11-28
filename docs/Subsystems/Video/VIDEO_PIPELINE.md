@@ -39,7 +39,7 @@ Experimental means *not production-promoted*, not *refused* (owner decision N1, 
 
 ### 1.1.1 The licence confirmation (LTX-2.5)
 
-Owner decision 2026-11-28: "Add it as an option, let user attest to non-explicitness (no checks or blocks)". `src/video/licence_attestation.py` declares the sentence and its version by workflow id (outside the catalog specs, which stay pinned): *"LTX-2.5's licence forbids sexually explicit content. I confirm this source and prompt are not sexually explicit."*
+Owner decision 2026-11-28: "Add it as an option, let user attest to non-explicitness (no checks or blocks)". `src/video/licence_attestation.py` declares the sentence and its version by workflow id (outside the catalog specs, which stay pinned): *"LTX-2.5: explicit content may violate its license. I confirm this source and prompt are not sexually explicit."* The first sentence is the title of the workflow's typed licence warning (spec 1.0.1).
 
 - **Asked per Queue, never saved.** Every desktop Queue that can run LTX-2.5 (single, many images, multi-shot sequence, Storyboard take, Continue this clip, eval run) shows it in a dialog that defaults to No; one answer covers the jobs of that one Queue.
 - **Recorded** on each job that needs it as `provenance.metadata["licence_attestation"]` (`attested`, `text_version`, `attested_at`), copied into the clip manifest, and kept by Replay, retry and sequence resume without asking again.

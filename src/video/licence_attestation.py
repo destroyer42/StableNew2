@@ -1,7 +1,7 @@
 """The per-job licence attestation (owner decision 2026-11-28, VID-CAND-LTX25).
 
-LTX-2.5's licence forbids sexually explicit content, so queueing a job that uses it needs the operator's own
-confirmation of one plain sentence.  It is frozen into the job's provenance
+LTX-2.5's license includes a use policy that bans sexually explicit content, so queueing a job that uses it needs the
+operator's own confirmation of one plain sentence.  It is frozen into the job's provenance
 (``provenance.metadata["licence_attestation"]``: attested, text version, time), which Replay keeps and the clip
 manifest copies.  It is a record of what the operator said, not a check: nothing here or anywhere else looks at the
 source, the prompt or the output, and only a missing record refuses a job.
@@ -23,8 +23,9 @@ from src.video.workflow_catalog_ltx25 import LTX25_IDS
 #: The NJR provenance key, the manifest key, the form field a surface fills and the phone protocol's arm field.
 ATTESTATION_KEY = "licence_attestation"
 
+#: Opens with the title of the workflow's licence warning (owner wording, 2026-11-28), so a user reads one statement.
 LTX25_ATTESTATION_TEXT = (
-    "LTX-2.5's licence forbids sexually explicit content. I confirm this source and prompt are not "
+    "LTX-2.5: explicit content may violate its license. I confirm this source and prompt are not "
     "sexually explicit."
 )
 #: Change this with any change to the text: a surface that showed an older sentence must show the new one.

@@ -26,7 +26,7 @@ from src.video.licence_attestation import (
 )
 from src.video.storyboard_tree_store import StoryboardTreeStore
 from src.video.workflow_admission import require_workflow_admission
-from src.video.workflow_catalog_ltx25 import LTX25_ID
+from src.video.workflow_catalog_ltx25 import LTX25_ID, LTX25_VERSION
 from src.video.workflow_catalog_wan_a14b import WAN_A14B_ID, WAN_A14B_VERSION
 from tests.helpers.storyboard_380 import (
     REG,
@@ -43,7 +43,7 @@ from tests.helpers.storyboard_380 import (
 def _ltx_arm(**extra: Any) -> dict[str, Any]:
     return {
         "workflow_id": LTX25_ID,
-        "workflow_version": "1.0.0",
+        "workflow_version": LTX25_VERSION,
         "experimental_opt_in": True,
         **extra,
     }
@@ -149,7 +149,7 @@ def _continue_setup(tmp_path: Path, form: dict[str, Any]) -> SimpleNamespace:
 def _ltx_clip_form() -> dict[str, Any]:
     return {
         "workflow_id": LTX25_ID,
-        "workflow_version": "1.0.0",
+        "workflow_version": LTX25_VERSION,
         "prompt": "she waves",
         "seed": "11",
         "frame_count": 25,

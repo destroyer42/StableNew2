@@ -384,13 +384,16 @@ Owner decision, 2026-11-28: **"Add it as an option, let user attest to non-expli
 the same day: warn only; explicit use may violate the LTX licence and the user takes the risk; no control, block or
 disallow.
 
-- Both ids stay `experimental`, in the picker's **Show experimental** tier, never the default or preselected. The 1.0.0
-  specs, graphs and VRAM readiness values are unchanged.
+- Both ids stay `experimental`, in the picker's **Show experimental** tier, never the default or preselected. The one
+  spec change is 1.0.1, the reworded warning (section 1); 1.0.0 stays registered, and graphs, files and VRAM readiness
+  values are the same in both.
 - Every Queue asks for the confirmation and records it on the job and clip manifest (VIDEO_PIPELINE section 1.1.1).
   Only a missing record refuses a job. This adds no content check, source-label check or classifier, so section 1's
   restriction rests on the user's statement. The "open every source first" lesson of section 1 still applies to agents.
 - Section 1's "for non-explicit clips only" is now each user's own confirmation rather than a rule StableNew enforces.
-- The specs' description and notes still read as an eval candidate; changing them needs a new spec version.
+- The confirmation sentence opens with the 1.0.1 warning's title: "LTX-2.5: explicit content may violate its license.
+  I confirm this source and prompt are not sexually explicit." It covers 1.0.0 too (it is declared by workflow id).
+- The 1.0.1 description and notes still read as an eval candidate; changing them needs another spec version.
 - Peak VRAM in section 7 was 11,925 MiB of 12,282 MiB. No preflight or stop rule was changed.
 - The audio workflow has never run. No physical run was made for this change.
 - Execution class: Standard. Model recommendation: Claude Code Sonnet 5.5 High; Codex GPT-6.1 Sol High. Controller
