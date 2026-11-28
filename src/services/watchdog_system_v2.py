@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from src.services.queue_idle_report import QueueIdleReporter
+from src.utils.contention_lock import held_locks
 from src.utils.logger import LogContext, log_with_ctx
 from src.utils.stack_sites import describe_stack
 
@@ -22,6 +23,8 @@ _STACK_DEPTH = 16
 _STACKS_PER_EPISODE = 4
 #: Other threads' sites reported for samples where the Tk thread showed only ``mainloop``.
 _OTHER_THREADS = 32
+#: A lock held at least this long while the Tk heartbeat is late is listed in the stall record.
+_HELD_LOCK_S = 0.5
 
 
 @dataclass
@@ -46,6 +49,10 @@ class _UiStallEpisode:
     cpu_start: tuple[float, float] | None = None
     #: Other threads' call sites, counted only for samples with no Python frame above ``mainloop``.
     other_threads: dict[str, int] = field(default_factory=dict)
+    #: ``(disk MB written, disk write ms, process MB written)`` when sampling began.
+    io_start: tuple[float, float, float] | None = None
+    #: Longest hold seen per ``(lock, thread, site)`` while the heartbeat was late.
+    held_locks: dict[tuple[str, str, str], float] = field(default_factory=dict)
 
 
 class SystemWatchdogV2:
@@ -285,9 +292,13 @@ class SystemWatchdogV2:
                     last_ui_action=getattr(self.app, "last_ui_action", None),
                     started_at=time.monotonic(),
                     cpu_start=self._cpu_times(),
+                    io_start=self._io_counters(),
                 )
             episode.peak_age_s = max(episode.peak_age_s, ui_age)
             episode.sample_count += 1
+            for hold in held_locks(_HELD_LOCK_S):
+                key = (str(hold["lock"]), str(hold["thread"]), str(hold["site"]))
+                episode.held_locks[key] = max(episode.held_locks.get(key, 0.0), float(hold["held_s"]))
             frames = self._capture_ui_stack()
             if frames:
                 sample = episode.stacks.get(frames)
@@ -301,7 +312,7 @@ class SystemWatchdogV2:
             return
         episode, self._ui_episode = self._ui_episode, None
         if episode is not None:
-            self._report_ui_stall(episode, self._cpu_times())
+            self._report_ui_stall(episode, self._cpu_times(), self._io_counters())
 
     def _cpu_times(self) -> tuple[float, float] | None:
         """``(Tk thread CPU seconds, process CPU seconds)``; ``None`` when they cannot be read."""
@@ -316,6 +327,21 @@ class SystemWatchdogV2:
             return (
                 float(thread.user_time + thread.system_time),
                 float(sum(process.cpu_times()[:2])),
+            )
+        except Exception:  # noqa: BLE001 - diagnostics must never break the watchdog
+            return None
+
+    def _io_counters(self) -> tuple[float, float, float] | None:
+        """``(disk MB written, disk write ms, process MB written)``; ``None`` when they cannot be read."""
+
+        try:
+            psutil = importlib.import_module("psutil")
+            disk = psutil.disk_io_counters()
+            process = psutil.Process().io_counters()
+            return (
+                disk.write_bytes / (1024 * 1024),
+                float(disk.write_time),
+                process.write_bytes / (1024 * 1024),
             )
         except Exception:  # noqa: BLE001 - diagnostics must never break the watchdog
             return None
@@ -335,7 +361,11 @@ class SystemWatchdogV2:
             return []
 
     @staticmethod
-    def _report_ui_stall(episode: _UiStallEpisode, cpu_end: tuple[float, float] | None) -> None:
+    def _report_ui_stall(
+        episode: _UiStallEpisode,
+        cpu_end: tuple[float, float] | None,
+        io_end: tuple[float, float, float] | None = None,
+    ) -> None:
         ranked = sorted(episode.stacks.values(), key=lambda item: item.samples, reverse=True)
         stacks = [
             {
@@ -357,6 +387,16 @@ class SystemWatchdogV2:
             tk_cpu = round(cpu_end[0] - episode.cpu_start[0], 2)
             process_cpu = round(cpu_end[1] - episode.cpu_start[1], 2)
         others = sorted(episode.other_threads.items(), key=lambda item: item[1], reverse=True)
+        # Disk activity while sampling: a stall with little CPU and a busy disk is a wait on storage.
+        io = None
+        if episode.io_start is not None and io_end is not None:
+            written, busy_ms, own = (end - start for start, end in zip(episode.io_start, io_end, strict=True))
+            io = {
+                "disk_write_mb": round(written, 1),
+                "disk_write_ms": round(busy_ms, 1),
+                "process_write_mb": round(own, 1),
+            }
+        holds = sorted(episode.held_locks.items(), key=lambda item: item[1], reverse=True)
         log_with_ctx(
             logger,
             logging.WARNING,
@@ -375,6 +415,11 @@ class SystemWatchdogV2:
                 "other_threads": [
                     {"samples": count, "site": site} for site, count in others[:_OTHER_THREADS]
                 ],
+                "held_locks": [
+                    {"lock": lock, "thread": thread, "site": site, "held_s": held}
+                    for (lock, thread, site), held in holds[:_STACKS_PER_EPISODE]
+                ],
+                "io": io,
             },
         )
 

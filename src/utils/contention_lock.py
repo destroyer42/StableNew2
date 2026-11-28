@@ -15,6 +15,7 @@ import logging
 import sys
 import threading
 import time
+import weakref
 from dataclasses import dataclass
 from types import FrameType
 
@@ -28,11 +29,36 @@ logger = logging.getLogger(__name__)
 _FORWARDING_FUNCTIONS = frozenset({"__enter__", "acquire", "transaction", "_acquire_restore"})
 
 
+#: Every live lock, so a stalled UI thread's record can name what was held at the time.
+_LOCKS: weakref.WeakSet[ContentionLock] = weakref.WeakSet()
+
+
 @dataclass(frozen=True)
 class _Holder:
     site: str
     thread: str
     since: float
+    #: The holder thread's CPU seconds when it took the lock.
+    cpu_since: float = 0.0
+
+
+def held_locks(min_held_s: float) -> list[dict[str, object]]:
+    """Locks held for at least ``min_held_s`` right now (read racily, for attribution only)."""
+
+    now = time.perf_counter()
+    found: list[dict[str, object]] = []
+    for lock in list(_LOCKS):
+        holder = lock._holder
+        if holder is not None and now - holder.since >= min_held_s:
+            found.append(
+                {
+                    "lock": lock._name,
+                    "thread": holder.thread,
+                    "site": holder.site,
+                    "held_s": round(now - holder.since, 2),
+                }
+            )
+    return found
 
 
 def _caller_site(frame: FrameType | None) -> str:
@@ -66,6 +92,7 @@ class ContentionLock:
         # Written only by the thread that owns the underlying lock; read racily by waiters for attribution only.
         self._depth = 0
         self._holder: _Holder | None = None
+        _LOCKS.add(self)
 
     def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
         waiting_on = self._holder
@@ -78,6 +105,7 @@ class ContentionLock:
                 site=_caller_site(sys._getframe(1)),
                 thread=threading.current_thread().name,
                 since=now,
+                cpu_since=time.thread_time(),
             )
         self._depth += 1
         waited = now - started
@@ -87,16 +115,18 @@ class ContentionLock:
 
     def release(self) -> None:
         holder = None
-        held = 0.0
+        held = cpu = 0.0
         if self._depth == 1:
             holder = self._holder
-            held = time.perf_counter() - holder.since if holder is not None else 0.0
+            if holder is not None:
+                held = time.perf_counter() - holder.since
+                cpu = time.thread_time() - holder.cpu_since
             self._holder = None
         self._depth -= 1
         self._lock.release()
         # Reported after the underlying lock is free so that logging can never lengthen the hold it describes.
         if holder is not None and held >= self._hold_warn_s:
-            self._report("hold", held, holder, None)
+            self._report("hold", held, holder, None, cpu_s=cpu)
 
     def locked(self) -> bool:
         """Whether any thread holds the lock (the ``threading.Lock`` surface; an RLock has none of its own)."""
@@ -113,7 +143,13 @@ class ContentionLock:
         self.release()
 
     def _report(
-        self, kind: str, seconds: float, subject: _Holder | None, holder: _Holder | None
+        self,
+        kind: str,
+        seconds: float,
+        subject: _Holder | None,
+        holder: _Holder | None,
+        *,
+        cpu_s: float | None = None,
     ) -> None:
         fields: dict[str, object] = {
             "lock": self._name,
@@ -122,6 +158,8 @@ class ContentionLock:
             "site": subject.site if subject is not None else "unknown",
             "thread": subject.thread if subject is not None else threading.current_thread().name,
         }
+        if cpu_s is not None:
+            fields["cpu_s"] = round(cpu_s, 3)
         if holder is not None:
             fields["holder_site"] = holder.site
             fields["holder_thread"] = holder.thread

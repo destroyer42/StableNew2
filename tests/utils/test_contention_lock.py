@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from src.utils.contention_lock import ContentionLock
+from src.utils.contention_lock import ContentionLock, held_locks
 
 
 @pytest.fixture
@@ -149,3 +149,37 @@ def test_logging_never_masks_the_protected_work(
 
     assert value == 42
     assert not lock.locked()
+
+
+def test_a_hold_report_says_how_much_cpu_the_holder_used(lock_records) -> None:
+    """A long hold with almost no CPU was waiting (a commit on a busy disk), not computing."""
+    lock = ContentionLock("job_repository", hold_warn_s=0.05, wait_warn_s=10.0)
+
+    _slow_repository_scan(lock, 0.2)
+
+    (record,) = lock_records()
+    assert record["cpu_s"] < 0.1 <= record["seconds"]
+
+
+def test_held_locks_names_long_holders_only_while_they_hold() -> None:
+    lock = ContentionLock("job_repository_probe")
+    held, release = threading.Event(), threading.Event()
+
+    def holder() -> None:
+        with lock:
+            held.set()
+            release.wait(5.0)
+
+    thread = threading.Thread(target=holder, name="progress_poll_probe")
+    thread.start()
+    try:
+        assert held.wait(5.0)
+        time.sleep(0.06)
+        (entry,) = [e for e in held_locks(0.05) if e["lock"] == "job_repository_probe"]
+        assert entry["thread"] == "progress_poll_probe" and entry["held_s"] >= 0.05
+        assert "holder" in entry["site"]
+        assert not [e for e in held_locks(30.0) if e["lock"] == "job_repository_probe"]
+    finally:
+        release.set()
+        thread.join(5.0)
+    assert not [e for e in held_locks(0.0) if e["lock"] == "job_repository_probe"]
