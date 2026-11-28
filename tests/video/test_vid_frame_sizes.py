@@ -104,15 +104,17 @@ def test_the_approved_version_keeps_its_two_sizes() -> None:
     assert _target(WAN_A14B_VERSION, 1024, 768) == (832, 480)
 
 
-def test_full_picture_version_is_experimental_with_the_baseline_graph_and_launch() -> None:
+def test_full_picture_version_is_the_approved_default_with_the_baseline_graph_and_launch() -> None:
     base, full = _spec(WAN_A14B_VERSION), _spec(WAN_A14B_FULL_PICTURE_ID)
 
-    assert full.is_experimental and not full.backend_defaults["make_video_default"]
+    assert not full.is_experimental and full.backend_defaults["make_video_default"] is True
+    assert base.backend_defaults["make_video_default"] is False
+    assert "3.8 GiB" in full.backend_defaults["operator_projection"]["fixed_settings"]["hardware"]
     assert full.backend_defaults["prompt_template"] == base.backend_defaults["prompt_template"]
     assert full.dependency_specs == base.dependency_specs
     assert a14b_launch_attention(full) == "baseline"
-    record = {"workflow_id": FULL, "governance_state": full.governance_state, "experimental": True}
-    assert not is_offered(record, show_experimental=False)
+    record = {"workflow_id": FULL, "governance_state": full.governance_state, "experimental": False}
+    assert is_offered(record, show_experimental=False)
     assert is_offered(record, show_experimental=True)
 
 
