@@ -59,7 +59,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: Build the shared GUI and CLI application kernel with injected configuration and runtime adapters
-- `frame_retention_service.py`: Run the video frame retention sweep in the background while the queue is empty (VID-FRAME)
+- `frame_retention_service.py`: Run the video frame retention sweep in the background while the queue is empty (VID-FRAME, KEEP-SPACE)
 - `live_update.py`: Update the live checkout to an approved ``origin/main`` commit and restart (LAUNCH-UPDATE-1)
 - `live_update_remote.py`: The phone side of a live update, on the PC (LAUNCH-UPDATE-2): the ``pc_status`` publish and ``admin_request``
 - `live_update_service.py`: The running app's side of a live update (LAUNCH-UPDATE-1): switch, rate limit, drain, hand-off and receipt
@@ -288,7 +288,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `dropdown_loader_v2.py`: Normalize WebUI resources and populate Pipeline dropdowns across the stage cards and sidebar
 - `engine_settings_dialog.py`: Modern engine settings dialog for GUI V2
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
-- `frame_cleanup_dialog.py`: The one-time confirmation before the first video frame cleanup (VID-FRAME)
+- `frame_cleanup_dialog.py`: The one-time confirmation before the first video frame cleanup (VID-FRAME, KEEP-SPACE)
 - `generation_profile_strip.py`: Compact generation-profile selector for the Base Generation panel (PR-IMG-PROFILE-630)
 - `gui_invoker.py`: Marshal worker-thread calls through a queue serviced by the Tk main loop
 - `guided_reprocess_dialog.py`: Editable guided draft using Review's established batch Preview and admission dialog
@@ -889,6 +889,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `job_model.py`: Job model for single-node execution
 - `job_queue.py`: Thread-safe runnable projection with priority + FIFO behavior
 - `job_repository.py`: Transactional SQLite authority for StableNew job lifecycle state
+- `result_blocks.py`: Store each prompt-optimizer record of a job result once, by hash (KEEP-SPACE, forward only)
 - `single_node_runner.py`: Single-node job runner that executes jobs from an in-memory queue
 - `stub_runner.py`: Test stub runner that satisfies SingleNodeJobRunner interface without execution
 
@@ -1015,6 +1016,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `prompt_templates.py`: Load and cache prompt templates and compose text from named placeholder values
 - `prompt_txt_parser.py`: Utilities for parsing prompt pack TXT files into structured components
 - `randomizer.py`: Prompt randomization utilities for txt2img pipeline
+- `recycle_bin.py`: Move files to the Windows Recycle Bin, and say beforehand when it cannot take them (KEEP-SPACE)
 - `retry_policy_v2.py`: Retry policy definitions for StableNew WebUI interactions
 - `single_instance.py`: Simple localhost socket lock to enforce single StableNew V2 instance
 - `snapshot_builder_v2.py`: Snapshot helpers for Phase 9: Job Snapshotting + Deterministic Replay
@@ -1044,7 +1046,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `driver_intent.py`: Follow a driving video (V1-3): what a driver clip and a requested duration resolve to
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
-- `frame_retention.py`: Remove a clip's retained PNG frames a day after the clip exists (VID-FRAME, owner decision 2026-11-27)
+- `frame_retention.py`: Move a clip's retained PNG frames to the Recycle Bin 7 days after the clip exists
 - `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
 - `history_media_projection.py`: Read-only media-selection decisions over existing Job History entries
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)

@@ -68,6 +68,9 @@ whichever merges second must add one to the two counts in `test_pr_vid_gov_316_t
 
 ## d2. Frame retention
 
+Changed 2026-11-28 by KEEP-SPACE (`KEEP-SPACE_storage.md` section 1): 7 days instead of 1, and to the Recycle Bin
+instead of a permanent delete. The rest of this section is the original design.
+
 Setting `video_frame_cleanup_enabled` (default on, per the owner decision), a checkbox in Engine Settings. Deletion
 cannot be undone, so **the first sweep needs the operator**: a dry run counts the frames and size and a non-modal window
 shows them, with what is kept, and offers **Delete now**, **Not now** (asked again at the next start) and **Turn off**.
