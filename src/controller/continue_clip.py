@@ -193,12 +193,18 @@ def continue_clip(
     text = compose_prompt(prompt, motion_phrase)
     if not text.strip():
         raise ContinueRefused("Say what happens next; a continuation needs a prompt.")
+    parent_id = clip.parent_id
     if clip.storyboard_id:
         tree = service.store.load(clip.storyboard_id)
     else:
-        words = " ".join(str(prompt or text).split())[:_TITLE_WORDS]
-        tree = service.create_from_clip(clip.job_id, f"Continued: {words}")
-    cut = service.parent_cut(tree, clip.parent_id)
+        # Read again: a second Queue of the same clip must not make a second Storyboard.
+        found = find_clip_in_storyboards(service, clip.job_id)
+        if found is None:
+            words = " ".join(str(prompt or text).split())[:_TITLE_WORDS]
+            tree = service.create_from_clip(clip.job_id, f"Continued: {words}")
+        else:
+            tree, parent_id = found
+    cut = service.parent_cut(tree, parent_id)
     if cut is None:
         raise ContinueRefused("This clip has no frames to continue from.")
     index = len(cut.frames) - 1 if frame_index is None else frame_index
@@ -206,7 +212,7 @@ def continue_clip(
         ContinueRequest(
             storyboard_id=tree.storyboard_id,
             expected_revision=tree.revision,
-            parent_id=clip.parent_id,
+            parent_id=parent_id,
             handoff_index=index,
             mode="sequential",
             rows=(ContinueRow(prompt=text, negative_prompt=negative_prompt, seed=seed),),

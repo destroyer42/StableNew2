@@ -19,7 +19,13 @@ from dataclasses import dataclass, field
 from typing import Any, Final
 
 from src.video.motion_intent import frames_for_duration, length_policy
-from src.video.workflow_tasks import FIELD_LENGTH, TASK_ANIMATE, TASK_FOLLOW_CLIP, Suggestion
+from src.video.workflow_tasks import (
+    FIELD_LENGTH,
+    TASK_ANIMATE,
+    TASK_CONTINUE,
+    TASK_FOLLOW_CLIP,
+    Suggestion,
+)
 
 INTENT_PROMPT_ONLY: Final = "prompt_only"
 INTENT_FOLLOW_DRIVER: Final = "follow_driver"
@@ -265,14 +271,14 @@ def intent_suggestions(
 ) -> tuple[dict[str, Suggestion], list[str]]:
     """What the motion intent adds to the engine's own suggestions for ``task_id``.
 
-    The prompt-only task: the motion phrase is empty without a preset (so an untouched form submits what it always
+    The prompt-only and continue tasks: the motion phrase is empty without a preset (so an untouched form submits what it always
     did), and a chosen preset overlays its duration and phrase.  The follow-a-driver task (V1-3): the declared motion
     controls return to their defaults without a preset, and a chosen preset overlays them; the length is not a
     suggestion here, because it follows the driver (``driver_intent.plan_driver_clip``)."""
 
     if task_id == TASK_FOLLOW_CLIP:
         return _driver_suggestions(preset_by_id(preset_id), record)
-    if task_id != TASK_ANIMATE:
+    if task_id not in (TASK_ANIMATE, TASK_CONTINUE):
         return {}, []
     suggestions = {FIELD_MOTION_PHRASE: Suggestion(FIELD_MOTION_PHRASE, "", REASON_NO_PRESET)}
     preset = preset_by_id(preset_id)
