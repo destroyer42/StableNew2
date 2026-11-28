@@ -76,6 +76,7 @@ RECONCILE_WINDOW: Final = 200
 
 logger = logging.getLogger(__name__)
 
+
 class StoryboardSubmissionService:
     """Create storyboards, preview and submit Continue requests, and reconcile takes with the repository."""
 

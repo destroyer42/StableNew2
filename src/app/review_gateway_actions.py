@@ -266,7 +266,9 @@ class GatewayActions:
     def _seed_count(self, action: str, requested: int | None) -> int:
         if action == "more_like_this":
             return requested or DEFAULT_SEEDS
-        return 1 if action in ("make_video", "continue_clip") else 0  # one clip, a fresh seed each step
+        return (
+            1 if action in ("make_video", "continue_clip") else 0
+        )  # one clip, a fresh seed each step
 
     def _guarded(self, compile_step: Callable[[], Any]) -> Any:
         """Run a compiler call; every failure becomes a closed ``ActionRefused`` code, never its text."""
