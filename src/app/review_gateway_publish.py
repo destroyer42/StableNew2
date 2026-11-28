@@ -50,7 +50,12 @@ from src.app.review_gateway_protocol import (
     utc_text,
 )
 from src.app.review_gateway_scrub import Unclean, scrub_image
-from src.app.review_gateway_sources import RETAINED, SourceFilter, may_be_unrecorded_frame
+from src.app.review_gateway_sources import (
+    NOT_OUTPUT,
+    RETAINED,
+    SourceFilter,
+    may_be_unrecorded_frame,
+)
 from src.app.review_gateway_store import SyncLedger
 from src.app.site_library_reconcile import key_for
 from src.app.site_media_files import SiteOutputError, checked_digest, open_scoped
@@ -82,8 +87,8 @@ WITHDRAW_PAGE = 500
 WITHDRAW_PAGES = 10
 #: Ledger keys of that sweep. They are renamed when the source filter excludes more (RG-170: eval outputs), so a PC
 #: that already swept looks through its ledger once again.
-_SWEEP_DONE = "sources_withdrawn_v2"
-_SWEEP_CURSOR = "sources_withdraw_cursor_v2"
+_SWEEP_DONE = "sources_withdrawn_v3"
+_SWEEP_CURSOR = "sources_withdraw_cursor_v3"
 _SKIPPED_FOLDERS = (ARCHIVE_DIR_NAME, ".stablenew-library")
 _RUN_SAFE = re.compile(r"[^A-Za-z0-9._ -]+")
 _SEED = re.compile(r"-?[0-9]{1,19}")
@@ -585,8 +590,8 @@ class GatewayPublisher:
         self._deferred[key] = (version, failures, self._monotonic() + seconds)
 
     def withdraw_unpublishable(self, client: GatewayClient, cancel: Event) -> None:
-        """Once per ledger: ask the gateway to stop showing eval outputs, frames and un-smoothed clips published
-        earlier.
+        """Once per ledger: ask the gateway to stop showing eval outputs, frames, un-smoothed clips and working files
+        published earlier. A file that is merely outside the job output folders stays.
 
         Kept in steps, so a stop or an unreachable gateway resumes where it was.
         """
@@ -607,6 +612,7 @@ class GatewayPublisher:
                 str(row["library_id"])
                 for row in rows
                 if self._sources.exclusion_of(str(row["rel_path"]), str(row["kind"]))
+                not in ("", NOT_OUTPUT)
             ]
             if unwanted and not client.withdraw_items(unwanted):
                 log.info("Review gateway did not accept the withdrawal of earlier items")
