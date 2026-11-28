@@ -272,7 +272,8 @@ def test_cli_builds_index_without_saved_state_and_reports_invalid_checkout(check
 
 
 def test_every_source_module_has_a_module_docstring() -> None:
-    paths = module_files(ROOT)
+    # Vendored third-party files are kept byte-identical (their SHA-256 is pinned), so they are exempt.
+    paths = [path for path in module_files(ROOT) if "vendor" not in path.relative_to(ROOT).parts]
     assert paths
     assert [path for path in paths if not ast.get_docstring(ast.parse(path.read_bytes()))] == []
 

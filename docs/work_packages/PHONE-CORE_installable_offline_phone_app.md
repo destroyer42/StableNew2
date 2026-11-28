@@ -750,6 +750,16 @@ are registered from each `feature.js`; `compare` gets the triage's controls thro
 and `rating.js` are on the cap exception list for PC-2 to split. The core pieces that belong to later slices (`idb`,
 `sw-client`, the session states, `settings.for`) are not built, and saved settings keep their keys.
 
+**As built, PW-1** (differences from 2.3 only; behaviour is in `REVIEW_GATEWAY.md`):
+
+- `start_url` is `/`, not `/#/`: the orchestrator's brief kept all three of start URL, scope and id at what the owner's
+  installed app has (13.1). The router treats both the same.
+- The worker's only store is the install-time shell, so nothing outside it can be stored at all. The refusal to `put`
+  a URL ending in `/original` belongs with PW-2's rendition `put`, the first one that could see such a URL.
+- Settings is a core screen (`core/about.js`, `#/settings`) opened from a button at the end of the home screen and of
+  the "could not reach" screen, not from the header.
+- The 401 wipe of 4.3 has nothing to wipe yet: nothing authenticated is stored until PW-2.
+
 **As built, PP-1:** the QR's address is the desktop's own **Phone app address** setting, which the owner enters once
 (the PC knows only the gateway's LAN sync address). `last_seen_at` is sent only to a PC that asks for it
 (`device_fields=last_seen_at`), so neither side has to be updated first. `core/` was not edited. Behaviour:
