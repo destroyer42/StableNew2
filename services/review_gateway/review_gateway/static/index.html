@@ -7,10 +7,11 @@
   <meta name="theme-color" content="#101216">
   <meta name="mobile-web-app-capable" content="yes">
   <title>StableNew Review</title>
-  <!-- The server writes the version of the static files wherever {{V}} stands (static_files.py). -->
+  <!-- The server fills in the version of the static files, the features and their styles (static_files.py). -->
   <link rel="icon" href="/s/{{V}}/icon.svg" type="image/svg+xml">
+  <meta name="rg-features" content="{{FEATURES}}">
   <link rel="stylesheet" href="/s/{{V}}/core/core.css">
-  <link rel="stylesheet" href="/s/{{V}}/features/rating/rating.css">
+  {{STYLES}}
   <script type="module" src="/s/{{V}}/core/main.js"></script>
 </head>
 <body>
@@ -18,7 +19,6 @@
     <button id="back" type="button" aria-label="Back" hidden>&#8249;</button>
     <h1 id="title">Review</h1>
     <span id="unsent" role="status" hidden></span>
-    <button id="waiting" type="button" hidden></button>
     <button id="rejected" type="button" hidden></button>
   </header>
   <main id="view"><p class="muted">Loading. If this stays, pull down to reload.</p></main>

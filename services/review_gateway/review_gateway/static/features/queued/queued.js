@@ -3,25 +3,16 @@
 // put on screen as text.
 
 import { api, idempotencyKey } from "../../core/api.js";
+import { bus } from "../../core/bus.js";
+import { PICKERS, REWORK, WORDS, actionLabel, refusalText, warningBlock } from "../../core/catalog.js";
 import { closeSheet, el, sheet, show, toast } from "../../core/dom.js";
 import { mediaUrl } from "../../core/media.js";
 import { QUEUE_KEY, changeList, flush, readList, without } from "../../core/outbox.js";
-import { currentSerial, route } from "../../core/router.js";
+import { route } from "../../core/router.js";
 import { canQueue, loadScopes } from "../../core/session.js";
 import { STATUS_STALE_MS } from "../../core/status.js";
-import { allItems, currentTriage, findItem, key, needsReview } from "../../core/store.js";
+import { allItems, closeAfterRework, currentTriage, findItem, key, markRework, needsReview } from "../../core/store.js";
 import { since } from "../../core/text.js";
-import {
-  PICKERS,
-  REWORK,
-  WORDS,
-  actionLabel,
-  closeAfterRework,
-  markRework,
-  refusalText,
-  warningBlock,
-} from "../actions/actions.js";
-import { updateTriageStatus } from "../triage/triage.js";
 
 const CATALOG_KEY = "rg.catalog";
 const SEEN_KEY = "rg.pcSeen";
@@ -189,7 +180,7 @@ function add(item, action, extra) {
   if (REWORK.has(action)) closeAfterRework(item); // review moves on, as it does for a rework queued online
   else {
     closeSheet();
-    updateTriageStatus();
+    bus.emit("items:changed");
   }
   redraw();
 }
@@ -419,10 +410,10 @@ function entryRow(entry) {
   return row(entry, describe(entry, latest.image_backend_ready), buttons, summary ? summary.warnings : []);
 }
 
-async function show_(serial) {
+async function show_(view) {
   const asking = ++listing;
   await sync();
-  if (serial !== currentSerial() || asking !== listing) return;
+  if (!view.alive() || asking !== listing) return;
   const dismissed = new Set(recall(DISMISSED_KEY, []));
   const local = unsent().map((entry) =>
     row(entry, "Not sent yet", [

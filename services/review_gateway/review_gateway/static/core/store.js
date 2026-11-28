@@ -1,8 +1,10 @@
 // What the page holds about items: the runs read from the gateway, the filter, the triage in progress.
 
 import { api } from "./api.js";
+import { bus } from "./bus.js";
+import { closeSheet } from "./dom.js";
 import { QUEUE_KEY, REJECTED_KEY, readList } from "./outbox.js";
-import * as Queued from "../features/queued/queued.js";
+import { slots } from "./slots.js";
 
 const runItems = new Map(); // run_id -> items
 let filter = "todo";
@@ -50,7 +52,8 @@ function overlayUnsent(items) {
       item.reason_code = null;
     }
   }
-  return Queued.overlay(items);
+  slots.ask("items.overlay", { items });
+  return items;
 }
 
 export async function loadRun(runId) {
@@ -62,3 +65,21 @@ export async function loadRun(runId) {
 }
 
 export const needsReview = (item) => ["undecided", "refused", "rejected"].includes(item.state);
+
+// Sent for rework: the item counts as reviewed at once; a refusal puts it back.
+export function markRework(item, sent) {
+  for (const copy of [item, ...findItem(key(item))]) {
+    if (sent && needsReview(copy)) {
+      copy.before = copy.state;
+      copy.state = "rework";
+    } else if (!sent && copy.state === "rework" && copy.before) {
+      copy.state = copy.before;
+    }
+  }
+  bus.emit("items:changed");
+}
+
+export function closeAfterRework(item) {
+  closeSheet();
+  bus.emit("rework:closed", item);
+}

@@ -1,13 +1,11 @@
 // Decisions and requests the gateway has not accepted yet: saving, undo, sending and the "Not saved" screen.
 
 import { ApiError, api, idempotencyKey } from "./api.js";
+import { bus } from "./bus.js";
+import { actionLabel } from "./catalog.js";
 import { el, show, toast } from "./dom.js";
 import { mediaUrl } from "./media.js";
 import { currentTriage, findItem, key } from "./store.js";
-import { actionLabel } from "../features/actions/actions.js";
-import { showPairing } from "../features/pairing/pairing.js";
-import * as Queued from "../features/queued/queued.js";
-import { renderItem, updateTriageStatus } from "../features/triage/triage.js";
 
 // PHONE-FAST: the last decision stays on the phone this long, so it can be undone.
 const UNDO_MS = 8000;
@@ -136,7 +134,7 @@ function undo() {
   const index = triage && at ? triage.list.findIndex((item) => item.library_id === at.libraryId) : -1;
   if (index >= 0 && triage.runId === at.runId) {
     triage.index = index;
-    renderItem();
+    bus.emit("item:restored");
   } else if (at) {
     location.hash = `#/triage/${encodeURIComponent(at.runId)}/${at.libraryId}`;
   }
@@ -178,7 +176,7 @@ export async function flush() {
         state = await send(entry);
       } catch (error) {
         if (error.status === 401) {
-          showPairing();
+          bus.emit("session:lost");
           return;
         }
         // RG-160: "too many waiting" lasts until the PC answers them, so it is set aside rather than holding up the list.
@@ -199,13 +197,13 @@ export async function flush() {
       retryDelay = 2000;
       const target = key(entry);
       if (entry.action) {
-        Queued.sent(entry, state); // RG-160: it says nothing about the item's decision
+        bus.emit("outbox:sent", entry, state); // RG-160: it says nothing about the item's decision
       } else if (!readList(QUEUE_KEY).some((e) => !e.action && key(e) === target)) {
         for (const item of findItem(target)) {
           item.state = state;
           item.reason_code = reason;
         }
-        updateTriageStatus();
+        bus.emit("items:changed");
       }
     }
   } finally {

@@ -3,7 +3,6 @@
 
 import { api, idempotencyKey } from "../../core/api.js";
 import { el, show, toast } from "../../core/dom.js";
-import { currentSerial } from "../../core/router.js";
 
 const UNSENT_KEY = "rg.rating.unsent";
 const LAYOUT_KEY = "rg.rating.layout"; // "side" or "stacked", once the owner has chosen
@@ -57,7 +56,7 @@ function keep(map) {
 const unitKey = (taskId, itemId, clipId) => `${taskId}|${itemId}|${clipId}`;
 const waitingFor = (taskId) => Object.keys(unsent()).filter((k) => k.startsWith(`${taskId}|`));
 
-function flush() {
+export function flush() {
   if (!sending) sending = sendAll().finally(() => (sending = null));
   return sending;
 }
@@ -135,10 +134,10 @@ function card(task) {
   ]);
 }
 
-async function showList(serial) {
+async function showList(view) {
   await flush();
   const { tasks } = await api("/api/rating/tasks");
-  if (serial !== currentSerial()) return;
+  if (!view.alive()) return;
   const nodes = [];
   for (const [heading, states] of groups) {
     const found = tasks.filter((task) => states.includes(task.state));
@@ -500,11 +499,11 @@ function renderTask() {
   window.scrollTo(0, 0);
 }
 
-async function showTask(taskId, wanted, serial) {
+async function showTask(taskId, wanted, view) {
   await flush();
   if (!current || current.task_id !== taskId || !editable()) {
     const task = await api(`/api/rating/tasks/${encodeURIComponent(taskId)}`);
-    if (serial !== currentSerial()) return;
+    if (!view.alive()) return;
     current = task;
     submitKey = null;
     // Answers still waiting on this phone are newer than the gateway's.
@@ -519,13 +518,11 @@ async function showTask(taskId, wanted, serial) {
   renderTask();
 }
 
-export async function route(taskId, wanted, serial) {
+export async function route(taskId, wanted, view) {
   if (!taskId) {
     current = null;
-    await showList(serial);
+    await showList(view);
   } else {
-    await showTask(decodeURIComponent(taskId), wanted, serial);
+    await showTask(decodeURIComponent(taskId), wanted, view);
   }
 }
-
-window.addEventListener("online", () => flush());
