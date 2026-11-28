@@ -249,9 +249,8 @@ def test_slice_two_params_parse():
         "prompt_tweak",
         "make_video",
     }
-    assert (
-        not {"rerun_clip", "continue_clip"} & protocol.PHONE_ACTIONS
-    )  # N8: they use V1's functions later
+    assert protocol.CLIP_ACTIONS == {"continue_clip"} <= protocol.PHONE_ACTIONS  # V1-6
+    assert "rerun_clip" not in protocol.PHONE_ACTIONS  # N8: it will use V1's functions later
 
 
 def test_action_choices_are_bounded_scrubbed_and_match_the_schema():

@@ -35,6 +35,7 @@ The **Storyboard** tab (Motion group, after Video Workflow) grows a scene from f
 the linear **Storyboard** drafts above (the Multi-shot sequence form under Video Workflow > Advanced): those start from a
 still image and stay exactly as they are; the shared word is a known wording overlap until the tab covers the same ground.
 
+- **From Video Workflow (V1-6):** **Continue this clip** (Recent outputs, Job History) queues one take from a finished clip's last frame without opening this tab. It extends the Storyboard that holds the clip, or creates one titled *Continued: …*; everything below then applies to it (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 4).
 - **Start (PR-VID-STORY-IMPORT):** **New from clip or image…** opens a non-modal picker with **Browse for video clip…** and
   **Browse for still image…** (no job id is typed). The clip browser is the operating system's file dialog; it opens in the
   output root's `movie_clips` folder (the output root itself, or the home folder, when that is missing), filters `*.mp4` and

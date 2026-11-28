@@ -14,6 +14,7 @@ from src.video.workflow_tasks import (
     TASK_ANIMATE,
     TASK_BATCH,
     TASK_BETWEEN,
+    TASK_CONTINUE,
     TASK_FOLLOW_CLIP,
     TASK_SEQUENCE,
     TASKS,
@@ -55,6 +56,7 @@ def test_tasks_in_display_order():
         TASK_ANIMATE,
         TASK_FOLLOW_CLIP,
         TASK_BETWEEN,
+        TASK_CONTINUE,
         TASK_SEQUENCE,
         TASK_BATCH,
     ]

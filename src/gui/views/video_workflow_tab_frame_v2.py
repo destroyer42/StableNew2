@@ -47,6 +47,11 @@ from src.gui.views.motion_conversion_dialog import (
 from src.gui.views.video_eval_panel_v2 import VideoEvalPanel
 from src.gui.views.video_workflow_alignment_host import AlignmentHost, AlignmentRow
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
+from src.gui.views.video_workflow_continue_v2 import (
+    ContinueClipHost,
+    ContinueClipPanel,
+    apply_continuation,
+)
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_driver_host_v2 import DriverClipHost, DriverInputs
 from src.gui.views.video_workflow_evaluate_view_v2 import VideoWorkflowEvaluateView
@@ -156,6 +161,7 @@ from src.video.workflow_tasks import (
     TASK_ANIMATE,
     TASK_BATCH,
     TASK_BETWEEN,
+    TASK_CONTINUE,
     TASK_FOLLOW_CLIP,
     TASK_SEQUENCE,
     TASKS,
@@ -240,6 +246,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     motion_intent_panel: MotionIntentPanel
     follow_clip_frame: ttk.Frame
     end_image_frame: ttk.Frame
+    continue_panel: ContinueClipPanel
     pose_video_frame: ttk.Frame
     pose_video_entry: ttk.Entry
 
@@ -757,6 +764,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 "on_library_changed": self._refresh_motion_library,
                 "harvest_motion": self._harvest_recent_output,
                 "continue_in_storyboard": self._continue_output_in_storyboard,
+                "continue_clip": lambda output: self.open_continue(output.job_id),
                 "rerun_with_tweaks": lambda output: self.open_rerun(output.job_id),
             },
         )
@@ -1083,7 +1091,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         keeps_choice = current.get("governance_state") == "approved" and not current.get(
             "experimental"
         )
-        if self._task in (TASK_FOLLOW_CLIP, TASK_SEQUENCE, TASK_BETWEEN):
+        if self._task in (TASK_FOLLOW_CLIP, TASK_SEQUENCE, TASK_BETWEEN, TASK_CONTINUE):
             self.select_task(TASK_ANIMATE)  # one image handed over: the plain image-to-video task
             current = self._workflow_map.get(self.workflow_var.get().strip(), {})
             keeps_choice = current.get("governance_state") == "approved" and not current.get(
@@ -1120,9 +1128,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         return True
 
     def _leave_batch_task(self) -> None:
-        """A single image was chosen: the batch task gives way to the plain image-to-video task."""
+        """A single image was chosen: the batch and continue tasks give way to plain image-to-video."""
 
-        if self._task == TASK_BATCH:
+        if self._task in (TASK_BATCH, TASK_CONTINUE):
             self.select_task(TASK_ANIMATE)
 
     def set_source_image_path(
@@ -1258,7 +1266,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                     "The prompt box was empty: the default was sent."
                 )
         phrase = self.motion_intent_panel.phrase_var.get().strip()
-        if for_submission and self._task == TASK_ANIMATE:
+        if for_submission and self._task in (TASK_ANIMATE, TASK_CONTINUE):
             # V1-1 (D3, D5): the visible motion phrase is part of the submitted prompt; the preset and the basis of
             # each choice travel as provenance only.
             state["prompt"] = compose_prompt(state["prompt"], phrase)
@@ -1440,7 +1448,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # Required inputs, and the picker where an experimental engine is authorised, must not hide behind a header.
         # V1-3: following a driver, Queue on the visible warning is the opt-in; the picker stays under Advanced.
         if required_control or (
-            workflow_meta.get("experimental") and self._task not in (TASK_FOLLOW_CLIP, TASK_BETWEEN)
+            workflow_meta.get("experimental")
+            and self._task not in (TASK_FOLLOW_CLIP, TASK_BETWEEN, TASK_CONTINUE)
         ):
             self.advanced_section.set_expanded(True)
             self._sync_settings_editor_label()
@@ -1771,9 +1780,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.sequence_panel.grid()
         else:
             self.sequence_panel.grid_remove()
+        if task_id == TASK_CONTINUE:
+            self.continue_panel.grid()
+        else:
+            self.continue_panel.grid_remove()
         self.motion_intent_panel.show_mode(
-            phrase=task_id == TASK_ANIMATE,
-            preset=task_id in (TASK_ANIMATE, TASK_FOLLOW_CLIP),
+            phrase=task_id in (TASK_ANIMATE, TASK_CONTINUE),
+            preset=task_id in (TASK_ANIMATE, TASK_FOLLOW_CLIP, TASK_CONTINUE),
             sends=task_id == TASK_BETWEEN,
         )
         if task_id == TASK_BETWEEN:
@@ -1919,7 +1932,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         policy, frames = self._length_policy(), self._current_frames()
         preset = (
             preset_by_id(self._preset_id)
-            if self._task in (TASK_ANIMATE, TASK_FOLLOW_CLIP)
+            if self._task in (TASK_ANIMATE, TASK_FOLLOW_CLIP, TASK_CONTINUE)
             else None
         )
         self._refresh_composed()
@@ -2124,7 +2137,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if default:
             self.motion_intent_panel.set_composed("" if prompt else default)
             return
-        shown = phrase and self._task == TASK_ANIMATE
+        shown = phrase and self._task in (TASK_ANIMATE, TASK_CONTINUE)
         self.motion_intent_panel.set_composed(compose_prompt(prompt, phrase) if shown else "")
 
     def _motion_intent_record(self, phrase: str) -> dict[str, Any]:
@@ -2224,6 +2237,57 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self._driver_typed = False
             self._driver_host.choose(self.pose_video_var.get())
             self._sync_duration()
+
+    # ------------------------------------------------------------------ continue a clip (V1-6)
+
+    @property
+    def continue_host(self) -> ContinueClipHost:
+        host = getattr(self, "_continue_host", None)
+        if host is None:
+            host = self._continue_host = ContinueClipHost(
+                self,
+                service=lambda: self.app_controller.get_video_workflow_controller().storyboards,
+                on_opened=lambda opening: apply_continuation(self, opening),
+                on_queued=self._on_continue_queued,
+                on_refused=self._fail,
+                on_status=self.status_var.set,
+            )
+        return host
+
+    def open_continue(self, job_id: str) -> None:
+        """Continue a finished clip: read it on a worker, then fill the form (nothing is queued)."""
+
+        if not self._leave_batch_mode() or not self.select_task(TASK_CONTINUE):
+            return
+        self.select_view(VIEW_CREATE)
+        self.submission_notice.clear()
+        self.continue_panel.clear("Reading the clip...")
+        self.continue_host.open(job_id)
+
+    def _on_continue_frame(self, path: str) -> None:
+        self.source_image_var.set(path)
+        self._refresh_workspace_summary()
+
+    def _continue_as_prompt_only(self) -> None:
+        frame = self.source_image_var.get().strip()
+        if frame and self.select_task(TASK_ANIMATE):
+            self.set_source_image_path(
+                frame,
+                status_message="The clip's last frame starts a new clip, outside any Storyboard.",
+            )
+
+    def _continue_to_picture(self) -> None:
+        frame = self.source_image_var.get().strip()
+        if frame and self.select_task(TASK_BETWEEN):
+            self.set_source_image_path(
+                frame,
+                status_message="Choose the end image. This clip is made on its own, outside any Storyboard.",
+            )
+
+    def _on_continue_queued(self, result: Any) -> None:
+        message = f"Queued continuation job {', '.join(result.job_ids)} in Storyboard '{result.tree.title}'"
+        self.status_var.set(message)
+        self.submission_notice.show_queued(message + ".", on_view_queue=self._on_view_queue)
 
     # ------------------------------------------------------------------ re-run with tweaks (V1-2)
 
@@ -3021,6 +3085,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
     def _on_submit(self) -> None:
         self.submission_notice.clear()
+        if self._task == TASK_CONTINUE:
+            # V1-6: a continuation is a Storyboard take, queued by the facade, not a new job from this form.
+            self.continue_host.queue(
+                self.get_video_workflow_state(for_submission=True),
+                self.continue_panel.chosen_index(),
+            )
+            return
         controller = getattr(self, "app_controller", None)
         handler = getattr(controller, "submit_video_workflow_job", None)
         if not callable(handler):

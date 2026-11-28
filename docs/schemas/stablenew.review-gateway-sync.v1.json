@@ -445,7 +445,7 @@
       ]
     },
     "action_request": {
-      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this, slice 2 another_model, aspect_ratio, prompt_tweak and make_video. 'queue' (RG-160) is the one step made while the PC is away: the PC compiles and admits it when it arrives, with no summary first, and it never expires. It takes what a prepare takes, and the picker actions must name a choice. Sent only by a phone whose gateway has this PC's choice_catalog. rerun_clip and continue_clip stay reserved.",
+      "description": "RG-140: a phone action, in two steps. 'prepare' asks the PC to compile exactly what it would queue and answer with an action_summary, admitting nothing; 'confirm' names that prepare record and the summary revision the phone showed, and the PC admits only when its fresh compile has the same revision. Validated again on the PC against its closed lists; slice 1 implements fix_face, fix_hands, fix_both and more_like_this, slice 2 another_model, aspect_ratio, prompt_tweak and make_video. 'queue' (RG-160) is the one step made while the PC is away: the PC compiles and admits it when it arrives, with no summary first, and it never expires. It takes what a prepare takes, and the picker actions must name a choice. Sent only by a phone whose gateway has this PC's choice_catalog. rerun_clip stays reserved. continue_clip (V1-6) is for video items, with optional text (what happens next), in prepare and confirm only: it is never queued while the PC is away.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -487,7 +487,7 @@
               "$ref": "#/$defs/choice_id"
             },
             "text": {
-              "description": "prompt_tweak (required: words added to the prompt) and make_video (optional: the motion prompt) only, on prepare or queue. One line of plain text; the PC scrubs anything it shows back.",
+              "description": "prompt_tweak (required: words added to the prompt), make_video (optional: the motion prompt) and continue_clip (optional: what happens next) only, on prepare or queue. One line of plain text; the PC scrubs anything it shows back.",
               "type": "string",
               "minLength": 1,
               "maxLength": 200,
@@ -603,7 +603,8 @@
                 "not": {
                   "enum": [
                     "prompt_tweak",
-                    "make_video"
+                    "make_video",
+                    "continue_clip"
                   ]
                 }
               }
@@ -673,6 +674,29 @@
                 "required": [
                   "choice"
                 ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "continue_clip"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "properties": {
+                  "step": {
+                    "enum": [
+                      "prepare",
+                      "confirm"
+                    ]
+                  }
+                }
               }
             }
           }
