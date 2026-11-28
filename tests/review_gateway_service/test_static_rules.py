@@ -24,7 +24,7 @@ LISTED = re.compile(r"^export\s+\{(?P<names>[^}]*)\};", re.MULTILINE)
 #: The one dynamic import: main.js loads the features the server names.
 LOADER = "import(`../features/${name}/feature.js`)"
 #: PHONE-CORE 2.2 and 7: lines a file. A listed file is over its cap and may only shrink; PC-2 splits it.
-CAPS = {"core": 300, "features": 400}
+CAPS = {"core": 300, "features": 400, "sw.js": 300}  # the worker is one file at the root
 OVERSIZED: dict[str, int] = {}
 
 

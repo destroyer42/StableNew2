@@ -1,5 +1,6 @@
 // Hash routes, the render serial, the refresh, and where each list was left.
 
+import { settingsLink } from "./about.js";
 import { bus } from "./bus.js";
 import { closeSheet, el, show, view } from "./dom.js";
 import { flush, showRejected } from "./outbox.js";
@@ -114,8 +115,9 @@ export async function route() {
       show(
         "Review",
         Boolean(page),
-        el("p", { class: "error", text: "Could not reach the gateway." }),
+        el("p", { class: "error", text: `${error.offline ? "Offline: could" : "Could"} not reach the gateway.` }),
         el("button", { type: "button", text: "Try again", onclick: route }),
+        settingsLink(), // Repair stays reachable when nothing else loads
       );
   }
 }

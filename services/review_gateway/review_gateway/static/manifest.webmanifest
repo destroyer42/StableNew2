@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "StableNew Review",
+  "short_name": "Review",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101216",
+  "theme_color": "#101216",
+  "icons": [
+    { "src": "/s/{{V}}/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/s/{{V}}/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/s/{{V}}/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
