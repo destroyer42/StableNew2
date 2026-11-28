@@ -382,7 +382,7 @@ def test_phone_video_workflow_catalog_and_frozen_admission(native):
     not_allowed = replace(native.grant, queue_submit=False)
     assert native.call("video-options", device=not_allowed)[0] == 403
     status, options = native.call("video-options")
-    assert status == 200 and options["default"] == [CANDIDATE["workflow_id"], "1.0.0"]
+    assert status == 200 and options["default"] == ["wan22_i2v_a14b_4step_full_picture_v1", "1.0.0"]
     assert all("drive_i2v" not in item["workflow_id"] for item in options["workflows"])
     command = _video_request(native, [BASE], kind="video")
     command["sources"] = command["sources"][:1]

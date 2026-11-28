@@ -17,7 +17,6 @@ from src.video.workflow_tasks import TASK_ANIMATE, TASK_FOLLOW_CLIP, choose_work
 PROMPT_MODE = "wan_animate2_prompt_i2v_v1"
 ARMS = {
     "wan22_i2v_a14b_4step_ck_v1",
-    "wan22_i2v_a14b_4step_full_picture_v1",
     "wan22_i2v_a14b_svi",
     "hunyuan_video15_i2v_480p_8step_v1",
     "hunyuan_video15_i2v_480p_12step_v1",
@@ -26,6 +25,7 @@ ARMS = {
 }
 ALWAYS = {
     "wan22_i2v_a14b_4step_v1",
+    "wan22_i2v_a14b_4step_full_picture_v1",  # approved, the Make Video default
     "wan22_i2v_a14b_flf_v1",  # the only engine that takes an end image
     "wan22_ti2v_5b_i2v_v1",
     "wan22_ti2v_5b_i2v_720p_v1",
@@ -104,5 +104,7 @@ def test_choices_carry_their_tier_and_labels_stay_unique(records) -> None:
 def test_tasks_still_resolve_with_only_the_offered_engines(records) -> None:
     offered = picker.offered_workflow_ids(records, show_experimental=False)
     visible = [record for record in records if record["workflow_id"] in offered]
-    assert choose_workflow(TASK_ANIMATE, visible).workflow_id == "wan22_i2v_a14b_4step_v1"
+    assert (
+        choose_workflow(TASK_ANIMATE, visible).workflow_id == "wan22_i2v_a14b_4step_full_picture_v1"
+    )
     assert choose_workflow(TASK_FOLLOW_CLIP, visible) is not None

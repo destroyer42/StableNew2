@@ -41,7 +41,7 @@ from tests.helpers.make_video_313 import (
 pytestmark = pytest.mark.gui
 
 # VID-CLIP-372: the catalog declares A14B 4-step the Make Video default.
-RECOMMENDED_ID = "wan22_i2v_a14b_4step_v1"
+RECOMMENDED_ID = "wan22_i2v_a14b_4step_full_picture_v1"
 
 
 def _pump(root: tk.Misc, milliseconds: int = 120) -> None:
@@ -268,7 +268,7 @@ def test_the_picker_shows_friendly_names_but_state_keeps_the_workflow_id(env) ->
         TI2V_ID not in label and RECOMMENDED_ID not in label and ANIMATE2_ID not in label
         for label in labels
     )
-    assert env.tab.workflow_label_var.get() == "Wan2.2 I2V-A14B 4-step (recommended)"
+    assert env.tab.workflow_label_var.get() == "Wan2.2 I2V-A14B 4-step full picture (recommended)"
 
     state = env.tab.get_video_workflow_state()
     assert state["workflow_id"] == RECOMMENDED_ID  # persisted state is unchanged by the picker

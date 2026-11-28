@@ -87,7 +87,7 @@ def test_the_real_catalog_recommends_the_promoted_a14b_workflow() -> None:
     # VID-CLIP-372: the owner promoted A14B 4-step; the catalog declares it the Make Video default.
     app = SimpleNamespace(job_service=None, output_dir="output")
     controller = VideoWorkflowController(app_controller=app)
-    assert controller.recommended_workflow_id() == "wan22_i2v_a14b_4step_v1"
+    assert controller.recommended_workflow_id() == "wan22_i2v_a14b_4step_full_picture_v1"
     experimental = [s for s in controller.list_workflow_specs() if s["experimental"]]
     assert experimental and all(
         s["workflow_id"] != controller.recommended_workflow_id() for s in experimental
