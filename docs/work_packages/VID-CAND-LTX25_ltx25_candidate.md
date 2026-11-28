@@ -2,7 +2,7 @@
 
 Status: **stopped after stage 0 on 2026-11-27 because the frozen source images are not non-explicit** (section 7). Two
 silent-workflow smoke clips were generated; stage 1, stage 2 and the audio stage were not run, there is no comparison,
-and whether to delete the two clips and whether to go on at all are open owner decisions. The two workflows are
+the two clips await the owner's decision, and the owner chose to go on with new clothed sources. The two workflows are
 `experimental`, never the Make Video default, never preselected and not QUALIFIED.
 
 Owner's words (2026-11-27): "Let's do both and compare. Still do the ltx-2.5 as well." The comparison is LTX-2.5
@@ -218,12 +218,22 @@ Other sessions' test suites were using the CPU at launch, so the times may be a 
 and nothing was rated.
 
 **Both stage 0 sources contain nudity and one is sexually explicit.** Generating from them broke the owner's condition
-and, for the explicit one, the licence's use policy. The run stopped there. The two clips and their frames remain on the
-host until the owner decides; deleting them is recommended.
+and, for the explicit one, the licence's use policy (the AUP condition of section 1). The run stopped there. The two
+clips and their frames remain on the host, unpublished and unrated, **awaiting the owner's decision**: asked about
+deleting them, the owner did not say yes (2026-11-27), so no agent may delete, publish or reuse them.
 
-**To go on** needs the owner's decision and a new, opened-and-checked non-explicit source set, with VID-CAND-382's arms
-re-run on the same sources so the comparison still joins. A new plan and a new approval; the suites built for this run
-must not be reused.
+**Next (owner, 2026-11-27, relayed by the orchestrator session): new clothed sources, picked and classified by the
+owner.** Candidates go to the owner to be labelled safe-for-work or not, with their framing; only after that is a new
+GPU plan proposed, with 8-16 owner-confirmed safe-for-work sources across all three arms. An agent opens every chosen
+source before the first generation. The suites built for this run must not be reused.
+
+**Classification sitting, 2026-11-27:** 40 candidates (ten per named character, from the SDXL variants of the owner's
+character packs, picked from prompt metadata without opening any picture) are registered in the phone's To rate tab as
+`eval-sources-stormlight-2` (`-1` was withdrawn unanswered: a name collision had listed three pictures twice), an
+existing RG-170 `choice` sitting: safe-for-work or not (safe-for-work defined there as
+no nudity and no sexual pose or act), framing, an optional flawed-picture flag and notes. Nothing is generated from it.
+The owner's answers become a private source-labels file for later evaluations; the selection and labels stay outside
+the repository.
 
 ### The plan as approved (kept for the record)
 
@@ -275,7 +285,7 @@ three-way sheet can be built only after it does.
 
 ## 9. Recommendation and smallest next step
 
-LTX-2.5 loads and decodes on 12 GB at 768x1344x121 in about two minutes warm. **Recommendation: drop it as a candidate
-for this host's work.** The frozen evaluation sources, which stand for that work, are outside what its licence allows
-(section 1). The alternative, if the owner wants it for non-explicit work only, is the new source set described in
-section 7. The smallest next step that can change the decision is the owner's answer.
+LTX-2.5 loads and decodes on 12 GB at 768x1344x121 in about two minutes warm. The agent recommended dropping it,
+because the frozen evaluation sources are outside what its licence allows (section 1); **the owner chose to continue on
+new clothed sources** (section 7), so it stays a candidate for non-explicit work only. The smallest next step is the
+owner's classification of candidate sources.
