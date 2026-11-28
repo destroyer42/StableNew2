@@ -58,14 +58,35 @@ The gateway never compiles, admits or decides anything. It has no job, lifecycle
 - Caps: 300 lines a core file, 400 a feature file, checked by `test_static_rules.py`. No file is over its cap; an
   exception listed there may only shrink.
 - At start the phone app reads `static/` once. Only `.js`, `.css`, `.png`, `.svg` and `.webmanifest` files are
-  published. The version is 12 hex digits of a SHA-256 over their paths and digests and the `index.html` template.
+  published. The version is 12 hex digits of a SHA-256 over their paths and digests, the `index.html` template,
+  `sw.js` and the manifest.
 - `GET /` is `index.html` with that version, the feature names and each feature's `<id>.css` written in, in feature
   `order` (`no-cache`).
 - `GET /s/<version>/<path>` answers from the table only, `public, max-age=31536000, immutable`; any other version or
-  path is 404. `GET /s/<version>/files.json` lists each path with its SHA-256. The old `/static/...` addresses are
-  gone.
+  path is 404. `sw.js` and the manifest are not in that table: each has one fixed address. `GET /s/<version>/files.json`
+  lists each path with its SHA-256, and under `shell` the SHA-256 of `/` and of the manifest. The old `/static/...`
+  addresses are gone.
 - `GET /api/session` also returns `static_version` and `commit` (the release's `source.json`, or `dev`).
 - `install.sh` copies the whole `static/` tree.
+
+**The installable app** (PHONE-CORE PW-1):
+
+- `GET /manifest.webmanifest`: start URL, scope and id are all `/` (an app already installed from this origin stays the
+  same app), standalone, portrait; icons in `static/icons/`.
+- `GET /sw.js` (`no-cache`) is `static/sw.js` behind one line, `const VERSION = "<v>", COMMIT = "<sha12>";`, so every
+  deploy changes its bytes. Like the page, it needs no pairing.
+- The worker stores the shell only, in `rg-shell-<v>`: every listed file, `/` and the manifest, each checked against
+  its SHA-256 before any is stored. It answers those from that cache and leaves every other request alone: `/api/`,
+  `/rating-media/`, `/media/` (originals included) are never answered by it or stored. With no gateway the app opens and
+  says it is offline; nothing else works offline yet.
+- `core/sw-client.js` registers it through the one Trusted Types policy, `rg-sw`, which accepts only `/sw.js`; the CSP
+  adds `trusted-types rg-sw`. It asks for a new worker when the app comes back into view and every 30 minutes, and
+  requests persistent storage.
+- A new worker waits. The page shows "Update available · <commit>" with Reload, which sends any held decision, lets the
+  worker in and reloads. Ignored, the new version starts after the app is fully closed. Nothing is forced.
+- **Settings** (a button at the end of the home screen and of the "could not reach" screen; `#/settings`) shows the
+  version and commit and offers **Repair this app**: unregister the worker, delete `rg-shell-*` and `rg-media-*`,
+  reload. The pairing cookie, unsent work and settings stay. Without the gateway it asks first.
 
 ## 2. Sync HTTP binding (v1)
 
@@ -142,8 +163,8 @@ Rules:
 - Enrollment sets `rg_session` (`HttpOnly; Secure; SameSite=Lax`, so links from other apps arrive paired; JSON APIs still require the custom header); only its SHA-256 is stored. Every request reads the
   device row, so revocation applies to the next request. Every data and media route needs an enrolled device with the
   `review` scope. Action requests also need the `queue` scope (D6), chosen per phone when it is paired (section 7).
-- JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types; metadata
-  is put on screen with `textContent` only. Originals are `private, no-store`; thumbnails and image renditions `private, max-age=604800, immutable`; other
+- JSON APIs require `X-Review-Gateway: 1`. Every response carries `default-src 'self'` CSP with trusted types (one
+  policy name, `rg-sw`, section 1); metadata is put on screen with `textContent` only. Originals are `private, no-store`; thumbnails and image renditions `private, max-age=604800, immutable`; other
   derivatives `private, max-age=3600`.
 - Inbox grouped by named batch, else by run folder, with counts (section 3.1); a group's grid; triage with Keep,
   Favorite, Delete buttons and swipes (right, up, left) and the six reason tags. A refused item counts as "to review"
@@ -355,7 +376,8 @@ dependencies are exact pins in `requirements-dev.txt` that a test holds equal to
 fake HTTP server on loopback (`fake_immich.py`) with the request and reply shapes read from Immich's v2.0.0 and v3.4.2
 sources; no real Immich has been used.
 
-`test_static_serving.py` covers the page-file table, its version, traversal refusal and the session fields.
+`test_static_serving.py` covers the page-file table, its version, traversal refusal, the session fields, `/sw.js`,
+the manifest and its icons, and the Trusted Types directive.
 `test_static_rules.py` reads the page's files: no markup sinks or inline handlers, every import resolves inside
 `static/` to a name its target exports, no module exports a binding that changes, the import boundary, a `feature.js`
 per feature and the size caps.
@@ -374,8 +396,11 @@ per feature and the size caps.
   - Not saved;
   - a decision made while unreachable, and a lost reply resent with the same key;
   - To rate;
-  - the Update screen.
-- Each journey asserts what reached the gateway's outbox, not only the screen.
+  - the Update screen;
+  - the installable shell (`test_installable.py`): the manifest and the controlling worker, opening with no gateway,
+    a new version offered then taken by Reload, a damaged download refused, nothing but the shell ever stored, Repair
+    and the Trusted Types limit. Headless Chromium gives no installability verdict, so that is checked on the phone.
+- Journeys that send decisions assert what reached the gateway's outbox, not only the screen.
 - The suite runs only with `STABLENEW_PHONE_E2E=1` and its own hash-pinned lock (`tests/phone_e2e/requirements-e2e.txt`),
   in the `phone-e2e` CI job. `full-suite` waits for that job and fails when it failed.
 - The suite has a cheap contract test in the census (`test_phone_e2e_contract.py`) that keeps the lock and the wiring

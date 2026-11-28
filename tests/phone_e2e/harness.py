@@ -7,6 +7,7 @@ Nothing here reaches a network, a container, the PC app or the deployed gateway.
 from __future__ import annotations
 
 import hashlib
+import json
 import struct
 import threading
 import time
@@ -72,13 +73,26 @@ _COLOURS = [
 ]
 
 
+def _corrupting(app: Any, ending: str) -> Any:
+    async def wrapped(scope: Any, receive: Any, send: Any) -> None:
+        async def damaged(message: Any) -> None:
+            if message["type"] == "http.response.body" and message.get("body"):
+                body = message["body"]
+                message = {**message, "body": body[:-1] + (b"." if body[-1:] != b"." else b",")}
+            await send(message)
+
+        hit = scope["type"] == "http" and scope["path"].endswith(ending)
+        await app(scope, receive, damaged if hit else send)
+
+    return wrapped
+
+
 class TestGateway:
     """One gateway: the phone app served on loopback for the browser, the sync app called in process as the PC."""
 
     __test__ = False  # not a pytest test class
 
     def __init__(self, root: Path) -> None:
-        import uvicorn
         from review_gateway.app import Gateway
         from review_gateway.config import Settings
         from starlette.testclient import TestClient
@@ -102,8 +116,20 @@ class TestGateway:
             base_url="https://gateway.test",
             headers={"Authorization": f"Bearer {SECRET}"},
         )
+        self.root = root
+        self._app = self.gateway.phone_app()
+        self._port = 0
+        self.start()
+        # "localhost", not 127.0.0.1: a secure context in which Chromium keeps the Secure session cookie.
+        self.url = f"http://localhost:{self._port}"
+
+    def start(self) -> None:
+        """Serve the phone app; after ``stop``, on the same port, so the phone finds it at the same origin."""
+
+        import uvicorn
+
         config = uvicorn.Config(
-            self.gateway.phone_app(), host="127.0.0.1", port=0, log_level="warning", lifespan="off"
+            self._app, host="127.0.0.1", port=self._port, log_level="warning", lifespan="off"
         )
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(
@@ -115,13 +141,34 @@ class TestGateway:
             if time.monotonic() > deadline or not self._thread.is_alive():
                 raise RuntimeError("the test gateway did not start")
             time.sleep(0.02)
-        port = self._server.servers[0].sockets[0].getsockname()[1]
-        # "localhost", not 127.0.0.1: a secure context in which Chromium keeps the Secure session cookie.
-        self.url = f"http://localhost:{port}"
+        self._port = self._server.servers[0].sockets[0].getsockname()[1]
 
-    def close(self) -> None:
+    def stop(self) -> None:
+        """Nothing listens any more, as when the phone cannot reach the gateway."""
+
         self._server.should_exit = True
         self._thread.join(timeout=10)
+
+    def deploy(self, static_root: Path, commit: str, *, corrupt: str | None = None) -> None:
+        """Restart on the same address with another static tree and commit, as an installed update does.
+
+        ``corrupt`` names a path whose last byte is changed on the way out, as a damaged download would be.
+        """
+
+        from review_gateway.phone_app import build_phone_app
+
+        release = self.root / f"release-{commit[:8]}"
+        release.mkdir(exist_ok=True)
+        (release / "source.json").write_text(json.dumps({"commit": commit}), encoding="utf-8")
+        app = build_phone_app(
+            self.store, self.clock, self.gateway.ratings, release, static_root=static_root
+        )
+        self.stop()
+        self._app = app if corrupt is None else _corrupting(app, corrupt)
+        self.start()
+
+    def close(self) -> None:
+        self.stop()
         self.sync.close()
 
     # --- the PC, through the real sync API ---------------------------------------------------------------------

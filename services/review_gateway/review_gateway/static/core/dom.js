@@ -31,6 +31,14 @@ export function show(heading, canGoBack, ...nodes) {
   view.replaceChildren(...nodes.filter(Boolean)); // as in el(): a part that is not there is null, never text
 }
 
+// A notice under the header with one button. It stays until the page is loaded again.
+export function banner(text, label, onclick) {
+  const node = document.getElementById("update");
+  node.replaceChildren(el("span", { text }), el("button", { type: "button", class: "primary", text: label, onclick }));
+  node.hidden = false;
+  document.body.classList.add("updating");
+}
+
 export function closeSheet() {
   const sheet = document.getElementById("sheet");
   if (sheet) sheet.remove();

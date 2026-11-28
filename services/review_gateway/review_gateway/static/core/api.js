@@ -15,6 +15,9 @@ export async function api(path, body) {
     cache: "no-store",
     headers: { "X-Review-Gateway": "1", "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
+  }).catch((error) => {
+    error.offline = true; // no answer at all; still the same error to whoever retries
+    throw error;
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(response.status, data.error || "failed");
