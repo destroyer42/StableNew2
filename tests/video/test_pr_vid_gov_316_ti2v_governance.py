@@ -35,6 +35,9 @@ APPROVED_FRAMES_OUT = (WAN_ID, "1.3.0")
 A14B_APPROVED = ("wan22_i2v_a14b_4step_v1", "1.0.0")
 # VID-FRAME: the owner's 2026-11-27 decision made the full-picture sizes the approved default.
 FULL_PICTURE_APPROVED = ("wan22_i2v_a14b_4step_full_picture_v1", "1.0.0")
+# 2026-11-28: CK attention became the default (1.1.0); standard attention keeps its own id.
+FULL_PICTURE_CK_APPROVED = ("wan22_i2v_a14b_4step_full_picture_v1", "1.1.0")
+FULL_PICTURE_STANDARD_APPROVED = ("wan22_i2v_a14b_4step_full_picture_standard_v1", "1.0.0")
 # ...and the 720p TI2V-5B alternate, approved under its own workflow id so 480p stays selectable.
 TI2V_720P_APPROVED = ("wan22_ti2v_5b_i2v_720p_v1", "1.0.0")
 OLDER_TI2V = ((WAN_ID, "1.0.0"), (WAN_ID, "1.1.0"))
@@ -48,7 +51,7 @@ def _spec(workflow_id: str, version: str):
 # ---------------------------------------------------------------------------- catalog governance
 
 
-def test_exactly_five_catalog_versions_are_approved_two_ti2v_the_720p_alternate_and_two_a14b() -> (
+def test_exactly_seven_catalog_versions_are_approved_two_ti2v_the_720p_alternate_and_four_a14b() -> (
     None
 ):
     states = {
@@ -63,6 +66,8 @@ def test_exactly_five_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
         TI2V_720P_APPROVED,
         A14B_APPROVED,
         FULL_PICTURE_APPROVED,
+        FULL_PICTURE_CK_APPROVED,
+        FULL_PICTURE_STANDARD_APPROVED,
     ]
     assert (
         {key for key, state in states.items() if state == "experimental"}
@@ -99,7 +104,7 @@ def test_exactly_five_catalog_versions_are_approved_two_ti2v_the_720p_alternate_
             (WAN_ANIMATE2_DRIVE_ID, "1.3.0"),  # PR-VID-ANIMATE-CK-WARM
         }
     )
-    assert len(states) == 29
+    assert len(states) == 31
 
 
 def test_only_approved_versions_are_runnable_without_opt_in() -> None:
@@ -108,13 +113,15 @@ def test_only_approved_versions_are_runnable_without_opt_in() -> None:
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
     ] == [
+        FULL_PICTURE_STANDARD_APPROVED,
         FULL_PICTURE_APPROVED,
+        FULL_PICTURE_CK_APPROVED,
         A14B_APPROVED,
         TI2V_720P_APPROVED,
         APPROVED,
         APPROVED_FRAMES_OUT,
     ]
-    assert len(registry.list_offerable_specs("comfy")) == 29
+    assert len(registry.list_offerable_specs("comfy")) == 31
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:

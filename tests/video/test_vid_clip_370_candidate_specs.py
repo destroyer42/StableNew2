@@ -32,6 +32,7 @@ from src.video.workflow_catalog import (
     WAN22_FRAMES_VERSION,
 )
 from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_CK_VERSION,
     WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_ID,
     WAN_A14B_MODEL_FILES,
@@ -139,7 +140,7 @@ def test_the_picker_keeps_offering_the_approved_ti2v_1_3_0_and_recommends_the_pr
     form = controller.build_default_form_state()
     assert (form["workflow_id"], form["workflow_version"]) == (
         WAN_A14B_FULL_PICTURE_ID,
-        WAN_A14B_VERSION,
+        WAN_A14B_FULL_PICTURE_CK_VERSION,
     )
 
 

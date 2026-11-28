@@ -7,8 +7,9 @@ value the form stores, submits and persists, so saved state and frozen jobs are 
 Governance is read from the record, never assumed:
 
 * the *recommended* workflow is the approved one the catalog declares as the Make Video default
-  (``make_video_default``; since 2026-11-27 the full-picture Wan2.2 I2V-A14B 4-step), else the first
-  ``approved`` one in catalog order (owner decision D2: approved Comfy workflows are production backends);
+  (``make_video_default``; since 2026-11-27 the full-picture Wan2.2 I2V-A14B 4-step, with CK attention since
+  2026-11-28), else the first ``approved`` one in catalog order (owner decision D2: approved Comfy workflows are
+  production backends);
 * an experimental workflow is never recommended and never preselected by a handoff.  It stays selectable,
   is labelled as experimental, and still needs the job's own opt-in.
 
@@ -53,7 +54,8 @@ _PICKER_TIERS: Mapping[str, PickerTier] = {
         "Stored jobs still replay.",
     ),
     "wan22_i2v_a14b_4step_ck_v1": PickerTier(
-        TIER_EXPERIMENTAL_ONLY, "Unrated speed arm of Wan2.2 I2V-A14B 4-step (CK attention)."
+        TIER_EXPERIMENTAL_ONLY,
+        "Superseded: CK attention at 480x832 / 832x480 only; the full-picture default runs CK attention.",
     ),
     "wan22_i2v_a14b_svi": PickerTier(
         TIER_EXPERIMENTAL_ONLY, "Unrated SVI 2.0 arm of Wan2.2 I2V-A14B 4-step."

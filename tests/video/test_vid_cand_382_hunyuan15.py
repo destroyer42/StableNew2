@@ -38,6 +38,7 @@ from src.video.workflow_catalog_hunyuan15 import (
     HUNYUAN15_VERSION,
 )
 from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_CK_VERSION,
     WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_ID,
     WAN_A14B_VERSION,
@@ -164,7 +165,7 @@ def test_the_approved_a14b_stays_the_make_video_default_and_the_candidates_are_n
     form = controller.build_default_form_state()
     assert (form["workflow_id"], form["workflow_version"]) == (
         WAN_A14B_FULL_PICTURE_ID,
-        WAN_A14B_VERSION,
+        WAN_A14B_FULL_PICTURE_CK_VERSION,
     )
     for workflow_id in HUNYUAN15_IDS:
         assert records[workflow_id]["experimental"] is True

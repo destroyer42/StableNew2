@@ -231,6 +231,11 @@ def test_only_the_owner_promoted_qualification_candidate_is_an_approved_workflow
         ),  # 720p alternate, its own id, approved by VID-CLIP-372
         ("wan22_i2v_a14b_4step_v1", "1.0.0"),
         ("wan22_i2v_a14b_4step_full_picture_v1", "1.0.0"),  # owner-approved default, VID-FRAME
+        ("wan22_i2v_a14b_4step_full_picture_v1", "1.1.0"),  # owner-approved CK default (2026-11-28)
+        (
+            "wan22_i2v_a14b_4step_full_picture_standard_v1",
+            "1.0.0",
+        ),  # the same configuration as 1.0.0, standard attention
     }
     approved = {
         (spec.workflow_id, spec.workflow_version)

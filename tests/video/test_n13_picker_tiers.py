@@ -1,6 +1,6 @@
 """N13: video picker hygiene over the real catalog records (no Tk, no Comfy, no network).
 
-Wan-Animate-2 prompt mode is never offered; unrated speed arms and superseded arms are offered only with
+Wan-Animate-2 prompt mode is never offered; unrated arms and superseded arms are offered only with
 Show experimental; approved engines and the only driving-clip engines are always offered; the selected engine is
 always offered so a restored form or a handoff never loses it. Nothing is removed from the catalog.
 """
@@ -25,7 +25,8 @@ ARMS = {
 }
 ALWAYS = {
     "wan22_i2v_a14b_4step_v1",
-    "wan22_i2v_a14b_4step_full_picture_v1",  # approved, the Make Video default
+    "wan22_i2v_a14b_4step_full_picture_v1",  # approved, the Make Video default (CK attention)
+    "wan22_i2v_a14b_4step_full_picture_standard_v1",  # the standard-attention fallback
     "wan22_i2v_a14b_flf_v1",  # the only engine that takes an end image
     "wan22_ti2v_5b_i2v_v1",
     "wan22_ti2v_5b_i2v_720p_v1",
@@ -70,7 +71,8 @@ def test_every_hidden_entry_says_why(records) -> None:
     assert "31 of 31" in retired.reason
     for workflow_id in ARMS:
         tier = picker.picker_tier(by_id[workflow_id])
-        assert tier.tier == picker.TIER_EXPERIMENTAL_ONLY and "unrated" in tier.reason.lower()
+        why = "superseded" if workflow_id == "wan22_i2v_a14b_4step_ck_v1" else "unrated"
+        assert tier.tier == picker.TIER_EXPERIMENTAL_ONLY and why in tier.reason.lower()
     for workflow_id in ALWAYS:
         assert picker.picker_tier(by_id[workflow_id]).tier == picker.TIER_DEFAULT
 

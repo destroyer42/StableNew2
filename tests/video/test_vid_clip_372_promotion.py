@@ -38,6 +38,7 @@ from src.video.workflow_catalog import (
     WAN22_FRAMES_VERSION,
 )
 from src.video.workflow_catalog_wan_a14b import (
+    WAN_A14B_FULL_PICTURE_CK_VERSION,
     WAN_A14B_FULL_PICTURE_ID,
     WAN_A14B_ID,
     WAN_A14B_REQUIRED_LAUNCH_FLAGS,
@@ -116,7 +117,7 @@ def test_the_make_video_default_is_a14b_through_every_chooser() -> None:
     form = controller.build_default_form_state()
     assert (form["workflow_id"], form["workflow_version"]) == (
         WAN_A14B_FULL_PICTURE_ID,
-        WAN_A14B_VERSION,
+        WAN_A14B_FULL_PICTURE_CK_VERSION,
     )
     choice = choose_workflow(TASK_ANIMATE, records)
     assert (
@@ -191,7 +192,7 @@ def test_720p_is_its_own_approved_workflow_id_so_both_resolutions_are_picker_ent
     form = _controller().build_default_form_state()
     assert (form["workflow_id"], form["workflow_version"]) == (
         WAN_A14B_FULL_PICTURE_ID,
-        WAN_A14B_VERSION,
+        WAN_A14B_FULL_PICTURE_CK_VERSION,
     )
 
 

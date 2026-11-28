@@ -104,7 +104,7 @@ def test_the_approved_version_keeps_its_two_sizes() -> None:
     assert _target(WAN_A14B_VERSION, 1024, 768) == (832, 480)
 
 
-def test_full_picture_version_is_the_approved_default_with_the_baseline_graph_and_launch() -> None:
+def test_full_picture_1_0_0_is_approved_with_the_baseline_graph_and_standard_launch() -> None:
     base, full = _spec(WAN_A14B_VERSION), _spec(WAN_A14B_FULL_PICTURE_ID)
 
     assert not full.is_experimental and full.backend_defaults["make_video_default"] is True
