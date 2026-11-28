@@ -455,6 +455,7 @@ class GatewayActions:
     def _summary(self, action: str, compiled: CompiledAction, now: datetime) -> ActionSummary:
         warnings = tuple(_warning(item) for item in shown_warnings(compiled))
         position = "next" if action in _PASSES else "last"
+        jobs = 1 if compiled.build is not None else len(compiled.records)
         lines = (
             *compiled.lines,
             "Runs next, after the current job."
@@ -465,7 +466,7 @@ class GatewayActions:
             "action": action,
             "title": _TITLES[action],
             "lines": list(lines),
-            "job_count": 1 if compiled.build is not None else len(compiled.records),
+            "job_count": jobs,
             "queue_position": position,
             "warnings": [item.payload() for item in warnings],
             "identity": list(compiled.identity),
@@ -478,7 +479,7 @@ class GatewayActions:
             revision=revision,
             title=_TITLES[action],
             lines=tuple(lines),
-            job_count=body["job_count"],
+            job_count=jobs,
             queue_position=position,
             warnings=warnings,
             expires_at=now + PREPARE_TTL,

@@ -210,7 +210,7 @@ def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
             return list(existing["job_ids"])
         if jobs.queue.is_dispatch_fenced():
             raise SiteOutputError("app_shutting_down")
-        return compiled.build(admit_records)
+        return list(compiled.build(admit_records))
 
     def admitted(owner: str, receipt: str) -> list[str]:
         found = PhoneQueueView(repository, app.job_service).receipt(owner, receipt)
