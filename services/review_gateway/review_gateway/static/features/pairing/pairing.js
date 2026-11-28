@@ -11,7 +11,7 @@ export function showPairing() {
   if (view.querySelector(".pair")) return; // never wipe a code that is being typed
   setTriage(null);
   const code = el("input", {
-    class: "code",
+    class: "pair-code",
     name: "code",
     autocomplete: "one-time-code",
     autocapitalize: "characters",

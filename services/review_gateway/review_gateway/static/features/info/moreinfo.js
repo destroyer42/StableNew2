@@ -41,7 +41,7 @@ export function infoPanel(item, other) {
       el("a", { href: mediaUrl(side, "original"), target: "_blank", rel: "noopener", text: "Open full size" }),
     ];
   };
-  return el("div", { class: "info", hidden: "" }, [
+  return el("div", { class: "info moreinfo", hidden: "" }, [
     ...sides.flatMap(about),
     item.kind === "image" ? el("p", { class: "muted", text: "Double-tap the picture for full resolution." }) : null,
   ]);

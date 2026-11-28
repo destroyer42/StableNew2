@@ -25,7 +25,7 @@ LISTED = re.compile(r"^export\s+\{(?P<names>[^}]*)\};", re.MULTILINE)
 LOADER = "import(`../features/${name}/feature.js`)"
 #: PHONE-CORE 2.2 and 7: lines a file. A listed file is over its cap and may only shrink; PC-2 splits it.
 CAPS = {"core": 300, "features": 400}
-OVERSIZED = {"features/queued/queued.js": 471, "features/rating/rating.js": 528}
+OVERSIZED = {"features/queued/queued.js": 471}
 
 
 def sources(suffix: str) -> dict[str, str]:
