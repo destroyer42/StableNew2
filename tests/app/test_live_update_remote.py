@@ -787,5 +787,6 @@ def test_the_signature_refusals_reach_the_phone_with_their_own_words(reason):
 
     validate_def(receipt, "update_receipt")
     assert receipt["reason_code"] == reason
-    page = SRC.parent / "services" / "review_gateway" / "review_gateway" / "static" / "app.js"
+    static = SRC.parent / "services" / "review_gateway" / "review_gateway" / "static"
+    page = static / "features" / "status" / "status.js"
     assert f"\n  {reason}:" in page.read_text(encoding="utf-8")

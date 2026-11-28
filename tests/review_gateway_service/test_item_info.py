@@ -79,7 +79,9 @@ def test_info_with_an_unknown_field_is_refused(rig) -> None:
 
 
 def test_the_page_has_more_info_on_both_views(rig) -> None:
-    script = (STATIC / "app.js").read_text(encoding="utf-8")
-    assert script.count("· More info`") == 2
-    assert "infoPanel(item, original)" in script
-    assert rig.phone.get("/static/moreinfo.js").status_code == 200
+    triage = (STATIC / "features/triage/triage.js").read_text(encoding="utf-8")
+    compare = (STATIC / "features/compare/compare.js").read_text(encoding="utf-8")
+    assert triage.count("· More info`") == 1 and compare.count("· More info`") == 1
+    assert "infoPanel(item, original)" in compare
+    version = rig.phone.get("/").text.split("/s/", 1)[1].split("/", 1)[0]
+    assert rig.phone.get(f"/s/{version}/features/info/moreinfo.js").status_code == 200

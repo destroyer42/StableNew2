@@ -19,10 +19,12 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from .deploy_inbox import deployed_commit
 from .errors import GatewayError
 from .media import is_digest
 from .rating_routes import phone_rating_routes
 from .rating_store import RatingStore
+from .static_files import load_static
 from .store import SOURCES, Clock, Device, Store
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
@@ -47,17 +49,8 @@ _SECURITY_HEADERS = {
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 }
 
-_STATIC = Path(__file__).resolve().parent / "static"
-_PAGES = {
-    "/": ("index.html", "text/html"),
-    "/static/app.js": ("app.js", "text/javascript"),
-    "/static/queued.js": ("queued.js", "text/javascript"),
-    "/static/app.css": ("app.css", "text/css"),
-    "/static/rating.js": ("rating.js", "text/javascript"),
-    "/static/moreinfo.js": ("moreinfo.js", "text/javascript"),
-    "/static/rating.css": ("rating.css", "text/css"),
-    "/static/icon.svg": ("icon.svg", "image/svg+xml"),
-}
+#: A file under ``/s/<version>/`` never changes: a changed file has a new version, and so a new address.
+_IMMUTABLE = "public, max-age=31536000, immutable"
 _VARIANTS = {
     "thumb": "thumb_320",
     "preview": "preview_1080",
@@ -105,8 +98,12 @@ class _Guard:
         await self.app(scope, receive, guarded)
 
 
-def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlette:
+def build_phone_app(
+    store: Store, clock: Clock, ratings: RatingStore, release_dir: Path | None = None
+) -> Starlette:
     failures: deque = deque()
+    site = load_static()
+    commit = (deployed_commit(release_dir) if release_dir else None) or "dev"
 
     async def session(request: Request, *, review: bool = True) -> Device:
         token = request.cookies.get(COOKIE, "")
@@ -118,9 +115,22 @@ def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlet
         return device
 
     async def page(request: Request) -> Response:
-        name, media_type = _PAGES[request.url.path]
-        return FileResponse(
-            _STATIC / name, media_type=media_type, headers={"Cache-Control": "no-cache"}
+        return Response(site.index, media_type="text/html", headers={"Cache-Control": "no-cache"})
+
+    async def static_list(request: Request) -> Response:
+        if request.path_params["version"] != site.version:
+            raise GatewayError(404, "not_found")
+        files = {name: file.sha256 for name, file in sorted(site.files.items())}
+        return JSONResponse(
+            {"version": site.version, "files": files}, headers={"Cache-Control": _IMMUTABLE}
+        )
+
+    async def static_file(request: Request) -> Response:
+        found = site.files.get(request.path_params["path"])
+        if request.path_params["version"] != site.version or found is None:
+            raise GatewayError(404, "not_found")
+        return Response(
+            found.body, media_type=found.media_type, headers={"Cache-Control": _IMMUTABLE}
         )
 
     async def pair(request: Request) -> Response:
@@ -158,7 +168,13 @@ def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlet
     async def whoami(request: Request) -> Response:
         device = await session(request, review=False)
         return JSONResponse(
-            {"device_id": device.device_id, "label": device.label, "scopes": list(device.scopes)}
+            {
+                "device_id": device.device_id,
+                "label": device.label,
+                "scopes": list(device.scopes),
+                "static_version": site.version,
+                "commit": commit,
+            }
         )
 
     async def runs(request: Request) -> Response:
@@ -321,7 +337,9 @@ def build_phone_app(store: Store, clock: Clock, ratings: RatingStore) -> Starlet
 
     return Starlette(
         routes=[
-            *(Route(path, page, methods=["GET"]) for path in _PAGES),
+            Route("/", page, methods=["GET"]),
+            Route("/s/{version}/files.json", static_list, methods=["GET"]),
+            Route("/s/{version}/{path:path}", static_file, methods=["GET"]),
             Route("/api/pair", pair, methods=["POST"]),
             Route("/api/session", whoami, methods=["GET"]),
             Route("/api/runs", runs, methods=["GET"]),

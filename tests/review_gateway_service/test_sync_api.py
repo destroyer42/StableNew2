@@ -68,7 +68,7 @@ def test_the_test_covers_every_route_the_sync_app_serves(rig) -> None:
 
 
 def test_the_sync_app_serves_no_phone_route(rig) -> None:
-    for path in ("/", "/api/runs", "/api/pair", "/static/app.js"):
+    for path in ("/", "/api/runs", "/api/pair", "/s/000000000000/core/main.js"):
         assert rig.sync.get(path).status_code == 404, path
 
 
