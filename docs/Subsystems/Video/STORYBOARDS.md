@@ -93,7 +93,7 @@ still image and stay exactly as they are; the shared word is a known wording ove
   tab's status line.
 
 Acceptance boundary: deterministic tests only (Tk-free contract and projection tests, Tk tests with a fake service and real
-PNG frames, the gate). **NOT TESTED on hardware:** no GPU run, no A14B stitched continuation, no live use of the tab.
+PNG frames, the gate). **On hardware:** only the V1-6 harness run of 2026-11-28 (A14B 1.0.0 continuation takes with stitched cuts, unrated; `docs/work_packages/V1_motion_controls.md` section 15). **NOT TESTED:** live use of the tab.
 Rob's first live use is the demonstration: one clip, three parallel takes, then one take continued with a two-row
 sequential run. Nothing here is a qualification claim.
 

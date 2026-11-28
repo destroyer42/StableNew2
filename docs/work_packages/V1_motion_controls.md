@@ -458,6 +458,30 @@ on the installed A14B experts. No new engine, model, download, custom node or ev
 **Not in slice A** (left for later, not silently dropped): the compact tag-filtered driver picker (G9) and a separate
 Motion Library window; the library stays inline behind a button.
 
+**Physical run and owner acceptance (V1-3, slices A and B).** Eval harness (not the app's History), 2026-11-27, code
+`7a8b2d53`, RTX 4070 Ti 12 GB, stock subjects: **7 of 7 completed**, no stop rule, no `nvlddmkm` event.
+
+| Case | What ran | Peak VRAM (MiB), stop line |
+|---|---|---|
+| A1 | driver (4K source), whole movement, 81 frames, 480x832 | 11,663 of 12,000 |
+| A2 | driver (1080x1920), 33 frames, 480x832 | 10,977 of 12,000 |
+| A3 | driver, Gesture preset, 49 frames, 832x480 | 11,457 of 12,000 |
+| B1 | start and end image, 49 frames, 480x832 | 10,674 of 11,500 |
+| B2 | same pair, 81 frames, 480x832 | 10,034 of 11,500 |
+| B3 | start and end image, 81 frames, 832x480 | 9,822 of 11,500 |
+| B4 | start and end image, 81 frames, 480x832 | 9,241 of 11,500 |
+
+The owner rated the clips on the phone (answered 2026-11-27 evening local, 2026-11-28 UTC; recorded as V1-3
+acceptance). A1-A3: follows the driver, same person, natural motion and keep all **yes**. B1-B4: starts on the start
+picture, ends on the end picture, same person and natural motion all **yes**; keep **yes** for B2-B4 and **partly** for
+B1 ("Slight aberration on shirt design partway through, causes a flicker."), a quality note and not a blocker. Limits:
+one clip per case, one seed, not blind, not run from the app. This is not a ledger QUALIFIED verdict and changes no
+workflow's governance state: both stay experimental.
+
+Evidence stays outside the repository, on the owner's PC: `runs/20261127T235311Z/evidence.json` in the V1-3 acceptance
+folder (SHA-256 `daed151479aaa801db2110b9034e1bc986b963e714cfe74cd0e69ea7c00a5143`), and the rating answers
+`v1-3-driver-a1-a3` and `v1-3-endframe-b1-b4`.
+
 ## 15. V1-6 Continue a clip
 
 Started 2026-11-27 on `claude/v1-6-continue-clip` from `origin/main` `7b5c0a9e` (requested by the orchestrator; the owner
