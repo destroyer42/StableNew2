@@ -3,3 +3,6 @@
 *.service text eol=lf
 requirements.txt text eol=lf
 *.path text eol=lf
+
+# The app icons.
+*.png binary
