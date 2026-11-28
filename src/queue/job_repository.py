@@ -1234,6 +1234,25 @@ class JobRepository(JobHistoryStore):
             ).fetchall()
         return [self._row_to_history(row) for row in rows]
 
+    def _row_to_batch_candidate(self, row: sqlite3.Row) -> BatchCandidateRow:
+        return BatchCandidateRow(
+            job_id=str(row["job_id"]),
+            status=JobStatus(row["status"]),
+            priority=int(row["priority"]),
+            queue_order=int(row["queue_order"]),
+            created_at=_parse_datetime(row["created_at"]) or datetime.utcnow(),
+            started_at=_parse_datetime(row["started_at"]),
+            completed_at=_parse_datetime(row["completed_at"]),
+            error_message=row["error_message"],
+            error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None, column="error_envelope", row=row)),
+            result=self._read_result(row),
+            execution_metadata=_execution_metadata_from_dict(
+                _json_loads(row["execution_metadata"], {}, column="execution_metadata", row=row)
+            ),
+            snapshot=_json_loads(row["njr_snapshot"], {}, column="njr_snapshot", row=row),
+            cursor=int(row["cursor"]),
+        )
+
     @staticmethod
     def _stored_result(connection: sqlite3.Connection, result: Any) -> str | None:
         """The ``result_json`` text of ``result``, storing its repeated records on the caller's transaction."""
@@ -1269,25 +1288,6 @@ class JobRepository(JobHistoryStore):
             )
 
         return restore(result, lookup, report)
-
-    def _row_to_batch_candidate(self, row: sqlite3.Row) -> BatchCandidateRow:
-        return BatchCandidateRow(
-            job_id=str(row["job_id"]),
-            status=JobStatus(row["status"]),
-            priority=int(row["priority"]),
-            queue_order=int(row["queue_order"]),
-            created_at=_parse_datetime(row["created_at"]) or datetime.utcnow(),
-            started_at=_parse_datetime(row["started_at"]),
-            completed_at=_parse_datetime(row["completed_at"]),
-            error_message=row["error_message"],
-            error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None, column="error_envelope", row=row)),
-            result=self._read_result(row),
-            execution_metadata=_execution_metadata_from_dict(
-                _json_loads(row["execution_metadata"], {}, column="execution_metadata", row=row)
-            ),
-            snapshot=_json_loads(row["njr_snapshot"], {}, column="njr_snapshot", row=row),
-            cursor=int(row["cursor"]),
-        )
 
     def record_status_change(
         self,
