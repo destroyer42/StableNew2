@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from typing import Any
 
+from src.video.clip_finishing import FINISHING_KEY
+from src.video.seedvr2_upscale import require_frozen_upscale
 from src.video.video_execution_resolver import effective_workflow_identity
 from src.video.workflow_frame_count import interpolation_requested, interpolation_source_fps
 from src.video.workflow_input_integrity import requires_exact_motion, verify_exact_dispatch_inputs
@@ -35,6 +37,11 @@ def require_workflow_admission(record: Any) -> None:
             "that shows its warning to record the opt-in. Nothing was queued."
         )
     _require_interpolation_rate(record, spec, stage)
+    upscale = (stage.get(FINISHING_KEY) or {}).get("upscale")
+    if upscale is not None:
+        require_frozen_upscale(
+            upscale
+        )  # VID-FINISH: experimental, so it needs this job's own opt-in
     if not requires_exact_motion(spec):
         return
     if not workflow_version:

@@ -17,6 +17,7 @@ from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.views.video_workflow_continue_v2 import ContinueClipPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
+from src.gui.views.video_workflow_finish_panel_v2 import FinishOptionsPanel
 from src.gui.views.video_workflow_motion_intent_v2 import MotionIntentPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
@@ -195,8 +196,17 @@ def build_settings_section(tab: Any, body: ttk.Frame) -> None:
     )
     tab.workflow_controls_panel.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 6))
     tab.workflow_controls_panel.grid_remove()
+    # VID-FINISH: optional trim, loop and upscale of this clip, off by default.
+    tab.finish_panel = FinishOptionsPanel(adv, on_change=tab._on_finishing_changed)
+    tab.finish_panel.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+    tab._attach_setting_help(
+        "finishing",
+        VIDEO_WORKFLOW_SETTING_HELP["finishing"],
+        tab.finish_panel.loop_combo,
+        tab.finish_panel.upscale_check,
+    )
     svd_row = ttk.Frame(adv, style="Panel.TFrame")
-    svd_row.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+    svd_row.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
     tab.use_svd_button = ttk.Button(
         svd_row, text="Use native SVD instead", style="Dark.TButton", command=tab._on_use_svd
     )

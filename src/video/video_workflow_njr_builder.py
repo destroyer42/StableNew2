@@ -32,7 +32,14 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_TESTING,
 )
+from src.video.clip_finishing import (
+    FINISHING_KEY,
+    check_against_clip,
+    frozen_finishing,
+    normalize_finishing,
+)
 from src.video.continuity_models import normalize_continuity_link
+from src.video.frames_out import frames_output_fps
 from src.video.motion_alignment_preparation import (
     is_aligned_record,
     validate_aligned_record,
@@ -44,6 +51,13 @@ from src.video.motion_rerun import RERUN_LINEAGE_FIELD, normalize_rerun_lineage,
 from src.video.motion_source_plan import motion_source_contract
 from src.video.motion_source_preparation import validate_prepared_record
 from src.video.rife_runtime import default_rife_multiplier, find_rife_executable
+from src.video.seedvr2_upscale import (
+    configured_upscale_issues,
+    frozen_upscale,
+    upscale_refusal,
+    upscale_size_issue,
+    upscale_warning,
+)
 from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
 from src.video.video_interpolation import normalize_interpolation_request
 from src.video.video_workflow_intent import (
@@ -676,6 +690,53 @@ class VideoWorkflowNjrBuilder:
             VideoWorkflowNjrBuilder._shared_checks(shared.driving_video, shared.files)
         )
 
+    # ------------------------------------------------------------------ finishing
+
+    def _freeze_finishing(
+        self,
+        spec: Any,
+        form_data: Mapping[str, Any],
+        *,
+        seed: int | None,
+        source_preparation: Mapping[str, Any] | None,
+        frame_count: int | None,
+        interpolation: Mapping[str, Any] | None,
+        sequence: bool,
+    ) -> dict[str, Any] | None:
+        """VID-FINISH: the optional loop, trim and upscale, refused here when the clip cannot satisfy them."""
+
+        request = normalize_finishing(form_data.get(FINISHING_KEY))
+        if request is None:
+            return None
+        if sequence:
+            raise ValueError(
+                "Loop, trim and upscale apply to single clips. Turn them off to queue a sequence. Nothing was queued."
+            )
+        frozen: dict[str, Any] = dict(frozen_finishing(request))
+        length = frame_count_policy(spec)
+        if frame_count is not None and length is not None:
+            multiplier = int((interpolation or {}).get("multiplier") or 1)
+            check_against_clip(
+                request, fps=int(length["fps"]) * multiplier, frame_count=frame_count * multiplier
+            )
+        if request.upscale:
+            if frames_output_fps(spec) is None:
+                raise ValueError(
+                    f"The SeedVR2 upscale needs a workflow that saves its frames; '{spec.display_name}' "
+                    f"{spec.workflow_version} does not. Nothing was queued."
+                )
+            target = dict((source_preparation or {}).get("target_dimensions") or {})
+            size_issue = upscale_size_issue(
+                int(target.get("width") or 0), int(target.get("height") or 0), frame_count or 0
+            )
+            if size_issue:
+                raise ValueError(f"The SeedVR2 upscale cannot run: {size_issue}. Nothing was queued.")
+            issues = configured_upscale_issues()
+            if issues:
+                raise ValueError(f"{upscale_refusal(issues)} Nothing was queued.")
+            frozen["upscale"] = frozen_upscale(seed=seed or 0)
+        return frozen
+
     # ------------------------------------------------------------------ building
 
     def build_job(
@@ -816,6 +877,17 @@ class VideoWorkflowNjrBuilder:
                 "model_dir": smoothing.model_dir,
             }
             workflow_config[interpolation_key] = frozen_interpolation
+        finishing = self._freeze_finishing(
+            spec,
+            form_data,
+            seed=frozen_seed,
+            source_preparation=source_preparation,
+            frame_count=frozen_frame_count,
+            interpolation=frozen_interpolation,
+            sequence=sequence_plan is not None,
+        )
+        if finishing is not None:
+            workflow_config[FINISHING_KEY] = finishing
         if sequence_plan is not None:
             # One NJR, N sequential segments (PR-VID-SEQ-330-CORE): the plan was frozen at admission and the
             # runner executes it inside this single job.
@@ -860,6 +932,8 @@ class VideoWorkflowNjrBuilder:
             extra_metadata["video_workflow"]["interpolation"] = dict(frozen_interpolation)
         if frozen_controls is not None:
             extra_metadata["video_workflow"]["operator_controls"] = dict(frozen_controls)
+        if finishing is not None:
+            extra_metadata["video_workflow"][FINISHING_KEY] = dict(finishing)
         if driving_provenance is not None:
             extra_metadata["video_workflow"]["pose_video"] = dict(driving_provenance)
         if frozen.library_asset:
@@ -925,6 +999,8 @@ class VideoWorkflowNjrBuilder:
             )
             if end_crop is not None:
                 accepted.append(end_crop)
+        if finishing is not None and "upscale" in finishing:
+            accepted.append(upscale_warning())
         if accepted:
             surface = str(form_data.get(WARNING_SURFACE_FIELD) or SURFACE_DESKTOP)
             extra_metadata = merge_accepted_warnings(extra_metadata, accepted, surface=surface)

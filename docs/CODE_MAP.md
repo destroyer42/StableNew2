@@ -512,6 +512,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `video_workflow_driver_host_v2.py`: The driver clip of the "Follow a driving video" task (V1-3): read it, fit the length, prepare it
 - `video_workflow_evaluate_view_v2.py`: Evaluate view container for the Video Workflow tab (VID-UX-384)
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
+- `video_workflow_finish_panel_v2.py`: VID-FINISH: the per-clip finishing options in the Video Workflow tab's Advanced section
 - `video_workflow_harvest_host.py`: Owns the one non-modal Harvest Motion window for the Video Workflow tab (PR-VID-MOTION-400)
 - `video_workflow_layout_v2.py`: Layout scaffolding for the Video Workflow tab (VID-UX-384)
 - `video_workflow_media_pane_v2.py`: Right-pane media and status column of the Video Workflow tab (VID-UX-384)
@@ -1030,6 +1031,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 
 - `__init__.py`: Video utilities package for StableNew v2.6
 - `assembly_models.py`: Typed models for stitched and interpolated assembled-video outputs
+- `clip_finishing.py`: Optional finishing of a finished clip: trim, then loop (VID-FINISH)
 - `comfy_api_client.py`: Access local ComfyUI health, queue, history, and media endpoints through a typed client
 - `comfy_dependency_probe.py`: Check declared Comfy workflow dependencies against reported stock nodes and loader options
 - `comfy_healthcheck.py`: Probe ComfyUI health and wait for system statistics and object metadata readiness
@@ -1066,6 +1068,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `review_preview.py`: Bounded, read-only review previews of existing video outputs (PR-VID-QUALITY-211)
 - `rife_runtime.py`: Locate the external ``rife-ncnn-vulkan`` runtime and choose its model and factor (PR-VID-SMOOTH-302)
 - `runtime_version_check.py`: Warn when an approved Comfy workflow runs on a ComfyUI version it was not qualified on (VID-CLIP-372)
+- `seedvr2_upscale.py`: Experimental SeedVR2 2x upscale of a finished clip's frames (VID-FINISH)
 - `sequence_admission.py`: Admission of a multi-segment video job: intent in, frozen ``SequencePlan`` out (PR-VID-SEQ-330-CORE)
 - `sequence_assembly.py`: Assemble a sequence's frames into one movie with the ASM-332 engine, inside the sequence job (PR-VID-SEQ-330-…
 - `sequence_frames.py`: Frame-level helpers of a sequence job: the exact final frame, overlap trimming, opt-in colour matching and th…

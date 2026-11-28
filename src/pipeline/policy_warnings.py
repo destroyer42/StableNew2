@@ -34,6 +34,8 @@ CODE_VIDEO_EXPERIMENTAL = "video_experimental_workflow"
 CODE_VIDEO_LICENCE_RESTRICTION = "video_licence_restriction"
 #: VID-FRAME: the video workflow's closest size cuts away more of the source picture than the workflow allows.
 CODE_VIDEO_SOURCE_CROPPED = "video_source_cropped"
+#: VID-FINISH: the optional SeedVR2 upscale is experimental and unrated. Its acceptance is the job's opt-in.
+CODE_VIDEO_UPSCALE_EXPERIMENTAL = "video_upscale_experimental"
 #: V1 end frame: the end image is cut to the start image's size and loses more than the workflow allows.
 CODE_VIDEO_END_FRAME_CROPPED = "video_end_frame_cropped"
 #: A checkpoint StableNew has no qualified profile for (for example a FLUX layout without a profile).
@@ -202,6 +204,7 @@ __all__ = [
     "CODE_VIDEO_EXPERIMENTAL",
     "CODE_VIDEO_LICENCE_RESTRICTION",
     "CODE_VIDEO_SOURCE_CROPPED",
+    "CODE_VIDEO_UPSCALE_EXPERIMENTAL",
     "CONTRACT",
     "KNOWN_SURFACES",
     "PENDING_WARNINGS_KEY",

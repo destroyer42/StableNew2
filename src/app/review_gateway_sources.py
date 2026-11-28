@@ -6,7 +6,9 @@ result. Neither is something to review. They are recognized without the job data
 * every image under the ``movie_clips`` route is a frame (that route's outputs are movies);
 * an image a video manifest of its own run folder lists in ``frame_paths`` is a frame, whatever the route;
 * a clip a manifest records as retained, or (for manifests written before ``retained_paths`` existed) a clip listed
-  after the first of an interpolated result, is the un-smoothed source.
+  after the first of an interpolated result, is the un-smoothed source (VID-FINISH: or the untrimmed, unlooped or
+  not yet upscaled one);
+* anything in an upscale's temporary folder (left behind only when the app stopped mid-pass) is a working file.
 
 Eval outputs are not published either (RG-170): they are rated blind in the phone's "To rate" tab, and the Review inbox
 would show their model and workflow. They are anything under the ``video_eval`` run folders, and any output whose run
@@ -28,6 +30,7 @@ from typing import Any
 from src.app.site_media_files import SiteOutputError, inside, open_scoped
 from src.app.site_output_library import LibraryItem
 from src.state.output_routing import OUTPUT_ROUTE_MOVIE_CLIPS
+from src.video.seedvr2_upscale import WORK_DIR_SUFFIX
 from src.video.video_eval_run import EVAL_OUTPUT_FOLDER, RUN_MANIFEST_NAME
 
 log = logging.getLogger(__name__)
@@ -137,6 +140,8 @@ class SourceFilter:
             return ""
         if self.is_eval_output(rel_path):
             return EVAL
+        if any(part.endswith(WORK_DIR_SUFFIX) for part in parts[:-1]):
+            return FRAME
         if kind == "image" and parts[0].casefold() == OUTPUT_ROUTE_MOVIE_CLIPS.casefold():
             return FRAME
         frames, retained, _jobs = self._recorded((self._root / rel_path).parent / "manifests")
