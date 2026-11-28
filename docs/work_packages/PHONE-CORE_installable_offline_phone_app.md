@@ -838,6 +838,23 @@ OD-8 to OD-11 adjudicated by the orchestrator with the recommended defaults.
 - Qualification claim: N/A.
 - Not demonstrated: no browser, no phone, no deployed gateway, nothing run.
 
+### 13.1 PC-0 owner phone check (partial, 2026-11-27)
+
+The owner's answers, read from his screenshots and relayed by the orchestrator. Identifiers are left out.
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Phone, Android, free storage | Samsung Galaxy S23+, Android 16, about 33 GB free (8 GB RAM). The 1 GB rendition cap (OD-2) is about 3 % of the free space. |
+| 2 | Chrome version | Chrome 158 |
+| 3 | Chrome on the gateway: Install app, or only Add to Home screen | Not answered yet |
+| 4 | DuckDuckGo on the gateway: an Install item? Fireproofed? | The gateway site **is Fireproofed**. The DuckDuckGo main menu he showed has no Install item, but it was not opened on the gateway page, so whether the page itself offers one is still unchecked. |
+| 5 | DuckDuckGo automatic data clearing | Not answered yet |
+| 6 | Tailscale Always-on VPN | Not answered yet. The Tailscale app does not show it; it is in Android's own VPN settings (Settings › Connections › More connection settings › VPN on Samsung). |
+
+**What it changes so far.** Nothing in the plan. Answer 4 means a Fireproofed site is still the setup that lost the
+pairing on 2026-11-27, unless it was Fireproofed only afterwards. Answer 5 decides which. OD-1 (Chrome app for review)
+stands either way.
+
 ## 14. Token-efficient validation plan (for the slices)
 
 1. Focused: the slice's ASGI tests and `test_static_rules.py`.
