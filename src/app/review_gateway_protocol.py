@@ -137,7 +137,10 @@ CHOICE_ID = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 _PLAIN_LINE = re.compile(r"[^\x00-\x1f\x7f]+")
 MAX_TEXT = 200
 MAX_CHOICES = 100
-STEPS = frozenset({"prepare", "confirm"})
+#: ``queue`` (RG-160) is the one step of a request made while the PC was away: compiled and admitted on arrival.
+STEPS = frozenset({"prepare", "confirm", "queue"})
+#: An answer that is not final yet: the record is neither recorded nor acknowledged and is asked again later.
+IN_PROGRESS = "in_progress"
 MAX_SEEDS = 8
 #: Why an action could not be prepared or admitted (``receipt.detail``): closed codes, never compiler text.
 DETAILS = frozenset(
@@ -291,14 +294,17 @@ class Decision:
 
 @dataclass(frozen=True)
 class ActionRequest:
-    """A phone action (RG-140): ``prepare`` asks for a summary, ``confirm`` admits what that summary showed."""
+    """A phone action (RG-140): ``prepare`` asks for a summary, ``confirm`` admits what that summary showed.
+
+    ``queue`` (RG-160) was made while the PC was away and is admitted on arrival.
+    """
 
     action: str
     step: str = "prepare"
     count: int | None = None
     prepared_record: str = ""
     summary_revision: str = ""
-    #: Slice 2, on prepare only: an option id the PC listed (``CHOICE_ACTIONS``), and the owner's words
+    #: Slice 2, on prepare or queue only: an option id the PC listed (``CHOICE_ACTIONS``), and the owner's words
     #: (``TEXT_ACTIONS``). Untrusted: the text is one bounded line of plain text, used only as prompt text.
     choice: str = ""
     text: str = ""
@@ -377,14 +383,17 @@ def _action_request(value: Any) -> ActionRequest:
         {"count", "prepared_record", "summary_revision", "choice", "text"},
     )
     step = _choice(params["step"], STEPS)
+    asks = step != "confirm"  # a confirm only names its prepare
     choice = params.get("choice")
     text = params.get("text")
-    if (choice is not None and (action not in CHOICE_ACTIONS or step != "prepare")) or (
-        text is not None and (action not in TEXT_ACTIONS or step != "prepare")
+    if (choice is not None and (action not in CHOICE_ACTIONS or not asks)) or (
+        text is not None and (action not in TEXT_ACTIONS or not asks)
     ):
         raise _fail()
-    if action == "prompt_tweak" and step == "prepare" and text is None:
+    if action == "prompt_tweak" and asks and text is None:
         raise _fail()
+    if step == "queue" and action in CHOICE_ACTIONS and choice is None:
+        raise _fail()  # nothing could list the options: the PC was away when it was made
     if text is not None and not (
         isinstance(text, str) and len(text) <= MAX_TEXT and _PLAIN_LINE.fullmatch(text)
     ):
@@ -392,7 +401,7 @@ def _action_request(value: Any) -> ActionRequest:
     count = params.get("count")
     if count is not None and (
         action != "more_like_this"
-        or step != "prepare"
+        or not asks
         or type(count) is not int
         or not 1 <= count <= MAX_SEEDS
     ):

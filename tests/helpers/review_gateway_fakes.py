@@ -173,6 +173,8 @@ class FakeGateway:
         self.offers_pc_status = True  # False: an older gateway without the route (404)
         self.withdrawn: list[str] = []  # PHONE-FAST library ids the PC asked to withdraw
         self.refuse_withdrawals = False
+        self.catalogs: list[dict[str, Any]] = []  # RG-160 choice catalogs, in order
+        self.offers_catalog = True
         self.sources: dict[
             str, str
         ] = {}  # PHONE-FAST review sections the PC named for earlier items
@@ -279,6 +281,13 @@ class FakeGateway:
             validate_def(status, "pc_status")
             validate(status)
             self.statuses.append(status)
+            return Response(200, b'{"status":"stored"}')
+        if route == "/sync/v1/choice-catalog" and method == "PUT":
+            if not self.offers_catalog:
+                return Response(404, b"")
+            catalog = json.loads(data or b"")
+            validate_def(catalog, "choice_catalog")
+            self.catalogs.append(catalog)
             return Response(200, b'{"status":"stored"}')
         if route == "/sync/v1/withdrawals" and method == "POST":
             withdrawal = json.loads(data or b"")

@@ -22,6 +22,7 @@ from src.app.review_gateway_actions import (
     AppActionCompiler,
     CompiledAction,
     GatewayActions,
+    admission_claim,
 )
 from src.app.review_gateway_apply import RecordApplier
 from src.app.review_gateway_protocol import ActionChoices, utc_text
@@ -167,7 +168,7 @@ class Env:
                 policy=SubmissionPolicy(
                     priority=JobPriority.HIGH if runs_next else JobPriority.NORMAL
                 ),
-                claim={"channel": "review_gateway"},
+                claim=admission_claim(compiled),
             )
 
         self.actions = GatewayActions(

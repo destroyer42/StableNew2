@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from . import upload_queue
+from . import deferred, upload_queue
 from .contract import SCHEMA_VERSION, Contract, ContractError
 from .errors import GatewayError
 from .media import MediaStore, MediaWriter
@@ -183,6 +183,7 @@ class Store:
         with self.connection() as db:
             db.executescript(_TABLES)
             _migrate(db)
+            deferred.initialize(db)
             upload_queue.initialize(db)
 
     @contextmanager
@@ -514,9 +515,10 @@ class Store:
                 (value,),
             ).fetchall()
             reworked = _reworked(db)
+            waiting = deferred.waiting_actions(db)
             originals = {
                 (row["library_id"], row["sha256"]): self._original(
-                    db, row["parent_library_id"], row["parent_sha256"], reworked
+                    db, row["parent_library_id"], row["parent_sha256"], reworked, waiting
                 )
                 for row in rows
                 if row["parent_library_id"]
@@ -524,7 +526,7 @@ class Store:
             for row in rows:
                 if row["input_library_id"] and not row["parent_library_id"]:
                     originals[(row["library_id"], row["sha256"])] = self._input_of(
-                        db, row, reworked
+                        db, row, reworked, waiting
                     )
         available = self._available(variants)
         items = []
@@ -546,6 +548,8 @@ class Store:
                     "state": state,
                     "decision": decision,
                     "reason_code": reason,
+                    # RG-160: requests for this image still waiting for the PC.
+                    "waiting": waiting.get((row["library_id"], row["sha256"]), []),
                     "compare": original,
                     "original_missing": open_result and had_input and original is None,
                 }
@@ -554,17 +558,22 @@ class Store:
             return _stream(items, rows)
         return items
 
-    def phone_status(self) -> dict[str, Any]:
-        """What every review phone shows: the PC's last reported queue and how large the cache is."""
+    def phone_status(self, device_id: str = "") -> dict[str, Any]:
+        """What every review phone shows: whether the PC is there, its queue and how large the cache is."""
 
         with self.connection() as db:
             status = db.execute(
                 "SELECT payload, received_at FROM pc_status WHERE id = 1"
             ).fetchone()
             size = _cached_bytes(db)
+            presence = deferred.presence(db)
+            waiting = deferred.waiting_count(db, device_id)
         queue = json.loads(status["payload"])["queue"] if status else None
         return {
             "now": stamp(self.clock()),
+            "pc_seen_at": presence["pc_seen_at"],
+            "image_backend_ready": presence["image_backend_ready"],
+            "waiting": waiting,
             "pc": {**queue, "received_at": status["received_at"]} if queue else None,
             "cache": {
                 "bytes": size,
@@ -588,6 +597,7 @@ class Store:
         library_id: str,
         sha256: str,
         reworked: set[tuple[str, str]],
+        waiting: dict[tuple[str, str], list[str]],
     ) -> dict[str, Any] | None:
         """A result's original while it is still on the gateway and not deleted."""
 
@@ -615,10 +625,17 @@ class Store:
             "variants": sorted(self._available(variants).get(key, [])),
             "state": state,
             "decision": decision,
+            "waiting": waiting.get(
+                key, []
+            ),  # RG-160: "Keep rework" deletes it, so the phone warns first
         }
 
     def _input_of(
-        self, db: sqlite3.Connection, row: sqlite3.Row, reworked: set[tuple[str, str]]
+        self,
+        db: sqlite3.Connection,
+        row: sqlite3.Row,
+        reworked: set[tuple[str, str]],
+        waiting: dict[tuple[str, str], list[str]],
     ) -> dict[str, Any] | None:
         """The image a desk job made this one from, as ``_original``. The PC may name it by its file's digest when
         it was sent as other bytes (metadata paths removed), so the library id then finds it."""
@@ -630,7 +647,7 @@ class Store:
         ).fetchone()
         if found is None:
             return None
-        original = self._original(db, row["input_library_id"], found["sha256"], reworked)
+        original = self._original(db, row["input_library_id"], found["sha256"], reworked, waiting)
         return {**original, "desk": True} if original else None
 
     def media_file(self, library_id: str, sha256: str, variant: str) -> tuple[Path, str]:
@@ -733,6 +750,8 @@ class Store:
                 "UPDATE item SET latest_record_id = ? WHERE library_id = ? AND sha256 = ?",
                 (record["record_id"], *key),
             )
+            if decision["verdict"] == "delete":
+                deferred.cancel_for_delete(db, key, record["created_at"])
             self._reconcile_upload(db, key)
         return record["record_id"], "pending"
 
@@ -745,7 +764,7 @@ class Store:
         action_request: dict[str, Any],
         idempotency_key: str,
     ) -> tuple[str, str]:
-        """Record a phone action request (prepare or confirm). Returns ``(record_id, state)``.
+        """Record a phone action request (prepare, confirm or RG-160's queue). Returns ``(record_id, state)``.
 
         It is only a request: it never becomes the item's decision and never touches Immich. The PC compiles,
         decides and answers it (invariants 2 and 4).
@@ -778,7 +797,7 @@ class Store:
             if "queue" not in json.loads(device["scopes"]):
                 raise GatewayError(403, "not_granted")
             previous = db.execute(
-                "SELECT record_id, record, status FROM outbox"
+                "SELECT record_id, record, status, cancelled_at FROM outbox"
                 " WHERE device_id = ? AND idempotency_key = ?",
                 (device_id, idempotency_key),
             ).fetchone()
@@ -786,7 +805,7 @@ class Store:
                 sent = json.loads(previous["record"])
                 if sent["target"] != target or sent.get("action_request") != action_request:
                     raise GatewayError(409, "idempotency_conflict")
-                return previous["record_id"], _state(previous["status"])
+                return previous["record_id"], _action_state(previous)
             item = db.execute(
                 "SELECT kind FROM item WHERE library_id = ? AND sha256 = ?"
                 " AND ready_at IS NOT NULL AND purged_at IS NULL",
@@ -823,8 +842,8 @@ class Store:
 
         with self.connection() as db:
             row = db.execute(
-                "SELECT record, status, acknowledgement FROM outbox WHERE record_id = ?"
-                " AND device_id = ? AND kind = 'action_request'",
+                "SELECT record, status, acknowledgement, delivered_at, cancelled_at FROM outbox"
+                " WHERE record_id = ? AND device_id = ? AND kind = 'action_request'",
                 (record_id, device_id),
             ).fetchone()
         return _action_view(row) if row is not None else None
@@ -834,12 +853,38 @@ class Store:
 
         with self.connection() as db:
             rows = db.execute(
-                "SELECT record, status, acknowledgement FROM outbox WHERE device_id = ?"
-                " AND library_id = ? AND sha256 = ? AND kind = 'action_request'"
+                "SELECT record, status, acknowledgement, delivered_at, cancelled_at FROM outbox"
+                " WHERE device_id = ? AND library_id = ? AND sha256 = ? AND kind = 'action_request'"
                 " ORDER BY seq DESC LIMIT 20",
                 (device_id, target["library_id"], target["sha256"]),
             ).fetchall()
         return [_action_view(row) for row in rows]
+
+    # --- requests that wait for the PC (RG-160) ----------------------------------------------------------------
+
+    def cancel_action(self, device_id: str, record_id: str) -> str | None:
+        """Cancel one of this device's requests (``deferred.cancel``); ``None`` for anyone else's."""
+
+        with self.write() as db:
+            return deferred.cancel(db, device_id, record_id, stamp(self.clock()))
+
+    def deferred_requests(self, device_id: str) -> dict[str, Any]:
+        """This device's waiting list, with whether the PC is there."""
+
+        now = stamp(self.clock())
+        with self.connection() as db:
+            rows = deferred.listed(db, device_id, now)
+            presence = deferred.presence(db)
+        return {"now": now, **presence, "requests": [_action_view(row) for row in rows]}
+
+    def set_choice_catalog(self, catalog: dict[str, Any]) -> None:
+        with self.write() as db:
+            deferred.set_catalog(db, catalog, stamp(self.clock()))
+
+    def choice_catalog(self) -> dict[str, Any]:
+        with self.connection() as db:
+            catalog, received_at = deferred.catalog(db)
+        return {"catalog": catalog, "received_at": received_at, "now": stamp(self.clock())}
 
     # --- remote update (LAUNCH-UPDATE-2) -----------------------------------------------------------------------
 
@@ -955,6 +1000,8 @@ class Store:
 
     def outbox_page(self, after: int, limit: int) -> dict[str, Any]:
         with self.write() as db:
+            now = self.clock()
+            deferred.pc_seen(db, now, stamp(now))
             rows = db.execute(
                 "SELECT seq, record FROM outbox WHERE status = 'pending' AND seq > ?"
                 " ORDER BY seq LIMIT ?",
@@ -984,12 +1031,20 @@ class Store:
         record_id = acknowledgement["record_id"].lower()
         with self.write() as db:
             row = db.execute(
-                "SELECT library_id, sha256, status, kind FROM outbox WHERE record_id = ?",
+                "SELECT library_id, sha256, status, kind, delivered_at, cancelled_at FROM outbox"
+                " WHERE record_id = ?",
                 (record_id,),
             ).fetchone()
             if row is None:
                 raise GatewayError(404, "unknown_record")
-            if row["status"] != "pending":
+            # RG-160: the PC had it before the phone cancelled and admitted it anyway; the phone must be told.
+            too_late = (
+                row["status"] == "superseded"
+                and row["cancelled_at"] is not None
+                and row["delivered_at"] is not None
+                and acknowledgement["outcome"] != "refused"
+            )
+            if row["status"] != "pending" and not too_late:
                 return "already_acknowledged"
             db.execute(
                 "UPDATE outbox SET status = ?, answered_at = ?, acknowledgement = ?"
@@ -1316,14 +1371,20 @@ def _action_view(row: sqlite3.Row) -> dict[str, Any]:
     record = json.loads(row["record"])
     answer = json.loads(row["acknowledgement"]) if row["acknowledgement"] else {}
     request = record["action_request"]
+    params = request["params"]
     return {
         "record_id": record["record_id"],
         "library_id": record["target"]["library_id"],
         "sha256": record["target"]["sha256"],
         "action": request["action"],
-        "step": request["params"]["step"],
+        "step": params["step"],
+        "choice": params.get("choice"),
+        "text": params.get("text"),
+        "count": params.get("count"),
         "created_at": record["created_at"],
-        "state": _state(row["status"]),
+        "state": _action_state(row),
+        "delivered": row["delivered_at"] is not None,
+        "too_late": row["cancelled_at"] is not None and row["status"] in ("applied", "duplicate"),
         "reason_code": answer.get("reason_code") if row["status"] == "refused" else None,
         "receipt": answer.get("receipt"),
     }
@@ -1344,6 +1405,12 @@ def _admin_view(row: sqlite3.Row) -> dict[str, Any]:
 
 def _state(status: str) -> str:
     return "applied" if status == "duplicate" else status
+
+
+def _action_state(row: sqlite3.Row) -> str:
+    if row["status"] == "superseded" and row["cancelled_at"] is not None:
+        return "cancelled"
+    return _state(row["status"])
 
 
 def _reworked(db: sqlite3.Connection) -> set[tuple[str, str]]:
