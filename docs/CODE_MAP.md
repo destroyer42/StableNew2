@@ -1082,6 +1082,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `storyboard_projection.py`: Read-only projection of a storyboard's takes from the repository (PR-VID-STORY-380, spec 7.7)
 - `storyboard_readiness.py`: Read-only source identity and workflow projections for editable Storyboards; admission stays authoritative
 - `storyboard_reconcile.py`: Adopt a repository job into a storyboard tree by the storyboard link its plan carries (PR-VID-STORY-380, spec…
+- `storyboard_requests.py`: The records of a Storyboard Continue: what is asked, previewed and queued (PR-VID-STORY-380)
 - `storyboard_root.py`: Storyboard root preparation (PR-VID-STORY-380, spec 7.3)
 - `storyboard_store.py`: Atomic Storyboard JSON storage with revision compare-and-swap; never stores executable jobs
 - `storyboard_tree.py`: Storyboard tree-of-takes authoring file (PR-VID-STORY-380)

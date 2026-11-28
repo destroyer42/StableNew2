@@ -19,8 +19,8 @@ import secrets
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass, replace
-from typing import Any, Final, Literal
+from dataclasses import replace
+from typing import Any, Final
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.video.motion_intent import MOTION_INTENT_FIELD
@@ -41,6 +41,13 @@ from src.video.storyboard_cuts import read_job, root_cut, take_cut, write_lead_i
 from src.video.storyboard_import import ClipImporter, ClipImportPlan
 from src.video.storyboard_projection import TakeView, first_missing_frame, project_storyboard
 from src.video.storyboard_reconcile import adopt_job
+from src.video.storyboard_requests import (
+    ContinuePreview,
+    ContinueRequest,
+    ContinueResult,
+    ContinueRow,
+    Mode,
+)
 from src.video.storyboard_root import (
     PreparedRoot,
     prepare_clip_root,
@@ -68,55 +75,6 @@ from src.video.workflow_frame_count import parse_frame_count
 RECONCILE_WINDOW: Final = 200
 
 logger = logging.getLogger(__name__)
-
-Mode = Literal["parallel", "sequential"]
-
-
-@dataclass(frozen=True, slots=True)
-class ContinueRow:
-    prompt: str
-    negative_prompt: str
-    #: Blank or ``random`` is drawn at admission; a whole number is used as given.
-    seed: str
-
-
-@dataclass(frozen=True, slots=True)
-class ContinueRequest:
-    storyboard_id: str
-    expected_revision: int
-    #: A take id, or ``ROOT_PARENT``.
-    parent_id: str
-    #: 0-based index of the handoff frame in the parent's cut; ``None`` only for an image root.
-    handoff_index: int | None
-    mode: Mode
-    rows: tuple[ContinueRow, ...]
-    experimental_opt_in: bool = False
-    #: V1-6: each take's length; ``None`` inherits the root's.
-    frame_count: int | None = None
-    #: V1-6: the provenance-only motion intent record of the takes (D5); admission never reads it.
-    motion_intent: Mapping[str, Any] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ContinuePreview:
-    jobs: int
-    segments: int
-    lead_in_frames: int
-    #: The length of each take's cut (parallel) or of the chain's whole cut (sequential), lead-in included.
-    total_cut_frames: int
-    fps: int
-    workflow_id: str
-    workflow_version: str
-    #: Each row's seed intent (``random`` where the row left it blank); nothing is drawn by a preview.
-    seeds: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ContinueResult:
-    job_ids: tuple[str, ...]
-    take_ids: tuple[str, ...]
-    tree: StoryboardTree
-
 
 class StoryboardSubmissionService:
     """Create storyboards, preview and submit Continue requests, and reconcile takes with the repository."""
