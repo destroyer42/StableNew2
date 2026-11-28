@@ -206,9 +206,7 @@ button {
 .actions .favorite { background: var(--favorite); border-color: var(--favorite); color: #1b1500; }
 .actions button:disabled { opacity: 0.35; }
 
-/* RG-140 phone actions: a row of requests and the PC's one-screen summary. */
-.fixes { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; padding: 0 0.5rem; }
-.fixes button { font-size: 0.85rem; padding: 0.35rem 0.7rem; }
+/* the sheet, its choices and the PC's warnings: shared */
 .sheet {
   position: fixed;
   inset: 0;
