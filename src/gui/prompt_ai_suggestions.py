@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import tkinter as tk
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, replace
 from tkinter import ttk
@@ -24,6 +25,8 @@ from src.gui.ai_preview_dialog import AiPreviewDialog
 from src.gui.ai_suggestion_dialog import AiSuggestionDialog
 from src.gui.prompt_ai_plan_sources import PlanSnapshot
 from src.gui.tooltip import attach_tooltip
+from src.gui.ui_dispatcher import tk_dispatcher_for
+from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui_v2.ai_changes import (
     ApplyJournal,
     ApplyRecord,
@@ -118,6 +121,7 @@ from src.gui_v2.ai_suggestion_view import (
 )
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
 from src.prompting.prompt_adaptation import adapt_prompt_for_target
+from src.utils.thread_registry import get_thread_registry
 
 
 class ContextUnavailable(ValueError):
@@ -210,13 +214,59 @@ class PromptAiSuggestions:
             justify="left",
         )
         self.explanation.pack(fill="x", pady=(0, 4))
+        self._status_reading = False
+        self._status_generation = 0
+        self._status_runner: BackgroundWorkRunner | None = None
         self._poll_id = tab.after(1000, self._poll)
 
     def _poll(self) -> None:
         self._poll_id = None
         if not self._closed:
-            self.refresh()
+            self._refresh_in_background()
             self._poll_id = self.tab.after(1000, self._poll)
+
+    def _refresh_in_background(self) -> None:
+        """The periodic refresh: owner status is read on a worker (it opens the AI settings file), shown on Tk.
+
+        STARTUP-STALL-2. One read runs at a time. A direct :meth:`refresh` (an operator action) is newer than a poll
+        still reading, so that poll's result is dropped.
+        """
+        owner = self.owner
+        if owner is None:
+            self.refresh()
+            return
+        if self._status_reading:
+            return
+        generation = self._status_generation
+
+        def read() -> WorkOutcome:
+            return WorkOutcome(value=(owner.availability(), str(owner.trust_label())))
+
+        def publish(outcome: WorkOutcome) -> None:
+            self._status_reading = False
+            if self._closed or generation != self._status_generation or outcome.error:
+                return
+            try:
+                if self.tab.winfo_exists():
+                    self.refresh(status=outcome.value)
+            except tk.TclError:
+                return
+
+        try:
+            if self._status_runner is None:
+                self._status_runner = BackgroundWorkRunner(
+                    spawn=lambda name, target: get_thread_registry().spawn(
+                        target=target,
+                        name=name,
+                        daemon=False,
+                        purpose="Read AI Assist status without blocking Tk",
+                    ),
+                    dispatch=tk_dispatcher_for(self.tab).invoke,
+                )
+            self._status_reading = True
+            self._status_runner.start("AiAssist-Status", read, publish)
+        except RuntimeError:  # the app is closing
+            self._status_reading = False
 
     def _mode(self) -> str:
         return str(
@@ -321,21 +371,26 @@ class PromptAiSuggestions:
         except Exception:  # noqa: BLE001 - private context must not enter diagnostics
             return "The authored context could not be read safely."
 
-    def refresh(self) -> None:
+    def refresh(self, *, status: tuple[tuple[OutcomeCode | None, str], str] | None = None) -> None:
+        """Project AI Assist state. ``status`` is what the poll's worker read; without it, it is read now."""
         if self._closed:
             return
-        code, explanation = (
-            self.owner.availability()
-            if self.owner is not None
-            else (OutcomeCode.NOT_INSTALLED, OUTCOME_TEXT[OutcomeCode.NOT_INSTALLED])
-        )
+        if status is None:
+            self._status_generation += 1
+            code, explanation = (
+                self.owner.availability()
+                if self.owner is not None
+                else (OutcomeCode.NOT_INSTALLED, OUTCOME_TEXT[OutcomeCode.NOT_INSTALLED])
+            )
+            label = self._trust_label()
+        else:
+            (code, explanation), label = status
         if code is None:
             problem = self._problem(SuggestionKind.TARGET_FIT_ADVICE)
             rewrite_problem = self._problem(SuggestionKind.PROMPT_REWRITE)
             if problem and rewrite_problem:
                 explanation = rewrite_problem
                 code = OutcomeCode.INVALID_REQUEST
-        label = self._trust_label()
         if label and label not in explanation:
             explanation = f"{label}. {explanation}"
         self.explanation.configure(text=explanation)

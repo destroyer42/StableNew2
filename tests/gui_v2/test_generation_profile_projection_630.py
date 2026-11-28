@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -127,13 +128,22 @@ def test_plan_messages_are_shown_for_a_conflict_and_a_missing_profile() -> None:
 # --------------------------------------------------------------------------- Tk wiring
 
 
+def pump_until(root, ready, timeout: float = 5.0) -> None:
+    """The strip reads its files on a worker (STARTUP-STALL-2): pump Tk until the redraw arrives."""
+    end = time.monotonic() + timeout
+    while not ready():
+        assert time.monotonic() < end, "the strip did not redraw"
+        root.update()
+        time.sleep(0.01)
+
+
 def test_strip_renders_the_view_and_selecting_a_row_applies_that_profile(
     tk_root, host: FakeHost
 ) -> None:
     host.profiles.on_model_chosen(SDXL_MODEL)
     strip = GenerationProfileStrip(tk_root, controller_getter=lambda: host.profiles)
     strip.refresh()
-    assert strip.profile_var.get().startswith("Research:")
+    pump_until(tk_root, lambda: strip.profile_var.get().startswith("Research:"))
     assert str(strip.restore_button.cget("state")) in (
         "normal",
         "",
@@ -147,7 +157,8 @@ def test_strip_renders_the_view_and_selecting_a_row_applies_that_profile(
 
     strip.combo.current(0)
     strip._on_selected()  # "No profile": keep the working values
-    assert host.panel.values["width"] == 1024 and not strip.restore_button.instate(["!disabled"])
+    assert host.panel.values["width"] == 1024
+    pump_until(tk_root, lambda: not strip.restore_button.instate(["!disabled"]))
 
 
 def test_strip_details_toggle_and_actions(tk_root, host: FakeHost) -> None:
@@ -158,16 +169,19 @@ def test_strip_details_toggle_and_actions(tk_root, host: FakeHost) -> None:
     )
     assert not strip.detail_frame.winfo_manager()
     strip.toggle_details()
-    assert strip.detail_frame.winfo_manager() and "Width" in strip.evidence_label.cget("text")
+    pump_until(tk_root, lambda: "Width" in strip.evidence_label.cget("text"))
+    assert strip.detail_frame.winfo_manager()
 
     strip.save_as_custom()  # cancelled prompt: nothing is saved
     assert not [label for label in strip.combo["values"] if label.startswith("Custom:")]
     strip.save_as_custom()
-    assert any(label.startswith("Custom: Mine") for label in strip.combo["values"])
+    pump_until(
+        tk_root, lambda: any(label.startswith("Custom: Mine") for label in strip.combo["values"])
+    )
     assert "Saved Custom profile 'Mine'" in strip.message_label.cget("text")
 
     strip.toggle_favorite()
-    assert strip.favorite_button.cget("text") == "Remove favorite"
+    pump_until(tk_root, lambda: strip.favorite_button.cget("text") == "Remove favorite")
     strip.toggle_details()
     assert not strip.detail_frame.winfo_manager()
 

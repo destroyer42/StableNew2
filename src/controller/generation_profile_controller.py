@@ -178,7 +178,18 @@ class GenerationProfileController:
         return self.service.state_for(model, values) if model else None
 
     def strip_view(self) -> StripView:
-        return build_strip_view(self.state(), self._last_plan)
+        return self.strip_view_job()()
+
+    def strip_view_job(self) -> Callable[[], StripView]:
+        """Read the working values now (UI thread); return the file-reading half, which a worker may run."""
+
+        values = self.working_values()
+        model = str(values.get("model") or "")
+        plan = self._last_plan
+        if not model:
+            return lambda: build_strip_view(None, plan)
+        service = self.service
+        return lambda: build_strip_view(service.state_for(model, values), plan)
 
     def profile_label(self) -> str:
         state = self.state()
