@@ -38,6 +38,7 @@ DEFAULT_COLLECTION_EXCLUDES = (
     "tests/legacy",
     "tests/quarantine",
     "tests/scripts",
+    "tests/phone_e2e",  # Playwright browser suite; its own CI job (phone-e2e) runs it by explicit path
 )
 
 

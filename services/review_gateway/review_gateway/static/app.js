@@ -1668,7 +1668,7 @@ function statusLines(status) {
   const pc = status.pc;
   if (pc) {
     const age = Date.parse(status.now) - Date.parse(pc.received_at);
-    const seen = age > STATUS_STALE_MS ? `PC last seen ${ago(age)} ago. ` : "";
+    const seen = age > STATUS_STALE_MS ? `PC last seen ${duration(age)} ago. ` : "";
     lines.push(el("p", { class: "muted", text: `${seen}${queueText(pc)}` }));
   }
   if (status.cache.over) {
@@ -1680,7 +1680,7 @@ function statusLines(status) {
   return lines;
 }
 
-function ago(milliseconds) {
+function duration(milliseconds) {
   const minutes = Math.round(milliseconds / 60000);
   if (minutes < 120) return `${minutes} min`;
   const hours = Math.round(minutes / 60);
