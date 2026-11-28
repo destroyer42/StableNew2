@@ -1,8 +1,23 @@
 # PR-VID-CAND-382: HunyuanVideo 1.5 candidate workflow and evaluation suite (record)
 
-Status: implemented offline; **nothing has run on the target host**. The workflows are `experimental`, never the Make Video
-default, never preselected and not QUALIFIED. Licence acceptance, the model download, every physical stage and every rating
-are held for the owner (section 7). Work package: `docs/work_packages/VID-CAND-382_HunyuanVideo15_vs_A14B_Eval.md`.
+Status: **retired by the owner, 2026-11-28** (section 0). The workflows stay registered as `experimental`; nothing is
+deleted. They are never the Make Video default, never preselected and not QUALIFIED. The sections after section 0 are the
+record as written before any physical run. Work package: `docs/work_packages/VID-CAND-382_HunyuanVideo15_vs_A14B_Eval.md`.
+
+## 0. Retirement, 2026-11-28
+
+Owner decision (relayed by the orchestrator session): "Retire Hunyuan, close it".
+
+- **Basis:** a blind three-way ranking on nine pictures (VID-CAND-LTX25 section 7) put the 8-step arm at a 0.37 share
+  against A14B, "no clear case" by the rule fixed before that run; likeness and stability tied, A14B had better motion on
+  eight of nine. In that run its later clips took a median 295 s against 127 s for A14B with standard attention, about 2.3
+  times as long, at a different size and frame rate; the default now runs CK attention, which was not timed beside it.
+- **Stage 1** had run and was scored by the owner before the decision: likeness and same-subject means 5.00 for all three
+  arms; the requested action was achieved 5 of 8 times for A14B and 4 of 8 for each Hunyuan arm.
+- **Stage 2 is not run.** Its pick sitting ("which step count should run?") was withdrawn unanswered.
+- **Unchanged:** both workflow ids stay registered as `experimental` (offered only with Show experimental), the specs,
+  eval tooling, suites, model files and results are all kept. Nothing was deleted.
+- A return needs a new owner decision.
 
 ## 1. Package contract
 
@@ -124,7 +139,7 @@ The shareable synthetic examples are `docs/runbooks/examples/video_eval_hunyuan1
 The A14B spec and the picker default, `presets/settings.json`, any controller or schema, ComfyUI or its custom nodes, and every
 downloaded model (none exists locally).
 
-## 7. Held for the owner
+## 7. Held for the owner (closed by section 0)
 
 1. **Licence acceptance** for HunyuanVideo 1.5 on this host and **the download** of the five files in section 3 (about 21.5 GB) to
    the managed Comfy `diffusion_models`, `text_encoders`, `vae` and `clip_vision` folders.
