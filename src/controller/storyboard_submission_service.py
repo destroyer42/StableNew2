@@ -17,12 +17,13 @@ from __future__ import annotations
 import logging
 import secrets
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass, replace
-from typing import Any, Final, Literal
+from dataclasses import replace
+from typing import Any, Final
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.video.motion_intent import MOTION_INTENT_FIELD
 from src.video.rife_runtime import find_rife_executable
 from src.video.sequence_admission import LEAD_IN_OVERLAP
 from src.video.sequence_job_build import build_sequence_njr
@@ -40,6 +41,13 @@ from src.video.storyboard_cuts import read_job, root_cut, take_cut, write_lead_i
 from src.video.storyboard_import import ClipImporter, ClipImportPlan
 from src.video.storyboard_projection import TakeView, first_missing_frame, project_storyboard
 from src.video.storyboard_reconcile import adopt_job
+from src.video.storyboard_requests import (
+    ContinuePreview,
+    ContinueRequest,
+    ContinueResult,
+    ContinueRow,
+    Mode,
+)
 from src.video.storyboard_root import (
     PreparedRoot,
     prepare_clip_root,
@@ -67,50 +75,6 @@ from src.video.workflow_frame_count import parse_frame_count
 RECONCILE_WINDOW: Final = 200
 
 logger = logging.getLogger(__name__)
-
-Mode = Literal["parallel", "sequential"]
-
-
-@dataclass(frozen=True, slots=True)
-class ContinueRow:
-    prompt: str
-    negative_prompt: str
-    #: Blank or ``random`` is drawn at admission; a whole number is used as given.
-    seed: str
-
-
-@dataclass(frozen=True, slots=True)
-class ContinueRequest:
-    storyboard_id: str
-    expected_revision: int
-    #: A take id, or ``ROOT_PARENT``.
-    parent_id: str
-    #: 0-based index of the handoff frame in the parent's cut; ``None`` only for an image root.
-    handoff_index: int | None
-    mode: Mode
-    rows: tuple[ContinueRow, ...]
-    experimental_opt_in: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class ContinuePreview:
-    jobs: int
-    segments: int
-    lead_in_frames: int
-    #: The length of each take's cut (parallel) or of the chain's whole cut (sequential), lead-in included.
-    total_cut_frames: int
-    fps: int
-    workflow_id: str
-    workflow_version: str
-    #: Each row's seed intent (``random`` where the row left it blank); nothing is drawn by a preview.
-    seeds: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ContinueResult:
-    job_ids: tuple[str, ...]
-    take_ids: tuple[str, ...]
-    tree: StoryboardTree
 
 
 class StoryboardSubmissionService:
@@ -142,6 +106,15 @@ class StoryboardSubmissionService:
         self.clip_importer = clip_importer or ClipImporter(
             repository=repository, registry=workflow_registry, output_root=output_root
         )
+
+    @property
+    def registry(self) -> Any:
+        return self._registry
+
+    def job_repository(self) -> Any:
+        """The canonical job repository; raises when it is not available."""
+
+        return self._repo()
 
     # ------------------------------------------------------------------------------------------ roots
 
@@ -291,8 +264,18 @@ class StoryboardSubmissionService:
 
     # ------------------------------------------------------------------------------------------ submit
 
-    def submit(self, request: ContinueRequest) -> ContinueResult:
-        """Admit a Continue through ONE ``submit_njrs`` call; all or none (see the module docstring)."""
+    def submit(
+        self,
+        request: ContinueRequest,
+        *,
+        admit: Callable[[list[Any]], Sequence[str]] | None = None,
+    ) -> ContinueResult:
+        """Admit a Continue through ONE ``submit_njrs`` call; all or none (see the module docstring).
+
+        ``admit`` replaces that call for a surface with its own admission (the phone's, V1-6): it takes the built
+        NJRs, crosses ``JobService.submit_njrs`` once and returns the admitted job ids in the same order. It must
+        raise only when nothing was admitted.
+        """
 
         rows = _check_rows(request)
         tree = self.store.load(request.storyboard_id)
@@ -329,13 +312,16 @@ class StoryboardSubmissionService:
                     lead_in=lead_in,
                 )
                 njrs.append(built.njr)
-            self._job_service().submit_njrs(njrs, SubmissionPolicy())
+            if admit is None:
+                # JobService admits each NJR under its own job id, so the attempts are the NJRs' ids.
+                self._job_service().submit_njrs(njrs, SubmissionPolicy())
+                job_ids = tuple(str(njr.job_id) for njr in njrs)
+            else:
+                job_ids = tuple(str(job_id) for job_id in admit(njrs))
             submitted = True
         finally:
             if not submitted:
                 self._settle_failed(request.storyboard_id, groups, njrs)
-        # JobService admits each NJR under its own job id, so the attempts are the NJRs' ids.
-        job_ids = tuple(str(njr.job_id) for njr in njrs)
         recorded = pending
         for (_rows, _seeds, group_ids), job_id in zip(groups, job_ids, strict=True):
             for take_id in group_ids:
@@ -398,6 +384,10 @@ class StoryboardSubmissionService:
             form["interpolation"] = {"enabled": True}
         if request.experimental_opt_in:
             form[EXPERIMENTAL_OPT_IN_FIELD] = True
+        if request.frame_count is not None:
+            form["frame_count"] = request.frame_count
+        if request.motion_intent is not None:
+            form[MOTION_INTENT_FIELD] = dict(request.motion_intent)
         return form
 
     def _draw_seeds(self, rows: tuple[ContinueRow, ...]) -> tuple[str, ...]:

@@ -128,13 +128,15 @@ REASON_CODES = frozenset(
 
 #: RG-140 slice 1; the other actions stay reserved and are refused as ``invalid_record``.
 SLICE_ONE_ACTIONS = frozenset({"fix_face", "fix_hands", "fix_both", "more_like_this"})
-#: RG-140 slice 2. ``rerun_clip`` and ``continue_clip`` (N8) stay reserved: they will call V1's shared functions.
+#: RG-140 slice 2. ``rerun_clip`` (N8) stays reserved: it will call V1's shared functions.
 SLICE_TWO_ACTIONS = frozenset({"another_model", "aspect_ratio", "prompt_tweak", "make_video"})
-PHONE_ACTIONS = SLICE_ONE_ACTIONS | SLICE_TWO_ACTIONS
+#: V1-6: actions on a video item (all the others take an image). Never offline: no ``queue`` step (RG-160).
+CLIP_ACTIONS = frozenset({"continue_clip"})
+PHONE_ACTIONS = SLICE_ONE_ACTIONS | SLICE_TWO_ACTIONS | CLIP_ACTIONS
 #: Actions whose prepare names one of the PC's options (``params.choice``); without one the PC lists them.
 CHOICE_ACTIONS = frozenset({"another_model", "aspect_ratio"})
 #: Actions whose prepare carries one line of the owner's words (``params.text``): required for ``prompt_tweak``.
-TEXT_ACTIONS = frozenset({"prompt_tweak", "make_video"})
+TEXT_ACTIONS = frozenset({"prompt_tweak", "make_video", "continue_clip"})
 CHOICE_ID = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 _PLAIN_LINE = re.compile(r"[^\x00-\x1f\x7f]+")
 MAX_TEXT = 200
@@ -394,6 +396,8 @@ def _action_request(value: Any) -> ActionRequest:
         raise _fail()
     if action == "prompt_tweak" and asks and text is None:
         raise _fail()
+    if step == "queue" and action in CLIP_ACTIONS:
+        raise _fail()  # V1-6: a continuation is always shown before it is queued
     if step == "queue" and action in CHOICE_ACTIONS and choice is None:
         raise _fail()  # nothing could list the options: the PC was away when it was made
     if text is not None and not (

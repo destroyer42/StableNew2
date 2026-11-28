@@ -26,6 +26,7 @@ from src.gui.controllers.history_compare_service import (
 from src.gui.controllers.history_iterate_service import HistoryIterateRefused, HistoryIterateService
 from src.gui.controllers.video_workspace_handoff import (
     route_job_to_storyboard,
+    route_job_to_video_continue,
     route_job_to_video_rerun,
     route_video_to_motion_harvest,
 )
@@ -183,6 +184,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         action_bar.add(self.harvest_btn)
+        self.continue_btn = ttk.Button(
+            action_bar,
+            text="Continue this clip",
+            command=self._on_continue_clip,
+            state=tk.DISABLED,
+        )
+        action_bar.add(self.continue_btn)
         self.storyboard_btn = ttk.Button(
             action_bar,
             text="Continue in Storyboard",
@@ -368,6 +376,7 @@ class JobHistoryPanelV2(ttk.Frame):
             label="Send to Movie Clips", command=self._on_send_to_movie_clips
         )
         self._history_menu.add_command(label="Harvest Motion...", command=self._on_harvest_motion)
+        self._history_menu.add_command(label="Continue this clip", command=self._on_continue_clip)
         self._history_menu.add_command(
             label="Continue in Storyboard", command=self._on_continue_in_storyboard
         )
@@ -809,6 +818,28 @@ class JobHistoryPanelV2(ttk.Frame):
             return
         self.replay_status_var.set("")
 
+    def _on_continue_clip(self) -> None:
+        """Continue the selected finished clip from its last frame in Video Workflow (V1-6; intent only)."""
+
+        entry = self._selected_entry()
+        if not entry:
+            return
+        if not self._history_action_state(entry).storyboard:
+            self.replay_status_var.set("Continue this clip needs a completed video job.")
+            return
+        main_window = getattr(self.controller, "main_window", None)
+        if main_window is None:
+            self.replay_status_var.set(
+                "Continue this clip is not available: the main window is missing."
+            )
+            return
+        try:
+            route_job_to_video_continue(main_window=main_window, job_id=entry.job_id)
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.replay_status_var.set(f"Continue this clip failed: {exc}")
+            return
+        self.replay_status_var.set("")
+
     def _on_rerun_with_tweaks(self) -> None:
         """Open the selected finished clip in the Video Workflow tab to change and queue again (V1-2; intent only)."""
 
@@ -870,6 +901,10 @@ class JobHistoryPanelV2(ttk.Frame):
         )
         self.movie_clips_btn.configure(state=tk.NORMAL if actions.movie_clips else tk.DISABLED)
         self.harvest_btn.configure(state=tk.NORMAL if actions.harvest else tk.DISABLED)
+        self.continue_btn.configure(state=tk.NORMAL if actions.storyboard else tk.DISABLED)
+        self._history_menu.entryconfigure(
+            "Continue this clip", state=tk.NORMAL if actions.storyboard else tk.DISABLED
+        )
         self.storyboard_btn.configure(state=tk.NORMAL if actions.storyboard else tk.DISABLED)
         self._history_menu.entryconfigure(
             "Continue in Storyboard", state=tk.NORMAL if actions.storyboard else tk.DISABLED

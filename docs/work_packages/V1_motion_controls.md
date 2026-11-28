@@ -456,3 +456,39 @@ on the installed A14B experts. No new engine, model, download, custom node or ev
 
 **Not in slice A** (left for later, not silently dropped): the compact tag-filtered driver picker (G9) and a separate
 Motion Library window; the library stays inline behind a button.
+
+## 15. V1-6 Continue a clip
+
+Started 2026-11-27 on `claude/v1-6-continue-clip` from `origin/main` `7b5c0a9e` (requested by the orchestrator; the owner
+kept V1-6 in the re-scope, D6). Standard class. Model: Claude Code Sonnet 5.5 High; Codex GPT-6.1 Sol High.
+
+**Outcome.** From a finished clip, the owner continues it from its last frame by saying only what happens next and for
+how long, on the desktop or the phone, and finds the result in the same Storyboard as the clip.
+
+**As built (what 5.8 becomes).**
+
+| # | Rule |
+|---|---|
+| C1 | One Tk-free facade (`src/controller/continue_clip.py`) reads a finished clip job without writing anything (engine, length, prompt, frames, how it can continue) and queues a continuation through `StoryboardSubmissionService`. Desktop and phone both use it. |
+| C2 | A clip that already belongs to a Storyboard (a take's job, or the root's) extends that Storyboard; otherwise one is created from the clip. The continuation is one sequential row. |
+| C3 | The default is the last generated frame, never the thumbnail. An earlier frame can be chosen where the clip's frames are recorded; the result is still a Storyboard take. |
+| C4 | The length is chosen in seconds (default: the clip's own). `ContinueRequest` gains an optional frame count for this; unset keeps today's behaviour. |
+| C5 | A clip whose engine cannot make Storyboard takes (driving video, end image, engine controls, not approved) is offered **Continue as prompt-only motion**: an ordinary job from its last frame on the Make Video default engine, said on screen to be outside the Storyboard. |
+| C6 | **End on a picture** uses slice B: it opens *Start and end image* with the chosen frame as the start. It is an ordinary job, not a take, because Storyboard takes refuse end images; sequence admission is unchanged. |
+| C7 | Phone: `continue_clip` on video items only, prepare then confirm, optional words (empty: the clip's own prompt), the clip's own length, a new seed. Admission stays `admit_phone_records` into `JobService.submit_njrs`. It is not offered as an offline (RG-160) request. |
+
+**Acceptance.**
+
+- The facade's Storyboard continuation builds the same job as the Storyboard tab for the same inputs.
+- The source is the clip's last generated frame (or the chosen frame), not its thumbnail.
+- A driving-video clip is offered the prompt-only fallback and no Storyboard take.
+- A phone prepare writes no Storyboard and queues nothing; one confirm queues one job, once.
+- No new queue, runner, builder or lineage store; sequence admission and the NJR schema are unchanged.
+
+**Deviations from 5.8, left for later:** browsing to a video made outside StableNew stays in the Storyboard tab (its
+import asks its own questions); the phone has no length or frame picker.
+
+**Evidence boundary.** Offline tests only. No Storyboard or A14B continuation has run on hardware (3.3), so V1-6 claims
+nothing about how a continued clip looks until a GPU plan is run with the owner's OK.
+
+**Stop conditions.** Section 12's, plus any change to sequence admission or the sequence plan schema.

@@ -352,6 +352,68 @@ def _load_clip_job(repository: Any, job_id: str, registry: Any) -> _ClipJob:
     return _ClipJob(job_id, njr, job.result, stage, spec, int(policy["fps"]))
 
 
+def check_clip_job(repository: Any, job_id: str, registry: Any) -> None:
+    """Whether the finished job ``job_id`` can start a storyboard; reads only. Raises :class:`StoryboardRootError`."""
+
+    _load_clip_job(repository, job_id, registry)
+
+
+def recorded_clip_frames(repository: Any, job_id: str) -> tuple[str, ...]:
+    """The generated frames a single clip job recorded, in order, when every one is still on disk; else empty."""
+
+    job = repository.get_job_model(job_id)
+    artifact = _metadata(getattr(job, "result", None)).get("video_workflow_artifact")
+    if not isinstance(artifact, Mapping):
+        return ()
+    paths = [str(path) for path in natural_frame_order(artifact.get("frame_paths") or ())]
+    return tuple(paths) if paths and all(Path(path).is_file() for path in paths) else ()
+
+
+def clip_last_frame(
+    repository: Any,
+    job_id: str,
+    folder: str | Path,
+    *,
+    decode_clip: ClipDecoder = decode_clip_to_frames,
+) -> str:
+    """The last generated frame of a clip job, for engines that cannot make Storyboard takes (V1-6).
+
+    A recorded frame is used where it is; otherwise the job's un-smoothed clip is decoded and its last frame is kept
+    as ``<folder>/last_frame.png``. Never the thumbnail. Raises :class:`StoryboardRootError` when neither exists.
+    """
+
+    frames = recorded_clip_frames(repository, job_id)
+    if frames:
+        return frames[-1]
+    job = repository.get_job_model(job_id)
+    artifact = _metadata(getattr(job, "result", None)).get("video_workflow_artifact")
+    if not isinstance(artifact, Mapping):
+        raise StoryboardRootError(f"Job {job_id} recorded no video workflow output")
+    manifests = [str(item) for item in artifact.get("manifest_paths") or () if item]
+    interpolation: Mapping[str, Any] | None = None
+    if manifests and Path(manifests[0]).is_file():
+        try:
+            backend = json.loads(Path(manifests[0]).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise StoryboardRootError(f"the backend manifest cannot be read: {exc}") from exc
+        value = backend.get("interpolation") if isinstance(backend, Mapping) else None
+        interpolation = value if isinstance(value, Mapping) else None
+    clip = _unsmoothed_clip(artifact, interpolation)
+    if clip is None or not clip.is_file():
+        raise StoryboardRootError(f"the clip of job {job_id} is missing: {clip}")
+    target = Path(folder) / "last_frame.png"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=target.parent) as scratch:
+        try:
+            decoded = decode_clip(clip, Path(scratch) / "frames", None)
+        except SequenceFrameError as exc:
+            raise StoryboardRootError(f"Job {job_id}: {exc}") from exc
+        if not decoded:
+            raise StoryboardRootError(f"decoding {clip.name} gave no frames")
+        shutil.copyfile(decoded[-1], target)
+    return str(target)
+
+
 def _clip_settings(job: _ClipJob) -> dict[str, Any]:
     settings: dict[str, Any] = {
         key: job.stage[key] for key in _STAGE_SETTING_KEYS if key in job.stage
@@ -812,6 +874,9 @@ __all__ = [
     "SmoothingNote",
     "RootBuild",
     "StoryboardRootError",
+    "check_clip_job",
+    "clip_last_frame",
+    "recorded_clip_frames",
     "prepare_clip_root",
     "prepare_image_root",
     "publish_root",
