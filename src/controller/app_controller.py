@@ -95,6 +95,7 @@ from src.controller.app_controller_services.pack_settings_apply_service import (
     bind_preview_invalidation,
 )
 from src.controller.app_controller_services.queue_projection import QueueSummaryProjector
+from src.controller.app_controller_services.queue_removal import remove_queued_jobs_async
 from src.controller.app_controller_services.run_submission_service import (
     PreviewWitness,
     QueueRunSubmissionService,
@@ -2746,6 +2747,12 @@ class AppController:
                 self._append_log(f"[controller] on_queue_remove_job_v2 error: {exc!r}")
         return False
 
+    def on_queue_remove_jobs_v2(
+        self, job_ids: Iterable[str] | None, *, reason: str | None = None, on_done: Any = None
+    ) -> bool:
+        """Batched, off-Tk removal (None: every queued job); ``on_done(outcome | None)`` runs on Tk."""
+        return remove_queued_jobs_async(self, job_ids, reason=reason, on_done=on_done)
+
     def on_queue_clear_v2(self) -> int:
         """Clear all jobs from the queue."""
         if not self.job_service:
@@ -3147,23 +3154,6 @@ class AppController:
     # ------------------------------------------------------------------
     # Run / Stop / Preview
     # ------------------------------------------------------------------
-
-    def _run_pipeline_via_runner_only(self, pipeline_config: Any) -> Any:
-        """DEPRECATED (PR-CORE1-12): Legacy fallback execution - NO LONGER USED.
-
-        As of PR-CORE1-B2, all jobs execute via NJR-only path. This method existed
-        as a fallback for jobs without NJR, but such jobs are no longer created.
-
-        All execution MUST go through:
-        GUI → PipelineController → JobService → Queue → Runner (NJR only)
-
-        Raises:
-            RuntimeError: Always - pipeline_config execution is disabled.
-        """
-        runner = getattr(self, "pipeline_runner", None)
-        if runner is None:
-            raise RuntimeError("No pipeline runner configured")
-        raise RuntimeError("Legacy runner-only path is disabled in NJR-only mode")
 
     def _get_pipeline_tab_upscale_params(self, pipeline_tab: Any) -> tuple[float, str, int]:
         del pipeline_tab  # presentation values come from the AppStateV2 projection

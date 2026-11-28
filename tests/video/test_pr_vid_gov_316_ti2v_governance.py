@@ -90,7 +90,9 @@ def test_exactly_seven_catalog_versions_are_approved_two_ti2v_the_720p_alternate
             ("hunyuan_video15_i2v_480p_12step_v1", "1.0.0"),
             # VID-CAND-LTX25 LTX-2.5 eval candidates (audio off and on).
             ("ltx25_distilled_i2v_v1", "1.0.0"),
+            ("ltx25_distilled_i2v_v1", "1.0.1"),
             ("ltx25_distilled_i2v_audio_v1", "1.0.0"),
+            ("ltx25_distilled_i2v_audio_v1", "1.0.1"),
             # VID-A14B-SVI-375 SVI 2.0 sequence workflow.
             ("wan22_i2v_a14b_flf_v1", "1.0.0"),  # V1 end frame
             ("wan22_i2v_a14b_svi", "1.0.0"),
@@ -104,7 +106,7 @@ def test_exactly_seven_catalog_versions_are_approved_two_ti2v_the_720p_alternate
             (WAN_ANIMATE2_DRIVE_ID, "1.3.0"),  # PR-VID-ANIMATE-CK-WARM
         }
     )
-    assert len(states) == 31
+    assert len(states) == 33
 
 
 def test_only_approved_versions_are_runnable_without_opt_in() -> None:
@@ -121,7 +123,7 @@ def test_only_approved_versions_are_runnable_without_opt_in() -> None:
         APPROVED,
         APPROVED_FRAMES_OUT,
     ]
-    assert len(registry.list_offerable_specs("comfy")) == 31
+    assert len(registry.list_offerable_specs("comfy")) == 33
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:

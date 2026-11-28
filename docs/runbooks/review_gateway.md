@@ -148,6 +148,86 @@ After `rollback`, keep the database unless the older release fails on it. Restor
 the current release started. The container needs `api.github.com` and `codeload.github.com` on TCP 443, which CT 120's
 firewall already allows.
 
+## Staging gateway and promotion
+
+PHONE-CORE PS-1 ([design](../work_packages/PHONE-CORE_installable_offline_phone_app.md) section 6). A second gateway
+in its own container tries each merge before production. It has its own tailnet name, sync secret, certificate and
+pairing, holds only generated fixtures, and has no Immich key. StableNew never syncs to it. The same deployer and rules
+apply: only signed commits of `main`.
+
+Owner decision 2026-11-28 ("auto-promote, you check big ones"): every merge is deployed to staging first; the check
+below must pass; then the same commit is deployed to production. For a visible phone change the owner looks at staging
+on the phone before the production deploy.
+
+### Create it (once)
+
+Values in angle brackets are yours; none belong in the repository.
+
+1. **Container** (Proxmox host): an unprivileged LXC from the same template as production, 8 GB root disk, no GPU, no
+   media disk, nesting on, `/dev/net/tun` passed in, `firewall=1`, address `<staging address>`.
+2. **Firewall** (before anything listens): inbound only TCP 9443 from `<PC address>`; outbound DNS to the router,
+   reject every private range (so production and Immich are unreachable), then TCP 80 and 443 and UDP. No Immich rule.
+3. **Tailscale:** add a `tag:review-staging` tag owner and let members reach it on `tcp:443` only. Install Tailscale
+   in the container, then `tailscale up --hostname=<staging name> --advertise-tags=tag:review-staging
+   --accept-dns=false` and `tailscale serve --bg --https=443 http://127.0.0.1:8443`.
+4. **Install** a merge commit by the archive paste of [Turn on deploys from the PC](#turn-on-deploys-from-the-pc-one-paste-once),
+   with the staging container's id, `SYNC_HOST=<staging address>` and no `MEDIA_DIR` or `IMMICH_URL`. Then
+   `review-gateway-deploy remote on`.
+5. **Label**, once a release that has PS-1 is installed (an older one refuses the unknown setting): add
+   `environment_label = "Staging"` to `/etc/review-gateway/config.toml` and `systemctl restart review-gateway`. The
+   phone header then shows it. Never set it on production. Remove the line before rolling staging back to a release
+   from before PS-1.
+6. **PC:** the promotion check loads the staging phone page, which is on the tailnet only, so the PC needs Tailscale.
+   Then store the staging values once. They go to a DPAPI file that only the tools read; the secret is asked for with
+   hidden input and refused if it, the certificate or the address is production's.
+
+```powershell
+python -m tools.review_gateway_deploy --target staging configure
+```
+
+### Every merge
+
+```powershell
+python -m tools.review_gateway_deploy --target staging request <merge sha>
+```
+
+```powershell
+python -m tools.review_gateway_promote <merge sha>
+```
+
+The check ends with `PASS` or `FAIL: <reason>` (exit 0 or 1). It confirms the deployed commit, the labelled page, the
+page's static version for that commit (run it from a checkout that holds the commit), a temporary pairing whose
+session reports both, a fresh test item that is listed, shows its thumbnail and round-trips a delete decision, and
+`/sw.js` when the commit has a service worker. The temporary phone is revoked. It deploys nothing. After `PASS`, and
+after the owner's look when the change is visible:
+
+```powershell
+python -m tools.review_gateway_deploy request <merge sha>
+```
+
+If staging is wrong, revert on `main`; production never got it.
+
+### Fixtures, pairing and wiping
+
+```powershell
+python -m tools.review_gateway_stage seed
+```
+
+```powershell
+python -m tools.review_gateway_stage pair
+```
+
+`seed` publishes small generated images in several review sections, a batch, a rework, a desk input, a rating set, a
+choice catalog, a PC status and a video placeholder that does not play. `pair` prints a five-minute code (`--admin`
+adds the Update screen). Nothing plays the PC afterwards: decisions and requests wait.
+
+```powershell
+python -m tools.review_gateway_stage reset
+```
+
+`reset` prints one line for the Proxmox host's shell that deletes staging's data and paired phones, and does nothing
+unless that container's gateway has an environment label. `--target production` is refused by both tools.
+
 ## Sync secret and certificate
 
 The installer creates `/etc/review-gateway/sync_secret` (mode 0600) and a self-signed certificate
@@ -190,7 +270,9 @@ Deleting a phone Keep afterwards does not remove it from Immich: delete it there
 ## Pair and revoke phones
 
 Pairing starts on the desktop (RG-120): it shows a single-use code that lasts five minutes. Open the phone app and enter
-it. Revoke from the desktop, or on the gateway while the PC is off:
+it, or scan the QR code. The QR appears once **Phone app address** (the `https://` address phones open) has been saved
+in the same dialog; a scan opens the pairing screen with the code filled in, and you still press **Pair this phone**.
+**Last seen** in the phone list helps pick out old entries to revoke. Revoke from the desktop, or on the gateway while the PC is off:
 
 ```bash
 review-gateway-admin devices

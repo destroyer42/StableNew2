@@ -5,3 +5,13 @@
 .updates { list-style: none; margin: 0; padding: 0; }
 .updates li { border-top: 1px solid var(--line); padding: 0.5rem 0; }
 .updates p { margin: 0.15rem 0; overflow-wrap: anywhere; }
+/* PHONE-CORE PS-1: the gateway's environment label in the header (index.html); production has none. */
+#environment {
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.4rem;
+  background: var(--favorite);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}

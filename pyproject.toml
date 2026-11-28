@@ -69,13 +69,14 @@ extend-exclude = '''
   | dist
   | archive
   | ARCHIVE
+  | src/utils/vendor
 )/
 '''
 
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-extend-exclude = ["archive", "ARCHIVE", ".venv", "build", "dist"]
+extend-exclude = ["archive", "ARCHIVE", ".venv", "build", "dist", "src/utils/vendor"]
 
 [tool.ruff.lint]
 select = [
@@ -108,6 +109,11 @@ strict = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
+ignore_errors = true
+
+# Vendored unchanged (src/utils/vendor/README.md): its errors are not ours to fix.
+[[tool.mypy.overrides]]
+module = "src.utils.vendor.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]

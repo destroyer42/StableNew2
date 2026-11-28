@@ -23,6 +23,7 @@ from dataclasses import replace
 from typing import Any, Final
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.video.licence_attestation import with_attestation
 from src.video.motion_intent import MOTION_INTENT_FIELD
 from src.video.rife_runtime import find_rife_executable
 from src.video.sequence_admission import LEAD_IN_OVERLAP
@@ -311,7 +312,7 @@ class StoryboardSubmissionService:
                     take_ids=group_ids,
                     lead_in=lead_in,
                 )
-                njrs.append(built.njr)
+                njrs.append(with_attestation(built.njr, request.licence_attestation))
             if admit is None:
                 # JobService admits each NJR under its own job id, so the attempts are the NJRs' ids.
                 self._job_service().submit_njrs(njrs, SubmissionPolicy())

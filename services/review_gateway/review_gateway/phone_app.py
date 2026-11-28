@@ -24,8 +24,10 @@ from .errors import GatewayError
 from .media import is_digest
 from .rating_routes import phone_rating_routes
 from .rating_store import RatingStore
-from .static_files import load_static
+from .static_files import STATIC_DIR, load_static
 from .store import SOURCES, Clock, Device, Store
+from .timing_routes import phone_timing_routes
+from .timing_store import TimingStore
 from .web import EXCEPTION_HANDLERS, read_json, refusal
 
 COOKIE = "rg_session"
@@ -37,7 +39,8 @@ FAILED_PAIRING_WINDOW = timedelta(minutes=10)
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; "
     "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; "
-    "frame-ancestors 'none'; require-trusted-types-for 'script'"
+    # rg-sw is the one Trusted Types policy: it lets the page name /sw.js to register it, and nothing else.
+    "frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types rg-sw"
 )
 _SECURITY_HEADERS = {
     "Content-Security-Policy": CONTENT_SECURITY_POLICY,
@@ -99,11 +102,22 @@ class _Guard:
 
 
 def build_phone_app(
-    store: Store, clock: Clock, ratings: RatingStore, release_dir: Path | None = None
+    store: Store,
+    clock: Clock,
+    ratings: RatingStore,
+    timings: TimingStore,
+    release_dir: Path | None = None,
+    static_root: Path = STATIC_DIR,
+    *,
+    environment_label: str = "",
 ) -> Starlette:
     failures: deque = deque()
-    site = load_static()
+    site = load_static(static_root, environment_label=environment_label)
     commit = (deployed_commit(release_dir) if release_dir else None) or "dev"
+    # PHONE-CORE 2.3: one line in front, so the worker's bytes change with every deploy and the browser sees it. The
+    # version is hexadecimal and the commit is validated hexadecimal or "dev", so neither can end the string.
+    prefix = f'const VERSION = "{site.version}", COMMIT = "{commit[:12]}";\n'
+    worker = prefix.encode() + site.worker
 
     async def session(request: Request, *, review: bool = True) -> Device:
         token = request.cookies.get(COOKIE, "")
@@ -117,13 +131,26 @@ def build_phone_app(
     async def page(request: Request) -> Response:
         return Response(site.index, media_type="text/html", headers={"Cache-Control": "no-cache"})
 
+    async def service_worker(request: Request) -> Response:
+        if not site.worker:
+            raise GatewayError(404, "not_found")
+        return Response(worker, media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+    async def manifest(request: Request) -> Response:
+        if not site.manifest:
+            raise GatewayError(404, "not_found")
+        return Response(
+            site.manifest,
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "no-cache"},
+        )
+
     async def static_list(request: Request) -> Response:
         if request.path_params["version"] != site.version:
             raise GatewayError(404, "not_found")
         files = {name: file.sha256 for name, file in sorted(site.files.items())}
-        return JSONResponse(
-            {"version": site.version, "files": files}, headers={"Cache-Control": _IMMUTABLE}
-        )
+        listing = {"version": site.version, "files": files, "shell": site.shell_digests()}
+        return JSONResponse(listing, headers={"Cache-Control": _IMMUTABLE})
 
     async def static_file(request: Request) -> Response:
         found = site.files.get(request.path_params["path"])
@@ -338,6 +365,8 @@ def build_phone_app(
     return Starlette(
         routes=[
             Route("/", page, methods=["GET"]),
+            Route("/sw.js", service_worker, methods=["GET"]),
+            Route("/manifest.webmanifest", manifest, methods=["GET"]),
             Route("/s/{version}/files.json", static_list, methods=["GET"]),
             Route("/s/{version}/{path:path}", static_file, methods=["GET"]),
             Route("/api/pair", pair, methods=["POST"]),
@@ -358,6 +387,7 @@ def build_phone_app(
             Route("/api/admin/updates/{record_id}", update_request, methods=["GET"]),
             Route("/media/{library_id}/{sha256}/{variant}", media, methods=["GET"]),
             *phone_rating_routes(ratings, session),
+            *phone_timing_routes(timings, session),
         ],
         middleware=[Middleware(_Guard)],
         exception_handlers=EXCEPTION_HANDLERS,

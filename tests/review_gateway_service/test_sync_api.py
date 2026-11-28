@@ -30,6 +30,7 @@ SYNC_ROUTES = (
     ("POST", "/sync/v1/withdrawals"),
     ("POST", "/sync/v1/item-sources"),
     ("PUT", "/sync/v1/choice-catalog"),
+    ("GET", "/sync/v1/open-timings"),
 )
 
 

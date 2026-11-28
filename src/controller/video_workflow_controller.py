@@ -13,6 +13,7 @@ from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.video_workflow_mixins import VideoWorkflowMixins
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
 from src.video.driving_video_inspection import inspect_driving_video as _inspect_video
+from src.video.licence_attestation import ATTESTATION_KEY, with_attestation
 from src.video.motion_source_preparation import prepare_for_form
 from src.video.video_workflow_batch import (
     BatchAdmissionResult,
@@ -163,7 +164,8 @@ class VideoWorkflowController(VideoWorkflowMixins):
         built = self._njr_builder.build_job(
             form_data, frozen, lineage=lineage if isinstance(lineage, Mapping) else None
         )
-        job_ids = self._job_service().submit_njrs([built.njr], SubmissionPolicy())
+        njr = with_attestation(built.njr, form_data.pop(ATTESTATION_KEY, None))  # this Queue only
+        job_ids = self._job_service().submit_njrs([njr], SubmissionPolicy())
         if not job_ids:
             raise RuntimeError("Failed to enqueue video workflow job")
         form_data["_stable_new_submission_projection"] = {
@@ -231,11 +233,10 @@ class VideoWorkflowController(VideoWorkflowMixins):
 
         return self._batches.preview(form_data, sources, duplicates_omitted=duplicates_omitted)
 
-    def submit_batch(self, plan: BatchPlan) -> BatchAdmissionResult:
-        """Admit a previewed batch through ONE ``JobService.submit_njrs`` call (worker-safe; the
-        caller refreshes GUI-visible queue state afterwards, on the UI thread)."""
+    def submit_batch(self, plan: BatchPlan, *, attestation: Any = None) -> BatchAdmissionResult:
+        """Admit a previewed batch through ONE ``JobService.submit_njrs`` call (worker-safe)."""
 
-        return self._batches.admit(plan, self._job_service())
+        return self._batches.admit(plan, self._job_service(), attestation=attestation)
 
     # ---------------------------------------------------------------- motion-source readiness
 

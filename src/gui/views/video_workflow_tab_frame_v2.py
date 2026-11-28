@@ -11,6 +11,7 @@ from typing import Any
 
 from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
 from src.gui.layout_v2 import configure_grid_columns
+from src.gui.licence_attestation_dialog import NOT_CONFIRMED, ask_licence_attestation
 from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.motion_library_contract import MotionLibraryPorts
@@ -107,6 +108,7 @@ from src.video.driver_intent import (
     DEFAULT_DRIVER_PROMPT,
     WHOLE_MOVEMENT_LABEL,
 )
+from src.video.licence_attestation import ATTESTATION_KEY
 from src.video.motion_intent import (
     LONGEST_SUFFIX,
     MOTION_INTENT_FIELD,
@@ -386,7 +388,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # Transient multi-source batch state (PR-VID-BATCH-200); never saved with the form.
         self._batch_session = VideoBatchSession(
             build_preview=lambda **kw: self._experiment_controller().preview_batch(**kw),
-            submit_plan=lambda plan: self._experiment_controller().submit_batch(plan),
+            submit_plan=lambda plan, **kw: self._experiment_controller().submit_batch(plan, **kw),
             select_sources=lambda paths, lineage=None, review_origin=False: (
                 self._experiment_controller().select_batch_sources(
                     paths, lineage, review_origin=review_origin
@@ -3145,6 +3147,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         lineage = self._current_lineage()
         if lineage:
             form_data["source_lineage"] = lineage
+        attestation = ask_licence_attestation(self, [form_data.get("workflow_id")])
+        if attestation is None:
+            self._fail(NOT_CONFIRMED)
+            return
+        if attestation:
+            form_data[ATTESTATION_KEY] = attestation
         try:
             job_id = handler(source_image_path=source_image_path, form_data=form_data)
         except Exception as exc:

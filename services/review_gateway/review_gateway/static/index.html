@@ -8,7 +8,9 @@
   <meta name="mobile-web-app-capable" content="yes">
   <title>StableNew Review</title>
   <!-- The server fills in the version of the static files, the features and their styles (static_files.py). -->
-  <link rel="icon" href="/s/{{V}}/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/s/{{V}}/icons/icon.svg" type="image/svg+xml">
+  <meta name="rg-version" content="{{V}}">
   <meta name="rg-features" content="{{FEATURES}}">
   <link rel="stylesheet" href="/s/{{V}}/core/core.css">
   {{STYLES}}
@@ -18,10 +20,12 @@
   <header id="bar">
     <button id="back" type="button" aria-label="Back" hidden>&#8249;</button>
     <h1 id="title">Review</h1>
+    {{ENVIRONMENT}}
     <span id="unsent" role="status" hidden></span>
     <button id="rejected" type="button" hidden></button>
   </header>
-  <main id="view"><p class="muted">Loading. If this stays, pull down to reload.</p></main>
+  <div id="update" role="status" hidden></div>
+  <main id="view"><p class="muted">Loading. If this stays, close the app fully and open it again.</p></main>
   <div id="toast" role="status" hidden></div>
 </body>
 </html>

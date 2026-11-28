@@ -671,8 +671,15 @@ switch.
 
 ## 6. Staging gateway (deferred, OD-7)
 
-**Deferred by the owner on 2026-11-27 ("Not now").** PS-1 is not scheduled. The design below is kept for when it is
-wanted. Until then, pre-merge evidence is CI's `phone-e2e` and changes land on production directly, as today.
+**Deferred by the owner on 2026-11-27 ("Not now"), started on 2026-11-28 ("Start PS-1 now").** Promotion (owner,
+2026-11-28: "Auto-promote, you check big ones"): every merge is deployed to staging; `tools.review_gateway_promote`
+must print `PASS`; then the orchestrator deploys the same SHA to production. For a visible phone change the owner looks
+at staging first. Operator steps: [`review_gateway.md`](../runbooks/review_gateway.md#staging-gateway-and-promotion).
+
+**As built, PS-1:** the PC needs Tailscale, because the check loads the tailnet-only phone page. `reset` prints a
+console line (the sync API cannot wipe a gateway, and a decided item cannot be withdrawn); the line stops unless the
+container has `environment_label`. Staging settings that share production's address, certificate or secret are refused.
+The seeder generates its own fixtures with the shapes of the browser tests' seeder, and does not play the PC.
 
 **Topology: a second container, not a second instance** (OD-7). Cookies are scoped by host, not port.
 
@@ -749,6 +756,21 @@ or moved into the core: the action wording to `core/catalog.js`, the rework stat
 are registered from each `feature.js`; `compare` gets the triage's controls through its `item.view` claim. `queued.js`
 and `rating.js` are on the cap exception list for PC-2 to split. The core pieces that belong to later slices (`idb`,
 `sw-client`, the session states, `settings.for`) are not built, and saved settings keep their keys.
+
+**As built, PW-1** (differences from 2.3 only; behaviour is in `REVIEW_GATEWAY.md`):
+
+- `start_url` is `/`, not `/#/`: the orchestrator's brief kept all three of start URL, scope and id at what the owner's
+  installed app has (13.1). The router treats both the same.
+- The worker's only store is the install-time shell, so nothing outside it can be stored at all. The refusal to `put`
+  a URL ending in `/original` belongs with PW-2's rendition `put`, the first one that could see such a URL.
+- Settings is a core screen (`core/about.js`, `#/settings`) opened from a button at the end of the home screen and of
+  the "could not reach" screen, not from the header.
+- The 401 wipe of 4.3 has nothing to wipe yet: nothing authenticated is stored until PW-2.
+
+**As built, PP-1:** the QR's address is the desktop's own **Phone app address** setting, which the owner enters once
+(the PC knows only the gateway's LAN sync address). `last_seen_at` is sent only to a PC that asks for it
+(`device_fields=last_seen_at`), so neither side has to be updated first. `core/` was not edited. Behaviour:
+`REVIEW_GATEWAY.md` section 3.8.
 
 Order on the critical path:
 

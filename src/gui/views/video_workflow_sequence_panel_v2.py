@@ -15,12 +15,14 @@ from tkinter import filedialog, ttk
 from typing import Any
 from uuid import uuid4
 
+from src.gui.licence_attestation_dialog import NOT_CONFIRMED, ask_licence_attestation
 from src.gui.view_contracts.video_sequence_contract import (
     SequenceSession,
     SequenceSubmitOutcome,
     sequence_block_reason,
 )
 from src.gui.views.storyboard_panel_actions import StoryboardPanelActions
+from src.video.licence_attestation import ATTESTATION_KEY
 from src.video.sequence_shots import MAX_SHOTS, MIN_SHOTS, ShotDraft
 from src.video.storyboard import StoryboardDraft
 from src.video.storyboard_readiness import readiness, record_images
@@ -362,6 +364,12 @@ class WorkflowSequencePanel(StoryboardPanelActions):
         if reason:
             self.status_var.set(reason)
             return
+        attestation = ask_licence_attestation(self, [form.get("workflow_id")])
+        if attestation is None:
+            self.status_var.set(NOT_CONFIRMED)
+            return
+        if attestation:
+            form = {**form, ATTESTATION_KEY: attestation}
         captured = self._capture_storyboard()
         registry = self._registry()
 

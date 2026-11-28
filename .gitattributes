@@ -1,3 +1,5 @@
 snapshots/*.zip filter=lfs diff=lfs merge=lfs -text
 snapshots/StableNew-snapshot-20251213-142301.zip filter=lfs diff=lfs merge=lfs -text
 docs/CODE_MAP.md linguist-generated=true
+# Vendored files keep their exact bytes (a test pins the SHA-256).
+src/utils/vendor/qrcodegen.py -text

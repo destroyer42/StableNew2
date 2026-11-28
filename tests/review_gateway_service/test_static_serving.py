@@ -12,7 +12,14 @@ from review_gateway.static_files import STATIC_DIR, load_static
 from tests.review_gateway_service.conftest import Rig, sha
 
 IMMUTABLE = "public, max-age=31536000, immutable"
-TYPES = {".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml"}
+TYPES = {
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+}
+#: Served at their own fixed addresses, not under the version.
+FIXED = {"index.html", "manifest.webmanifest", "sw.js"}
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
 
@@ -43,7 +50,7 @@ def test_every_page_file_is_listed_and_served_with_the_listed_bytes(rig) -> None
     published = {
         path.relative_to(STATIC_DIR).as_posix()
         for path in STATIC_DIR.rglob("*")
-        if path.is_file() and path.name != "index.html"
+        if path.is_file() and path.relative_to(STATIC_DIR).as_posix() not in FIXED
     }
     assert set(listed.json()["files"]) == published
     for name, digest in listed.json()["files"].items():
@@ -61,6 +68,8 @@ def test_every_page_file_is_listed_and_served_with_the_listed_bytes(rig) -> None
         "/s/000000000000/core/main.js",  # another version's address
         "/s/000000000000/files.json",
         "/s/{v}/index.html",  # the template is only ever served at /
+        "/s/{v}/sw.js",  # the worker only at /sw.js, so no other address of it can be registered
+        "/s/{v}/manifest.webmanifest",
         "/s/{v}/core",
         "/s/{v}/core/",
         "/s/{v}/nothing.js",
@@ -148,10 +157,16 @@ def test_the_version_changes_exactly_when_a_published_byte_or_the_template_does(
         {"core/main.js": b"two"},
         {"features/a/a.css": b"new file"},
         {"index.html": b"<p>{{V}}</p>"},
+        {"sw.js": b"worker"},
+        {"manifest.webmanifest": b'{"icons": "/s/{{V}}/a.png"}'},
     ):
         tree(root, change)
         seen.add(load_static(root).version)
-    assert len(seen) == 4
+    assert len(seen) == 6
+    site = load_static(root)
+    assert list(site.files) == ["core/main.js", "features/a/a.css"]
+    assert site.worker == b"worker"
+    assert site.manifest == f'{{"icons": "/s/{site.version}/a.png"}}'.encode()
 
 
 def test_the_session_says_which_page_and_commit_it_is_talking_to(rig) -> None:
@@ -182,3 +197,77 @@ def test_the_commit_comes_from_the_releases_source_file(tmp_path, clock, source,
         assert rig.phone.get("/api/session").json()["commit"] == commit
     finally:
         rig.close()
+
+
+# --- PHONE-CORE PW-1: the installable shell ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("source", "commit"),
+    [(None, "dev"), (json.dumps({"commit": COMMIT}), COMMIT[:12])],
+)
+def test_the_worker_is_served_at_the_root_with_its_version_and_commit_in_front(
+    tmp_path, clock, source, commit
+) -> None:
+    release = tmp_path / "release"
+    release.mkdir()
+    if source:
+        (release / "source.json").write_text(source, encoding="utf-8")
+    rig = Rig(tmp_path / "gateway", clock, release_dir=release)
+    try:
+        response = rig.phone.get("/sw.js")  # no pairing: the shell is public, as the page is
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].split(";")[0] == "text/javascript"
+        assert response.headers["cache-control"] == "no-cache"
+        assert response.headers["x-content-type-options"] == "nosniff"
+        # The widest scope is the script's own directory, the root; nothing widens or needs to.
+        assert "service-worker-allowed" not in response.headers
+        assert "connect-src 'self'" in response.headers["content-security-policy"]
+        first, rest = response.content.split(b"\n", 1)
+        version = version_of(rig)
+        assert first == f'const VERSION = "{version}", COMMIT = "{commit}";'.encode()
+        assert rest == (STATIC_DIR / "sw.js").read_bytes()
+    finally:
+        rig.close()
+
+
+def test_the_manifest_keeps_the_installed_apps_identity_and_names_real_icons(rig) -> None:
+    response = rig.phone.get("/manifest.webmanifest")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].split(";")[0] == "application/manifest+json"
+    assert response.headers["cache-control"] == "no-cache"
+    manifest = response.json()
+    # The app already installed on the owner's phone is "/", "/", "/": any other value would make a second app.
+    assert (manifest["id"], manifest["start_url"], manifest["scope"]) == ("/", "/", "/")
+    assert manifest["display"] == "standalone"
+    assert [icon.get("purpose", "any") for icon in manifest["icons"]] == ["any", "any", "maskable"]
+    for icon in manifest["icons"]:
+        assert icon["src"].startswith(f"/s/{version_of(rig)}/icons/")
+        image = rig.phone.get(icon["src"])
+        assert image.headers["content-type"] == "image/png"
+        # A PNG's size is the two numbers at the start of its first chunk.
+        width, height = (int.from_bytes(image.content[at : at + 4], "big") for at in (16, 20))
+        assert icon["sizes"] == f"{width}x{height}"
+    assert '<link rel="manifest" href="/manifest.webmanifest">' in rig.phone.get("/").text
+
+
+def test_the_file_list_also_gives_the_digests_of_the_page_and_the_manifest(rig) -> None:
+    listed = rig.phone.get(f"/s/{version_of(rig)}/files.json").json()
+
+    assert listed["shell"] == {
+        path: sha(rig.phone.get(path).content) for path in ("/", "/manifest.webmanifest")
+    }
+
+
+@pytest.mark.parametrize("path", ["/", "/sw.js", "/manifest.webmanifest", "/api/session"])
+def test_the_only_trusted_types_policy_that_may_exist_is_the_workers(rig, path) -> None:
+    policy = rig.phone.get(path).headers["content-security-policy"]
+
+    directives = dict(part.strip().split(" ", 1) for part in policy.split(";"))
+    assert directives["require-trusted-types-for"] == "'script'"
+    assert directives["trusted-types"] == "rg-sw"
+    # Nothing else was loosened for the worker or the manifest: both fall back to these.
+    assert directives["script-src"] == directives["default-src"] == "'self'"
+    assert "worker-src" not in directives and "manifest-src" not in directives

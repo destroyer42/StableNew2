@@ -16,6 +16,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.controller.continue_clip import ClipContinuation, continue_clip, inspect_continuation
+from src.gui.licence_attestation_dialog import NOT_CONFIRMED, ask_licence_attestation
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
@@ -275,6 +276,10 @@ class ContinueClipHost:
         except (AttributeError, RuntimeError) as exc:
             self._on_refused(f"Not queued: {exc}")
             return
+        attestation = ask_licence_attestation(self._widget, [clip.workflow_id])
+        if attestation is None:
+            self._on_refused(NOT_CONFIRMED)
+            return
         self.queueing = True
         self._on_status("Queueing the continuation...")
         values = dict(form)
@@ -289,6 +294,7 @@ class ContinueClipHost:
                 frame_index=frame_index,
                 experimental_opt_in=values.get(EXPERIMENTAL_OPT_IN_FIELD) is True,
                 motion_intent=values.get(MOTION_INTENT_FIELD),
+                licence_attestation=attestation or None,
             )
             return WorkOutcome(value=result)
 

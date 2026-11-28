@@ -13,6 +13,7 @@ from typing import Any, Literal, Protocol
 
 from src.config.app_config import get_process_container_config, get_watchdog_config
 from src.controller import job_service_auto_run, job_service_outage, job_service_shutdown
+from src.controller import job_service_queue_batch as queue_batch
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service_dispatch import dispatch_next_now
@@ -279,6 +280,7 @@ class JobService:
         self._job_lifecycle_logger = job_lifecycle_logger
         self._require_normalized_records = bool(require_normalized_records)
         self.job_queue.register_status_callback(self._handle_job_status_change)
+        queue_batch.bind(self)
         self._runner_lock = Lock()
         self._worker_started = False
         self.auto_run_enabled = False
@@ -996,9 +998,7 @@ class JobService:
         # PR-D: Emit status-specific callbacks for GUI queue/history updates
         self._emit_status_callbacks(job, status)
 
-        self._emit_queue_updated()
-        if not any(j.status == JobStatus.QUEUED for j in self.job_queue.list_jobs()):
-            self._emit(self.EVENT_QUEUE_EMPTY)
+        queue_batch.publish_queue_update(self)
 
         # PR-CORE1-D21B: Activity hook for runner
         if hasattr(self, "_on_runner_activity") and self._on_runner_activity:

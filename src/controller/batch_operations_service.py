@@ -49,6 +49,7 @@ from src.queue.batch_projection import (
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import QueuedCancelOutcome
 from src.queue.job_repository import JobRepository
+from src.video.licence_attestation import attestation_problem
 
 #: Rowids examined per repository call (bounds how long the repository lock is held), and the listing cap.
 _SCAN_WINDOW = 2000
@@ -420,6 +421,8 @@ class BatchOperationsService:
                 f"Workflow governance would refuse it now: '{workflow_id}' is experimental and this job "
                 "recorded no experimental opt-in."
             )
+        if problem := attestation_problem(record):
+            return f"Workflow governance would refuse it now: {problem}"
         return None
 
     def preflight_retry(self, key: BatchKey, job_ids: Sequence[str]) -> RetryPlan:

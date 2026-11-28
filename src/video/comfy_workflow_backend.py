@@ -48,6 +48,7 @@ from src.video.frames_out import (
     frames_output_fps,
     natural_frame_order,
 )
+from src.video.licence_attestation import ATTESTATION_KEY, recorded_attestation
 from src.video.managed_comfy_runtime import (
     missing_required_flags,
     plan_comfy_launch,
@@ -1161,6 +1162,10 @@ class ComfyWorkflowVideoBackend:
             provenance_extra["actual_runtime"] = actual_runtime
         if version_warning:
             provenance_extra["runtime_version_warning"] = version_warning
+        # The operator's licence confirmation travels from the job's provenance into each clip's manifest.
+        attestation = recorded_attestation(request.context_metadata.get("provenance"))
+        if attestation:
+            provenance_extra[ATTESTATION_KEY] = attestation
         manifest_path = self._write_manifest(
             request=request,
             prompt_id=prompt_id,

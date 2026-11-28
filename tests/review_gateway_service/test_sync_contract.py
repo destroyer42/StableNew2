@@ -193,6 +193,24 @@ def test_malformed_values_are_refused(contract: Contract, kind: str, change: dic
         contract.validate(kind, {**sample(kind), **change})
 
 
+@pytest.mark.parametrize(
+    ("last_seen_at", "accepted"),
+    [(NOW, True), ("yesterday", False), (None, False), (1764072000, False)],
+)
+def test_an_enrolled_device_may_say_when_it_was_last_seen(
+    contract: Contract, last_seen_at: object, accepted: bool
+) -> None:
+    """PHONE-CORE PP-1: an additive field of ``outbox_page``; the schema version is unchanged."""
+
+    payload = sample("outbox_page")
+    payload["enrolled_devices"][0]["last_seen_at"] = last_seen_at
+    if accepted:
+        contract.validate("outbox_page", payload)
+    else:
+        with pytest.raises(ContractError):
+            contract.validate("outbox_page", payload)
+
+
 def test_a_refused_acknowledgement_needs_a_reason(contract: Contract) -> None:
     payload = sample("acknowledgement")
     del payload["reason_code"]
