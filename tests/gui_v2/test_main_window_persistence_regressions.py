@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import tkinter as tk
+import tkinter.ttk
 from pathlib import Path
+from types import SimpleNamespace
 
 from src.gui.main_window_v2 import MainWindowV2
 from src.gui.view_contracts.window_layout_contract import compute_window_layout
 from src.services.ui_state_store import UIStateStore
+from tests.helpers.tk_root_factory import create_root
 
 # The stub roots have no screen; MainWindowV2 falls back to a 1920x1080 display for its layout.
 DEFAULT_GEOMETRY = compute_window_layout(1920, 1080).default_geometry
@@ -390,3 +394,48 @@ def test_on_window_map_restores_visible_geometry_after_minimize() -> None:
     window._on_window_map()
 
     assert window.root.geometry() == visible_geometry
+
+
+def test_child_widget_events_do_no_window_geometry_work() -> None:
+    """Tk delivers every descendant's <Configure>/<Map> to a binding on the toplevel (STARTUP-STALL-2)."""
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot("1984x1110+-32000+-32000")
+    window._last_visible_window_geometry = f"{DEFAULT_GEOMETRY}+140+90"
+    child_event = SimpleNamespace(widget=object())
+
+    window._on_window_configure(child_event)
+    window._on_window_map(child_event)
+
+    assert window.root.geometry() == "1984x1110+-32000+-32000"
+    assert window.root.deiconified == 0
+
+
+def test_root_bindings_ignore_descendants_and_still_see_the_root() -> None:
+    root = create_root()
+    try:
+        window = MainWindowV2.__new__(MainWindowV2)
+        window.root = root
+        window._last_visible_window_geometry = None
+        calls: list[str] = []
+        window._capture_visible_window_geometry = lambda: calls.append("capture")  # type: ignore[method-assign]
+        window._ensure_window_visible_after_restore = lambda: calls.append("restore")  # type: ignore[method-assign]
+        root.bind("<Configure>", window._on_window_configure, add="+")
+        root.bind("<Map>", window._on_window_map, add="+")
+        for index in range(40):
+            tk.ttk.Label(root, text=str(index)).pack()
+        root.geometry("640x900+10+10")
+        root.deiconify()
+        root.update()
+
+        assert "restore" in calls and "capture" in calls  # the root's own events still arrive
+        assert calls.count("restore") == 1
+        assert calls.count("capture") <= 6  # was one per descendant (40+)
+
+        calls.clear()
+        root.iconify()
+        root.update()
+        root.deiconify()
+        root.update()
+        assert "restore" in calls  # restoring from minimise still re-checks visibility
+    finally:
+        root.destroy()

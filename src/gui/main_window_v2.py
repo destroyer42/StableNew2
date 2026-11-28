@@ -1341,10 +1341,17 @@ class MainWindowV2:
             pass
         self._last_visible_window_geometry = fallback_geometry
 
-    def _on_window_configure(self, _event: Any | None = None) -> None:
-        self._capture_visible_window_geometry()
+    def _is_descendant_event(self, event: Any | None) -> bool:
+        """Tk delivers every descendant's events to a binding on the toplevel; only the root's own count here."""
+        return event is not None and getattr(event, "widget", self.root) is not self.root
 
-    def _on_window_map(self, _event: Any | None = None) -> None:
+    def _on_window_configure(self, event: Any | None = None) -> None:
+        if not self._is_descendant_event(event):
+            self._capture_visible_window_geometry()
+
+    def _on_window_map(self, event: Any | None = None) -> None:
+        if self._is_descendant_event(event):
+            return
         try:
             self.root.after_idle(self._ensure_window_visible_after_restore)
         except Exception:
