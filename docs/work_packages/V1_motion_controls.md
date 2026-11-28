@@ -405,6 +405,7 @@ Rough size: V1-1 and V1-6 about 1-2 days of agent work each, the others about 2-
   safeguard; if the owner declines D3, prompt-only presets reduce to duration and the table collapses to two rows.
 - **Continue on A14B is unexercised.** Sequence admission accepts it by rule, but no physical Storyboard or A14B
   continuation has run. V1-6 cannot claim continue works on hardware until the owner's first live use; its PR says so.
+  (Later: continuations completed in an eval harness on 2026-11-28; section 15.)
 - **Scope pressure.** Re-run with tweaks (V1-2) overlaps RG-140. Keeping the intent layer here and the transport there
   avoids two job-reconstruction implementations, but needs the two sessions to agree on the tweak vocabulary first.
 
@@ -457,6 +458,30 @@ on the installed A14B experts. No new engine, model, download, custom node or ev
 **Not in slice A** (left for later, not silently dropped): the compact tag-filtered driver picker (G9) and a separate
 Motion Library window; the library stays inline behind a button.
 
+**Physical run and owner acceptance (V1-3, slices A and B).** Eval harness (not the app's History), 2026-11-27, code
+`7a8b2d53`, RTX 4070 Ti 12 GB, stock subjects: **7 of 7 completed**, no stop rule, no `nvlddmkm` event.
+
+| Case | What ran | Peak VRAM (MiB), stop line |
+|---|---|---|
+| A1 | driver (4K source), whole movement, 81 frames, 480x832 | 11,663 of 12,000 |
+| A2 | driver (1080x1920), 33 frames, 480x832 | 10,977 of 12,000 |
+| A3 | driver, Gesture preset, 49 frames, 832x480 | 11,457 of 12,000 |
+| B1 | start and end image, 49 frames, 480x832 | 10,674 of 11,500 |
+| B2 | same pair, 81 frames, 480x832 | 10,034 of 11,500 |
+| B3 | start and end image, 81 frames, 832x480 | 9,822 of 11,500 |
+| B4 | start and end image, 81 frames, 480x832 | 9,241 of 11,500 |
+
+The owner rated the clips on the phone (answered 2026-11-27 evening local, 2026-11-28 UTC; recorded as V1-3
+acceptance). A1-A3: follows the driver, same person, natural motion and keep all **yes**. B1-B4: starts on the start
+picture, ends on the end picture, same person and natural motion all **yes**; keep **yes** for B2-B4 and **partly** for
+B1 ("Slight aberration on shirt design partway through, causes a flicker."), a quality note and not a blocker. Limits:
+one clip per case, one seed, not blind, not run from the app. This is not a ledger QUALIFIED verdict and changes no
+workflow's governance state: both stay experimental.
+
+Evidence stays outside the repository, on the owner's PC: `runs/20261127T235311Z/evidence.json` in the V1-3 acceptance
+folder (SHA-256 `daed151479aaa801db2110b9034e1bc986b963e714cfe74cd0e69ea7c00a5143`), and the rating answers
+`v1-3-driver-a1-a3` and `v1-3-endframe-b1-b4`.
+
 ## 15. V1-6 Continue a clip
 
 Started 2026-11-27 on `claude/v1-6-continue-clip` from `origin/main` `7b5c0a9e` (requested by the orchestrator; the owner
@@ -488,12 +513,37 @@ how long, on the desktop or the phone, and finds the result in the same Storyboa
 **Deviations from 5.8, left for later:** browsing to a video made outside StableNew stays in the Storyboard tab (its
 import asks its own questions); the phone has no length or frame picker.
 
-**Evidence boundary.** Offline tests only. No Storyboard or A14B continuation has run on hardware (3.3), so V1-6 claims
-nothing about how a continued clip looks until a GPU plan is run with the owner's OK.
+**Evidence boundary.** Continuations have run on hardware once, in an eval harness (below). The clips are unrated, so
+V1-6 claims nothing about how a continued clip looks.
 
 **First physical run (2026-11-28, eval harness, stopped).** The source clip completed; the first continuation was
 refused before generation, because the GPU readiness check counted the memory of the still-warm ComfyUI as another
 program's. Sequence segments now get the standalone jobs' verified warm reuse (`docs/Subsystems/Video/VIDEO_PIPELINE.md`,
-GPU readiness on a warm runtime). No continuation has completed on hardware yet.
+GPU readiness on a warm runtime).
+
+**Rerun (2026-11-28, eval harness, 7 of 7 completed).** Code `5b91600a`, owner's OK, RTX 4070 Ti 12 GB, stock source
+picture, outputs 480x832. The engine was **A14B 1.0.0** (standard attention), selected by hand, not the CK-attention
+Make Video default. The source clip C1 was made again, so C2 started on its still-warm ComfyUI. No retry, no stop rule
+tripped (11,500 MiB, out of memory, device loss, `nvlddmkm`), minimum free host RAM 5.68 GiB.
+
+| Case | What ran | Peak VRAM (MiB) | Wall (s) |
+|---|---|---|---|
+| C1 | prompt-only source clip, 49 frames | 11,163 | 150.5 |
+| C2 | continue C1 (reused the warm ComfyUI) | 11,387 | 100.0 |
+| C3 | continue C2 | **11,451** | 150.8 |
+| C4 | branch from frame 25 of C1 | 11,196 | 141.2 |
+| C5 | the phone's continue action on C2, run on the PC, no new words | 10,876 | 146.6 |
+| C6a | Wan-Animate-2 1.3.0 driving-video clip, 33 frames | 11,126 | 122.2 |
+| C6 | continue as prompt-only motion from C6a's last frame | 10,748 | 118.8 |
+
+- **Headroom is small.** C3's 11,451 MiB is 49 MiB under the 11,500 MiB stop line.
+- C2's readiness record says `vram_check: skipped_owned_warm_reuse`, with 6,267 MiB in use when the job started. C3,
+  C4 and C5 started after a sequence had released ComfyUI, so only C2 exercised the warm reuse.
+- C2 to C5: the handoff picture matches the recorded parent frame, the stitched cut keeps it and decodes. C6 was refused
+  a Storyboard take, and its source matches C6a's last frame.
+- **Not exercised:** the real phone screen and gateway transport; the app's own panels (History, Storyboard tab);
+  Continue queued behind a still-running clip; continuing a clip made with the CK-attention default; any size other
+  than 480x832.
+- The joins are registered as a phone rating sitting; unrated at the time of writing.
 
 **Stop conditions.** Section 12's, plus any change to sequence admission or the sequence plan schema.
