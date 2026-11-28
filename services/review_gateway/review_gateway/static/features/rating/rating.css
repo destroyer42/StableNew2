@@ -1,4 +1,4 @@
-/* RG-170 "To rate": the home-screen entry and the rating view. Colours and the .run, .chip and .tools classes are app.css's. */
+/* RG-170 "To rate": the home-screen entry and the rating view. Colours and the .run, .chip and .tools classes are core/core.css's. */
 .rt-count {
   display: inline-block;
   min-width: 1.4rem;

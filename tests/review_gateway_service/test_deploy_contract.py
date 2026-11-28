@@ -130,6 +130,17 @@ def test_the_installer_creates_a_certificate_once_and_prints_its_fingerprint() -
     assert 'sync_tls_cert = "$ETC/sync.crt"' in script and "# sync_tls_cert" not in script
 
 
+def test_the_installer_installs_the_whole_page_tree() -> None:
+    script = read("install.sh")
+
+    # The page has directories, which a flat "install static/*" would stop on.
+    assert any(path.is_dir() for path in (PACKAGE / "static").iterdir())
+    assert 'cp -R "$SOURCE/review_gateway/static/." "$APP/review_gateway/static/"' in script
+    assert 'find "$APP/review_gateway/static" -type d -exec chmod 0755 {} +' in script
+    assert 'find "$APP/review_gateway/static" -type f -exec chmod 0644 {} +' in script
+    assert "static/*" not in script
+
+
 def test_an_upgrade_is_built_and_checked_before_the_running_service_is_touched() -> None:
     script = read("install.sh")
 

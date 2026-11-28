@@ -737,6 +737,12 @@ PC-0 adds only tests and CI, so it can start now on `main`.
 | **PS-1 staging (deferred, OD-7)** | `--target` in `tools.review_gateway_deploy`, separate staging settings, `tools.review_gateway_stage seed/reset` reusing the PC-0 seeder, the "Staging" header label from gateway config, a runbook section, the owner steps of section 6. | Tool tests (closed target set, settings isolation: the app's sync settings are never read or written). After the owner's Proxmox steps: one deploy to staging and one promotion of the same SHA, recorded. | Owner time on Proxmox. Settings mix-up (separate file and name, tests). | M | Deferred by the owner. When wanted: after PC-0 (seeder), parallel with everything. |
 | **PP-1 QR re-pair** | Desktop pairing dialog QR (`src/app` dialog, no new dependency if a QR encoder is already pinned, else a tiny vendored one, owner check), phone `#/pair/<code>` prefill and fragment removal, `last_seen_at` in `enrolled_devices` and the desktop list. | A Tk test that the dialog renders the QR. e2e: the fragment prefills and is removed from history. Sync contract test for the additive field. | QR library supply chain. | S-M | After PC-2(f). Parallel with PW and PO. |
 
+**As built, PC-1a** (the boundary with PC-1b moved on the owner's orchestrator brief): PC-1a already put the code into
+`core/` and `features/<id>/`, moved verbatim, with shared state behind functions and every call a direct `import`,
+including core-to-feature and feature-to-feature ones. PC-1b keeps the rest of its row: `feature.js` entries, slots,
+hooks and the bus in place of those imports (else `legacyImports`), the server-written feature list and stylesheet
+links, the remaining core modules, and the size caps.
+
 Order on the critical path:
 
 ```

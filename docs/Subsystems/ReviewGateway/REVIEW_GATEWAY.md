@@ -39,9 +39,26 @@ Immich after an explicit Keep (RG-100 invariant 5).
 | `phone_app.py` | Phone web app and API, loopback `:8443`, published by `tailscale serve` |
 | `sync_app.py` | PC-facing API, one LAN address `:9443`, TLS, bearer sync secret |
 | `config.py`, `server.py`, `__main__.py` | Settings and listener rules, the two servers, the admin CLI |
-| `static/` | Bundled front end; no CDN, no inline script or style |
+| `static_files.py` | The closed table of page files and their version, read once at start |
+| `static/` | Bundled front end as native ES modules, no build step; no CDN, no inline script or style |
 
 The gateway never compiles, admits or decides anything. It has no job, lifecycle, review-evidence or file-path concept.
+
+**The page's files** (PHONE-CORE PC-1a; design
+`docs/work_packages/PHONE-CORE_installable_offline_phone_app.md`):
+
+- `static/core/` holds what every screen shares (start-up, DOM, API, router, store, outbox, session, wording).
+  `static/features/<id>/` holds one screen or feature each. `index.html` loads one module, `core/main.js`; every import
+  is relative.
+- Shared state is read and changed through functions (`core/store.js`, `core/router.js`, `core/session.js`). Until
+  PC-1b adds slots and hooks, modules call each other by direct import, including between features.
+- At start the phone app reads `static/` once. Only `.js`, `.css`, `.png`, `.svg` and `.webmanifest` files are
+  published. The version is 12 hex digits of a SHA-256 over their paths and digests and the `index.html` template.
+- `GET /` is `index.html` with that version written in (`no-cache`). `GET /s/<version>/<path>` answers from the table
+  only, `public, max-age=31536000, immutable`; any other version or path is 404. `GET /s/<version>/files.json` lists
+  each path with its SHA-256. The old `/static/...` addresses are gone.
+- `GET /api/session` also returns `static_version` and `commit` (the release's `source.json`, or `dev`).
+- `install.sh` copies the whole `static/` tree.
 
 ## 2. Sync HTTP binding (v1)
 
@@ -255,7 +272,7 @@ all read only; a reprocess or clip job takes pack and prompt from the job of its
 travel as the manifest's optional `info`, a closed list of bounded fields with paths reduced to their last part, only
 to a gateway that lists `item_info`. Short names come from `src/pipeline/output_naming.py` and
 `config/output_model_names.json`. An item published without `info` shows what it already has (model, batch, seed,
-date); items already on the phone are not published again for it. The page's code is `static/moreinfo.js`.
+date); items already on the phone are not published again for it. The page's code is `static/features/info/moreinfo.js`.
 A file named by the descriptive scheme (NAME-INFO slice 2) also sends its name (only to a gateway that lists
 `item_file_name`), and Immich uploads under it; no other file name and no folder leaves the PC.
 
@@ -327,6 +344,10 @@ are not purged.
 dependencies are exact pins in `requirements-dev.txt` that a test holds equal to the gateway's lock. Immich is a small
 fake HTTP server on loopback (`fake_immich.py`) with the request and reply shapes read from Immich's v2.0.0 and v3.4.2
 sources; no real Immich has been used.
+
+`test_static_serving.py` covers the page-file table, its version, traversal refusal and the session fields.
+`test_static_rules.py` reads the page's files: no markup sinks or inline handlers, every import resolves inside
+`static/` to a name its target exports, and no module exports a binding that changes.
 
 **The phone page in a real browser** (PHONE-CORE PC-0, `tests/phone_e2e/`):
 
@@ -547,7 +568,7 @@ its state: to rate, partly done, waiting for the PC, done, or not accepted with 
 yes/no scores per clip, an N-way ordering, and a pick-one question. Answers are saved per item as they are given.
 **Submit** is explicit and final; the PC then writes the eval's own file and sends back the reveal.
 
-**Navigation hook** (`static/rating.js`). `Rating.entry(unavailable)` returns the full-width "To rate" button with its
+**Navigation hook** (`static/features/rating/rating.js`). Its `entry(unavailable)` returns the full-width "To rate" button with its
 open-count badge; the home screen puts it above the review folders. On a gateway without rating tasks it hides itself
 and calls `unavailable`. The hash routes under `#/rate` belong to ratings. Evaluation runs appear only here, never
 as a review folder.
