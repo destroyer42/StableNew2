@@ -80,16 +80,7 @@ button {
 .muted { color: var(--muted); }
 .error { color: #ff8a84; min-height: 1.4em; }
 
-/* pairing */
-.pair { display: grid; gap: 0.75rem; max-width: 22rem; margin: 2rem auto; }
-.pair input {
-  width: 100%;
-  padding: 0.75rem;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 0.6rem;
-}
-.pair .code { font-size: 1.6rem; letter-spacing: 0.2em; text-align: center; text-transform: uppercase; }
+/* the main button: shared */
 .primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
 
 /* cards, chips and covers: shared */
@@ -157,9 +148,7 @@ button {
   overflow-wrap: anywhere;
   touch-action: pan-y;
 }
-.info a { color: var(--accent); }
 .info button { margin-right: 0.5rem; }
-.info h2 { font-size: 0.95rem; margin: 0.6rem 0 0.2rem; }
 .actions {
   display: grid;
   grid-template-columns: 3rem 1fr 1fr 1fr 3rem;
@@ -201,14 +190,8 @@ button {
 .warning { margin: 0.6rem 0; padding: 0.5rem 0.6rem; border-left: 3px solid var(--favorite); background: var(--bg); }
 .warning-title { font-weight: 600; color: var(--favorite); }
 
-/* Remote update (LAUNCH-UPDATE-2) */
-.pc-link { width: 100%; margin-bottom: 0.75rem; }
-.run.pc { cursor: default; }
-.run.pc p { margin: 0.25rem 0; overflow-wrap: anywhere; }
+/* a screen's main button and its section headings: shared */
 #view > .primary { width: 100%; min-height: 3rem; }
-.updates { list-style: none; margin: 0; padding: 0; }
-.updates li { border-top: 1px solid var(--line); padding: 0.5rem 0; }
-.updates p { margin: 0.15rem 0; overflow-wrap: anywhere; }
 .section-title { font-size: 1rem; margin: 1rem 0 0.25rem; }
 
 /* PHONE-FAST: the last decision can be taken back for a few seconds */

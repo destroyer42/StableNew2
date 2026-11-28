@@ -1,6 +1,7 @@
 // The To rate tab (RG-170).
 
-import { entry, flush, route } from "./rating.js";
+import { flush } from "./answers.js";
+import { entry, route } from "./rating.js";
 
 export default {
   id: "rating",

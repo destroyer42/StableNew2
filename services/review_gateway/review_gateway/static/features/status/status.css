@@ -1,0 +1,7 @@
+/* Remote update (LAUNCH-UPDATE-2): the home-screen link and the Update the PC screen. Colours and .run are core/core.css's. */
+.pc-link { width: 100%; margin-bottom: 0.75rem; }
+.run.pc { cursor: default; }
+.run.pc p { margin: 0.25rem 0; overflow-wrap: anywhere; }
+.updates { list-style: none; margin: 0; padding: 0; }
+.updates li { border-top: 1px solid var(--line); padding: 0.5rem 0; }
+.updates p { margin: 0.15rem 0; overflow-wrap: anywhere; }

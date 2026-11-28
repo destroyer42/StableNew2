@@ -1,0 +1,3 @@
+/* NAME-INFO: what "More info" lists. The panel itself (.info) is core/core.css's: triage and compare use it too. */
+.moreinfo a { color: var(--accent); }
+.moreinfo h2 { font-size: 0.95rem; margin: 0.6rem 0 0.2rem; }
