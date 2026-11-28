@@ -7,6 +7,7 @@ substitution in the server, not a build; development, tests and production use t
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,10 @@ MEDIA_TYPES = {
 }
 TEMPLATE = "index.html"
 VERSION_MARK = "{{V}}"
+FEATURES_MARK = "{{FEATURES}}"
+STYLES_MARK = "{{STYLES}}"
+#: The ``order`` a feature's entry gives itself (``features/<id>/feature.js``).
+_ORDER = re.compile(rb"^\s*order:\s*(\d+),", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -37,8 +42,20 @@ class StaticSite:
     version: str
     #: Published path ("core/main.js") to file.
     files: Mapping[str, StaticFile]
-    #: ``index.html`` with the version written into it.
+    #: ``index.html`` with the version, the features and their stylesheets written into it.
     index: bytes
+
+
+def feature_ids(files: Mapping[str, StaticFile]) -> list[str]:
+    """The features that have an entry, by their own ``order``: it orders their slots and their stylesheets."""
+
+    found = []
+    for name, file in files.items():
+        parts = name.split("/")
+        if len(parts) == 3 and parts[0] == "features" and parts[2] == "feature.js":
+            order = _ORDER.search(file.body)
+            found.append((int(order[1]) if order else 0, parts[1]))
+    return [feature for _order, feature in sorted(found)]
 
 
 def load_static(root: Path = STATIC_DIR) -> StaticSite:
@@ -56,4 +73,15 @@ def load_static(root: Path = STATIC_DIR) -> StaticSite:
     named[TEMPLATE] = hashlib.sha256(template).hexdigest()
     listing = "".join(f"{name}\0{digest}\n" for name, digest in sorted(named.items()))
     version = hashlib.sha256(listing.encode("utf-8")).hexdigest()[:12]
-    return StaticSite(version, files, template.replace(VERSION_MARK.encode(), version.encode()))
+    features = feature_ids(files)
+    styles = "\n  ".join(
+        f'<link rel="stylesheet" href="/s/{version}/features/{name}/{name}.css">'
+        for name in features
+        if f"features/{name}/{name}.css" in files
+    )
+    index = (
+        template.replace(VERSION_MARK.encode(), version.encode())
+        .replace(FEATURES_MARK.encode(), ",".join(features).encode())
+        .replace(STYLES_MARK.encode(), styles.encode())
+    )
+    return StaticSite(version, files, index)

@@ -1,17 +1,14 @@
 // The triage stream: one item at a time, swipes, reason tags and the three choices.
 
+import { bus } from "../../core/bus.js";
 import { el, show, toast } from "../../core/dom.js";
 import { PREFETCH, mediaElement, prefetch } from "../../core/media.js";
-import { NOT_SAVED, decideUndoably } from "../../core/outbox.js";
-import { currentSerial, leaving } from "../../core/router.js";
+import { NOT_SAVED, decideUndoably, queueDecision } from "../../core/outbox.js";
+import { leaving } from "../../core/router.js";
 import { loadScopes } from "../../core/session.js";
-import { currentFilter, currentTriage, loadRun, needsReview, setTriage } from "../../core/store.js";
+import { slots } from "../../core/slots.js";
+import { currentFilter, currentTriage, key, loadRun, needsReview, setTriage } from "../../core/store.js";
 import { REASONS, isStream, runName } from "../../core/text.js";
-import { actionRow } from "../actions/actions.js";
-import { renderCompare } from "../compare/compare.js";
-import { renderGrid } from "../inbox/inbox.js";
-import { infoPanel } from "../info/moreinfo.js";
-import * as Queued from "../queued/queued.js";
 import { doubleTaps, openViewer } from "./viewer.js";
 
 const TAGS = [
@@ -25,15 +22,15 @@ const TAGS = [
 
 // --- triage -------------------------------------------------------------------------------------------------------
 
-export async function showTriage(runId, libraryId, serial) {
+export async function showTriage(runId, libraryId, view) {
   await loadScopes();
   const items = await loadRun(runId);
-  if (serial !== currentSerial()) return;
+  if (!view.alive()) return;
   const todo = items.filter(needsReview);
   const useTodo = currentFilter() === "todo" && todo.length && (!libraryId || todo.some((i) => i.library_id === libraryId));
   const list = useTodo ? todo : items;
   if (!list.length) {
-    renderGrid(runId);
+    bus.emit("grid:wanted", runId);
     return;
   }
   const index = Math.max(0, list.findIndex((item) => item.library_id === libraryId));
@@ -61,7 +58,7 @@ export function updateTriageStatus() {
   const triage = currentTriage();
   if (!triage || !node) return;
   const item = triage.list[triage.index];
-  node.textContent = statusText(item) + Queued.suffix(item);
+  node.textContent = statusText(item) + slots.render("item.status", { item }).join("");
   node.className = item.state === "refused" || item.state === "rejected" ? "refused" : "";
 }
 
@@ -125,10 +122,12 @@ export function renderItem() {
   const item = list[index];
   triage.tags = new Set(item.decision ? item.decision.tags : []);
   history.replaceState(null, "", `#/triage/${encodeURIComponent(runId)}/${item.library_id}`);
-  if (item.compare && needsReview(item)) return renderCompare(item);
+  // Another feature may show this item its own way (a compare); it gets the triage's controls to do it with.
+  const controls = { step, advance, rerender: renderItem, showStatus: updateTriageStatus, doubleTaps, openViewer };
+  if (slots.claim("item.view", { item, ...controls })) return;
 
   const media = mediaElement(item);
-  const info = infoPanel(item);
+  const [info] = slots.render("item.info", { item });
   const stage = el("div", { class: "stage" }, [media, info]);
   attachSwipe(stage, media, info, item);
 
@@ -194,7 +193,7 @@ export function renderItem() {
       ]),
       stage,
       tags,
-      actionRow(item),
+      ...slots.render("item.tools", { item }),
       el("div", { class: "actions" }, [
         previous,
         ...choices,
@@ -222,9 +221,8 @@ function decide(verdict, favorite, confirmed = false) {
     return;
   }
   const item = triage.list[triage.index];
-  if (verdict === "delete" && !confirmed && Queued.waitingOn(item)) {
-    return Queued.confirmDelete(() => decide(verdict, favorite, true));
-  }
+  const warning = verdict === "delete" && !confirmed && slots.claim("delete.warn", { items: [item] });
+  if (warning) return warning.confirm(() => decide(verdict, favorite, true));
   const tags = [...triage.tags].filter((tag) => !(verdict === "delete" && tag === "needs_fix"));
   decideUndoably([[item, verdict, favorite, tags]]);
   if (navigator.vibrate) navigator.vibrate(15);
@@ -242,4 +240,40 @@ export function advance() {
     toast(isStream(triage.runId) ? "Nothing more to review" : "End of this run");
     location.hash = leaving(triage.runId);
   }
+}
+
+// An action says what is wrong with the image: switch those reason tags on, and resend a Keep already made for it.
+export function addTags(item, wanted) {
+  const triage = currentTriage();
+  if (!triage || triage.list[triage.index] !== item) return;
+  const before = triage.tags.size;
+  for (const tag of wanted) triage.tags.add(tag);
+  for (const button of document.querySelectorAll(".tags button[data-tag]")) {
+    button.setAttribute("aria-pressed", String(triage.tags.has(button.dataset.tag)));
+  }
+  const decision = item.decision;
+  if (triage.tags.size !== before && decision && decision.verdict === "keep") {
+    queueDecision(item, "keep", decision.favorite, [...triage.tags]);
+    updateTriageStatus();
+  }
+}
+
+// The sheet of a rework was closed: if its item is still on screen, review moves on.
+export function moveOnAfterRework(item) {
+  const triage = currentTriage();
+  if (triage && key(triage.list[triage.index]) === key(item) && item.state === "rework") advance();
+}
+
+// The periodic refresh keeps the item on screen and only brings its rows up to date, so the scroll stays put.
+export async function refreshTriage(view) {
+  if (!currentTriage()) return false;
+  const fresh = await loadRun(currentTriage().runId);
+  if (!view.alive() || !currentTriage()) return false;
+  const latest = new Map(fresh.map((item) => [key(item), item]));
+  for (const item of currentTriage().list) {
+    const found = latest.get(key(item));
+    if (found) Object.assign(item, found);
+  }
+  updateTriageStatus();
+  return false;
 }

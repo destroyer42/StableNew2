@@ -2,7 +2,7 @@
 
 import { ApiError, api, idempotencyKey } from "../../core/api.js";
 import { el, show, toast } from "../../core/dom.js";
-import { currentSerial, refresh, route } from "../../core/router.js";
+import { refresh, route } from "../../core/router.js";
 import { canUpdate, loadScopes } from "../../core/session.js";
 import { STATUS_STALE_MS } from "../../core/status.js";
 import { REASONS, ago, duration } from "../../core/text.js";
@@ -124,11 +124,11 @@ async function sendUpdate(sha) {
 
 let updateTimer = 0;
 
-export async function showUpdate(serial) {
+export async function showUpdate(view) {
   await loadScopes();
   if (!canUpdate()) throw new ApiError(403, "not_granted");
   const data = await api("/api/admin");
-  if (serial !== currentSerial()) return;
+  if (!view.alive()) return;
   const status = data.pc_status;
   const nodes = [];
   const pending = data.requests.some((request) => request.state === "pending");
@@ -204,7 +204,13 @@ export async function showUpdate(serial) {
   clearTimeout(updateTimer);
   if (pending || (status && status.update.state === "in_progress")) {
     updateTimer = setTimeout(() => {
-      if (serial === currentSerial() && !document.hidden) refresh();
+      if (view.alive() && !document.hidden) refresh();
     }, UPDATE_POLL_MS);
   }
 }
+
+// Only a phone paired for remote update is offered it.
+export const updateLink = () =>
+  canUpdate()
+    ? el("button", { type: "button", class: "pc-link", text: "Update the PC…", onclick: () => (location.hash = "#/update") })
+    : null;

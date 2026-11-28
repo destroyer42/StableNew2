@@ -4,13 +4,9 @@ import { el, show, toast } from "../../core/dom.js";
 import { PREFETCH, mediaUrl, prefetch } from "../../core/media.js";
 import { decideUndoably } from "../../core/outbox.js";
 import { readSetting, writeSetting } from "../../core/settings.js";
+import { slots } from "../../core/slots.js";
 import { currentTriage } from "../../core/store.js";
 import { runName } from "../../core/text.js";
-import { actionRow } from "../actions/actions.js";
-import { infoPanel } from "../info/moreinfo.js";
-import * as Queued from "../queued/queued.js";
-import { advance, renderItem, step, updateTriageStatus } from "../triage/triage.js";
-import { doubleTaps, openViewer } from "../triage/viewer.js";
 
 // --- compare a rework with its original (PHONE-FAST) --------------------------------------------------------------
 // Three views, the phone's choice: side by side (tap one to see it alone), flip (tap or swipe) and a before/after
@@ -22,7 +18,7 @@ const COMPARE_MODES = [
   ["slider", "Slider"],
 ];
 
-export function renderCompare(item) {
+export function renderCompare({ item, step, advance, rerender, showStatus, doubleTaps, openViewer }) {
   const triage = currentTriage();
   const { list, index, runId } = triage;
   const original = item.compare;
@@ -119,9 +115,9 @@ export function renderCompare(item) {
   const button = (className, text, onclick) =>
     el("button", { type: "button", class: className, text, "aria-label": text, onclick });
   const choices = [
-    button("keep", "Keep original", () => pick(original, item)),
-    button("keep", `Keep ${result.toLowerCase()}`, () => pick(item, original)),
-    button("keep", "Keep both", () => pick(item, original, true)),
+    button("keep", "Keep original", () => pick(advance, original, item)),
+    button("keep", `Keep ${result.toLowerCase()}`, () => pick(advance, item, original)),
+    button("keep", "Keep both", () => pick(advance, item, original, true)),
   ];
   const allow = () => {
     if (currentTriage() !== current || current.list[current.index] !== item) return;
@@ -139,14 +135,14 @@ export function renderCompare(item) {
         stage.append(
           el("div", { class: "info" }, [
             el("p", { text: "One of the two could not be loaded." }),
-            el("button", { type: "button", class: "primary", text: "Try again", onclick: renderItem }),
+            el("button", { type: "button", class: "primary", text: "Try again", onclick: rerender }),
             el("button", { type: "button", text: "Decide without seeing it", onclick: allow }),
           ]),
         ),
       { once: true },
     );
   }
-  const info = infoPanel(item, original);
+  const [info] = slots.render("item.info", { item, other: original });
   stage.append(info);
   const previous = button("", "‹", () => step(-1));
   previous.disabled = index === 0;
@@ -162,24 +158,23 @@ export function renderCompare(item) {
       ]),
       el("div", { class: "modes", role: "group", "aria-label": "Compare view" }, toggles),
       stage,
-      actionRow(item),
+      ...slots.render("item.tools", { item }),
       el("div", { class: "actions compare-actions" }, [previous, ...choices, next]),
     ]),
   );
-  updateTriageStatus();
+  showStatus();
   prefetch(list.slice(index + 1, index + 1 + PREFETCH));
 }
 
-function pick(winner, loser, both = false, confirmed = false) {
+function pick(advance, winner, loser, both = false, confirmed = false) {
   const triage = currentTriage();
   if (!triage || Date.now() < triage.lockedUntil) return;
   if (!triage.ready) {
     toast("Still loading");
     return;
   }
-  if (!both && !confirmed && Queued.waitingOn(loser)) {
-    return Queued.confirmDelete(() => pick(winner, loser, false, true));
-  }
+  const warning = !both && !confirmed && slots.claim("delete.warn", { items: [loser] });
+  if (warning) return warning.confirm(() => pick(advance, winner, loser, false, true));
   decideUndoably(
     [
       [winner, "keep"],

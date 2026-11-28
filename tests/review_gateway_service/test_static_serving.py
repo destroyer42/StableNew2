@@ -90,6 +90,48 @@ def tree(root: Path, files: dict[str, bytes]) -> Path:
     return root
 
 
+def test_the_page_names_its_features_and_links_their_styles_in_that_order(rig) -> None:
+    index = rig.phone.get("/").text
+
+    listed = re.search(r'<meta name="rg-features" content="([a-z,]+)">', index)
+    assert listed, "the page names its features"
+    names = listed[1].split(",")
+    assert sorted(names) == sorted(
+        path.name for path in (STATIC_DIR / "features").iterdir() if path.is_dir()
+    )
+    version = version_of(rig)
+    assert re.findall(r'<link rel="stylesheet" href="([^"]+)">', index) == [
+        f"/s/{version}/core/core.css",
+        *(
+            f"/s/{version}/features/{name}/{name}.css"
+            for name in names
+            if (STATIC_DIR / "features" / name / f"{name}.css").is_file()
+        ),
+    ]
+
+
+def test_features_are_listed_by_their_own_order_and_only_with_an_entry(tmp_path) -> None:
+    root = tree(
+        tmp_path / "static",
+        {
+            "index.html": b'<meta content="{{FEATURES}}">\n{{STYLES}}',
+            "features/late/feature.js": b"export default {\n  id: 'late',\n  order: 90,\n};\n",
+            "features/late/late.css": b"a{}",
+            "features/early/feature.js": b"export default {\n  id: 'early',\n  order: 5,\n};\n",
+            "features/early/early.css": b"b{}",
+            "features/helpers/only.js": b"export const x = 1;\n",
+        },
+    )
+
+    site = load_static(root)
+
+    assert site.index.decode() == (
+        '<meta content="early,late">\n'
+        f'<link rel="stylesheet" href="/s/{site.version}/features/early/early.css">\n'
+        f'  <link rel="stylesheet" href="/s/{site.version}/features/late/late.css">'
+    )
+
+
 def test_the_version_changes_exactly_when_a_published_byte_or_the_template_does(tmp_path) -> None:
     files = {"index.html": b"<a href='/s/{{V}}/core/main.js'>", "core/main.js": b"one"}
     root = tree(tmp_path / "static", files)

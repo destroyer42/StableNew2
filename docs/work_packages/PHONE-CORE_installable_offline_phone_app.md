@@ -208,6 +208,7 @@ any --403 not_granted on /api/session--> forbidden
 | `action.open` | claim | actions | queued claims the action when the PC is away or a prepare times out (RG-160 `offer`, `unreachable`) |
 | `delete.warn` | ask | inbox, triage, compare | queued ("N have a request waiting. Deleting cancels it.") |
 | `items.overlay` | ask | core store | queued (RG-160 `overlay`) |
+| `home.prepare` (added in PC-1b) | ask | inbox | queued (reads what waits before the home screen is drawn) |
 
 The slot table is in `core/slots.js`. Adding a slot is a core change. PC-1b defines every slot above, so the feature
 extractions in PC-2 need no core edit.
@@ -742,6 +743,12 @@ PC-0 adds only tests and CI, so it can start now on `main`.
 including core-to-feature and feature-to-feature ones. PC-1b keeps the rest of its row: `feature.js` entries, slots,
 hooks and the bus in place of those imports (else `legacyImports`), the server-written feature list and stylesheet
 links, the remaining core modules, and the size caps.
+
+**As built, PC-1b:** no feature declares `legacyImports`. Calls with no slot became bus topics (`core/bus.js` lists them)
+or moved into the core: the action wording to `core/catalog.js`, the rework state changes to `core/store.js`. Routes
+are registered from each `feature.js`; `compare` gets the triage's controls through its `item.view` claim. `queued.js`
+and `rating.js` are on the cap exception list for PC-2 to split. The core pieces that belong to later slices (`idb`,
+`sw-client`, the session states, `settings.for`) are not built, and saved settings keep their keys.
 
 Order on the critical path:
 

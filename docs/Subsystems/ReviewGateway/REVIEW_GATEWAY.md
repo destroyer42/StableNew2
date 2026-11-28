@@ -44,19 +44,26 @@ Immich after an explicit Keep (RG-100 invariant 5).
 
 The gateway never compiles, admits or decides anything. It has no job, lifecycle, review-evidence or file-path concept.
 
-**The page's files** (PHONE-CORE PC-1a; design
+**The page's files** (PHONE-CORE PC-1a and PC-1b; design
 `docs/work_packages/PHONE-CORE_installable_offline_phone_app.md`):
 
-- `static/core/` holds what every screen shares (start-up, DOM, API, router, store, outbox, session, wording).
-  `static/features/<id>/` holds one screen or feature each. `index.html` loads one module, `core/main.js`; every import
-  is relative.
-- Shared state is read and changed through functions (`core/store.js`, `core/router.js`, `core/session.js`). Until
-  PC-1b adds slots and hooks, modules call each other by direct import, including between features.
+- `static/core/` holds what every screen shares (start-up, DOM, API, router, store, outbox, session, wording, slots
+  and the bus). `static/features/<id>/` holds one screen or feature each, entered through its `feature.js`
+  (`id`, `order`, `routes`, `start(core)`). `index.html` loads one module, `core/main.js`, which imports every feature
+  named in `<meta name="rg-features">` before the first screen; every import is relative.
+- A feature imports only `core/` and its own directory, and the core imports no feature. Features meet through named
+  slots (`core/slots.js`: render, ask, claim), notifications (`core/bus.js`, no return values) and the route table
+  (`core/router.js`). Slot contributions run in feature `order`. Adding a slot or a topic is a core change.
+- Shared state is read and changed through functions (`core/store.js`, `core/router.js`, `core/session.js`).
+- Caps: 300 lines a core file, 400 a feature file; `queued.js` and `rating.js` are listed exceptions that may only
+  shrink.
 - At start the phone app reads `static/` once. Only `.js`, `.css`, `.png`, `.svg` and `.webmanifest` files are
   published. The version is 12 hex digits of a SHA-256 over their paths and digests and the `index.html` template.
-- `GET /` is `index.html` with that version written in (`no-cache`). `GET /s/<version>/<path>` answers from the table
-  only, `public, max-age=31536000, immutable`; any other version or path is 404. `GET /s/<version>/files.json` lists
-  each path with its SHA-256. The old `/static/...` addresses are gone.
+- `GET /` is `index.html` with that version, the feature names and each feature's `<id>.css` written in, in feature
+  `order` (`no-cache`).
+- `GET /s/<version>/<path>` answers from the table only, `public, max-age=31536000, immutable`; any other version or
+  path is 404. `GET /s/<version>/files.json` lists each path with its SHA-256. The old `/static/...` addresses are
+  gone.
 - `GET /api/session` also returns `static_version` and `commit` (the release's `source.json`, or `dev`).
 - `install.sh` copies the whole `static/` tree.
 
@@ -350,7 +357,8 @@ sources; no real Immich has been used.
 
 `test_static_serving.py` covers the page-file table, its version, traversal refusal and the session fields.
 `test_static_rules.py` reads the page's files: no markup sinks or inline handlers, every import resolves inside
-`static/` to a name its target exports, and no module exports a binding that changes.
+`static/` to a name its target exports, no module exports a binding that changes, the import boundary, a `feature.js`
+per feature and the size caps.
 
 **The phone page in a real browser** (PHONE-CORE PC-0, `tests/phone_e2e/`):
 

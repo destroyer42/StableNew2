@@ -82,6 +82,6 @@ def test_the_page_has_more_info_on_both_views(rig) -> None:
     triage = (STATIC / "features/triage/triage.js").read_text(encoding="utf-8")
     compare = (STATIC / "features/compare/compare.js").read_text(encoding="utf-8")
     assert triage.count("· More info`") == 1 and compare.count("· More info`") == 1
-    assert "infoPanel(item, original)" in compare
+    assert 'slots.render("item.info", { item, other: original })' in compare
     version = rig.phone.get("/").text.split("/s/", 1)[1].split("/", 1)[0]
     assert rig.phone.get(f"/s/{version}/features/info/moreinfo.js").status_code == 200

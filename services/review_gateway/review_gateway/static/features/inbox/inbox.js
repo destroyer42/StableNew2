@@ -4,14 +4,12 @@ import { api } from "../../core/api.js";
 import { closeSheet, el, sheet, show, toast } from "../../core/dom.js";
 import { mediaUrl } from "../../core/media.js";
 import { queueDecision, releaseHeld } from "../../core/outbox.js";
-import { currentSerial, route, setSection } from "../../core/router.js";
-import { canUpdate, loadScopes } from "../../core/session.js";
+import { route, setSection } from "../../core/router.js";
+import { loadScopes } from "../../core/session.js";
 import { readSetting, writeSetting } from "../../core/settings.js";
+import { slots } from "../../core/slots.js";
 import { currentFilter, itemsOf, loadRun, needsReview, setFilter, setGroupName } from "../../core/store.js";
 import { SECTIONS, runName } from "../../core/text.js";
-import * as Queued from "../queued/queued.js";
-import * as Rating from "../rating/rating.js";
-import { statusLines } from "../status/status.js";
 
 const SEEN_KEY = "rg.seen"; // section -> the gateway's time when this phone last opened it
 const COUNT_KEY = "rg.count"; // "new" shows what arrived since then; otherwise what is left to review
@@ -36,11 +34,11 @@ function confirmDeleteRun(runId, items) {
   const reworked = items.filter((item) => item.state === "rework").length;
   const stay = [kept ? `${kept} kept` : "", reworked ? `${reworked} in rework` : ""].filter(Boolean).join(" and ");
   const targets = items.filter(deletable);
-  const requests = targets.filter(Queued.waitingOn).length;
+  const warnings = slots.ask("delete.warn", { items: targets }).filter(Boolean);
   sheet(
     el("h2", { text: `Delete ${targets.length}?` }),
     el("p", { text: `The files go to the PC's archive.${stay ? ` ${stay} stay.` : ""}` }),
-    requests ? el("p", { text: `${requests} have a request waiting. Deleting cancels it.` }) : null,
+    ...warnings.map((warning) => el("p", { text: warning.text })),
     el("div", { class: "sheet-actions" }, [
       el("button", { type: "button", text: "Cancel", onclick: closeSheet }),
       el("button", {
@@ -131,14 +129,14 @@ function sectionRow(entry, countNew) {
 }
 
 // The home screen: one row per source of outputs. The top row is where other review tabs sit.
-export async function showHome(serial) {
+export async function showHome(view) {
   const seen = readSetting(SEEN_KEY, {});
   const query = new URLSearchParams(seen).toString();
   const { sections } = await api(`/api/sections${query ? `?${query}` : ""}`);
   await loadScopes();
   const status = await api("/api/status").catch(() => null); // extra: the home screen shows without it
-  await Queued.sync();
-  if (serial !== currentSerial()) return;
+  await Promise.all(slots.ask("home.prepare"));
+  if (!view.alive()) return;
   const countNew = readSetting(COUNT_KEY, "todo") === "new";
   const counting = (value, text) =>
     el("button", {
@@ -151,24 +149,22 @@ export async function showHome(serial) {
       },
     });
   const waiting = sections.reduce((sum, entry) => sum + entry.unreviewed, 0);
-  const update = canUpdate()
-    ? el("button", { type: "button", class: "pc-link", text: "Update the PC…", onclick: () => (location.hash = "#/update") })
-    : null;
   const content = sections.length
     ? [
         el("div", { class: "tools counting" }, [counting("todo", "To review"), counting("new", "New since opened")]),
         ...sections.map((entry) => sectionRow(entry, countNew)),
       ]
     : [el("p", { class: "muted", text: "Nothing to review yet. Items appear after the PC syncs." })];
-  // RG-170: ratings sit above the folders. Eval clips are rated there and are never a folder here.
-  const rate = Rating.entry(() => rate.remove());
-  show("Review", false, ...[...statusLines(status), Queued.line(status), rate, reviewAllButton(waiting, "all"), ...content, update].filter(Boolean));
+  // Above the folders: the PC's state, what waits for it, and To rate. Eval clips are rated there, never a folder here.
+  const above = slots.render("home.top", { status });
+  const below = slots.render("home.bottom");
+  show("Review", false, ...[...above, reviewAllButton(waiting, "all"), ...content, ...below].filter(Boolean));
 }
 
-export async function showSection(name, serial) {
+export async function showSection(name, view) {
   const clock = await api("/api/status").catch(() => null); // asked first: nothing arriving meanwhile counts as seen
   const { runs } = await api(`/api/runs?source=${encodeURIComponent(name)}`);
-  if (serial !== currentSerial()) return;
+  if (!view.alive()) return;
   setSection(name);
   if (clock) writeSetting(SEEN_KEY, { ...readSetting(SEEN_KEY, {}), [name]: clock.now });
   const waiting = runs.reduce((sum, run) => sum + run.undecided + run.refused, 0);
@@ -199,7 +195,7 @@ function tile(runId, item) {
       STATE_BADGES[item.state]
         ? el("span", { class: `badge state ${item.state}`, text: STATE_BADGES[item.state] })
         : null,
-      Queued.mark(item),
+      ...slots.render("tile.marks", { item }),
     ],
   );
 }
@@ -251,7 +247,7 @@ export function renderGrid(runId) {
   );
 }
 
-export async function showRun(runId, serial) {
+export async function showRun(runId, view) {
   await loadRun(runId);
-  if (serial === currentSerial()) renderGrid(runId);
+  if (view.alive()) renderGrid(runId);
 }
