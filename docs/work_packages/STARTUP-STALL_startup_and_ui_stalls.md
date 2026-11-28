@@ -1,7 +1,9 @@
 # STARTUP-STALL: startup UI stall, WebUI startup window, stall attribution
 
 Status: built 2026-11-28 with deterministic tests; nothing run in the live app, no GPU. Base `origin/main` 841f9b49,
-branch `claude/startup-stall-4de886`. Owner picked this work on 2026-11-28.
+branch `claude/startup-stall-4de886`. Owner picked this work on 2026-11-28. The follow-up STARTUP-STALL-2
+(base 85a59f91, branch `claude/startup-stall-2-a56548`) is recorded below; it supersedes the table's state for
+groups C, E, H and I.
 
 Execution class: Standard. Model recommendation: Claude Code Sonnet 5.5 at high effort, or Codex equivalent.
 Controller surface: `webui_connection_controller.py` gains one read-only state projection and the service
@@ -74,13 +76,65 @@ DESK-QUICK (#464) left ten stalls with no Python frame above `mainloop`:
   shape add that Tk CPU is only 2-70 % of the observed time while process CPU is often above it, so other startup
   threads share the blame.
 
+## STARTUP-STALL-2 (built 2026-11-28; deterministic tests and a test harness only, nothing run in the live app)
+
+Execution class: Standard. Model recommendation: Claude Code Sonnet 5.5 at high effort, or Codex equivalent.
+Controller surface: `generation_profile_controller.py` splits one projection into a UI-thread read and a worker half; it
+is not ratcheted. No change to the canonical execution path.
+
+### Records on the #498 code (starts at 05:57, 06:38 and 08:00 on 2026-11-28)
+
+Startup stalls were still 1.2-4.9 s (before #498: up to 10.2 s). In the longest (4.86 s) the Tk thread used 0.03 s of
+CPU while the process used 4.16 s: it was waiting for the interpreter, not computing. Reproduced outside the app: 3,600
+small Tk calls take 1 ms alone and about 1.0 s beside one thread busy in pure Python. A startup stall is therefore
+roughly (number of Tk calls) x (the wait for each), and layout code shows in the samples because it is where Tk is
+calling, not because it is slow by itself.
+
+### Changes
+
+1. **Window-geometry handlers run for the root only** (`main_window_v2.py`). A binding on the Tk root also receives
+   every descendant's `<Configure>` and `<Map>`, so each widget re-checked the window's visibility. This also ran on
+   every later resize, tab switch and queue row change (samples in groups D, G and J show `wm_state`, `deletecommand`
+   and `winfo_screenwidth` under these handlers or their `after_idle`; the group D link is inference).
+
+   Test harness (3,003 widgets, isolated state, three runs each, other startup threads not controlled):
+
+   | | Before | After |
+   |---|---|---|
+   | Visibility handler calls, build + first update | 3,900 configure checks, 1,121 map checks | 4 and 1 |
+   | Tcl `call` + `createcommand`, build + first update | 41,700 | 19,800 |
+   | First `update()` wall, median | 2.33 s | 2.01 s |
+   | Visit every tab once, median wall | 6.87 s | 3.81 s |
+
+2. **Generation profile strip** (group I): working values are read on Tk; the profile store, evidence catalog and asset
+   registry reads run on a tracked worker, one at a time, newest result only. Behaviour change: the strip redraws a
+   moment after the edit instead of inside it. `AssetRegistry._load` now marks itself loaded only after loading.
+3. **AI Assist poll** (group H): availability and trust label are read on a worker once a second; a direct refresh
+   (an operator action) supersedes a poll still reading.
+4. **Completion stalls** (group E, records 15 and 21): still not attributed. What the logs do show:
+   - no lock-contention record has ever named the Tk thread, so the UI has not waited 0.5 s or more on
+     `job_repository`; no UI-side lock change was made;
+   - the 4.3-4.6 s hold of `job_repository.update_progress` occurred seven times and only two had a UI stall, so the
+     hold and the stall are probably two effects of one cause (a slow durable commit on a busy disk is the
+     hypothesis).
+   New instrumentation: a "UI thread stalled" record now carries `held_locks` (long holds seen while it lasted) and
+   `io` (disk MB written, disk write ms, this process's MB written); a "Lock contention" hold carries `cpu_s`. On a
+   recurrence: low `cpu_s` with high `disk_write_ms` means storage; `tk_cpu_s` near the stall length means Tcl was
+   busy; high `process_cpu_s` with low `tk_cpu_s` means interpreter starvation. It does not name a Tcl call site.
+
 ## Remaining, in order of size
 
-1. Group C, the startup map and layout fit (up to 10 s). Needs a design change to the compact fit and to how much work
-   starts together; not a small safe fix.
-2. The generation profile strip reads its store and hashes the asset registry path on Tk (group I).
-3. The AI Assist poll reads its settings file on Tk (group H).
-4. Groups F and G need more than one sample before changing anything.
+1. Startup interpreter starvation (the rest of group C). LoRA discovery, the video-eval catalog, the Site output index,
+   the review-gateway publish, the GPU telemetry process scan and photo/OpenPose listing all start with the first map.
+   Fewer Tk calls shorten the stall; it ends only if these start after the window has settled or cost less CPU. That
+   is a startup-sequencing change, not made here. Re-measure in the live log first.
+2. Group E, now instrumented; wait for a recurrence.
+3. Groups F and G. Group F recurred once on 2026-11-28 06:38 (1.15 s, the storyboard's dirty poll reading the form).
+4. File reads still on Tk without a stall record: the Preview's effective-settings profile lines (only while that
+   section is shown), the AI Preview dialog's remote status (only while open) and the profile reads inside an operator
+   action (choosing a model, saving).
+5. `HistoryProjectionRefresh` held `job_repository` for up to 12 s in `list_recent_jobs`, delaying the queue worker's
+   claim. Not a UI stall.
 
 ## Related findings, not changed
 
@@ -95,5 +149,6 @@ DESK-QUICK (#464) left ten stalls with no Python frame above `mainloop`:
 
 ## Not demonstrated
 
-Nothing ran in the live app: the shorter startup freeze, the CONNECTING status during a real Forge boot, the 300 s
+STARTUP-STALL-2 has no live measurement: how much shorter the real startup freeze is after it is unknown until the
+next restarts are read from the log. Nothing ran in the live app: the shorter startup freeze, the CONNECTING status during a real Forge boot, the 300 s
 window against a real slow boot and the thumbnail change are shown only by deterministic tests.
