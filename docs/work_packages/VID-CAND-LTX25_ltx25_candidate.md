@@ -1,9 +1,10 @@
 # VID-CAND-LTX25: LTX-2.5 distilled image-to-video candidate and three-way comparison
 
-Status: **three-arm comparison run on 2026-11-28 (27 of 27 clips, no stop rule); the owner's blind ranking is
-pending** (section 7). No quality verdict exists. The 2026-11-27 run stopped after stage 0 because the frozen source
-images were not non-explicit; the comparison used new sources the owner labelled instead. The two workflows are
-`experimental`, never the Make Video default, never preselected and not QUALIFIED.
+Status: **three-arm comparison run and ranked blind on 2026-11-28: by the rule fixed before the run, LTX-2.5 (silent)
+is "at least as good" as the A14B default and HunyuanVideo 1.5 8-step is "no clear case"** (section 7). Screening only.
+The 2026-11-27 run stopped after stage 0 because the frozen source images were not non-explicit; the comparison used
+new sources the owner labelled instead. The two workflows are `experimental`, never the Make Video default, never
+preselected and not QUALIFIED.
 
 Owner's words (2026-11-27): "Let's do both and compare. Still do the ltx-2.5 as well." The comparison is LTX-2.5
 against HunyuanVideo 1.5 (VID-CAND-382) and the current default, Wan2.2 I2V-A14B 4-step 1.0.0.
@@ -19,6 +20,11 @@ bestiality, and erotic chats.
 Sources, read 2026-11-27: the licence text at `https://huggingface.co/unsloth/LTX-2.5-GGUF/blob/main/LICENSE` (the
 official model card links `https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x`);
 `https://static.lightricks.com/legal/ltx-acceptable-use-policy.pdf`.
+
+Re-read 2026-11-28: the official GitHub copy is also marked "As amended: November 11, 2026" and does not say what
+changed (the mirror copy lacks the line). A paraphrase-level comparison showed the same grant, revenue threshold,
+incorporation of the policy and 20 restrictions, and no exemption for personal, private or local use. The policy is
+still dated 3 November 2026.
 
 - The policy's own text speaks of Lightricks "Products" (apps, web services, API). The licence applies it to the open
   model by incorporation. That reading is this record's, not legal advice.
@@ -251,7 +257,22 @@ No agent fills it. Blinding is partial: sharpness and frame rate can hint at the
 **Decision rule, fixed before the run:** for each challenger against A14B, its share over nine pictures x three
 questions (ties split): at least 0.50, at least as good; below 0.33, not worth adopting; between, no clear case. Not
 ready if any out-of-memory (none), host commit at or above 0.95 (peak 0.78) or more than one identity break in the
-owner's notes (pending). Screening only: nine pictures, one seed; nothing is promoted without a separate decision.
+owner's notes. Screening only: nine pictures, one seed; nothing is promoted without a separate decision.
+
+**Verdict, 2026-11-28** (the owner ranked blind; all 27 answers given; scored with the frozen key):
+
+| Challenger against A14B | Likeness | Stability | Motion | Share | Rule |
+|---|---|---|---|---|---|
+| LTX-2.5 distilled, silent | 0.50 | 0.50 | 1.00 | 0.67 | at least as good |
+| HunyuanVideo 1.5 8-step | 0.50 | 0.50 | 0.11 | 0.37 | no clear case |
+
+- Likeness and stability were ties across all three arms on all nine pictures, so the shares differ on motion only.
+- LTX-2.5 was ranked first for motion on all nine pictures, above A14B and Hunyuan. A14B beat Hunyuan on eight.
+- One note: on one picture the LTX-2.5 clip added a camera zoom the prompt did not ask for, which may have flattered
+  its motion rank. Counting that picture against LTX-2.5 instead gives motion 0.89 and share 0.63: same rule outcome.
+- Not-ready conditions: none met (no out-of-memory, commit 0.78 at most, no identity break noted).
+- This does not make LTX-2.5 a default or a recommendation. It can only be considered for work that is not sexually
+  explicit (section 1).
 
 ### Result, 2026-11-27 (code `7b5c0a9e`, plan digest `81ab7ed14043`, run `20261128_001904_vidcandltx25-stage0_29babf76`)
 
@@ -334,10 +355,12 @@ three-way sheet can be built only after it does.
 | Demonstration | `tests/video/test_vid_cand_ltx25.py` and `tests/tools/test_vid_cand_ltx25_eval.py`: registry, opt-in, pins, graphs, probe, fake-Comfy runs, eval-kit admission, three-way sheet, all on synthetic data. Graph inputs were checked by reading the installed node sources; **the real ComfyUI has accepted only the silent graph; the audio graph is unvalidated** |
 | Physical | Silent LTX graph: 2 stage 0 clips (2026-11-27) and 9 comparison clips beside 9 A14B and 9 Hunyuan clips (section 7). Not qualification evidence |
 | Qualification | None. No ledger entry |
-| Held or unverified | The owner's ranking and so any quality verdict; the audio workflow (never run); landscape output; other seeds |
+| Held or unverified | Any default or promotion decision; the audio workflow (never run); landscape output; other seeds; a matched-size speed run |
 
 ## 9. Recommendation and smallest next step
 
-LTX-2.5 runs on 12 GB at 768x1344x121 in under two minutes warm. Whether it is worth keeping is open until the owner
-ranks sitting `vidcand-ltx25-threearm`; then score it against the section 7 rule and record the verdict here. It stays a
-candidate for non-explicit work only (section 1). The two stage 0 clips are still kept, undecided.
+LTX-2.5 runs on 12 GB at 768x1344x121 in under two minutes warm and passed the section 7 screen with better motion
+than the A14B default and no loss ranked on likeness or stability. It is worth keeping as an experimental choice for
+non-explicit work only (section 1). A14B stays the default; the licence keeps LTX-2.5 from replacing it for adult
+content. A speed run at matched size is the follow-up section 6 named, with its own plan, if the owner wants one. The
+two stage 0 clips are still kept, undecided.
