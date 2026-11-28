@@ -1,4 +1,5 @@
-"""VID-FRAME: PNG frames are removed a day after their clip exists, and nothing that is still needed is."""
+"""VID-FRAME / KEEP-SPACE: PNG frames go to the Recycle Bin 7 days after their clip exists, and nothing that is
+still needed does. The shell is fake; every file is in a temp folder."""
 
 from __future__ import annotations
 
@@ -7,10 +8,18 @@ import os
 import time
 from pathlib import Path
 
-from src.video.frame_retention import MARKER_NAME, frames_were_removed, sweep_retained_frames
+import pytest
+
+from src.video.frame_retention import (
+    MARKER_NAME,
+    MIN_AGE_SECONDS,
+    frames_were_removed,
+    sweep_retained_frames,
+)
+from tests.helpers.recycle_bin import fake_bin
 
 NOW = time.time()
-OLD = NOW - 2 * 86_400
+OLD = NOW - 8 * 86_400
 
 
 def _run(root: Path, name: str = "run1", *, count: int = 5, age: float = OLD) -> Path:
@@ -40,6 +49,7 @@ def _names(run: Path) -> list[str]:
 
 
 def _sweep(root: Path, tree_root: Path | None = None, **kwargs):
+    kwargs.setdefault("recycle_bin", fake_bin(root.parent / f"{root.name}_bin")[0])
     return sweep_retained_frames(root, now=NOW, tree_root=tree_root or root / "no_trees", **kwargs)
 
 
@@ -174,3 +184,70 @@ def test_the_sweep_stops_when_asked(tmp_path: Path) -> None:
 
     assert _sweep(tmp_path, should_stop=lambda: True).frames == 0
     assert len(_names(run)) == 5
+
+
+def test_frames_wait_seven_days_after_the_clip(tmp_path: Path) -> None:
+    six = _run(tmp_path, "six", age=NOW - 6 * 86_400)
+    eight = _run(tmp_path, "eight")
+
+    _sweep(tmp_path)
+
+    assert MIN_AGE_SECONDS == 7 * 86_400
+    assert len(_names(six)) == 5 and len(_names(eight)) == 2
+
+
+def test_frames_move_to_the_recycle_bin(tmp_path: Path) -> None:
+    run = _run(tmp_path / "out")
+    recycle_bin, shell = fake_bin(tmp_path / "bin")
+
+    _sweep(tmp_path / "out", recycle_bin=recycle_bin)
+
+    assert shell.recycled() == ["clip_00002_.png", "clip_00003_.png", "clip_00004_.png"]
+    assert json.loads((run / MARKER_NAME).read_text(encoding="utf-8"))["to"] == "recycle_bin"
+
+
+def test_a_dry_run_says_what_the_bin_can_take(tmp_path: Path) -> None:
+    _run(tmp_path)
+
+    counted = _sweep(tmp_path, dry_run=True)
+
+    assert counted.bin_refusal == "" and "free of its" in counted.bin_room
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"limit_mb": 1, "used": 1024 * 1024}, {"disabled": True}, {"limit_mb": None}]
+)
+def test_a_bin_that_cannot_take_them_all_moves_nothing(tmp_path: Path, kwargs) -> None:
+    first, second = _run(tmp_path / "out", "first"), _run(tmp_path / "out", "second")
+    recycle_bin, shell = fake_bin(tmp_path / "bin", **kwargs)
+
+    counted = _sweep(tmp_path / "out", recycle_bin=recycle_bin, dry_run=True)
+    result = _sweep(tmp_path / "out", recycle_bin=recycle_bin)
+
+    assert (counted.frames, counted.runs) == (6, 2) and counted.bin_refusal
+    assert result.frames == 0 and result.bin_refusal == counted.bin_refusal
+    assert shell.batches == [] and len(_names(first)) == 5 and len(_names(second)) == 5
+    assert not frames_were_removed(first) and not frames_were_removed(second)
+
+
+def test_a_move_windows_refuses_stops_the_pass_and_the_run_is_looked_at_again(
+    tmp_path: Path,
+) -> None:
+    first, second = _run(tmp_path / "out", "first"), _run(tmp_path / "out", "second")
+    recycle_bin, shell = fake_bin(tmp_path / "bin", takes=0)
+
+    result = _sweep(tmp_path / "out", recycle_bin=recycle_bin)
+
+    assert result.frames == 0 and "stopped at" in result.bin_refusal and len(shell.batches) == 1
+    assert len(_names(first)) == 5 and len(_names(second)) == 5
+    assert not frames_were_removed(first) and not frames_were_removed(second)
+
+
+def test_a_half_done_move_keeps_the_marker_and_counts_what_left(tmp_path: Path) -> None:
+    run = _run(tmp_path / "out")
+    recycle_bin, _shell = fake_bin(tmp_path / "bin", takes=1)
+
+    result = _sweep(tmp_path / "out", recycle_bin=recycle_bin)
+
+    assert result.frames == 1 and result.stopped and result.bin_refusal and frames_were_removed(run)
+    assert len(_names(run)) == 4

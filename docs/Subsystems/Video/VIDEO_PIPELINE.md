@@ -143,12 +143,15 @@ warnings, and `video_workflow.source_crop_fraction` records it. The three differ
 1.1.0 (the Make Video default, listed under the full-picture id) launches with CK attention; 1.0.0 (stored jobs) and the
 standard id do not. A saved form that names the full-picture id opens at 1.1.0.
 
-**Frame retention (VID-FRAME).** `src/video/frame_retention.py` removes a frames-out clip's PNGs a day after the clip
-exists (setting `video_frame_cleanup_enabled`, default on, Engine Settings; the first sweep waits for a one-time
-confirmation showing a dry run's count and size; passes run only while the queue is empty). It keeps
+**Frame retention (VID-FRAME, KEEP-SPACE).** `src/video/frame_retention.py` moves a frames-out clip's PNGs to the
+Windows Recycle Bin 7 days after the clip exists (setting `video_frame_cleanup_enabled`, default on, Engine Settings;
+the first sweep waits for a one-time confirmation showing a dry run's count, size and the bin's free room; passes run
+only while the queue is empty). It keeps
 the clip, every recorded output, the first and last frame, frames a cut manifest or Storyboard file names, and skips
 sequence runs, evaluations and the archive; `frames_removed.json` marks a swept run. Continue in Storyboard then decodes
-that clip, and the Movie Clips handoff uses the clip. Deletion cannot be undone.
+that clip, and the Movie Clips handoff uses the clip. Nothing is hard-deleted: when a drive's bin is missing, off, of
+unknown size or too full for everything due (`src/utils/recycle_bin.py`), nothing moves and a window says why. Disk
+space is freed when the bin is emptied (`docs/work_packages/KEEP-SPACE_storage.md`).
 
 The catalog holds no disabled placeholder. The two former LTX multi-frame-anchor specs (`ltx_multiframe_anchor_v1`, `ltx_multiframe_anchor_v1_conditioned`) were retired because the bridge nodes they named never existed and no runtime evidence was accepted; future LTX support is not ruled out and would need bridge implementations plus accepted runtime evidence. `RETIRED_WORKFLOW_IDS` in `src/video/workflow_registry.py` is a message-only record: a stored job or history snapshot that still names a retired id loads and displays, and an execution request for it fails with `Workflow '<id>' is not registered: ... was removed ...` (`WorkflowLookupError`, a `KeyError` subclass whose `str()` is that plain message; the resolver reports it as `invalid_workflow`). It never aliases or substitutes a workflow. The disabled governance state still exists and is enforced (not offerable, lookup refused even with the experimental opt-in); tests exercise it with a synthetic disabled spec.
 

@@ -1,10 +1,11 @@
-"""Run the video frame retention sweep in the background while the queue is empty (VID-FRAME).
+"""Run the video frame retention sweep in the background while the queue is empty (VID-FRAME, KEEP-SPACE).
 
-The sweep itself and its protections are ``src/video/frame_retention.py``. The rule ships on, but deletion cannot be
-undone, so the first sweep waits for the operator: a dry run counts what would go and ``ask`` shows it with Delete now,
-Not now and Turn off. After one Delete now, later sweeps run on schedule without asking. Nothing is removed while a job
-is queued or running (a waiting job may have frozen a frame as its input), when the queue cannot be read, or when the
-setting is off. All scheduling stays on the Tk thread; only the folder pass runs on a worker.
+The sweep itself and its protections are ``src/video/frame_retention.py``. The rule ships on, but the first sweep waits
+for the operator: a dry run counts what would move to the Recycle Bin and ``ask`` shows it with Move now, Not now and
+Turn off. After one Move now, later sweeps run on schedule without asking. When the Recycle Bin cannot take the frames,
+nothing is moved, the choice falls back to Not now and ``ask`` explains why, once per start. Nothing is moved while a
+job is queued or running (a waiting job may have frozen a frame as its input), when the queue cannot be read, or when
+the setting is off. All scheduling stays on the Tk thread; only the folder pass runs on a worker.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from typing import Any
 
 from src.review.archive import job_queue_of
 from src.utils.config import ConfigManager
+from src.utils.recycle_bin import RecycleBin
 from src.utils.thread_registry import get_thread_registry
 from src.video import storyboard_tree_store
 from src.video.frame_retention import FrameSweep, sweep_retained_frames
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 SETTING_KEY = "video_frame_cleanup_enabled"
 CONFIRMED_KEY = "video_frame_cleanup_confirmed"
-CHOICE_DELETE_NOW = "delete_now"
+CHOICE_MOVE_NOW = "move_now"
 CHOICE_NOT_NOW = "not_now"
 CHOICE_TURN_OFF = "turn_off"
 FIRST_RUN_MS = 5 * 60 * 1000
@@ -41,6 +43,7 @@ def run_frame_retention(
     setting: Read | None = None,
     stopping: Callable[[], bool] = lambda: False,
     dry_run: bool = False,
+    recycle_bin: RecycleBin | None = None,
 ) -> FrameSweep | None:
     """One pass over the output folder (counting only when ``dry_run``), or ``None`` when it may not run now."""
 
@@ -59,6 +62,7 @@ def run_frame_retention(
     return sweep_retained_frames(
         output_root,
         tree_root=storyboard_tree_store.default_root(),
+        recycle_bin=recycle_bin or RecycleBin(),
         should_stop=must_stop,
         dry_run=dry_run,
     )
@@ -80,6 +84,9 @@ def schedule_frame_retention(
     stop = threading.Event()
     busy = threading.Lock()  # one folder pass at a time
     asked = threading.Event()  # at most one question per start of the application
+    explained = (
+        threading.Event()
+    )  # and one explanation of why the Recycle Bin cannot take the frames
 
     def start_pass(*, dry_run: bool) -> None:
         if stop.is_set() or not busy.acquire(blocking=False):
@@ -105,22 +112,30 @@ def schedule_frame_retention(
                 return
             if not done.is_set():
                 root.after(POLL_MS, collect)
-            elif dry_run and found and found[0].frames and not asked.is_set():
-                asked.set()
-                ask(found[0], choose)
+            elif found:
+                report(found[0], dry_run=dry_run)
 
         try:
             get_thread_registry().spawn(
-                target=work, name="VideoFrameRetention", purpose="Remove day-old video frames"
+                target=work, name="VideoFrameRetention", purpose="Recycle week-old video frames"
             )
         except RuntimeError:  # shutting down
             busy.release()
             return
-        if dry_run:
-            root.after(POLL_MS, collect)
+        root.after(POLL_MS, collect)
+
+    def report(result: FrameSweep, *, dry_run: bool) -> None:
+        if result.bin_refusal:
+            if not explained.is_set():
+                explained.set()
+                asked.set()
+                ask(result, choose)
+        elif dry_run and result.frames and not asked.is_set():
+            asked.set()
+            ask(result, choose)
 
     def choose(choice: str) -> None:
-        if choice == CHOICE_DELETE_NOW:
+        if choice == CHOICE_MOVE_NOW:
             write({CONFIRMED_KEY: True})
             start_pass(dry_run=False)
         elif choice == CHOICE_TURN_OFF:
@@ -141,7 +156,7 @@ def schedule_frame_retention(
 
 
 __all__ = [
-    "CHOICE_DELETE_NOW",
+    "CHOICE_MOVE_NOW",
     "CHOICE_NOT_NOW",
     "CHOICE_TURN_OFF",
     "CONFIRMED_KEY",

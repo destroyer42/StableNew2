@@ -248,7 +248,7 @@ class EngineSettingsDialog(ttk.Frame):
 
         ttk.Checkbutton(
             paths_frame,
-            text="Delete a video's PNG frames one day after its clip is made (clips are always kept)",
+            text="Move a video's PNG frames to the Recycle Bin 7 days after its clip is made (clips are kept)",
             variable=self._frame_cleanup_var,
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
