@@ -1,7 +1,7 @@
 # VID-FINISH: optional loop, trim and SeedVR2 upscale for finished clips
 
-Status: built 2026-11-28 with deterministic tests. First GPU trial the same day, stopped after one before/after pair
-(section 7). Built on `origin/main` 841f9b49, then
+Status: built 2026-11-28 with deterministic tests. GPU trial the same day in two runs: upscale pairs completed at 33 and 81
+frames; the 121-frame upscale was stopped on low host RAM (sections 7 and 8). Built on `origin/main` 841f9b49, then
 merged with 71e2a4a0; branch
 `claude/vid-finish-eceb88`. Finishes slice (d) of the 2026-11-27 Value Assessment's VID-FRAME item (owner pick
 2026-11-28).
@@ -106,8 +106,8 @@ job fails; the native clip and frames stay on disk.
   the clip as generated, not from a trimmed end or a loop point, and not at the upscaled size.
 - **Send to Movie Clips** prefers a clip's frames, so it assembles the native frames. Smoothed clips already behave
   this way.
-- Only the smallest case has run on a GPU (section 7): the graph was accepted by ComfyUI 0.38.0, in the same process as
-  the CK A14B default. Longer clips, other sizes and TI2V-5B input are unmeasured.
+- On a GPU (sections 7 and 8) the pass completed for A14B clips of 33 and 81 frames, in the same ComfyUI process as the
+  CK default. At 121 frames it ran out of the 3 GiB host RAM margin before finishing. TI2V-5B input is unmeasured.
 - The Queue warning still says the pass has never been run on this PC; changing that text is a code change.
 - The lossless clip uploaded for the upscale is H.264 RGB (`libx264rgb -qp 0`); ComfyUI decoding it pixel-exactly is
   unverified.
@@ -174,8 +174,35 @@ cases were planned (the three of section 6 plus 720x544, 81 frames); 3 of 8 jobs
 - An `nvlddmkm` event 153 was logged in the same second as the interrupt and ComfyUI stop. Its cause is not established
   (a 153 on forced termination has been seen before). `nvidia-smi` and device status were normal afterwards; no further
   GPU work tested it. Nothing was retried.
-- **Not measured:** 81 and 121 frames, 544x720 and 720x544, host RAM under a long upscale.
-- **Rating:** sitting `vid-finish-seedvr2-upscale` has the one completed pair, blind; not yet rated. The pass stays
-  experimental.
+- **Not measured in this run:** 81 and 121 frames, 544x720 and 720x544 (see section 8).
+- **Rating:** sitting `vid-finish-seedvr2-upscale` has the one completed pair, blind; not rated when recorded. The pass
+  stays experimental.
 
 Evidence: `%USERPROFILE%\Videos\StableNewAcceptance\GPU-CHECKS\seedvr2\`.
+
+## 8. Second run (2026-11-28): the two A14B cases, TI2V-5B dropped
+
+Owner decision: finish with A14B only. Eval harness at `e15f3e4d`, StableNew and Forge closed, A14B 1.1.0, seed 374,
+smoothing on in both arms. Stop rules as in section 7 plus the 3 GiB host RAM floor and a 20-minute limit on the pass.
+
+| Case | Arm | Result | Wall s | Upscale pass s | Smoothing s | Peak VRAM MiB | Free RAM low GiB |
+|---|---|---|---:|---:|---:|---:|---:|
+| U4 720x544, 81 f | before | completed | 230.4 | - | 22.2 | 11,065 | 4.78 |
+| U4 | after | completed, 1440x1088 | 683.3 | 594.4 | 75.5 | 6,634 | 5.22 |
+| U3 544x720, 121 f | before | completed | 245.1 | - | 28.2 | 8,851 | 11.14 |
+| U3 | after | **stopped**: host RAM 2.96 GiB | 905.1 | 889.7 (unfinished) | - | 6,747 | 2.96 |
+
+- **81 frames:** the upscale added about 11 minutes (594 s for the pass, 53 s more smoothing), about 7.3 s per source
+  frame. The two native clips are frame-for-frame identical, so the pair differs only by the upscale.
+- **121 frames:** all sampling chunks finished with free host RAM near 12 GiB. As ComfyUI moved to decoding the whole
+  1088x1440 clip, free RAM fell to 2.96 GiB within 8 s, under the floor, and the job was cancelled. No upscaled clip was
+  made. Whether it would have finished is unknown; it was not retried.
+- No out-of-memory error, device loss, `nvlddmkm` event or retry in this run. The pass peaked under 6.8 GiB of VRAM at
+  81 and 121 frames.
+- The "before" VRAM peaks are single one-second samples during the final decode, so measured peaks vary between runs.
+- **Rating:** the 81-frame pair is sitting `vid-finish-seedvr2-upscale-2`, blind; not rated when recorded. Its upscaled
+  clip is shown on the phone at 1280 px on the long edge. The 33-frame pair stays in `vid-finish-seedvr2-upscale`.
+- Before the pass is offered for long clips, its host RAM at the final decode needs a fix or a limit: a lower frame cap,
+  a chunked decode, or a re-measurement after a RAM upgrade.
+
+Evidence: `%USERPROFILE%\Videos\StableNewAcceptance\GPU-CHECKS\seedvr2\runs\20261128T152316Z\`.
