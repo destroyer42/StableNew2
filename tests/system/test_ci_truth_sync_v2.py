@@ -131,7 +131,7 @@ def test_ci_is_python_312_only_with_no_version_matrix() -> None:
     assert "python-version: [" not in workflow
     assert "3.11" not in workflow
     assert "3.12" not in workflow and "3.13" not in workflow
-    assert workflow.count('python-version: "3.14"') == 4  # required + full-suite-shard + full-suite + windows
+    assert workflow.count('python-version: "3.14"') == 5  # required + full-suite-shard + full-suite + windows + phone-e2e
 
 
 def test_census_shard_count_is_consistent_between_the_matrix_and_every_command() -> None:
@@ -159,14 +159,15 @@ def test_superseded_ci_runs_are_cancelled_per_pull_request() -> None:
     assert "github.event.pull_request.number" in concurrency
 
 
-def test_ci_has_one_required_job_a_sharded_blocking_census_and_a_windows_lane() -> None:
+def test_ci_has_one_required_job_a_sharded_blocking_census_a_windows_lane_and_phone_e2e() -> None:
     jobs = _ci_section("\njobs:")
 
-    assert re.findall(r"^  ([a-z][a-z-]*):\s*$", jobs, flags=re.MULTILINE) == [
+    assert re.findall(r"^  ([a-z][a-z0-9-]*):\s*$", jobs, flags=re.MULTILINE) == [
         "required",
         "full-suite-shard",
         "full-suite",
         "windows",
+        "phone-e2e",
     ]
     required = _ci_section("  required:", "  full-suite-shard:")
     assert "continue-on-error" not in required  # the required gate is never masked

@@ -130,6 +130,9 @@ addopts = [
     "--ignore=tests/legacy",
     "--ignore=tests/quarantine",
     "--ignore=tests/scripts",
+    # The phone page in a real browser (PHONE-CORE PC-0): needs Playwright, runs only in the phone-e2e CI job,
+    # which names the directory explicitly (an explicit path is collected despite --ignore).
+    "--ignore=tests/phone_e2e",
 ]
 norecursedirs = [
     "archive",

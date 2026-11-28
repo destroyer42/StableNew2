@@ -176,7 +176,9 @@ def test_the_census_is_the_blocking_merge_gate_and_waits_for_the_required_gate()
 
 def test_every_job_has_a_timeout_so_a_hang_cannot_hold_a_runner_for_hours() -> None:
     jobs = WORKFLOW[WORKFLOW.index("\njobs:") :]
-    assert jobs.count("timeout-minutes:") == 4  # required, full-suite-shard, full-suite, windows
+    assert (
+        jobs.count("timeout-minutes:") == 5
+    )  # required, full-suite-shard, full-suite, windows, phone-e2e
 
 
 def test_third_party_actions_are_pinned_to_full_commit_shas() -> None:
