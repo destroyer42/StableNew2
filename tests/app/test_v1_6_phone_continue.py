@@ -8,13 +8,21 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 
+from src.app.review_gateway_protocol import parse_record
+from src.app.review_gateway_store import SyncLedger
+from src.app.runtime_stack import _gateway_actions
 from src.app.site_media_files import SiteOutputError
 from src.app.site_phone_continue import compile_continuation
+from src.controller.job_service import JobService
 from src.controller.storyboard_submission_service import StoryboardSubmissionService
 from src.queue.job_model import JobStatus
+from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
 from src.video.sequence_ledger import sha256_of
 from src.video.storyboard_tree_store import StoryboardTreeStore
 from tests.helpers.storyboard_380 import (
@@ -152,3 +160,59 @@ def test_a_file_no_job_recorded_is_refused(tmp_path: Path) -> None:
         compile_continuation(
             env.service, tmp_path, stray, sha256_of(stray), "go", 1, video=_no_video
         )
+
+
+def test_a_confirmed_phone_request_queues_one_take_once(tmp_path: Path, monkeypatch) -> None:
+    """The composed path with a real JobService: prepare, confirm, confirm again."""
+
+    env = _setup(tmp_path)
+    repository = JobRepository(tmp_path / "jobs.sqlite3")
+    runner = Mock(is_running=lambda: True)
+    runner.run_njr.side_effect = AssertionError("a phone job reached the runner directly")
+    jobs = JobService(JobQueue(repository=repository), runner=runner)
+    monkeypatch.setattr(
+        "src.app.site_phone_continue.phone_storyboard_service", lambda *_args: env.service
+    )
+    ledger = SyncLedger(tmp_path / "ledger.sqlite3")
+    actions = _gateway_actions(
+        SimpleNamespace(job_service=jobs), ledger, tmp_path, tmp_path / "learning.jsonl"
+    )
+
+    def record(params: dict[str, Any]) -> Any:
+        return parse_record(
+            {
+                "record_id": str(uuid4()),
+                "idempotency_key": uuid4().hex,
+                "device_id": "phone-device-01",
+                "created_at": "2026-11-27T12:00:00Z",
+                "target": {"library_id": "a" * 32, "sha256": env.digest},
+                "kind": "action_request",
+                "action_request": {"action": "continue_clip", "params": params},
+            }
+        )
+
+    prepare = record({"step": "prepare", "text": "she turns"})
+    summary = actions.handle(prepare, env.clip).receipt["action_summary"]
+    assert (summary["title"], summary["job_count"], summary["queue_position"]) == (
+        "Continue the clip",
+        1,
+        "last",
+    )
+    assert env.service.store.list_trees() == [] and repository.list_recent_jobs(limit=5) == []
+
+    confirm = {
+        "step": "confirm",
+        "prepared_record": prepare.record_id,
+        "summary_revision": summary["revision"],
+    }
+    first = actions.handle(record(confirm), env.clip)
+    assert first.outcome == "applied", (first.reason, first.receipt)
+    again = actions.handle(record(confirm), env.clip)
+
+    (job_id,) = first.receipt["job_ids"]
+    assert (again.outcome, again.receipt["job_ids"]) == ("duplicate", [job_id])
+    assert [entry.job_id for entry in repository.list_recent_jobs(limit=5)] == [job_id]
+    ((storyboard_id, _title, _updated),) = env.service.store.list_trees()
+    (take,) = env.service.store.load(storyboard_id).takes
+    assert take.attempts == (job_id,)
+    ledger.close()

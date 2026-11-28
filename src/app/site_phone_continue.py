@@ -22,11 +22,14 @@ from src.controller.continue_clip import (
     continue_clip,
     inspect_continuation,
 )
+from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.controller.storyboard_submission_service import StoryboardSubmissionService
 from src.pipeline.policy_warnings import PolicyWarning
 from src.video.motion_intent import compose_prompt
+from src.video.rife_runtime import find_rife_executable
 from src.video.storyboard_import import resolve_known_clip
 from src.video.storyboard_root import StoryboardRootError, clip_last_frame
+from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
 from src.video.workflow_warnings import accepted_workflow_warnings
 
 #: Where a fallback's decoded last frame is kept, under the Output root.
@@ -52,6 +55,25 @@ class PhoneContinuation:
     identity: tuple[str, ...]
     build: Callable[[AdmitRecords], list[str]] | None = None
     video: Any = None
+
+
+def phone_storyboard_service(
+    repository: Any, root: Path, jobs: Callable[[], Any]
+) -> StoryboardSubmissionService:
+    """The desktop's Storyboard service over the same repository and store, with its own builder: the gateway's
+    worker never reaches into the tab's controller."""
+
+    registry = DefaultWorkflowRegistryPort()
+    return StoryboardSubmissionService(
+        njr_builder=VideoWorkflowNjrBuilder(
+            workflow_registry=registry, output_dir_provider=lambda: str(root)
+        ),
+        workflow_registry=registry,
+        job_service=jobs,
+        repository=lambda: repository,
+        output_root=lambda: str(root),
+        smooth_takes=lambda: find_rife_executable() is not None,
+    )
 
 
 def _job_of(repository: Any, path: Path) -> str:
@@ -159,4 +181,9 @@ def _from_last_frame(
     )
 
 
-__all__ = ["AdmitRecords", "PhoneContinuation", "compile_continuation"]
+__all__ = [
+    "AdmitRecords",
+    "PhoneContinuation",
+    "compile_continuation",
+    "phone_storyboard_service",
+]

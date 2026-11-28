@@ -33,6 +33,8 @@ const ACTIONS = [
   ["prompt_tweak", "Tweak prompt"],
   ["make_video", "Make video"],
 ];
+// V1-6: what a video offers instead.
+const CLIP_ACTIONS = [["continue_clip", "Continue clip"]];
 // Slice 2. A picker action first asks the PC for its options; a words action asks the owner first.
 const PICKERS = {
   another_model: "Choose a checkpoint on the PC. The image is run through it with img2img.",
@@ -41,15 +43,16 @@ const PICKERS = {
 const WORDS = {
   prompt_tweak: { required: true, hint: "Words added to this image's prompt, then img2img of the image.", placeholder: "smiling, golden hour" },
   make_video: { required: false, hint: "What should move? Leave it empty to use the image's own prompt.", placeholder: "she turns towards the window" },
+  continue_clip: { required: false, hint: "What happens next? Leave it empty to keep the clip's own prompt.", placeholder: "she sits down" },
 };
 // PHONE-FAST: actions that replace the image (the gateway holds the same list). The original then counts as reviewed
 // until the result arrives and one of the two is kept.
 const REWORK = new Set(["fix_face", "fix_hands", "fix_both", "another_model", "aspect_ratio"]);
-const SLICE_TWO = new Set(["another_model", "aspect_ratio", "prompt_tweak", "make_video"]);
+const SLICE_TWO = new Set(["another_model", "aspect_ratio", "prompt_tweak", "make_video", "continue_clip"]);
 const DETAILS = {
   not_an_image: "only images can be fixed",
   source_changed: "the image changed on the PC",
-  provenance_unverified: "the PC cannot find the job that made this image",
+  provenance_unverified: "the PC cannot find the job that made this",
   recipe_not_variable: "this image cannot be re-run with new seeds (it was made from another image, such as a face or hands fix)",
   model_unavailable: "the checkpoint is not available",
   model_family_refused: "the checkpoint cannot run this fix",
@@ -1355,11 +1358,12 @@ function addTags(item, wanted) {
 }
 
 function actionRow(item) {
-  if (item.kind !== "image" || !canQueue()) return null;
+  const offered = item.kind === "image" ? ACTIONS : item.kind === "video" ? CLIP_ACTIONS : null;
+  if (!offered || !canQueue()) return null;
   return el(
     "div",
     { class: "fixes", role: "group", "aria-label": "Ask the PC" },
-    ACTIONS.map(([action, text]) =>
+    offered.map(([action, text]) =>
       el("button", {
         type: "button",
         text,
@@ -1374,7 +1378,7 @@ function actionRow(item) {
   );
 }
 
-const actionLabel = (action) => Object.fromEntries(ACTIONS)[action];
+const actionLabel = (action) => Object.fromEntries([...ACTIONS, ...CLIP_ACTIONS])[action];
 
 function askWords(item, action) {
   const { required, hint, placeholder } = WORDS[action];

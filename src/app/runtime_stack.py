@@ -168,7 +168,9 @@ def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
     """RG-140 phone actions over the running application, or ``None`` when it has no job repository."""
 
     from src.app.review_gateway_actions import AppActionCompiler, GatewayActions, admission_claim
+    from src.app.site_media_files import SiteOutputError
     from src.app.site_phone_admission import admit_phone_records
+    from src.app.site_phone_continue import phone_storyboard_service
     from src.app.site_phone_preview_host import PhonePreviewHost
     from src.app.site_phone_queue import PhoneQueueView, gateway_owner
     from src.controller.submission_policy_v26 import SubmissionPolicy
@@ -181,25 +183,45 @@ def _gateway_actions(app: Any, ledger: Any, root: Path, records: Path) -> Any:
 
     def admit(owner: str, receipt: str, compiled: Any, warnings: Any, runs_next: bool) -> list[str]:
         jobs = app.job_service  # read through: it may be replaced
-        return admit_phone_records(
-            jobs,
-            PhoneQueueView(repository, jobs),
-            owner,
-            receipt,
-            compiled.kind,
-            compiled.records,
-            warnings,
-            reprocess=compiled.reprocess,
-            # D8 first step: touch-ups run after the current job, ahead of NORMAL work (the existing priority).
-            policy=SubmissionPolicy(priority=JobPriority.HIGH if runs_next else JobPriority.NORMAL),
-            claim=admission_claim(compiled),
-        )
+        view = PhoneQueueView(repository, jobs)
+
+        def admit_records(records: Any) -> list[str]:
+            return admit_phone_records(
+                jobs,
+                view,
+                owner,
+                receipt,
+                compiled.kind,
+                tuple(records),
+                warnings,
+                reprocess=compiled.reprocess,
+                # D8 first step: touch-ups run after the current job, ahead of NORMAL work (the existing priority).
+                policy=SubmissionPolicy(
+                    priority=JobPriority.HIGH if runs_next else JobPriority.NORMAL
+                ),
+                claim=admission_claim(compiled),
+            )
+
+        if compiled.build is None:
+            return admit_records(compiled.records)
+        # V1-6: building a Storyboard take writes it, so a request already admitted is answered first.
+        existing = view.receipt(owner, receipt)
+        if existing["state"] == "admitted":
+            return list(existing["job_ids"])
+        if jobs.queue.is_dispatch_fenced():
+            raise SiteOutputError("app_shutting_down")
+        return compiled.build(admit_records)
 
     def admitted(owner: str, receipt: str) -> list[str]:
         found = PhoneQueueView(repository, app.job_service).receipt(owner, receipt)
         return list(found["job_ids"]) if found["state"] == "admitted" else []
 
-    compiler = AppActionCompiler(PhonePreviewHost(app, repository, records), repository, root)
+    compiler = AppActionCompiler(
+        PhonePreviewHost(app, repository, records),
+        repository,
+        root,
+        storyboards=lambda: phone_storyboard_service(repository, root, lambda: app.job_service),
+    )
     return GatewayActions(ledger, compiler, admit, owner_of=gateway_owner, admitted=admitted)
 
 

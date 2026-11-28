@@ -43,6 +43,7 @@ from src.app.review_gateway_protocol import (
     ACTION_UNAVAILABLE,
     ADMISSION_REFUSED,
     CHOICE_ACTIONS,
+    CLIP_ACTIONS,
     DETAILS,
     IN_PROGRESS,
     INVALID_RECORD,
@@ -83,6 +84,7 @@ _TITLES = {
     "aspect_ratio": "Change the aspect ratio",
     "prompt_tweak": "Tweak the prompt",
     "make_video": "Make a video",
+    "continue_clip": "Continue the clip",
 }
 _PASSES = {"fix_face": (True, False), "fix_hands": (False, True), "fix_both": (True, True)}
 #: PHONE-FAST: actions that make one replacement of the image, so the phone compares the two and keeps one. The
@@ -112,6 +114,9 @@ class CompiledAction:
     choices: ActionChoices | None = None
     #: RG-160: made while the PC was away, so admitted without a summary first.
     deferred: bool = False
+    #: V1-6: a Storyboard take, built only when admitted (``records`` is then empty): it is given the admission
+    #: of its records and returns the admitted job ids.
+    build: Callable[[Callable[[list[Any]], Sequence[str]]], list[str]] | None = None
 
 
 class ActionRefused(Exception):
@@ -261,7 +266,7 @@ class GatewayActions:
     def _seed_count(self, action: str, requested: int | None) -> int:
         if action == "more_like_this":
             return requested or DEFAULT_SEEDS
-        return 1 if action == "make_video" else 0  # one clip, with a fresh seed at each step
+        return 1 if action in ("make_video", "continue_clip") else 0  # one clip, a fresh seed each step
 
     def _guarded(self, compile_step: Callable[[], Any]) -> Any:
         """Run a compiler call; every failure becomes a closed ``ActionRefused`` code, never its text."""
@@ -290,7 +295,7 @@ class GatewayActions:
             lambda: self._compiler.compile(action, path, digest, seeds, options)
         )
         # The compilers make one job per fix and one per seed; anything else is a compiler fault, not a request.
-        if len(compiled.records) != max(count, 1):
+        if compiled.build is None and len(compiled.records) != max(count, 1):
             raise ActionRefused("compile_failed")
         return compiled, self._summary(action, compiled, now)
 
@@ -460,7 +465,7 @@ class GatewayActions:
             "action": action,
             "title": _TITLES[action],
             "lines": list(lines),
-            "job_count": len(compiled.records),
+            "job_count": 1 if compiled.build is not None else len(compiled.records),
             "queue_position": position,
             "warnings": [item.payload() for item in warnings],
             "identity": list(compiled.identity),
@@ -473,7 +478,7 @@ class GatewayActions:
             revision=revision,
             title=_TITLES[action],
             lines=tuple(lines),
-            job_count=len(compiled.records),
+            job_count=body["job_count"],
             queue_position=position,
             warnings=warnings,
             expires_at=now + PREPARE_TTL,
@@ -483,6 +488,7 @@ class GatewayActions:
 # -- the running application ------------------------------------------------------------------------------------------
 
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
+_VIDEO_SUFFIXES = frozenset({".mp4", ".webm"})
 _HASH_LIMIT = 256 * 1024 * 1024
 
 
@@ -535,7 +541,9 @@ class AppActionCompiler:
         output_root: Path,
         *,
         video: GatewayVideo = _default_video,
+        storyboards: Callable[[], Any] | None = None,
     ) -> None:
+        self._storyboards = storyboards
         self._host = host
         self._repository = repository
         self._root = output_root
@@ -559,6 +567,8 @@ class AppActionCompiler:
         options: ActionInput | None = None,
     ) -> CompiledAction:
         options = options or ActionInput()
+        if action in CLIP_ACTIONS:
+            return self._continue_clip(path, digest, seeds, options.text)
         if path.suffix.lower() not in _IMAGE_SUFFIXES:
             raise ActionRefused("not_an_image")
         if action in _PASSES:
@@ -839,6 +849,49 @@ class AppActionCompiler:
                 f"img2img of this exact image{self._denoise(job)}, same checkpoint.",
             ),
             (words, digest),
+        )
+
+    def _continue_clip(
+        self, path: Path, digest: str, seeds: tuple[int, ...], text: str
+    ) -> CompiledAction:
+        """V1-6: continue a published video through the shared facade (``site_phone_continue``)."""
+
+        if path.suffix.lower() not in _VIDEO_SUFFIXES:
+            raise ActionRefused("operation_unsupported")
+        if len(seeds) != 1:
+            raise ActionRefused("compile_failed")
+        if self._storyboards is None:
+            raise ActionRefused("video_unavailable")
+        from src.app.site_phone_continue import compile_continuation
+
+        found = compile_continuation(
+            self._storyboards(),
+            self._root,
+            path,
+            digest,
+            " ".join(text.split()),
+            seeds[0],
+            video=self._video,
+        )
+        lines = (*found.lines, "The clip comes back to the inbox when it is published.")
+        if found.build is not None:
+            return CompiledAction(
+                (),
+                lines,
+                found.warnings,
+                found.identity,
+                reprocess=False,
+                kind="video",
+                build=found.build,
+            )
+        return CompiledAction(
+            tuple(found.video.records),
+            lines,
+            found.warnings,
+            found.identity,
+            reprocess=False,
+            kind="video",
+            require_current=found.video.require_current,
         )
 
     def _make_video(

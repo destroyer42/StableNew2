@@ -91,6 +91,7 @@ deliberately no module total here, so parallel branches that add or remove modul
 - `site_pairing_protocol.py`: One-use Windows protocol handoff for the private Site's loopback connection
 - `site_phone_admission.py`: Prepare and admit one explicitly reviewed phone Preview through the native services
 - `site_phone_connector.py`: App-owned outbound transport for a locally enrolled phone browser
+- `site_phone_continue.py`: The phone's ``continue_clip`` (V1-6): what continuing a published video would queue, compiled on the PC
 - `site_phone_credentials.py`: Windows-local persistence for a single Operator Site phone grant
 - `site_phone_eval.py`: Scoped access to the desktop's native video evaluation report builder
 - `site_phone_followup.py`: Deterministic, evidence-bound phone follow-ups
