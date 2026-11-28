@@ -1,0 +1,36 @@
+/* The compare view: a rework or reprocess result beside its original (PHONE-FAST), side by side, flip or slider.
+   The stage, the status line, the action row and the "More info" panel are shared with triage and stay in
+   core/core.css. */
+.compare { gap: 0.25rem; }
+.compare figure {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.compare figcaption { font-size: 0.85rem; color: var(--muted); }
+.compare figure img { max-height: calc(100% - 1.6rem); }
+.compare.flip figure:not(.shown) { display: none; }
+.modes { display: flex; justify-content: center; gap: 0.35rem; padding: 0 0.5rem 0.3rem; }
+.modes button { padding: 0.25rem 0.65rem; font-size: 0.85rem; border-radius: 1rem; }
+.modes button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+/* Both pictures fill the same box, so the divider cuts them at the same place. */
+.compare.slider { touch-action: none; }
+.compare.slider figure { position: absolute; inset: 0; background: var(--bg); }
+.compare.slider figure img { width: 100%; height: calc(100% - 1.6rem); max-height: none; }
+.compare.slider figcaption { width: 100%; padding: 0 0.75rem; text-align: left; }
+.compare.slider figure + figure figcaption { text-align: right; }
+.divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.actions.compare-actions { grid-template-columns: 3rem 1fr 1fr 1fr 3rem; }
